@@ -295,7 +295,7 @@ func TestMigration0003NeedsNoRebuild(t *testing.T) {
 		  ORDER BY grabbed_at DESC, id DESC`).Scan(new(int), new(int), new(int), &plan); err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(plan, "ix_prov_unconfirmed") {
+	if !PlanHas(plan, "ix_prov_unconfirmed") {
 		t.Errorf("the attention-block query does not use ix_prov_unconfirmed: %s", plan)
 	}
 }
@@ -3622,7 +3622,7 @@ func TestMigrate0011KeepsTheInstanceIndex(t *testing.T) {
 		t.Fatal(err)
 	}
 	joined := strings.Join(plan, " | ")
-	if !strings.Contains(joined, "USING INDEX ix_sync_report_instance") {
+	if !PlanHas(joined, "USING INDEX ix_sync_report_instance") {
 		t.Errorf("the Services screen's recent-reports read no longer seeks on "+
 			"ix_sync_report_instance:\n  %s\n"+
 			"0011 adds an index BESIDE that one and must not have changed this plan.",

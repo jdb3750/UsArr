@@ -425,28 +425,52 @@ func TestQueryPlans(t *testing.T) {
 			if err != nil {
 				t.Fatalf("QueryPlan: %v", err)
 			}
-			joined := strings.Join(plan, " | ")
-
-			if !strings.Contains(joined, tc.index) {
-				t.Fatalf("plan does not use %s:\n  %s", tc.index, joined)
-			}
-			want := "SEARCH"
-			if tc.scan {
-				want = "SCAN"
-			}
-			if !strings.Contains(joined, want) {
-				t.Errorf("plan is not a %s:\n  %s", want, joined)
-			}
-			if !tc.scan && strings.Contains(joined, "SCAN") {
-				t.Errorf("plan contains a table SCAN:\n  %s", joined)
-			}
-			// An ordered read that still needs a sort is not using the index
-			// for what it was created for.
-			if strings.Contains(joined, "TEMP B-TREE") {
-				t.Errorf("plan needs a temp b-tree:\n  %s", joined)
+			for _, f := range queryPlanFaults(strings.Join(plan, " | "), tc.index, tc.scan) {
+				t.Error(f)
 			}
 		})
 	}
+}
+
+// queryPlanFaults is TestQueryPlans' assertion set, lifted out of the loop body
+// so that TestDBPlanGuardsRejectAPrefixRename can run THE SHIPPED GUARD against
+// a renamed plan. A demonstration that re-types the assertion proves something
+// about the copy; this one has nothing to drift from.
+//
+// It returns every fault rather than stopping at the first, which is the one
+// behavioural change from the inline form — the four checks are independent, so
+// a plan that fails two now says both.
+func queryPlanFaults(joined, index string, scan bool) []string {
+	var faults []string
+
+	// PlanHas, not strings.Contains: index is a bare identifier with nothing
+	// after it to bound the match, so `ix_ta_tag` would be satisfied by a plan
+	// naming `ix_ta_tag_v2` and every case in the table above would keep
+	// passing through the rename. See db.PlanHas.
+	if !PlanHas(joined, index) {
+		faults = append(faults, fmt.Sprintf("plan does not use %s:\n  %s", index, joined))
+	}
+	// `SEARCH`, `SCAN` and `TEMP B-TREE` are fixed SQLite plan vocabulary, not
+	// identifiers, so they cannot be extended by a rename and stay on
+	// strings.Contains. The two negative checks are immune for a second reason:
+	// a prefix match there fires TOO EAGERLY, which is a false alarm and not a
+	// silent green.
+	want := "SEARCH"
+	if scan {
+		want = "SCAN"
+	}
+	if !strings.Contains(joined, want) {
+		faults = append(faults, fmt.Sprintf("plan is not a %s:\n  %s", want, joined))
+	}
+	if !scan && strings.Contains(joined, "SCAN") {
+		faults = append(faults, fmt.Sprintf("plan contains a table SCAN:\n  %s", joined))
+	}
+	// An ordered read that still needs a sort is not using the index for what
+	// it was created for.
+	if strings.Contains(joined, "TEMP B-TREE") {
+		faults = append(faults, fmt.Sprintf("plan needs a temp b-tree:\n  %s", joined))
+	}
+	return faults
 }
 
 // TestScopedProvenanceOrderNeedsASort records what the CANONICAL scope
@@ -479,7 +503,7 @@ func TestScopedProvenanceOrderNeedsASort(t *testing.T) {
 		t.Fatalf("QueryPlan: %v", err)
 	}
 	joined := strings.Join(plan, " | ")
-	if !strings.Contains(joined, "ix_prov_user_grabbed") {
+	if !PlanHas(joined, "ix_prov_user_grabbed") {
 		t.Errorf("the scoped read no longer uses ix_prov_user_grabbed at all: %s", joined)
 	}
 	if !strings.Contains(joined, "TEMP B-TREE") {
@@ -511,7 +535,10 @@ func TestServiceInstanceListScanIsIntentional(t *testing.T) {
 	if err != nil {
 		t.Fatalf("QueryPlan: %v", err)
 	}
-	if !strings.Contains(strings.Join(plan, " | "), "SCAN service_instance") {
+	// PlanHas: `service_instance` is a strict prefix of `service_instance_id`
+	// and of any renamed table, and a SCAN of a DIFFERENT table is exactly what
+	// this pin must not accept.
+	if !PlanHas(strings.Join(plan, " | "), "SCAN service_instance") {
 		t.Errorf("service_instance is no longer planned as a scan: %v\n"+
 			"schema.md §5 specifies no ordering index on this table and a homelab has "+
 			"single-digit instances. If adding one is intended, say so in schema.md §5 "+
@@ -653,7 +680,9 @@ func TestLibraryScopedKeysetIsASeek(t *testing.T) {
 					"this stays a single covered seek regardless of the library's "+
 					"selectivity. See schema.md §13.3.", joined)
 			}
-			if !strings.Contains(joined, "library_id=?") || !strings.Contains(joined, "sort_title") {
+			// `library_id=?` is punctuation-terminated and cannot rot; the bare
+			// column name can, so it goes through PlanHas.
+			if !strings.Contains(joined, "library_id=?") || !PlanHas(joined, "sort_title") {
 				t.Errorf("the seek does not constrain both library_id and sort_title:\n  %s\n"+
 					"Constraining only the leading column is a range scan over the whole "+
 					"library wearing the same plan text.", joined)
@@ -748,21 +777,167 @@ func TestScopedSearchIsASeekNotAScan(t *testing.T) {
 			}
 			joined := strings.Join(plan, " | ")
 
-			if !strings.Contains(joined, "SEARCH sdl") {
-				t.Errorf("search_doc_library is not seeked:\n  %s", joined)
-			}
-			if strings.Contains(joined, "SCAN sdl") ||
-				strings.Contains(joined, "SCAN search_doc_library") {
-				t.Errorf("the scoped search SCANS search_doc_library:\n  %s\n"+
-					"This is the regression the junction table exists to make impossible. "+
-					"A scan here means permission filtering has moved out of the index "+
-					"join, which breaks keyset page sizes and leaks existence through "+
-					"result counts and ranking positions. schema.md §7 invariant 6.", joined)
-			}
-			if !strings.Contains(joined, "library_id=?") {
-				t.Errorf("the seek does not constrain library_id:\n  %s", joined)
+			for _, f := range scopedSearchPlanFaults(joined) {
+				t.Error(f)
 			}
 		})
+	}
+}
+
+// scopedSearchPlanFaults is TestScopedSearchIsASeekNotAScan's assertion set,
+// lifted out for the same reason queryPlanFaults was: so the rot demonstration
+// runs THE SHIPPED GUARD.
+func scopedSearchPlanFaults(joined string) []string {
+	var faults []string
+
+	// `sdl` → `sdl_f` is one of the three renames that motivated db.PlanHas,
+	// and this needle ends on the alias, so it goes through PlanHas.
+	if !PlanHas(joined, "SEARCH sdl") {
+		faults = append(faults, fmt.Sprintf("search_doc_library is not seeked:\n  %s", joined))
+	}
+	// The two SCAN checks are NEGATIVE and stay on strings.Contains
+	// deliberately: under a rename they match a longer alias and fire TOO
+	// EAGERLY, which is a false alarm someone reads, not a silent green.
+	if strings.Contains(joined, "SCAN sdl") ||
+		strings.Contains(joined, "SCAN search_doc_library") {
+		faults = append(faults, fmt.Sprintf("the scoped search SCANS search_doc_library:\n  %s\n"+
+			"This is the regression the junction table exists to make impossible. "+
+			"A scan here means permission filtering has moved out of the index "+
+			"join, which breaks keyset page sizes and leaks existence through "+
+			"result counts and ranking positions. schema.md §7 invariant 6.", joined))
+	}
+	// Punctuation-terminated: `library_id=?` cannot be satisfied by a longer
+	// column name, because the `=?` has to follow.
+	if !strings.Contains(joined, "library_id=?") {
+		faults = append(faults, fmt.Sprintf("the seek does not constrain library_id:\n  %s", joined))
+	}
+	return faults
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// PROVING THE ROT, on the real plans rather than on invented strings.
+//
+// The sibling of internal/store's TestPlanGuardsRejectAPrefixRename, and the
+// same three-step shape: take a plan the shipped guard PASSES on, rename the
+// identifier the guard names to `<old>_x` — the exact rot the sweep exists to
+// catch — then assert BOTH that the pre-sweep `strings.Contains` needle is
+// STILL satisfied by the renamed plan (so the hazard is demonstrated, not
+// asserted) and that the guard AS WRITTEN NOW rejects it.
+//
+// If either guard is ever rewritten back to a bare strings.Contains, the third
+// step fails and names it. Before the sweep, both cases below passed on the
+// renamed plan.
+// ─────────────────────────────────────────────────────────────────────────────
+func TestDBPlanGuardsRejectAPrefixRename(t *testing.T) {
+	ctx := t.Context()
+	d := openTestDB(t)
+
+	mustPlan := func(t *testing.T, query string, args ...any) string {
+		t.Helper()
+		plan, err := QueryPlan(ctx, d.Read(), query, args...)
+		if err != nil {
+			t.Fatalf("QueryPlan: %v", err)
+		}
+		return strings.Join(plan, " | ")
+	}
+
+	tagPlan := mustPlan(t,
+		`SELECT work_id FROM tag_assignment WHERE tag_id = ? AND user_id IN (0, ?)`, 1, 1)
+	searchPlan := mustPlan(t,
+		`SELECT sd.work_id, sd.popularity FROM search_doc sd
+		   JOIN search_doc_library sdl
+		     ON sdl.doc_rowid = sd.rowid AND sdl.library_id IN (?, ?)
+		  WHERE sd.rowid IN (?, ?)`, 0, 1, 1, 2)
+
+	for _, tc := range []struct {
+		name   string
+		plan   string
+		ident  string
+		needle string // the pre-sweep substring needle, kept as the hazard's proof
+		faults func(string) []string
+	}{
+		{
+			name:   "queryPlanFaults / ix_ta_tag",
+			plan:   tagPlan,
+			ident:  "ix_ta_tag",
+			needle: "ix_ta_tag",
+			faults: func(p string) []string { return queryPlanFaults(p, "ix_ta_tag", false) },
+		},
+		{
+			name:   "scopedSearchPlanFaults / sdl",
+			plan:   searchPlan,
+			ident:  "sdl",
+			needle: "SEARCH sdl",
+			faults: scopedSearchPlanFaults,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if faults := tc.faults(tc.plan); len(faults) > 0 {
+				t.Fatalf("the guard does not pass on the real plan, so this case is "+
+					"measuring nothing:\n  plan: %s\n  %s", tc.plan, strings.Join(faults, "\n  "))
+			}
+
+			renamed := renameIdent(tc.plan, tc.ident, tc.ident+"_x")
+			if renamed == tc.plan {
+				t.Fatalf("the plan does not name %q as a whole token, so the rename is a "+
+					"no-op and this case tests nothing:\n%s", tc.ident, tc.plan)
+			}
+
+			// The hazard, demonstrated rather than asserted: the pre-sweep
+			// needle is STILL satisfied by the renamed plan.
+			if !strings.Contains(renamed, tc.needle) {
+				t.Fatalf("strings.Contains(%q) no longer matches the renamed plan, so this "+
+					"case is not demonstrating prefix rot any more:\n%s", tc.needle, renamed)
+			}
+
+			if faults := tc.faults(renamed); len(faults) == 0 {
+				t.Fatalf("the guard PASSES on a plan where %s has been renamed to %s_x. "+
+					"It is matching by prefix and pinning nothing — use PlanHas:\n%s",
+					tc.ident, tc.ident, renamed)
+			}
+		})
+	}
+}
+
+// renameIdent rewrites every WHOLE-TOKEN occurrence of old, the way a real
+// rename would. strings.ReplaceAll is not good enough here: renaming the alias
+// `sdl` must not also rewrite the index `ix_sdl_doc`, or the case would be
+// demonstrating two renames and proving neither.
+func renameIdent(s, old, replacement string) string {
+	var b strings.Builder
+	for i := 0; i < len(s); {
+		if strings.HasPrefix(s[i:], old) &&
+			(i == 0 || !isPlanIdentByte(s[i-1])) &&
+			(i+len(old) == len(s) || !isPlanIdentByte(s[i+len(old)])) {
+			b.WriteString(replacement)
+			i += len(old)
+			continue
+		}
+		b.WriteByte(s[i])
+		i++
+	}
+	return b.String()
+}
+
+// TestPlanHasMatchesWholeTokensOnly is the helper's own property, asserted here
+// because this is the package the implementation lives in. The two cases above
+// exercise it through two guards and would not notice a PlanHas that returned
+// true for everything.
+func TestPlanHasMatchesWholeTokensOnly(t *testing.T) {
+	const plan = "SEARCH w USING INDEX ix_work_added_at (added_at<?) | SCAN lm"
+	for _, tc := range []struct {
+		want string
+		ok   bool
+	}{
+		{"USING INDEX ix_work_added", false}, // the rot this exists to catch
+		{"USING INDEX ix_work_added_at", true},
+		{"SCAN lm", true},  // at the very end of the string
+		{"SCAN l", false},  // a prefix of an alias
+		{"SEARCH w", true}, // followed by a space
+	} {
+		if got := PlanHas(plan, tc.want); got != tc.ok {
+			t.Errorf("PlanHas(plan, %q) = %v, want %v", tc.want, got, tc.ok)
+		}
 	}
 }
 
@@ -884,7 +1059,7 @@ func TestWriteQueueRunnableNeedsTheVerbatimINList(t *testing.T) {
 	if err != nil {
 		t.Fatalf("QueryPlan: %v", err)
 	}
-	if j := strings.Join(seeks, " | "); !strings.Contains(j, "ix_wq_runnable") {
+	if j := strings.Join(seeks, " | "); !PlanHas(j, "ix_wq_runnable") {
 		t.Errorf("the verbatim three-state predicate no longer reaches ix_wq_runnable:\n  %s\n"+
 			"That predicate is the sweep's, and reference/sync.md §4's reconciliation guard "+
 			"names the same three states literally.", j)
@@ -896,7 +1071,7 @@ func TestWriteQueueRunnableNeedsTheVerbatimINList(t *testing.T) {
 	if err != nil {
 		t.Fatalf("QueryPlan: %v", err)
 	}
-	if j := strings.Join(scans, " | "); !strings.Contains(j, "SCAN write_queue") {
+	if j := strings.Join(scans, " | "); !PlanHas(j, "SCAN write_queue") {
 		t.Errorf("the single-state predicate now reaches an index:\n  %s\n"+
 			"That is good news and it makes the comment beside ix_wq_runnable in "+
 			"00005_library_sync.sql wrong. Update both in the same change.", j)

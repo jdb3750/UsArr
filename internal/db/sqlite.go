@@ -265,6 +265,53 @@ func isIdentifier(s string) bool {
 	return true
 }
 
+// PlanHas reports whether a rendered query plan contains want AS A WHOLE TOKEN
+// — the match must not be followed by another identifier character, so
+// `ix_work_added` does not match a plan that names `ix_work_added_at`.
+//
+// WHY THIS IS NOT strings.Contains. A plan guard asserts on identifiers — index
+// names, table names, aliases — against one long string. That is fine until an
+// identifier is RENAMED to something that BEGINS with the old name:
+// `ix_work_added` → `ix_work_added_at`, `sil` → `sil_w`, `sdl` → `sdl_f`. The
+// old needle still matches the new plan, so the guard stays GREEN while pinning
+// nothing at all, and there is nothing in the symptom to point at the cause,
+// because a guard that passes by accident looks exactly like one that passes
+// correctly. LS-379's fix hit precisely this: one plan guard went red and said
+// so, two went on passing on `sil_w`.
+//
+// It is deliberately ONE-DIRECTIONAL. The needles it is written for always END
+// with the identifier under test and begin with plan keywords (`SEARCH `,
+// `USING INDEX `) or with the identifier itself, and a plan identifier is never
+// preceded by another identifier character, so only the trailing edge can rot.
+//
+// It lives beside QueryPlan, in package code rather than in a _test.go file,
+// for the same reason QueryPlan does: it is machinery for the gate's plan
+// assertions, and BOTH internal/db's guards and internal/store's need it.
+// internal/store imports internal/db, so one exported function here is reachable
+// from both; a copy in each package is the thing this is avoiding, since a
+// second implementation is a second thing to get wrong.
+func PlanHas(plan, want string) bool {
+	for i := 0; i+len(want) <= len(plan); {
+		j := strings.Index(plan[i:], want)
+		if j < 0 {
+			return false
+		}
+		end := i + j + len(want)
+		if end == len(plan) || !isPlanIdentByte(plan[end]) {
+			return true
+		}
+		i += j + 1
+	}
+	return false
+}
+
+func isPlanIdentByte(b byte) bool {
+	return b == '_' ||
+		(b >= '0' && b <= '9') ||
+		(b >= 'a' && b <= 'z') ||
+		(b >= 'A' && b <= 'Z')
+}
+
 // QueryPlan returns EXPLAIN QUERY PLAN output for a query, one line per step.
 //
 // This exists for the query-plan assertions docs/DEVELOPMENT.md §5 puts in the

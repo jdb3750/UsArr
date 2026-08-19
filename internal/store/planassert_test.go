@@ -3,6 +3,8 @@ package store
 import (
 	"strings"
 	"testing"
+
+	"github.com/jdb3750/UsArr/internal/db"
 )
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -32,35 +34,15 @@ import (
 // migration, and the test has nothing to derive them from.
 // ─────────────────────────────────────────────────────────────────────────────
 
-// planHas reports whether plan contains want AS A WHOLE TOKEN — the match must
-// not be followed by another identifier character, so `ix_work_added` does not
-// match a plan that names `ix_work_added_at`.
+// planHas is db.PlanHas under this package's original name, so the fifteen call
+// sites below and in the sibling files read as they did when the sweep landed.
 //
-// It is deliberately one-directional. The needles here always END with the
-// identifier under test and begin with plan keywords (`SEARCH `, `USING INDEX `)
-// or with the identifier itself, and a plan identifier is never preceded by
-// another identifier character, so only the trailing edge can rot.
-func planHas(plan, want string) bool {
-	for i := 0; i+len(want) <= len(plan); {
-		j := strings.Index(plan[i:], want)
-		if j < 0 {
-			return false
-		}
-		end := i + j + len(want)
-		if end == len(plan) || !isIdentByte(plan[end]) {
-			return true
-		}
-		i += j + 1
-	}
-	return false
-}
-
-func isIdentByte(b byte) bool {
-	return b == '_' ||
-		(b >= '0' && b <= '9') ||
-		(b >= 'a' && b <= 'z') ||
-		(b >= 'A' && b <= 'Z')
-}
+// THE IMPLEMENTATION MOVED, it was not copied. internal/db/*_test.go has plan
+// guards with the same rot, and internal/db cannot import internal/store — so
+// the one implementation lives beside QueryPlan in internal/db/sqlite.go, which
+// both packages already depend on. See db.PlanHas for why the match is
+// one-directional.
+func planHas(plan, want string) bool { return db.PlanHas(plan, want) }
 
 // PROVING THE SHAPE, on the real plans rather than on invented strings.
 //
@@ -134,22 +116,7 @@ func TestPlanGuardsRejectAPrefixRename(t *testing.T) {
 	}
 }
 
-// The helper's own property, because the two cases above exercise it through
-// two guards and would not notice a planHas that returned true for everything.
-func TestPlanHasMatchesWholeTokensOnly(t *testing.T) {
-	const plan = "SEARCH w USING INDEX ix_work_added_at (added_at<?) | SCAN lm"
-	for _, tc := range []struct {
-		want string
-		ok   bool
-	}{
-		{"USING INDEX ix_work_added", false}, // the rot this file exists to catch
-		{"USING INDEX ix_work_added_at", true},
-		{"SCAN lm", true},  // at the very end of the string
-		{"SCAN l", false},  // a prefix of an alias
-		{"SEARCH w", true}, // followed by a space
-	} {
-		if got := planHas(plan, tc.want); got != tc.ok {
-			t.Errorf("planHas(plan, %q) = %v, want %v", tc.want, got, tc.ok)
-		}
-	}
-}
+// The helper's own property test MOVED WITH THE IMPLEMENTATION: it is
+// TestPlanHasMatchesWholeTokensOnly in internal/db/queryplan_test.go, beside
+// PlanHas. Keeping a second copy of the same table here would be the
+// duplication this consolidation removed.
