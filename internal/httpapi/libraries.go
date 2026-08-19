@@ -382,9 +382,12 @@ func libraryCompletenessFor(l store.Library) *libraryCompletenessResponse {
 // librarySkipsFor renders the skip verdict, or nothing at all.
 //
 // NOTHING IS INVENTED AND NOTHING IS DEFAULTED, on libraryCompletenessFor's
-// reasoning. A nil verdict means nothing observed this library's containers —
-// no import has run, or the adapter that ran records neither skips nor
-// completeness — and the key is simply absent.
+// reasoning. A nil verdict means nothing WALKED this library's containers — no
+// import has run, or the one that ran never reached them, or the adapter that
+// ran counts no skips — and the key is simply absent. ⚠️ It no longer means "the
+// adapter records neither skips nor completeness": since ADR-0063 the store
+// derives this state from skip rows alone, and a completeness verdict is not
+// evidence for it either way.
 //
 // ⚠️ THE STATE IS RE-CHECKED ON THE WAY OUT rather than trusted. The store reads
 // its state out of a JSON blob no constraint governs, so a member this build

@@ -118,11 +118,16 @@ func (c ContainerCompleteness) Hidden() int64 {
 // library listing and nowhere else, and because a container list that binds
 // without ever being graded is the state this check exists to prevent.
 //
-// EVERY CONTAINER GETS A ROW, INCLUDING THE ONES THAT ARE FINE. That is the
-// difference between this and Skipped(), which reports only non-zero tallies:
-// a skip that is absent means nothing was skipped, whereas a completeness
-// verdict that is absent means nothing was ASKED, and those two absences have to
-// look different downstream.
+// EVERY CONTAINER GETS A ROW, INCLUDING THE ONES THAT ARE FINE, because an
+// absent verdict has to mean nothing was ASKED rather than nothing was found.
+//
+// ⚠️ THAT USED TO BE THE DIFFERENCE BETWEEN THIS AND Skipped(), which reported
+// only non-zero tallies. ADR-0063 gave Skipped() the same rule, so the two now
+// agree on what an absence means. What still differs is the SET: these verdicts
+// are raised HERE, before the walk, so a container an aborted import never
+// reached still gets one — while its skip tally is raised during the walk and so
+// does not exist. That is deliberate, and it is what stopped the skip read
+// inheriting this pass's before-the-walk reach.
 func (s *BookOrbitSource) checkCompleteness(ctx context.Context, libs []bookorbit.Library) {
 	if s.Client == nil {
 		return

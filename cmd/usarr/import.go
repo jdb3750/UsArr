@@ -208,6 +208,24 @@ const (
 // skipped item that vanishes silently is indistinguishable from one that never
 // existed.
 //
+// # ONE ROW PER CONTAINER THE WALK REACHED, ZERO OR NOT (ADR-0063)
+//
+// ⚠️ THIS USED TO WRITE A ROW ONLY WHERE SOMETHING WAS SKIPPED, and ADR-0063
+// supersedes ADR-0061 §5 on exactly that. "None skipped" and "nothing observed
+// this container" rendered identically as an absent row, so the read had to
+// borrow the completeness row as evidence a container had been walked at all —
+// and the reader one field over already uses row-per-walked-container, so the
+// two absences meant opposite things one column apart. The cost of the fix is
+// one row per container per import.
+//
+// ⚠️ THE INVARIANT IS NOT ENFORCED HERE AND CANNOT BE. This function writes a
+// row for every element of the slice it is handed and knows nothing about which
+// containers exist; the set is BookOrbitSource.Skipped's, which is populated
+// during the walk. Synthesising the zero rows here would mean taking a container
+// list from Containers() — i.e. from before the walk — and handing a row to
+// every container an aborted import never reached, which is the imprecision the
+// change exists to retire.
+//
 // A FAILURE TO RECORD DOES NOT FAIL THE IMPORT. The rows are already committed
 // and correct; losing the note about what was skipped is worth a warning, not a
 // rollback of a catalogue.
@@ -219,10 +237,17 @@ func (g *registry) recordSkippedItems(
 			Name:         s.Name,
 			Comics:       int64(s.Comics),
 			Unknown:      int64(s.Unknown),
-			Reason:       skipReason,
-			Effect:       skipEffect,
 			Covers:       skipCovers,
 			DoesNotCover: skipDoesNotCover,
+		}
+		// ⚠️ NO REASON AND NO EFFECT ON A ZERO ROW. Both sentences explain a skip
+		// that happened; on a row recording that nothing was skipped they would
+		// assert a cause for a non-event, to an operator reading sync_report and
+		// to the fold that lifts Reason onto the wire. The scope pair above stays
+		// on every row, because "a skip count is not a completeness verdict" is
+		// true of a zero exactly as it is true of a thousand.
+		if s.Total() > 0 {
+			note.Reason, note.Effect = skipReason, skipEffect
 		}
 		detail, err := json.Marshal(note)
 		if err != nil {
@@ -262,23 +287,29 @@ const (
 // recordCompleteness writes the durable half of "UsArr may not be seeing all of
 // your books".
 //
-// ONE ROW PER CONTAINER, INCLUDING THE ONES THAT WERE FINE, which is the
-// opposite of recordSkippedItems above and is the whole design. A skip row that
-// is absent means nothing was skipped. A completeness row that is absent means
-// nothing was ASKED — the adapter does not check, or the import never reached
-// this container — and if the two absences looked alike, an instance whose
-// probes all started failing would read as an instance with nothing wrong. That
-// is the defect this feature exists to close, and writing rows only for
-// shortfalls would have recreated it inside the fix.
+// ONE ROW PER CONTAINER, INCLUDING THE ONES THAT WERE FINE. An absent
+// completeness row means nothing was ASKED — the adapter does not check, or the
+// import never reached this container — and if that looked the same as a clean
+// verdict, an instance whose probes all started failing would read as an
+// instance with nothing wrong. That is the defect this feature exists to close,
+// and writing rows only for shortfalls would have recreated it inside the fix.
 //
-// ⚠️ AND THE ROW WRITTEN HERE IS LOAD-BEARING FOR THE NEIGHBOUR, WHICH IT WAS
-// NOT WHEN THIS COMMENT WAS FIRST WRITTEN. "An absent skip row means nothing was
-// skipped" is only true of a container something actually walked, and this row
-// is the only per-container record in the schema that an import went near one —
-// so store.LibrarySkips reads the pair, and a container with a completeness
-// verdict and no skip row is the one that reads as "observed, nothing left out".
-// Stop writing a row for the clean containers and every one of those collapses
-// back into silence.
+// ⚠️ recordSkippedItems NOW FOLLOWS THE SAME RULE, AND USED NOT TO. This comment
+// called that function "the opposite" of this one, and for a while the row
+// written here was LOAD-BEARING for it: the skip read borrowed a completeness
+// verdict as its evidence that a container had been walked at all, because an
+// absent skip row could not tell "nothing left out" from "nobody looked".
+// ADR-0063 ended that. Both writers now put a row per container per import, the
+// skip read stands on its own rows, and nothing here is evidence for anything
+// there — which is the state two adjacent readers on the same screen should have
+// been in from the start.
+//
+// ⚠️ THE TWO ROW SETS ARE STILL NOT THE SAME SET, and that difference is the
+// point rather than a bug. These verdicts are measured in Containers(), BEFORE
+// the walk, so an import that dies part-way still writes a completeness row for
+// every container including the ones it never reached. The skip rows come from
+// tallies raised during the walk, so they stop where the walk stopped. Decoupled
+// means the skip read no longer inherits the wider set.
 //
 // A FAILURE TO RECORD DOES NOT FAIL THE IMPORT, on recordSkippedItems's
 // reasoning: the catalogue rows are already committed and correct, and losing

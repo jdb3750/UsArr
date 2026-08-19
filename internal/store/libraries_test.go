@@ -1259,11 +1259,17 @@ func TestLibraryCompletenessPlanGuardFires(t *testing.T) {
 
 // ─── THE SIBLING AXIS: what the import read and did not map ──────────────────
 
-// seedSkipReports puts skip rows on Manga's container and completeness verdicts
-// on Manga's and on both of Books' — which is the exact corpus the three
-// readings need, because Films gets neither and Loose Ends has no source at all.
+// seedSkipReports writes what an import that WALKED Manga's and both of Books'
+// containers would leave behind (ADR-0063): a non-zero tally on Manga's, a
+// ZERO-COUNT row on each of Books', and no skip row at all for Films'.
 //
-// TWO IMPORTS DEEP ON THE SKIP ROW, so the newest-row pick is doing work: if the
+// ⚠️ FILMS' CONTAINER GETS A COMPLETENESS VERDICT AND NO SKIP ROW ON PURPOSE,
+// and it is the control that proves the coupling is retired. Under ADR-0061 §5
+// that exact pair was the evidence for `none`; Films must now read nil, because
+// a completeness verdict says a container was ASKED ABOUT, not that it was
+// walked. Loose Ends has no source at all and stays nil either way.
+//
+// TWO IMPORTS DEEP ON MANGA'S SKIP ROW, so the newest-row pick is doing work: if the
 // correlated subquery stopped ordering by id the older tally would win and the
 // count would be wrong rather than absent, which is the failure that looks like
 // data.
@@ -1289,10 +1295,24 @@ func seedSkipReports(t *testing.T, s *Store) {
 				`"reason":"UsArr maps prose books only","effect":"no work row"}`,
 			"2026-08-02 00:00:00",
 		},
-		// Every container that was OBSERVED, including the ones with no skip.
+		// Books' two containers: WALKED, and each recorded a clean zero. No
+		// reason and no effect, because there is no skip to explain.
+		{
+			1, SyncReportItemsSkipped, "12",
+			`{"name":"Books","skipped_comics":0,"skipped_unknown":0}`,
+			"2026-08-02 00:00:00",
+		},
+		{
+			2, SyncReportItemsSkipped, "21",
+			`{"name":"More Books","skipped_comics":0,"skipped_unknown":0}`,
+			"2026-08-03 00:00:00",
+		},
+		// Every container that was ASKED ABOUT — which now includes Films' '22',
+		// the one with no skip row above.
 		{1, SyncReportContentCompleteness, "11", `{"state":"complete"}`, "2026-08-02 00:00:00"},
 		{1, SyncReportContentCompleteness, "12", `{"state":"complete"}`, "2026-08-02 00:00:00"},
 		{2, SyncReportContentCompleteness, "21", `{"state":"complete"}`, "2026-08-03 00:00:00"},
+		{2, SyncReportContentCompleteness, "22", `{"state":"complete"}`, "2026-08-03 00:00:00"},
 	}
 	if err := s.DB().Write(t.Context(), func(ctx context.Context, tx *sql.Tx) error {
 		for _, r := range rows {
@@ -1311,16 +1331,23 @@ func seedSkipReports(t *testing.T, s *Store) {
 }
 
 // THE ASSERTION THE WHOLE FEATURE TURNS ON: "nothing was skipped" and "nothing
-// observed this library" are DIFFERENT STORED VALUES, not one absence with two
+// walked this library" are DIFFERENT STORED VALUES, not one absence with two
 // meanings.
 //
-// A skip row is written only when something was skipped (ADR-0061 §5), so the
-// items_skipped table alone cannot tell the two apart — which is why this read
-// pairs it with the completeness row, and why breaking that pairing has to go
-// red here rather than quietly turning every measured negative back into
-// silence. Films is the control: it is observed by nothing, and it must stay
-// nil while Books goes to `none`.
-func TestLibrarySkipsTellsNothingSkippedFromNothingObserved(t *testing.T) {
+// ⚠️ THE DISTINCTION SURVIVED ADR-0063; ITS EVIDENCE DID NOT, AND THIS TEST IS
+// RENAMED FOR THAT RATHER THAN REWRITTEN. It used to assert that the read pairs
+// the items_skipped table with the COMPLETENESS row, because a skip row existed
+// only where something had been skipped (ADR-0061 §5) and the table alone could
+// not tell the two apart. Now every container an import walked has a skip row,
+// zero or not, so the answer comes off those rows alone.
+//
+// ⚠️ AND THE OLD CONTROL IS INVERTED RATHER THAN DROPPED, which is the whole
+// value of keeping it: Films' container carries a completeness verdict and NO
+// skip row — the exact pair that used to mean `none` — and it must now read nil.
+// If somebody reinstates the completeness fallback, Films goes to `none` and
+// this goes red naming it. Books is the other half: two containers, two
+// zero-count rows, and a measured `none` that rests on nothing but its own rows.
+func TestLibrarySkipsTellsNothingSkippedFromNothingWalked(t *testing.T) {
 	s := newTestStore(t)
 	seedLibrariesCorpus(t, s)
 	seedSkipReports(t, s)
@@ -1349,8 +1376,8 @@ func TestLibrarySkipsTellsNothingSkippedFromNothingObserved(t *testing.T) {
 	books := libraryByName(t, got, "Books").Skips
 	if books == nil || books.State != SkipsNone {
 		t.Fatalf("Books' skip verdict = %+v, want `none` — both of its containers were "+
-			"observed and neither recorded a skip, which is a MEASURED negative and must "+
-			"not read as the same thing as nobody having looked", books)
+			"walked and each recorded a ZERO-COUNT row, which is a MEASURED negative and "+
+			"must not read as the same thing as nobody having looked", books)
 	}
 	if books.Items != 0 || books.Reason != "" {
 		t.Errorf("the `none` verdict published a count or a reason: %+v — there is nothing "+
@@ -1361,23 +1388,32 @@ func TestLibrarySkipsTellsNothingSkippedFromNothingObserved(t *testing.T) {
 		t.Errorf("Books folded %d container observations, want 2", books.Containers)
 	}
 
-	// ⚠️ THE CONTROLS. Films' container has no row of either kind, and Loose Ends
-	// has no source at all. Both must stay nil: reading either as "nothing was
-	// skipped" would be the defect this test exists to catch, told the other way
-	// round.
+	// ⚠️ THE CONTROLS, AND THE FIRST OF THEM IS THE INVERTED ONE. Films'
+	// container has a COMPLETENESS verdict and no skip row — under ADR-0061 §5
+	// that pair WAS the evidence for `none`, and this test asserted it. ADR-0063
+	// retired the pairing, so nil is now the right answer and `none` is the
+	// regression. Loose Ends has no source at all and is nil under either rule.
 	if films := libraryByName(t, got, "Films").Skips; films != nil {
-		t.Errorf("Films carries %+v — nothing has ever observed its container, and "+
-			"publishing a verdict for it reports silence as a measurement", films)
+		t.Errorf("Films carries %+v — nothing ever WALKED its container, only asked "+
+			"about it, and publishing a verdict off the completeness row is the "+
+			"coupling ADR-0063 removed", films)
 	}
 	if loose := libraryByName(t, got, "Loose Ends").Skips; loose != nil {
 		t.Errorf("Loose Ends has no source and carries %+v", loose)
 	}
 }
 
-// A detail blob that will not decode is DROPPED, and the library falls through
-// to whatever the observation says — which is the honest answer, because the
-// container WAS observed and what could not be read is what it recorded.
-func TestAnUnreadableSkipRowFallsBackToTheObservation(t *testing.T) {
+// A detail blob that will not decode is DROPPED, and with it the only evidence
+// that anything walked that container — so the library reads nil.
+//
+// ⚠️ THIS EXPECTATION IS INVERTED BY ADR-0063 RATHER THAN DELETED, and the old
+// one is worth stating because it is why the test exists: the drop used to fall
+// through to the SkipsNone pass, so an unreadable row on an OBSERVED container
+// still produced `none`. That pass is gone. nil is a step further into the same
+// safe direction the drop was chosen for — it understates what is known and
+// never overstates it — and it is the honest answer here, because what could not
+// be read is precisely the record of the walk.
+func TestAnUnreadableSkipRowIsDroppedAndPublishesNothing(t *testing.T) {
 	s := newTestStore(t)
 	seedLibrariesCorpus(t, s)
 	seedSkipReports(t, s)
@@ -1396,14 +1432,10 @@ func TestAnUnreadableSkipRowFallsBackToTheObservation(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ListLibraries: %v", err)
 	}
-	manga := libraryByName(t, got, "Manga").Skips
-	if manga == nil || manga.State != SkipsNone {
-		t.Fatalf("Manga's verdict = %+v, want `none`: the newest skip row is unreadable, so "+
-			"nothing is known to have been left out, but the container was still observed",
-			manga)
-	}
-	if manga.Items != 0 {
-		t.Errorf("an unreadable row contributed %d items", manga.Items)
+	if manga := libraryByName(t, got, "Manga").Skips; manga != nil {
+		t.Fatalf("Manga's verdict = %+v, want NIL: its newest skip row is unreadable, so "+
+			"the one record of what the walk left out cannot be read and nothing may be "+
+			"published off it — least of all a measured negative", manga)
 	}
 }
 
@@ -1415,6 +1447,13 @@ func TestAnUnreadableSkipRowFallsBackToTheObservation(t *testing.T) {
 // its four firing arms cover this read without a second copy of any of it — and
 // the day somebody hand-writes a second statement, this goes red and says which
 // coverage just lapsed.
+//
+// ⚠️ RE-EXAMINED AND KEPT UNDER ADR-0063, which changed neither statement: the
+// zero-count skip row is a WRITE-side change, so containerReportSQL, the four
+// equalities, the `ORDER BY r2.id` and ix_sync_report_container_latest are all
+// untouched. What did change is that both kinds now file a row per walked
+// container, which makes the shared statement more obviously the right shape
+// rather than a coincidence worth un-sharing.
 func TestTheSkipStatementIsTheCompletenessStatement(t *testing.T) {
 	skipSQL, skipArgs := librarySkipsSQL(OwnerScope(0), []int64{1, 2, 3})
 	compSQL, compArgs := libraryCompletenessSQL(OwnerScope(0), []int64{1, 2, 3})

@@ -110,7 +110,8 @@ because no ADR ever decided it. Annotating leaves that failure mode nowhere to h
 | [0058](#adr-0058) | UsArr **grades the scope a stored service credential actually carries**, and **reports rather than refuses** | **Accepted** — 2026-08-19; **discharges [ADR-0052](#adr-0052)'s §14 credential-scope gate** — ⚠️ a **discharge is not an amendment**, so ADR-0052 gains a dated inline note pointing here and **nothing in its text is struck**; **closes off assuming a service account is minimal** because it was created as a service account — the grading is done **in code, not in prose**, so `TestEveryBookOrbitPermissionIsClassified` notices a 24th permission upstream where a paragraph could not; all **23** members of BookOrbit's `Permission` enum are classified **elevated** (14: write or admin reach beyond a catalogue read) or **unneeded** (9: harmless but more than UsArr uses), with the superuser flag (elevated), a non-`shared` `provisioningMethod` (unneeded) and an inactive account (unneeded) as **separate findings** rather than permissions; ⚠️ **an unrecognised permission grades ELEVATED, never harmless** — chosen, not fallen into, so the verdict gets *more* conservative on its own when BookOrbit's vocabulary grows, at the named cost that a genuinely harmless upstream addition is over-flagged until someone classifies it (the grading is a **maintenance obligation**, not a self-maintaining one); **costs ZERO extra requests** — `AuthService.buildUserResponse` ships `permissions`, `isSuperuser` and `provisioningMethod` in the same body as the `accessToken`, which is why the verdict can be recomputed on **every** mint; **the client REPORTS and WARNS, it does not REFUSE**, because refusing leaves an operator with a service that will not talk to them and no visible reason — the opposite of principle 3, and the §14 finding would be **less** visible, not more; ⚠️ **what ships is the mechanism, not the gate's enforcement** — ADR-0052's condition is on the **catalogue read**, so slice 1 must consult `ScopeVerdict.Elevated()` at **both `Containers()` and `StreamItems()`** — a container list **is** catalogue data (it is what the Libraries screen renders and what `BindContainers` writes rows from) and `Containers()` runs first, so gating the item walk alone would bind a library list under an ungraded credential; one `sync.Once` makes the wider gate free — and slice 0 ships the thing both reads will consult; ✅ **that obligation is DISCHARGED, 2026-08-19, at `862a0ca`** — `BookOrbitSource.gate()` consults the verdict from both entry points; ⚠️ **discharged is not vacated**: the condition is on the *catalogue read*, so a future read path that lands without consulting it makes the obligation live again; **adds no migration, no column, no crypto and no new HKDF label** — the secret rides the existing versioned AAD-bound `service_instance` envelope |
 | [0059](#adr-0059) | The per-media-type facet count is an **assignment**: every work lands in **exactly one** bucket | **Accepted** — 2026-08-19; **records the counting semantics that shipped with `GET /api/v1/library/facets`** (`2711926`), whose wire contract is [`reference/http-api.md`](./reference/http-api.md) §8 and whose reasoning is `internal/store/facets.go` — **the numbers and the predicates live there and this ADR does not copy them**; a count cannot put one work in two buckets and remain a count, so the column would stop summing to the library and the same work would be reported twice in a summary whose whole question is *"what do I have?"*; the assignment is **`mediaTypeOf`'s**, the one that already renders every Block C and grid row's Type cell, so **a book held as both an EPUB and an M4B counts under Ebooks** and the count therefore equals the list a user reaches by clicking it — that equality is the decision's whole argument, and `TestMediaTypeCountsAgreeWithTheBrowseRead` pins it from the consumer's side; ⚠️ **the consequence, stated rather than buried: a library whose only audiobooks are second editions of ebooks reports `audiobooks: 0`**, while ARCHITECTURE §17.2's row-5 predicate — an independent `EXISTS` over `edition.format` — says that type has content; **the two disagree by design**, and this ADR is where a reader is meant to meet that; **closes off §17.2's independent-`EXISTS` shape as the counting rule** — it is the right shape for a *presence* test and the wrong one for a *count*, and the two are not interchangeable; **adds no endpoint, no migration, no column and no UI change** — the read, the index (`ix_edition_format`, migration `00009`) and the tests were already in the tree when this was written; ⚠️ **it is a live input to [ADR-0053](#adr-0053)**, whose reopening condition these counts appear to satisfy and do not — see that ADR's 2026-08-19 refinement, which this ADR is cited by |
 | [0060](#adr-0060) | A stored credential can be **readable upstream**: BookOrbit's `raw_token` is bounded by **service-account privilege, not rotation** | **Accepted** — 2026-08-19; **records a measured property of the service v0.1 replicates from** ([ADR-0052](#adr-0052)) rather than a design UsArr chose — BookOrbit at `73b7877` stores the magic-link token in **plaintext beside its hash** (`magic_access_tokens.raw_token`, written by `MagicLinkRepository.create`, which is **not** what `loginWithToken` authenticates on) and **returns every token's plaintext to any superuser** through `findAll` behind `GET /api/v1/auth/magic-links`; **the two axes are deliberately NOT collapsed, which is this ADR's whole value** — *plaintext-at-rest is the class norm, which **Kavita confirms** (measured at tag `v0.9.0.2` / `6bcd568`, **not `main`**, which is frozen at v0.7.8 and has planted a wrong fact in these docs before: `AppUserAuthKey.Key` is plaintext with **no hash column at all**, plus the legacy `AppUser.ApiKey` the v0.8.9 migration copied verbatim); admin-retrievable-over-the-API is **not**, which **Kavita refutes** (no route returns another user's key — `MemberDto` carries no key field, every read resolves `UserId` from the caller's own claims, and rotate/delete each assert `authKey.AppUserId == UserId`)*; so the listing is **a step down the threat model names as such, not the ecosystem baseline**, and it is a fact about **the switch**, not a defect *of BookOrbit*; ⚠️ **because the credential is retrievable and rotation does not change that, the privilege of the account UsArr authenticates as is the ONLY control that bounds the consequence** — not one mitigation among several but the whole of UsArr's leverage, and it is already built ([ADR-0058](#adr-0058)'s grading); 🚫 **periodic re-minting is REJECTED, explicitly so nobody re-proposes it** — a re-minted token lands in the same plaintext column and the same listing, so rotation stays available for an **incident** and is **not advised on a schedule**; the difference the retrievability axis actually makes is **attribution** — minting emits `AuditAction.MagicLinkCreate`, reading emits nothing, and later use is counted against UsArr's own row; ⚠️ **the Trace-logging hedge qualifies RETRIEVABILITY ONLY and leaves plaintext-at-rest untouched** — a Kavita admin can reach live keys indirectly (`AuthKeyService.UpdateLastAccessedAsync` logs a **valid** key at Trace, the level is an admin-writable setting, `GET /api/server/logs` downloads the zip), so *"not admin-retrievable"* is true of the API surface and true by default, **not absolute** — a deliberate multi-step through a config change and a wait, **not a read**, and **not exercised on any live instance**; **amends ARCHITECTURE §14** with one clause that **generalises and names no service** — a credential UsArr stores may be readable by the service that issued it, so **UsArr's protections are necessary and not sufficient** and the model says which side of the boundary each protection sits on, a question **every future adapter** gets asked; ✅ **CLOSES** — rather than standing forever over a mutable upstream — when BookOrbit drops `raw_token` (both axes) or the listing stops returning plaintext (retrievability), which doubles as the concrete ask any upstream report carries; **ships no code, no migration, no column and no schema change** |
-| [0061](#adr-0061) | Catalogue completeness is **measured and three-valued**: "not checked" is a state, not a zero | **Accepted** — 2026-08-19; **records the completeness verdict that shipped with the BookOrbit adapter's content-filter check** (`internal/bookorbit/stats.go`, `internal/libsync/bookorbitcompleteness.go`), whose wire contract is [`reference/http-api.md`](./reference/http-api.md) §2.6 and whose render is ARCHITECTURE §17.8; **the defect it answers is measured, not guessed** — BookOrbit at `73b7877d` puts a user's `contentFilters` in the books `LEFT JOIN … ON` condition with **no `.where()` at all** (`library.repository.ts:30-51`), so a filter **shorts each library's `bookCount` without dropping a library row**, while `getStats` (`library.repository.ts:150-178`) takes neither user nor filter, making `totalBooks − bookCount` the exact number of present books the credential was not shown; ⚠️ **a boolean `complete` is REJECTED explicitly, and that rejection is this ADR's whole point** — *"no shortfall"* and *"not checked"* are different facts, so the verdict is three-valued (`complete` · `shortfall` · `unverified`) with **`unverified` a first-class member**, enforced one level down as `Total` = **−1** rather than `0`, because `0` is a legal total for an empty container; ⚠️ **the degradation condition is named rather than assumed** — the measurement rests on an **unguarded upstream route** nobody promised UsArr, so if BookOrbit adds a `@RequirePermission` to `GET /libraries/:id/stats` every probe answers 403 and **every verdict becomes `unverified`**, which is the original defect recreated inside its own fix, and is why it is drilled rather than argued — `TestAGuardedStatsRouteRecordsUnverifiedRatherThanComplete` serves the 403 and asserts `unverified` with `Total = -1`; **it never blocks or refuses a sync** — a partial replica that says it is partial beats no replica, and the items that did import are correct either way; **every container gets a row**, `sync_report.kind = 'content_completeness'`, deliberately the **opposite** of the neighbouring `items_skipped` rule, because an absent skip row means nothing was skipped while an absent completeness row means nothing was **asked**, and those two absences must not look alike; ⚠️ **the claim's SCOPE travels in the row** (`covers` / `does_not_cover`) because a second axis is **unanswerable from a read-only account** — `LibraryAccessGuard` throws a byte-identical `ForbiddenException('No library access')` for *"the library exists and this account has no access row"* and for *"there is no such library"* — so `complete` on every library UsArr can see is **not** a statement that UsArr can see every library; 🚫 **probing library ids to find the hidden ones is REJECTED** — it is enumeration against the operator's own service and it does not even work, the guard's two refusals being identical; **`complete` renders nothing** on §17.8, which keeps that screen's standing invariant that nothing on it renders a positive health claim, and is why `unverified` has to be loud; **adds no migration, no column and no DDL** — `sync_report` carries no `CHECK` over `kind` (migration `00005`) and `detail` is already JSON, so the verdict's three sides share one declaration in `internal/store/completeness.go` and a typo is a silently missing verdict rather than a constraint violation; **the Kavita adapter is untouched and serves no verdict**, which renders as an absent key and is the seam: an adapter that can make the comparison implements the same shape and the screen needs no change |
+| [0061](#adr-0061) | Catalogue completeness is **measured and three-valued**: "not checked" is a state, not a zero | **Accepted** — 2026-08-19; **records the completeness verdict that shipped with the BookOrbit adapter's content-filter check** (`internal/bookorbit/stats.go`, `internal/libsync/bookorbitcompleteness.go`), whose wire contract is [`reference/http-api.md`](./reference/http-api.md) §2.6 and whose render is ARCHITECTURE §17.8; **the defect it answers is measured, not guessed** — BookOrbit at `73b7877d` puts a user's `contentFilters` in the books `LEFT JOIN … ON` condition with **no `.where()` at all** (`library.repository.ts:30-51`), so a filter **shorts each library's `bookCount` without dropping a library row**, while `getStats` (`library.repository.ts:150-178`) takes neither user nor filter, making `totalBooks − bookCount` the exact number of present books the credential was not shown; ⚠️ **a boolean `complete` is REJECTED explicitly, and that rejection is this ADR's whole point** — *"no shortfall"* and *"not checked"* are different facts, so the verdict is three-valued (`complete` · `shortfall` · `unverified`) with **`unverified` a first-class member**, enforced one level down as `Total` = **−1** rather than `0`, because `0` is a legal total for an empty container; ⚠️ **the degradation condition is named rather than assumed** — the measurement rests on an **unguarded upstream route** nobody promised UsArr, so if BookOrbit adds a `@RequirePermission` to `GET /libraries/:id/stats` every probe answers 403 and **every verdict becomes `unverified`**, which is the original defect recreated inside its own fix, and is why it is drilled rather than argued — `TestAGuardedStatsRouteRecordsUnverifiedRatherThanComplete` serves the 403 and asserts `unverified` with `Total = -1`; **it never blocks or refuses a sync** — a partial replica that says it is partial beats no replica, and the items that did import are correct either way; **every container gets a row**, `sync_report.kind = 'content_completeness'`, deliberately the **opposite** of the neighbouring `items_skipped` rule, because an absent skip row means nothing was skipped while an absent completeness row means nothing was **asked**, and those two absences must not look alike; ⚠️ **the claim's SCOPE travels in the row** (`covers` / `does_not_cover`) because a second axis is **unanswerable from a read-only account** — `LibraryAccessGuard` throws a byte-identical `ForbiddenException('No library access')` for *"the library exists and this account has no access row"* and for *"there is no such library"* — so `complete` on every library UsArr can see is **not** a statement that UsArr can see every library; 🚫 **probing library ids to find the hidden ones is REJECTED** — it is enumeration against the operator's own service and it does not even work, the guard's two refusals being identical; **`complete` renders nothing** on §17.8, which keeps that screen's standing invariant that nothing on it renders a positive health claim, and is why `unverified` has to be loud; **adds no migration, no column and no DDL** — `sync_report` carries no `CHECK` over `kind` (migration `00005`) and `detail` is already JSON, so the verdict's three sides share one declaration in `internal/store/completeness.go` and a typo is a silently missing verdict rather than a constraint violation; **the Kavita adapter is untouched and serves no verdict**, which renders as an absent key and is the seam: an adapter that can make the comparison implements the same shape and the screen needs no change; ⚠️ **superseded in part 2026-08-19 by [ADR-0063](#adr-0063)** — the `content_completeness` rule this ADR decides stands **unchanged**, and what falls is the `items_skipped` semantics §5 contrasts itself against: that kind now follows the **same** row-per-walked-container rule, so *"an absent skip row means nothing was skipped"* is no longer true and the two absences no longer differ |
+| [0063](#adr-0063) | A walked container records a **zero-count skip row**; "none skipped" stops being an absence | **Accepted** — 2026-08-19; **supersedes [ADR-0061](#adr-0061) §5's absent-row semantics for `items_skipped`**, leaving ADR-0061's text standing and unreworded with an inline flag on §5, on the pattern [ADR-0052](#adr-0052) used against [ADR-0041](#adr-0041) clause 1; **the problem is a coupling, not a bug** — `42246c0` built a reader that needed three states from a table that offered two (*items left out* · *walked, nothing left out* · *nothing walked it*), and could only separate the last two by joining against the **completeness** row, which measures a **different axis** and was quietly the only per-container record in the schema that an import had gone near a container, so `cmd/usarr` recorded in as many words that *"stop writing a row for the clean containers and every one of those collapses back into silence"*; ⚠️ **and the two adjacent readers had OPPOSITE absence conventions** one §17.8 column apart — absent completeness meant *nothing was asked*, absent skip meant *nothing was found* — which is a hazard on its own; **the same-screen compensating control was ruled INSUFFICIENT by the owner**, in his words *"cross-referencing is what people stop doing"*; **the decision**: every container an import **walked** gets a row, zero or not, and a container nothing walked gets none; ⚠️ **the three states survive and only the EVIDENCE moves** — `left_out` is a non-zero row, `none` is a zero row, absent is no row, and the wire contract, the `SkipState` vocabulary and the §17.8 render are all unchanged (`none` still renders nothing, keeping that screen's standing invariant that it paints no positive health claim); **the completeness derivation is RETIRED rather than left as a fallback**, taking `ListLibraries`'s ordering constraint with it, because a dead cleverness kept just-in-case is a second code path nobody exercises; ⚠️ **the change belongs in the ADAPTER and not in `cmd/usarr`, which is load-bearing** — the tally map is populated by `tallyFor` at the top of one container's iteration **inside** the walk and is never pre-seeded, so the row set is the set of containers the walk **reached**; ✅ **the before-the-walk imprecision therefore genuinely DIES** — completeness is measured in `Containers()` before the walk, so an aborted import writes verdicts for containers it never reached, and those used to read *"nothing was skipped"* when the truth was *"not observed"*; ⚠️ **and what is STILL OPEN is stated rather than implied** — the one container the walk died **inside** carries a row from what it had read, so a clean partial read is indistinguishable from a clean complete one (at most one per import), not closed because withholding it loses genuine observed skips and contradicts the invariant, and marking it means a fourth state the screen cannot render; 🚫 **synthesising the zero rows in `cmd/usarr` from the container list is REJECTED and was fired deliberately** — the only list available there is `Containers()`'s, and seeding from it produces a clean zero for a container named `Never Reached`, which **moves** the imprecision into the field just decoupled from it; **a zero row carries no `reason` and no `effect`** (they explain a skip, and on a zero they assert a cause for a non-event) but keeps `covers`/`does_not_cover`, because a skip count is not a completeness verdict at any count; **the `StreamItems` LOG keeps its zero gate** — nobody infers "walked clean" from an absent log line, so the record is the row; **adds no migration, no column and no DDL** — same `kind`, and `sync_report.kind` carries no `CHECK` (migration `00005`, verified in the DDL); **no SQL and no plan change** — `librarySkipsSQL` and `libraryCompletenessSQL` still share one `containerReportSQL`, and `TestTheSkipStatementIsTheCompletenessStatement` was re-examined and **kept**; **the Libraries screen does not change**, since `skipMarks` and `skippedNote` already keyed on `left_out` and the absent key; ⚠️ **one reader behaviour inverts in the safe direction** — a library whose only skip row is undecodable now reads absent rather than `none`; **four existing assertions are INVERTED rather than deleted**, because an inverted assertion records that the decision changed and a deleted one is silence |
 
 ---
 
@@ -8295,6 +8296,15 @@ an outage, and the items that did import are correct either way.
 `items_skipped` rule and is deliberate: an absent skip row means nothing was skipped, an absent
 completeness row means nothing was **asked**, and the two absences must not look alike.
 
+> 🚩 **SUPERSEDED IN PART 2026-08-19 by [ADR-0063](#adr-0063)** — **this clause's own rule stands
+> unchanged; what falls is the `items_skipped` semantics it contrasts itself against.** That kind now
+> follows the SAME rule — a row per container an import walked, zero or not — so *"an absent skip row
+> means nothing was skipped"* is no longer true, and the two absences no longer differ. The reason
+> was that they were being read one column apart on the same §17.8 row with opposite meanings, and
+> that the reader built on this clause had to borrow the completeness row as its evidence that a
+> container had been walked at all. **Every other word of this clause survives**, including its
+> conclusion for `content_completeness`: an absent verdict here still means nothing was **asked**.
+
 **6 · The claim's SCOPE travels in the row.** Every row carries `covers` and `does_not_cover` in its
 own detail blob. The second is load-bearing: Context §4's axis is unanswerable, so `complete` on
 every library UsArr can see is **not** a statement that UsArr can see every library, and the row says
@@ -8484,3 +8494,191 @@ salt copy is dropped — and `TestBackupOutputNamesWhatItDoesNotCover`, which fa
 paragraph stops naming the master key, its location on this install, or what to do about it.
 `TestBackupNeverPrintsKeyMaterial` watches the process's real stdout and stderr as well as the
 report writer, because the first version of it passed a deliberate `fmt.Printf` of the salt bytes.
+
+<a id="adr-0063"></a>
+## ADR-0063 — A walked container records a **zero-count skip row**; "none skipped" stops being an absence
+
+**Status:** Accepted — 2026-08-19. **Supersedes [ADR-0061](#adr-0061) §5's absent-row semantics for
+`items_skipped`.** ADR-0061's text is left standing and unreworded; its §5 carries an inline flag
+pointing here, on the pattern [ADR-0052](#adr-0052) used against [ADR-0041](#adr-0041) clause 1.
+
+### Context
+
+#### 1 · What shipped, and the state it could not name
+
+`sync_report.kind = 'items_skipped'` records what an adapter READ inside a container and
+deliberately did not map — v0.1's case is a comic, for which UsArr has no settled unit of work.
+ADR-0061 §5 stated the write rule as a decision: **a row only when something was skipped**, so an
+absent row meant nothing was skipped.
+
+`42246c0` then built the reader and the §17.8 render on top of that, and immediately met three
+states where the table offered two:
+
+| Reading | Wanted |
+| --- | --- |
+| Items were left out | `state: "left_out"` |
+| Walked, and nothing was left out | `state: "none"` — a **measured negative** |
+| Nothing walked this library | the key **absent** |
+
+The last two are the same absence in an `items_skipped`-only table. The reader separated them by
+joining against the **`content_completeness`** row, which ADR-0061 §5 does write for every container
+observed — so "a library with a completeness verdict and no skip row" became the stand-in for
+"walked, nothing left out".
+
+#### 2 · Which made the neighbour load-bearing for this field's silence
+
+That is the defect this ADR answers, and it is a coupling rather than a bug: the completeness row is
+a measurement on a **different axis** — *did the credential SEE everything the container holds* —
+and it was quietly doing double duty as the only per-container record in the schema that an import
+had gone near a container at all. `cmd/usarr/import.go` said so out loud: *"Stop writing a row for
+the clean containers and every one of those collapses back into silence."* A change to the
+completeness pass, made for completeness reasons, would have silently changed what the skip column
+says.
+
+#### 3 · And two adjacent readers had opposite absence conventions
+
+`completeness` and `skipped` render one column apart on the same §17.8 row. An absent completeness
+row meant *nothing was asked*; an absent skip row meant *nothing was found*. Two opposite meanings
+for the same shape of silence, side by side, is a hazard independent of the coupling above — for the
+next adapter author, for anyone reading `sync_report` out of the database, and for anyone reasoning
+about the screen.
+
+The compensating control was on the same screen and was **ruled insufficient**: the reader could
+cross-reference the completeness column to work out what the skip column's silence meant.
+Cross-referencing is what people stop doing.
+
+### Decision
+
+**1 · Every container an import WALKED gets an `items_skipped` row, zero or not. A container nothing
+walked gets none.** One row per container per import, mirroring `content_completeness`. Both readers
+now mean the same thing by an absence: **nothing looked**.
+
+**2 · The three states survive; only the evidence moves.** `left_out` is a row with a non-zero
+total, `none` is a row with a zero total, absent is no row. The wire contract
+(`reference/http-api.md` §2.6a), the store's `SkipState` vocabulary and the §17.8 render are
+**unchanged** — `none` still renders nothing, which keeps that screen's standing invariant that it
+paints no positive health claim.
+
+**3 · The completeness derivation is RETIRED, not left in as a fallback.** `attachLibrarySkips`'s
+second pass is deleted, and with it `ListLibraries`'s constraint that the skip read must run after
+the completeness read. A dead cleverness kept "just in case" is a second code path nobody exercises
+and a second explanation of the same field.
+
+**4 · The change belongs in the ADAPTER, not in `cmd/usarr`.** `BookOrbitSource.Skipped` stops
+filtering zero tallies. `recordSkippedItems` is untouched in that respect — it already wrote a row
+per element it was handed. This is the load-bearing half of the placement: the tally map is
+populated by `tallyFor` at the top of **one container's iteration inside the walk**, and nothing
+pre-seeds it, so the set of rows is the set of containers the walk **reached**. Synthesising the
+zero rows in `cmd/usarr` would mean taking a container list from `Containers()` — see Decision 5.
+
+**5 · A zero row carries no `reason` and no `effect`.** Both sentences explain a skip; on a row
+saying nothing was skipped they assert a cause for a non-event, to an operator reading `sync_report`
+and to the fold that lifts `reason` onto the wire. `covers` / `does_not_cover` **do** stay on every
+row (ADR-0061 §6), because *"a skip count is not a completeness verdict"* is as true of a zero as of
+a thousand.
+
+**6 · The `StreamItems` LOG keeps its zero gate.** A log line is not a record: nobody infers "this
+container was walked clean" from the absence of a line in a process log, so a line per clean library
+would be noise on every import and would buy the honesty nothing. The record is the row.
+
+### The imprecision: what dies, and what is still open
+
+Stated in both directions on purpose, because an ADR that omits the claim reads, later, as an ADR
+that made it.
+
+✅ **RETIRED.** The completeness verdict is measured in `Containers()`, **before** the walk, so an
+import that dies part-way writes one for containers it never reached — and while `none` was derived
+from that verdict, those containers read *"nothing was skipped"* when the truth was *"not
+observed"*. Skip rows are raised from tallies created **during** the walk, so a container the walk
+never reached has no row and reads as absent. The skip read no longer inherits the completeness
+pass's reach. This is a property of **where the tallies come from**, so it is asserted rather than
+argued: `TestSkippedNamesOnlyTheContainersTheWalkReached` walks two of three containers and fails if
+the third reports.
+
+⚠️ **STILL OPEN, and not closed by this change.** The one container the walk died **inside** does
+get a row, from what it had read so far — so a container that had skipped nothing before failing
+reads `none` for a partial read. At most one per import: `StreamItems` returns on the first
+container error. **Why it could not be closed here.** Withholding that container's row loses genuine
+skips the walk did observe and contradicts Decision 1's own invariant, since a partially walked
+container *was* walked; and marking it would mean a fourth "partially observed" concept in a read
+this change exists to simplify, for a state the screen has no distinct rendering for. The
+compensating control is unchanged and is not this field's: an instance whose import did not finish
+renders *"An import did not finish · this count may be short"* on every one of its libraries
+(`web/src/lib/libraries.ts`). It is asserted, so it cannot quietly become something else — the same
+test pins the dead container's row and says in words that this is the residual.
+
+### Consequences
+
+- **One extra `sync_report` row per container per import.** An append-only row with a small JSON
+  blob, on the import path, once per container. Nothing.
+- **No migration, and no new vocabulary.** The `kind` is the one that already exists;
+  `sync_report.kind` carries **no `CHECK`** (migration `00005`, verified in the DDL rather than
+  assumed) and `detail` is already JSON. Nothing in the schema changes.
+- **No SQL and no plan changes.** `librarySkipsSQL` and `libraryCompletenessSQL` still delegate to
+  one `containerReportSQL`, the four equality predicates and the `ORDER BY r2.id` are untouched, and
+  `ix_sync_report_container_latest` (migration `0011`) still covers the pick.
+  `TestTheSkipStatementIsTheCompletenessStatement` was **re-examined and kept** rather than assumed
+  still valid: byte-identity is what lets one plan guard and its firing arms cover both reads.
+- **The Libraries screen does not change.** `skipMarks` already rendered only `left_out` and
+  `skippedNote` already counted only `left_out` and the absent key, so all three states landed
+  identically before and after. What changed on that side is prose that had gone false.
+- **One reader behaviour inverts, in the safe direction.** With the second pass gone, a library
+  whose only skip row is **undecodable** now reads as absent rather than as `none`. That is a step
+  further into the direction the drop was already chosen for — nil understates what is known and
+  never overstates it — and it is the honest answer, because what could not be read is precisely the
+  record of the walk.
+- **The next adapter has one rule to learn, not two.** "A row per container you walked" is now the
+  answer for both fields.
+
+### Alternatives rejected
+
+**Keep the coupling and rely on the same-screen compensating control.** Rejected by the owner: the
+reader can already cross-reference the completeness column to decode the skip column's silence, and
+*cross-referencing is what people stop doing*. It also leaves a measurement on one axis
+load-bearing for a different axis's silence, which is a coupling nobody would design deliberately.
+
+**Synthesise the zero rows in `cmd/usarr` from the container list.** This is the tempting shape,
+because `recordSkippedItems` is where the rows are written — and it is exactly wrong. The only
+container list available there is `Containers()`'s, i.e. **before the walk**, so every container an
+aborted import never reached would get a row saying UsArr left nothing out of a container it never
+opened. That does not retire the before-the-walk imprecision, it **moves it** into the field that
+had just been decoupled from it. Fired deliberately during implementation: seeding the tally map
+from `s.containers` produces `RemoteID:3 Name:"Never Reached"` with a clean zero, and the guard
+names it.
+
+**A fourth state for "partially walked".** Rejected for now. It is the only thing that would close
+the residual above, and it buys a distinction §17.8 has no separate rendering for, at the cost of a
+fourth member in a vocabulary that exists to keep three readings apart. The residual is recorded
+instead. If a screen ever wants to say it, this is the seam: the writer already knows which
+container the walk died in.
+
+**Widen `sync_report` with a `walked` column or a new `container_walked` kind.** Rejected as "and
+also" — a second record for a fact the existing row can carry, and a second thing that can be
+missing.
+
+### What is built
+
+Write side: `internal/libsync/bookorbit.go` — `Skipped()` returns every tally including the zeroes;
+`Containers()` gains a comment pinning that the map is **never** seeded from the container list;
+`StreamItems`'s log gate keeps its zero filter and says why. `cmd/usarr/import.go` —
+`recordSkippedItems` omits `reason` / `effect` on a zero row, and `recordCompleteness`'s doc records
+that its row **used** to be load-bearing for the neighbour and no longer is.
+
+Read side: `internal/store/libraries.go` — `attachLibrarySkips` loses its second pass, `foldSkips`
+derives the state from the totals (`SkipsNone` until a non-zero total moves it, so row order cannot
+change the answer), and `ListLibraries` loses the ordering constraint. Vocabulary corrected in
+`internal/store/skips.go`, `internal/store/completeness.go`,
+`internal/libsync/bookorbitcompleteness.go`, `internal/httpapi/libraries.go`,
+`web/src/lib/libraries.ts` and `reference/http-api.md` §2.6a.
+
+**Guards.** `TestSkippedNamesOnlyTheContainersTheWalkReached` is the new one and carries both halves
+of the invariant plus the named residual. Four existing assertions are **inverted rather than
+deleted**, because an inverted assertion records that the decision changed and a deleted one is
+silence: `TestAddingABookOrbitProducesACatalogue`'s *"library 2 skipped nothing and still got %d
+notes"* now demands the zero row and additionally asserts that no row exists for a container the
+walk never reached; `TestLibrarySkipsTellsNothingSkippedFromNothingObserved` is renamed
+`…FromNothingWalked` and its Films control — a completeness verdict with no skip row, the exact pair
+that used to mean `none` — must now read nil; `TestAnUnreadableSkipRowFallsBackToTheObservation`
+becomes `TestAnUnreadableSkipRowIsDroppedAndPublishesNothing`; and both `Skipped()` assertions in
+`internal/libsync/bookorbit_test.go` now want a tally for every walked container. Each was fired
+red before being trusted, against the code line and not a comment.

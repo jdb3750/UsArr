@@ -351,6 +351,14 @@ func (s *BookOrbitSource) Containers(ctx context.Context) ([]store.CatalogueCont
 
 	s.mu.Lock()
 	s.containers = libs
+	// ⚠️ THE MAP IS CREATED EMPTY AND IS NEVER SEEDED FROM libs, WHICH IS A
+	// DECISION RATHER THAN AN OMISSION (ADR-0063). Skipped() now returns an entry
+	// per container so cmd/usarr can write a zero row for a clean one, and those
+	// entries come from tallyFor DURING the walk. Seeding them here — from the
+	// container list, before a single book has been read — would hand every
+	// container the walk never reached a row saying it left nothing out, which is
+	// exactly the before-the-walk imprecision the completeness check below still
+	// carries and which the skip read was decoupled from.
 	if s.skips == nil {
 		s.skips = map[string]*SkipTally{}
 	}
@@ -453,6 +461,14 @@ func (s *BookOrbitSource) StreamItems(ctx context.Context, fn func(store.Catalog
 			// LOGGED PER CONTAINER, as it finishes, and not only summed at the
 			// end: a walk that dies on library three must still have said what
 			// libraries one and two skipped.
+			//
+			// ⚠️ THIS ZERO GATE STAYS AND Skipped()'s DOES NOT, deliberately.
+			// ADR-0063 turned the RECORD into one row per walked container
+			// because an absent row there is read as a fact. A log line is not
+			// read that way — nobody infers "this container was walked clean"
+			// from the absence of a line in a process log — so a line per clean
+			// library would be noise on every import and would buy the honesty
+			// nothing. The record is the row.
 			s.log().Info("bookorbit: books read but not mapped",
 				"library_id", ref, "library", l.Name,
 				"read", page.Count, "skipped_comics", tally.Comics, "skipped_unknown", tally.Unknown,
@@ -523,6 +539,35 @@ func (s *BookOrbitSource) tallyFor(ref string) *SkipTally {
 // a log line nobody greps are the same thing as silence — the argument
 // importer.go's recordFileWalkFailures already makes for a dropped file walk.
 //
+// # ONE ENTRY PER CONTAINER THE WALK TOUCHED, ZERO OR NOT (ADR-0063)
+//
+// ⚠️ A ZERO TALLY IS RETURNED RATHER THAN FILTERED OUT, and that reversal is
+// this method's whole contract. It used to drop any container whose total was
+// zero, so cmd/usarr wrote a row only where something had been skipped — and the
+// read one field over then had to borrow the completeness row as evidence that a
+// container had been walked at all. "Nothing was left out" and "nothing looked"
+// are different facts, and returning only the non-zero tallies rendered them
+// identically. The neighbouring content_completeness rule already goes the other
+// way (a row per container observed), and two adjacent readers with opposite
+// absence conventions is its own hazard.
+//
+// # AND THE SET IS THE WALK'S, NOT Containers()'s — WHICH IS THE POINT
+//
+// ⚠️ NOTHING PRE-POPULATES THIS MAP. Containers() creates it empty and adds no
+// entries; tallyFor creates an entry at the top of one container's iteration in
+// StreamItems, so an entry exists exactly for a container the walk REACHED. An
+// import that dies on library three returns libraries one, two and three and NOT
+// four and five — which is what lets the skip read stop inheriting the
+// completeness row's before-the-walk imprecision, rather than merely moving it.
+// Seeding this map from s.containers would move it here.
+// TestSkippedNamesOnlyTheContainersTheWalkReached is what stops that.
+//
+// ⚠️ WHAT IS NOT CLOSED, stated rather than implied: the one container the walk
+// died INSIDE comes back with the tally it had reached, so a container that had
+// skipped nothing before failing reads as a clean zero for a partial read. At
+// most one per import — StreamItems returns on the first container error.
+// ADR-0063 records it as still open.
+//
 // The slice is sorted by container id so two runs over the same instance produce
 // the same order.
 func (s *BookOrbitSource) Skipped() []ContainerSkips {
@@ -535,9 +580,6 @@ func (s *BookOrbitSource) Skipped() []ContainerSkips {
 	}
 	out := make([]ContainerSkips, 0, len(s.skips))
 	for ref, t := range s.skips {
-		if t.Total() == 0 {
-			continue
-		}
 		out = append(out, ContainerSkips{RemoteID: ref, Name: byRef[ref], SkipTally: *t})
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].RemoteID < out[j].RemoteID })

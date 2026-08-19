@@ -327,12 +327,53 @@ func TestAddingABookOrbitProducesACatalogue(t *testing.T) {
 	if note.Name != "Fiction" || note.Reason == "" {
 		t.Errorf("the note names no library or gives no reason: %+v", note)
 	}
-	// Library 2 skipped nothing, so it must have NO row: a zero written as a row
-	// would make the Libraries screen show a warning about a library that is
-	// fully imported.
-	if n := countIn(t, env,
-		`SELECT COUNT(*) FROM sync_report WHERE kind = 'items_skipped' AND remote_id = '2'`); n != 0 {
-		t.Errorf("library 2 skipped nothing and still got %d notes", n)
+	// ⚠️ THE INVARIANT, AND THIS ASSERTION IS INVERTED RATHER THAN DELETED.
+	//
+	// It used to read *"library 2 skipped nothing and still got %d notes"*, on
+	// ADR-0061 §5: no skip meant no row, because a zero row was thought to put a
+	// warning on a fully imported library. It does not — `none` renders nothing
+	// on §17.8 — and the absence cost more than it saved, because "walked clean"
+	// and "never walked" then looked identical and the read had to borrow the
+	// completeness row to tell them apart. ADR-0063 reversed it: EVERY container
+	// an import walked gets a row, zero or not.
+	var zeroDetail string
+	if err := env.app.store.DB().Read().QueryRowContext(t.Context(), `
+		SELECT detail FROM sync_report
+		 WHERE kind = 'items_skipped' AND remote_kind = 'library' AND remote_id = '2'`,
+	).Scan(&zeroDetail); err != nil {
+		t.Fatalf("library 2 was walked and skipped nothing, so it must carry a ZERO-COUNT "+
+			"skip row; there is none: %v", err)
+	}
+	var zero struct {
+		SkippedComics  int    `json:"skipped_comics"`
+		SkippedUnknown int    `json:"skipped_unknown"`
+		Reason         string `json:"reason"`
+		DoesNotCover   string `json:"does_not_cover"`
+	}
+	if err := json.Unmarshal([]byte(zeroDetail), &zero); err != nil {
+		t.Fatalf("decode library 2's zero skip detail %q: %v", zeroDetail, err)
+	}
+	if zero.SkippedComics != 0 || zero.SkippedUnknown != 0 {
+		t.Errorf("library 2's row = %+v, want both tallies zero", zero)
+	}
+	// ⚠️ AND NO REASON ON IT. The reason explains a skip; on a row saying nothing
+	// was skipped it asserts a cause for a non-event. The SCOPE still travels,
+	// because "a skip count is not a completeness verdict" is as true of a zero.
+	if zero.Reason != "" {
+		t.Errorf("the zero row explains a skip that did not happen: reason = %q", zero.Reason)
+	}
+	if zero.DoesNotCover == "" {
+		t.Error("the zero row carries no scope, so an operator reading it out of the " +
+			"database cannot tell it apart from a completeness claim")
+	}
+	// ⚠️ THE OTHER HALF OF THE INVARIANT: a container NOTHING walked gets no row.
+	// This fixture's BookOrbit serves libraries 1 and 2 only, so '3' is a
+	// container the walk never reached — and if rows were synthesised from the
+	// container list before the walk instead of from tallies raised during it,
+	// this is where that would show.
+	if n := countIn(t, env, `SELECT COUNT(*) FROM sync_report
+		 WHERE kind = 'items_skipped' AND remote_id NOT IN ('1','2')`); n != 0 {
+		t.Errorf("%d skip rows exist for containers the walk never reached", n)
 	}
 	// The row also carries the SCOPE of what it claims, on the completeness
 	// row's pattern (ADR-0061 §6): a count with no scope invites being read as
@@ -355,9 +396,10 @@ func TestAddingABookOrbitProducesACatalogue(t *testing.T) {
 	// READ: the Libraries screen's own endpoint, over the same rows, with no
 	// upstream call on the path (principle 1).
 	//
-	// ⚠️ THE TWO SILENCES ARE ASSERTED APART HERE TOO. Library 2 skipped nothing
-	// and gets `none`; a library nothing observed would get no key at all, and if
-	// those collapsed, an absent verdict would start reading as an all-clear.
+	// ⚠️ THE TWO SILENCES ARE ASSERTED APART HERE TOO. Library 2 was walked,
+	// skipped nothing, and gets `none` off its own zero row; a library nothing
+	// walked would get no key at all, and if those collapsed, an absent verdict
+	// would start reading as an all-clear.
 	var libs struct {
 		Items []struct {
 			Name    string `json:"name"`

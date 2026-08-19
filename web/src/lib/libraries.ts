@@ -187,12 +187,16 @@ export interface Library {
  *
  * # Why there are three readings and only two members
  *
- * A skip row is written upstream only when something was skipped, so the table
- * alone answers "was anything left out" with *yes* or with *silence* — and
- * silence covers both "the walk left nothing out" and "nothing has ever
- * counted". The server separates those with a second record and serves the
- * difference: `left_out`, `none`, or the key absent. All three read differently
- * here, which is the whole reason the key exists.
+ * Upstream writes a skip row for every container an import WALKED, zero or not,
+ * so "the walk left nothing out" is a recorded zero and "nothing has ever
+ * counted" is no record at all. The server serves the difference: `left_out`,
+ * `none`, or the key absent. All three read differently here, which is the whole
+ * reason the key exists.
+ *
+ * ⚠️ The server USED to write a row only where something was skipped and tell
+ * the last two apart by cross-referencing a second record; ADR-0063 replaced
+ * that with the zero row. Nothing on this side changed — the three values were
+ * already three values — and that is the point: only the evidence moved.
  *
  * # And it is not a completeness check
  *

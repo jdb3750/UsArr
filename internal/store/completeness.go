@@ -37,11 +37,16 @@ package store
 // SyncReportContentCompleteness is sync_report.kind for one container's
 // completeness verdict.
 //
-// ONE ROW PER CONTAINER PER IMPORT, INCLUDING THE CONTAINERS THAT WERE FINE, and
-// that is the difference from `items_skipped`, which is written only when
-// something was skipped. An absent skip row means nothing was skipped; an absent
-// completeness row means nothing was ASKED, and the two absences must not look
-// alike. The cost is one small append-only row per container per run.
+// ONE ROW PER CONTAINER PER IMPORT, INCLUDING THE CONTAINERS THAT WERE FINE. An
+// absent completeness row means nothing was ASKED — not that there was nothing
+// to find — and the cost of saying so is one small append-only row per container
+// per run.
+//
+// ⚠️ IT USED TO BE THE DIFFERENCE FROM `items_skipped`, AND IS NOT ANY MORE.
+// That kind was written only where something had been skipped, so the two
+// absences meant opposite things one column apart on the same screen; ADR-0063
+// gave `items_skipped` this rule too. Same convention, both readers, no
+// cross-reference needed to tell silence from a measured zero.
 const SyncReportContentCompleteness = "content_completeness"
 
 // CompletenessState is the three-valued verdict, as it travels through
