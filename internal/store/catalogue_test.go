@@ -1348,10 +1348,27 @@ func TestAKindCollisionQualifiesButANameCollisionStillTakesAnOrdinal(t *testing.
 //
 // ⚠️ ux_library_name IS A REAL UNIQUE INDEX (migration 00005), so a container
 // genuinely named "Fiction (Comics)" upstream collides with the derived sibling
-// name. WHAT SHOULD HAPPEN THEN IS AN OPEN DESIGN QUESTION and is deliberately
-// not decided here. This test asserts only that the code does not invent one:
-// the candidate is not free, so the PRE-EXISTING ordinal loop runs, exactly as
-// it did before the qualifier existed, and the import still completes.
+// name. THE RULE THAT DECIDES WHAT HAPPENS THEN, and it is decided: AN ORDINAL
+// IS WRONG WHEN A MEANINGFUL QUALIFIER EXISTS, AND ACCEPTABLE WHEN NONE DOES.
+//
+// Both halves of that rule are pinned by the two tests above, so what follows is
+// the reasoning they share rather than a third rule. For a KIND SPLIT there IS a
+// meaningful qualifier — one library is the comics and one is not — so
+// `Fiction (2)` discards information the reader wants, which is what
+// TestASiblingLibraryIsNamedForItsKindAndNeverForItsOrder asserts. For a
+// SAME-KIND COLLISION the two containers differ in nothing the user can see
+// except identity, so the ordinal is the HONEST answer: it says "these are two
+// different things and there is nothing true we can tell you about the
+// difference." A distinguisher invented there would be WORSE than the number,
+// because it would state a difference that does not exist — which is what
+// TestAKindCollisionQualifiesButANameCollisionStillTakesAnOrdinal asserts.
+//
+// This case is the two meeting. The qualifier is meaningful AND it is taken, so
+// there is no qualifier left to reach for and the case falls to the arm where
+// none exists: the PRE-EXISTING ordinal loop runs from `base`, exactly as it did
+// before the qualifier existed, and the import still completes. Ugly, rare,
+// honest — and the only alternative is a distinguisher the code would have to
+// invent, which the rule above refuses.
 func TestAQualifiedNameThatIsItselfTakenFallsBackRatherThanInventingARule(t *testing.T) {
 	s := newTestStore(t)
 	inst := fixtureInstance(t, s, "kavita")
