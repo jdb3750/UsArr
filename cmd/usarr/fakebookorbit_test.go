@@ -185,8 +185,23 @@ func newFakeBookOrbit(t *testing.T, token string) *fakeBookOrbit {
 			return
 		}
 		if req.Token != f.token {
-			// MagicLinkService.loginWithToken collapses unknown, revoked,
-			// deactivated, expired and orphaned into ONE message on purpose.
+			// ONE status and ONE body is the whole stimulus this branch needs,
+			// because that is all UsArr's side can distinguish: parseErrorBody
+			// maps every 401 to the single ErrUnauthorized sentinel and branches
+			// on nothing, unlike its 403 arm, which splits one status into two
+			// sentinels on an exact message match. There is no second 401 shape
+			// worth faking because there is no second 401 sentinel to reach.
+			//
+			// ⚠️ This comment used to assert that loginWithToken collapses five
+			// upstream conditions into one message "on purpose". Those were its
+			// words; neither the enumeration nor the intent is checkable from
+			// this tree, since BookOrbit's server source is not vendored here.
+			// It also disagreed with the same claim in internal/bookorbit's
+			// errors.go about what the fifth condition was — "orphaned" here,
+			// "belongs to an inactive user" there. Upstream INTENT is UNKNOWN;
+			// the ordered enumeration belongs to internal/bookorbit/doc.go,
+			// which cites bookorbit@73b7877d for it. The status and body below
+			// are unchanged.
 			boNestError(w, r, http.StatusUnauthorized, "Invalid or expired magic link")
 			return
 		}

@@ -12,11 +12,33 @@ import (
 // Sentinel errors. Callers match with errors.Is; every failure this package
 // returns is an *APIError, which unwraps to one of these.
 var (
-	// ErrUnauthorized is a 401. On the magic-link login route it means the token
-	// is unknown, revoked, deactivated, expired, or belongs to an inactive user —
-	// MagicLinkService.loginWithToken collapses all five into one
-	// UnauthorizedException with the SAME message, deliberately, so the client
-	// cannot tell them apart and must not pretend to.
+	// ErrUnauthorized is the ONLY 401 sentinel in this package. parseErrorBody's
+	// `case status == 401` arm branches on nothing, so every 401 from every route
+	// unwraps to this one value. That mapping is UsArr's own and is the part of
+	// this comment a reader can check here. (Cited by name and not by line: this
+	// comment has already grown once and would take the line number with it.)
+	//
+	// The 403 arm a few lines below is the contrast worth reading beside it: 403
+	// DOES discriminate, splitting one status into ErrForbidden and
+	// ErrPasswordChangeRequired on an exact message match. The mechanism for
+	// splitting one status by its message therefore exists in this same function,
+	// and is not applied to 401.
+	//
+	// Collapsing costs less than it looks, because the upstream wire text survives
+	// even though the sentinel does not vary: parseErrorBody fills APIError.Message
+	// from the response body BEFORE this switch runs, and Error() renders it. The
+	// one route where that is untrue is the magic-link login, where auth.go
+	// OVERWRITES Message with a sentence of its own — so upstream's words reach a
+	// caller everywhere except the one route this comment used to be about.
+	//
+	// WHAT UPSTREAM DOES IS NOT CHECKABLE FROM THIS TREE. This comment used to say
+	// that MagicLinkService.loginWithToken collapses five conditions into one
+	// message "deliberately"; that was its word and it is not adopted here.
+	// BookOrbit's server source is not vendored — only packages/types is — so the
+	// five-condition enumeration rests entirely on doc.go's reading of
+	// bookorbit@73b7877d, and upstream's INTENT rests on nothing at all and is
+	// recorded as UNKNOWN. Note that the message below names three conditions
+	// rather than five, so it is not that enumeration's source either.
 	//
 	// On any other route it means the cached access token is stale, which this
 	// client handles by re-minting once rather than by surfacing (see auth.go).

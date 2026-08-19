@@ -265,9 +265,16 @@ func TestNoCredentialConfiguredIsItsOwnError(t *testing.T) {
 	}
 }
 
-// TestBadMagicLinkSaysWhatBookOrbitWillNotSay. loginWithToken collapses five
-// distinct causes into one 401 with one message, deliberately; the client must
-// report that ambiguity rather than picking one.
+// TestBadMagicLinkSaysWhatBookOrbitWillNotSay pins auth.go's message
+// substitution: a 401 on the login route must reach the caller as a sentence
+// that names no single cause. It cannot name one — parseErrorBody maps every
+// 401 to the single ErrUnauthorized sentinel and branches on nothing, unlike
+// its 403 arm, which splits one status in two on an exact message match.
+//
+// This comment used to say loginWithToken collapses five distinct causes into
+// one message "deliberately". The enumeration is doc.go's, read from
+// bookorbit@73b7877d and not re-checkable from this tree; upstream's intent is
+// UNKNOWN, so the word is dropped rather than hedged.
 func TestBadMagicLinkSaysWhatBookOrbitWillNotSay(t *testing.T) {
 	f := newFake(t)
 	c := f.client(t, func(o *Options) { o.MagicLinkToken = "9876543210zyxwvutsrq" })
