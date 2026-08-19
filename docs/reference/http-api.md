@@ -21,6 +21,33 @@ does not say by itself.
 `action` is omitted when there is nothing actionable. `error` is a code from
 `internal/httpapi/errorcodes.go` and is the field to switch on; `message` is prose and may change.
 
+**An unrecognised query parameter is IGNORED, not refused — on every endpoint in this file.** A
+request carrying a name the server does not know is served exactly as if the name were absent: no
+`400`, and no trace of it in the response. It is **case-sensitive**, so `?LIB=` and `?Media_Type=`
+are unrecognised names rather than the parameters they resemble.
+
+This is a wire contract and not an implementation detail, because **rejection would break forward
+compatibility in both directions**: a newer client sending a parameter this server has not learned
+yet would get a `400` instead of a degraded-but-correct page, and nothing could ever be added to a
+request without a version negotiation this API does not have. §6.1 states the same rule for one
+parameter from the other side — *"`q` is the only spelling; `query=` is not accepted here"* — and
+what makes `query=` "not accepted" is precisely that it is read by nothing and refused by nothing.
+
+⚠️ **The cost is real and is paid somewhere else.** A typo'd filter name is not caught: `?mediatype=`
+is `200` with an unfiltered first page, which looks like it worked. Two things answer that, and
+neither is rejection:
+
+* **A recognised parameter carrying an unrecognised VALUE is a `400`** — `?media_type=comix`,
+  `?sort=nope`, `?lib=nope` (§7.2, §7.3, §7.6). So the only thing a typo can silently lose is a
+  whole parameter, never a filter that was asked for and could not be applied.
+* **The response echoes what the server APPLIED** (§7.4), so a client that asked for a scope and got
+  an envelope back without one can see that it did.
+
+`TestUnrecognisedQueryParametersAreIgnoredNotRefused`
+(`internal/httpapi/library_browse_test.go`) pins it on the library grid, which has the most
+parameters to typo. A new endpoint inherits this rule; adopting a different one is a decision to
+write down here first.
+
 ---
 
 ## 1 · `GET /api/v1/library/recent` — Home's Block C
@@ -1077,7 +1104,9 @@ Requires an authenticated session; without one it is `401 unauthorized`.
 
 **`q` is the only spelling.** `query=` is *not* accepted here, even though `GET
 /api/v1/releases/search` accepts both; two spellings of one parameter is a contract a client has to
-guess at.
+guess at. "Not accepted" means what the preamble says it means API-wide: `query=` is **ignored**, not
+refused — so `?query=berserk` alone is not a `400` naming the wrong spelling, it is the `400` that
+says `q` is missing.
 
 **There is no `?lib=` scope chip and no per-type filter.** The scope this applies is the caller's
 *access* scope, derived from the session, and a query parameter cannot widen it. A user-chosen
@@ -1266,6 +1295,11 @@ none. The two share the row shape and the allowlist that builds it, and they pag
 There is **no cover art**: there is no image endpoint, so shipping `poster_asset_id` would be an id
 the client cannot turn into anything. There are **no facet counts** beside the chips; each is its
 own aggregate and its own read.
+
+**Any other parameter is ignored, not refused** — the preamble's API-wide rule, pinned on this
+endpoint by `TestUnrecognisedQueryParametersAreIgnoredNotRefused`. So `?mediatype=comics` is a `200`
+with an unfiltered first page, while `?media_type=comix` is a `400`: the four names above are
+case-sensitive and every value they take is checked.
 
 ### 7.2 The parameter is `media_type`, and its vocabulary is **not** `work.kind`
 

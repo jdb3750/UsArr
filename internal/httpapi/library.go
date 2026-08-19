@@ -398,6 +398,14 @@ func (s *Server) toRecentWorkResponse(w store.RecentWork) recentWorkResponse {
 // THE WIRE CONTRACT IS IN docs/reference/http-api.md §7, where a consumer can
 // find it. This comment is not reachable from a browser tab.
 //
+// ⚠️ A PARAMETER NAME THIS HANDLER DOES NOT READ IS IGNORED, NOT REFUSED, and
+// that is an API-WIDE contract — http-api.md's preamble, not a quirk of this
+// endpoint. Adding a "reject unknown parameters" loop here would be a wire
+// change that breaks forward compatibility in both directions, and it is what
+// TestUnrecognisedQueryParametersAreIgnoredNotRefused exists to catch. The typo
+// hazard it leaves is answered instead by refusing a bad VALUE on a name this
+// handler does read, and by the envelope echoing what was applied.
+//
 // WHAT IT DOES NOT DO YET: no cover art (there is no image endpoint, so
 // poster_asset_id would be an id the client cannot turn into anything), and no
 // facet counts beside the chips (each is its own aggregate and its own read).

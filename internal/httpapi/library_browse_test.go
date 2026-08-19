@@ -533,3 +533,103 @@ func mustBody(t *testing.T, s *Server, query string) string {
 	}
 	return body
 }
+
+// ⚠️ AN UNRECOGNISED QUERY PARAMETER IS IGNORED, NOT REFUSED — AND THAT IS AN
+// API-WIDE WIRE CONTRACT RATHER THAN A QUIRK OF THIS ENDPOINT.
+//
+// It is pinned here because the library grid has the most parameters to typo,
+// but the rule is the package's. `GET /api/v1/search` already has the same
+// shape stated for one parameter — http-api.md §6.1's "`q` is the only spelling;
+// `query=` is not accepted here" — and what makes `query=` "not accepted" is
+// exactly this: it is read by nothing and refused by nothing. The rule is
+// written down once, in http-api.md's preamble, so the NEXT endpoint inherits it
+// deliberately instead of re-deciding it.
+//
+// WHY IGNORE RATHER THAN REJECT, since a typo'd filter is a real hazard here:
+// rejection is a wire-contract change that breaks forward compatibility in BOTH
+// directions. A newer client sending a parameter this server has not learned yet
+// would get a 400 instead of a degraded-but-correct page, and an older client
+// would be unable to send anything an even older server did not know. The hazard
+// is answered a different way instead — a RECOGNISED parameter carrying an
+// unrecognised VALUE is a 400 (`?media_type=comix`, `?sort=nope`, `?lib=nope`),
+// so the only thing a typo can silently lose is the whole parameter, and the
+// echo (§7.4) is what lets a client notice that: it asked for a scope, and the
+// envelope came back without one.
+//
+// ⚠️ THIS TEST IS A CHARACTERISATION TEST, so it passes the moment it is written
+// and would keep passing if the handler were deleted around it. It was therefore
+// FIRED before it was trusted, per DEVELOPMENT.md §11 rule 1: a throwaway
+// `for k := range q { if !known[k] { return 400 } }` at the top of
+// handleBrowseWorks made every case below fail, and was then removed.
+func TestUnrecognisedQueryParametersAreIgnoredNotRefused(t *testing.T) {
+	s := newTestServer(t, nil)
+	seedLibraryCorpus(t, s)
+
+	unfiltered := mustBody(t, s, "")
+	comics := mustBody(t, s, "?media_type=comics")
+
+	// Alone: each of these is a request whose ONLY parameter the server does not
+	// know. Every one must answer the unfiltered first page — not a 400, and not
+	// a page that somehow honoured it.
+	for _, q := range []string{
+		"?mediatype=comics",  // the underscore dropped
+		"?media-type=comics", // the separator wrong
+		"?Media_Type=comics", // ⚠️ parameter names are CASE-SENSITIVE
+		"?LIB=books",         // …including this one, which is why it is here
+		"?type=comics",       // a plausible name from another API
+		"?sort_by=title",     // a plausible name from another API
+		"?page=2",            // offset paging, which this endpoint does not have
+		"?q=berserk",         // §6's parameter, sent to §7
+		"?utm_source=email",  // whatever a link shortener bolted on
+	} {
+		code, body := callBrowseWorks(t, s, q)
+		if code != http.StatusOK {
+			t.Errorf("%s returned %d, want 200 — an unknown parameter is ignored, "+
+				"never refused: %s", q, code, body)
+			continue
+		}
+		if body != unfiltered {
+			t.Errorf("%s changed the page, so something read it:\n got: %s\nwant: %s",
+				q, body, unfiltered)
+		}
+	}
+
+	// Alongside a recognised one: the known parameter still applies and the
+	// unknown one still does nothing. A rejection here would break the request
+	// that is MOST likely to be a newer client talking to an older server.
+	for _, q := range []string{
+		"?media_type=comics&facets=1",
+		"?facets=1&media_type=comics",
+		"?media_type=comics&media-type=movies",
+	} {
+		code, body := callBrowseWorks(t, s, q)
+		if code != http.StatusOK {
+			t.Errorf("%s returned %d, want 200: %s", q, code, body)
+			continue
+		}
+		if body != comics {
+			t.Errorf("%s is not ?media_type=comics:\n got: %s\nwant: %s", q, body, comics)
+		}
+	}
+
+	// It is IGNORED, which means it is not echoed either. The envelope carries
+	// what the server applied (§7.4); a key it did not read must not appear
+	// there, or a client would read its own typo back as a confirmation.
+	_, env := browseEnvelope(t, s, "?mediatype=comics&facets=1&utm_source=email")
+	for _, k := range []string{"mediatype", "facets", "utm_source"} {
+		if _, ok := env[k]; ok {
+			t.Errorf("the envelope echoed the unrecognised %q back: %v", k, env)
+		}
+	}
+
+	// The other half of the rule, and the half that keeps "ignore" honest: a
+	// parameter the server DOES know, carrying a value it does not, is a
+	// refusal. Ignoring is what happens to a name nobody claimed — never to a
+	// filter that was asked for and could not be applied.
+	for _, q := range []string{"?media_type=comix", "?sort=nope", "?lib=nope"} {
+		if code, body := callBrowseWorks(t, s, q); code != http.StatusBadRequest {
+			t.Errorf("%s returned %d, want 400 — a known parameter with an unknown "+
+				"value is refused, not ignored: %s", q, code, body)
+		}
+	}
+}
