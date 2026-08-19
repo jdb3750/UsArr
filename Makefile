@@ -549,7 +549,11 @@ test-integration: ## Tests behind the `integration` tag. Needs a live stack. NEV
 #
 # ADDING A DRIFT TEST: name it TestSpecDrift…, and raise SPEC_DRIFT_FLOOR here.
 # The floor is a floor, not an equality, so it never fights a test being added.
-SPEC_DRIFT_FLOOR ?= 1
+#
+# The two it stands at:
+#   internal/servarr  TestSpecDriftRefsStillShareThePinnedBlob      (ADR-0047)
+#   internal/bookorbit TestSpecDriftBookOrbitTypesStillMatchUpstream (packages/types)
+SPEC_DRIFT_FLOOR ?= 2
 
 # THE PREFIX HAS EXACTLY ONE DEFINITION, HERE. It used to have three — this
 # variable, the Go function's name, and a hardcoded
