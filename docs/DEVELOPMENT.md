@@ -1525,6 +1525,21 @@ paragraph describing a repo that no longer exists.
     moment at which such a read is safe, because it is only ever true of the tree as it was, and any
     concurrent lane can invalidate it before you land. **Only allocation fixes it**, because only the
     dispatcher sees every lane at once.
+
+    🔍 **A second instance, and it is the harder half of the class: the invalidating id may never
+    have been readable at all.** A lane was about to take *"the next free `SD-` id"* from the highest
+    one present in `docs/REVIEW-LOG.md`. `SD-04` already existed at that moment — as a commit in an
+    unlanded worktree, and so in no tree any reader could open. Unlike the migration case above,
+    where the slot was taken *afterwards*, this is not a stale read and it is not a race with a
+    window: there was **no moment at which a more careful or more recent read would have seen it**.
+    So the two halves close the class from both ends — **re-reading cannot fix an id that was never
+    readable, and it cannot fix one taken after you read** — and the ordinary remedy of re-reading
+    immediately before you push, the *a sequential id read out of a file is a race* bullet below, is
+    the right discipline for drift and no defence at all against invisibility. It also reaches
+    further than ADR and migration numbers: `SD-` is a `docs/REVIEW-LOG.md` entry prefix, so a
+    per-thread prefix removes the cross-thread collision without making the number after it
+    readable. **The trigger and the timing are stated by the lane that hit it; what is measured here
+    is only that `SD-04` is on `main`, landed by `60c9286`.**
 * **Key the worktree decision to the operation, not to the size of your change.** Any *whole-tree*
   git operation — `git add -A`, a `git commit` of an index somebody else may have added to,
   `git checkout <branch>` — belongs in a detached worktree of your own. Targeted single-path
