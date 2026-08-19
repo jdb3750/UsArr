@@ -26,6 +26,10 @@ func seedPosterFixture(t *testing.T, s *Store) {
 		   VALUES (7, 1, 'b1', 'book', '2026-08-16 09:00:00')`,
 		`INSERT INTO service_item_link (service_instance_id, work_id, remote_id, remote_kind, synced_at)
 		   VALUES (7, 2, 'b2', 'book', '2026-08-16 09:00:00')`,
+		// A LIVE link onto the TOMBSTONED work, so "the link resolves and the
+		// work is gone" is a reachable case and not a hypothetical.
+		`INSERT INTO service_item_link (service_instance_id, work_id, remote_id, remote_kind, synced_at)
+		   VALUES (7, 3, 'b3', 'book', '2026-08-16 09:00:00')`,
 	}
 	if err := s.DB().Write(t.Context(), func(ctx context.Context, tx *sql.Tx) error {
 		for _, stmt := range stmts {
@@ -48,7 +52,8 @@ func seedPosterFixture(t *testing.T, s *Store) {
 // guessed — and a waiver here would be a waiver the next fixture inherits.
 func validPoster() PosterAsset {
 	return PosterAsset{
-		WorkID:            1,
+		RemoteKind:        "book",
+		RemoteID:          "b1",
 		SourceURL:         "http://books.example/api/v1/books/11/cover",
 		CacheKey:          "00000000000000ab",
 		Format:            ImageFormatJPEG,
@@ -260,7 +265,9 @@ func TestPutPosterAssetRejectsTheOtherMalformedRows(t *testing.T) {
 	seedPosterFixture(t, s)
 
 	mutate := map[string]func(*PosterAsset){
-		"no work":          func(p *PosterAsset) { p.WorkID = 0 },
+		"no remote kind":   func(p *PosterAsset) { p.RemoteKind = "" },
+		"no remote id":     func(p *PosterAsset) { p.RemoteID = "" },
+		"no instance":      func(p *PosterAsset) { p.ServiceInstanceID = 0 },
 		"empty source_url": func(p *PosterAsset) { p.SourceURL = "" },
 		"short cache key":  func(p *PosterAsset) { p.CacheKey = "00000000000000a" },
 		"uppercase key":    func(p *PosterAsset) { p.CacheKey = "00000000000000AB" },
@@ -289,14 +296,18 @@ func TestPutPosterAssetRefusesToOrphanAnAsset(t *testing.T) {
 	s := newTestStore(t)
 	seedPosterFixture(t, s)
 
-	for name, workID := range map[string]int64{
-		"no such work": 9999,
-		"tombstoned":   3,
+	for name, remoteID := range map[string]string{
+		// No service_item_link at all — an item that was never imported, or one
+		// whose link was removed between the fetch and this write.
+		"no such link": "b-nonexistent",
+		// A LIVE link onto a TOMBSTONED work. This is the case a foreign key
+		// alone would not catch: the link resolves, and the work is gone.
+		"tombstoned work": "b3",
 	} {
 		t.Run(name, func(t *testing.T) {
 			p := validPoster()
-			p.WorkID = workID
-			p.SourceURL = fmt.Sprintf("http://books.example/api/v1/books/%d/cover", workID)
+			p.RemoteID = remoteID
+			p.SourceURL = fmt.Sprintf("http://books.example/api/v1/books/%s/cover", remoteID)
 
 			_, err := s.PutPosterAsset(t.Context(), p)
 			if !errors.Is(err, ErrNoSuchWork) {
@@ -334,7 +345,7 @@ func TestPutPosterAssetUpsertsKeepingTheRowID(t *testing.T) {
 
 	// A second work sharing the same artwork row.
 	second := p
-	second.WorkID = 2
+	second.RemoteID = "b2"
 	sameRow, err := s.PutPosterAsset(t.Context(), second)
 	if err != nil {
 		t.Fatalf("second PutPosterAsset: %v", err)
@@ -395,5 +406,87 @@ func assertNoRowsWritten(t *testing.T, s *Store) {
 	}
 	if assets != 0 || linked != 0 {
 		t.Errorf("a refused write left %d image_asset row(s) and %d linked work(s)", assets, linked)
+	}
+}
+
+// TestPutPosterAssetResolvesTheWorkInsideItsOwnTransaction is the structural
+// half of the CreditSet rule, and it is the reason PosterAsset carries no work
+// id at all.
+//
+// The hazard it forecloses: a caller resolves work 1, then spends a network
+// round trip fetching the cover, and in that window work 1 is deleted and its
+// `INTEGER PRIMARY KEY` rowid is reused. A writer that took a work id would put
+// this cover on whatever now holds it — a cover that silently does not match its
+// title. Because the id is not in the signature, the caller cannot supply a
+// stale one; this test pins the resolution that replaces it.
+//
+// It fails against a writer that ignores ServiceInstanceID in the lookup (the
+// two instances below share one remote_id and would collide), and against one
+// that resolves the link without checking the work is live.
+func TestPutPosterAssetResolvesTheWorkInsideItsOwnTransaction(t *testing.T) {
+	s := newTestStore(t)
+	seedPosterFixture(t, s)
+
+	// A SECOND instance whose own 'b1' names a DIFFERENT work. remote_id is
+	// unique only per (instance, kind), so an unscoped lookup picks whichever
+	// row it meets first.
+	if err := s.DB().Write(t.Context(), func(ctx context.Context, tx *sql.Tx) error {
+		for _, stmt := range []string{
+			`INSERT INTO service_instance (id, kind, role, name, base_url, api_key_enc)
+			   VALUES (8, 'bookorbit', 'library', 'BookOrbit Two', 'http://books2.example', X'00')`,
+			`INSERT INTO service_item_link (service_instance_id, work_id, remote_id, remote_kind, synced_at)
+			   VALUES (8, 2, 'b1', 'book', '2026-08-16 09:00:00')`,
+		} {
+			if _, err := tx.ExecContext(ctx, stmt); err != nil {
+				return fmt.Errorf("%s: %w", stmt, err)
+			}
+		}
+		return nil
+	}); err != nil {
+		t.Fatalf("seeding: %v", err)
+	}
+
+	for _, tc := range []struct {
+		instance int64
+		wantWork int64
+	}{
+		{7, 1},
+		{8, 2},
+	} {
+		p := validPoster()
+		p.ServiceInstanceID = tc.instance
+		p.SourceURL = fmt.Sprintf("http://books%d.example/api/v1/books/11/cover", tc.instance)
+		p.CacheKey = fmt.Sprintf("00000000000000%02d", tc.instance)
+
+		id, err := s.PutPosterAsset(t.Context(), p)
+		if err != nil {
+			t.Fatalf("instance %d: PutPosterAsset: %v", tc.instance, err)
+		}
+		var poster sql.NullInt64
+		if err := s.DB().Read().QueryRowContext(t.Context(),
+			`SELECT poster_asset_id FROM work WHERE id = ?`, tc.wantWork).Scan(&poster); err != nil {
+			t.Fatalf("reading work %d: %v", tc.wantWork, err)
+		}
+		if !poster.Valid || poster.Int64 != id {
+			t.Errorf("remote_id 'b1' from instance %d landed on the wrong work: work %d has "+
+				"poster %v, want %d. The link lookup is not scoped to the instance, so one "+
+				"service's cover can overwrite another's.", tc.instance, tc.wantWork, poster, id)
+		}
+	}
+
+	// A soft-deleted LINK must not resolve either, even though the work is live.
+	if err := s.DB().Write(t.Context(), func(ctx context.Context, tx *sql.Tx) error {
+		_, err := tx.ExecContext(ctx,
+			`UPDATE service_item_link SET deleted_at = '2026-08-17 00:00:00'
+			  WHERE service_instance_id = 8 AND remote_id = 'b1'`)
+		return err
+	}); err != nil {
+		t.Fatalf("tombstoning the link: %v", err)
+	}
+	p := validPoster()
+	p.ServiceInstanceID = 8
+	p.SourceURL = "http://books8.example/api/v1/books/99/cover"
+	if _, err := s.PutPosterAsset(t.Context(), p); !errors.Is(err, ErrNoSuchWork) {
+		t.Errorf("a tombstoned link still resolved: %v", err)
 	}
 }

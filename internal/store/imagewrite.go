@@ -47,14 +47,22 @@ var ErrCredentialInSourceURL = errors.New("store: image_asset.source_url carries
 // an unknown format token, a misshapen cache key, a missing width.
 var ErrInvalidImageAsset = errors.New("store: invalid image_asset row")
 
-// ErrNoSuchWork is returned when the work an asset was fetched for is not there
-// to point at it — deleted, or never imported.
+// ErrNoSuchWork is returned when the item an asset was fetched for has no live
+// `service_item_link` — deleted between the fetch and this write, or never
+// imported.
 //
 // The asset row is NOT written in that case: the transaction rolls back whole.
 // An `image_asset` no work points at is visible to nobody (imageassets.go's
 // access scope is an EXISTS over `work`), so committing one would leave bytes on
 // disk and a row in the table that no request can ever reach.
-var ErrNoSuchWork = errors.New("store: no such work")
+//
+// It is an ERROR here rather than CreditResult.ItemsUnresolved's silent count,
+// and the difference is the caller's shape rather than a disagreement: credits
+// arrive as a BATCH, where one vanished item must not fail the other 1,999, and
+// this writes ONE cover for ONE item, where there is no batch to protect.
+// PutPosterAsset's caller treats every failure as skippable decoration, so the
+// error is the count.
+var ErrNoSuchWork = errors.New("store: no live service_item_link for this item")
 
 // Image roles — `image_asset.role`'s vocabulary, of which the pipeline writes
 // one. The column carries no CHECK, for migration 00008's reasons.
@@ -89,9 +97,25 @@ var imageOriginClasses = map[string]bool{
 // has one width/height pair for a row that has up to seven renditions, and the
 // only one of them that is not a function of the allowlist is the original.
 type PosterAsset struct {
-	// WorkID is the work whose poster this is. The write fails with
-	// ErrNoSuchWork rather than orphaning the asset.
-	WorkID int64
+	// RemoteKind and RemoteID identify the UPSTREAM item, and the work is
+	// re-resolved from them THROUGH service_item_link inside this write's own
+	// transaction.
+	//
+	// ⚠️ IT IS KEYED THIS WAY AND NOT BY A WORK ID, FOR CreditSet's REASON
+	// VERBATIM (credits.go): "Carrying a work id across the two passes would
+	// mean trusting an id read in a different transaction, and an item deleted
+	// between the two passes would then have its credits written onto whatever
+	// now holds that id." The same hazard is worse here, because the gap between
+	// resolving the id and writing the row is not another local pass — it is a
+	// COVER FETCH, a network round trip against a service that may be slow. A
+	// work id resolved before that fetch is an id read arbitrarily long ago.
+	//
+	// `work.id` is `INTEGER PRIMARY KEY`, so SQLite may reuse a deleted row's
+	// id, which is what turns a stale id from "no such work" into "the wrong
+	// book's cover" — silent, and visible only as a cover that does not match
+	// its title.
+	RemoteKind string
+	RemoteID   string
 
 	// SourceURL is the credential-stripped URL the bytes came from. UNIQUE in
 	// the schema, and the input the cache key is derived from.
@@ -111,9 +135,13 @@ type PosterAsset struct {
 	// OriginClass is `image_asset.origin_class` — the SSRF policy input.
 	OriginClass string
 
-	// ServiceInstanceID is where the bytes came FROM. It is provenance and an
+	// ServiceInstanceID is where the bytes came FROM — provenance and an
 	// SSRF-policy input, NEVER a permission: imageassets.go's read authorizes
 	// against the owning work, not against this column.
+	//
+	// It is ALSO half the link lookup: `service_item_link` is unique on
+	// (service_instance_id, remote_kind, remote_id) — ux_sil — so this column is
+	// what makes the re-resolution seek that index rather than scan.
 	ServiceInstanceID int64
 
 	// Width and Height are the SOURCE image's pixel dimensions.
@@ -126,8 +154,14 @@ type PosterAsset struct {
 // validate is every refusal this write makes, gathered so the SQL below can
 // assume a well-formed row.
 func (p PosterAsset) validate() error {
-	if p.WorkID <= 0 {
-		return fmt.Errorf("%w: work id %d", ErrInvalidImageAsset, p.WorkID)
+	if p.RemoteKind == "" || p.RemoteID == "" {
+		return fmt.Errorf("%w: remote_kind %q and remote_id %q must both be set",
+			ErrInvalidImageAsset, p.RemoteKind, p.RemoteID)
+	}
+	if p.ServiceInstanceID <= 0 {
+		// Without it the link lookup has no instance to scope to, and
+		// `service_item_link` is only unique WITH one.
+		return fmt.Errorf("%w: service instance id %d", ErrInvalidImageAsset, p.ServiceInstanceID)
 	}
 	// THE CREDENTIAL ASSERTION. It runs before the format check and before
 	// anything touches the writer, so a credentialed URL never reaches a
@@ -229,17 +263,28 @@ func (s *Store) PutPosterAsset(ctx context.Context, p PosterAsset) (int64, error
 
 	var assetID int64
 	err := s.write(ctx, func(ctx context.Context, tx *sql.Tx) error {
-		// The work first, and NOT as an optimisation. It decides whether this
-		// transaction should exist at all, and doing it first means the failure
-		// costs no INSERT and no rollback of one.
-		var exists int
-		err := tx.QueryRowContext(ctx,
-			`SELECT 1 FROM work WHERE id = ? AND deleted_at IS NULL`, p.WorkID).Scan(&exists)
+		// ── 1. Re-resolve the work through the link the item pass wrote, INSIDE
+		// this transaction. applyOneCreditSet's step 1, statement for statement,
+		// and for the reason PosterAsset's header gives.
+		//
+		// The join to `work` is here rather than left to the foreign key because
+		// a link can outlive a tombstoned work: `deleted_at IS NULL` on the link
+		// says the LINK is live, and the second predicate says the work is.
+		var workID int64
+		err := tx.QueryRowContext(ctx, `
+			SELECT sil.work_id
+			  FROM service_item_link sil
+			  JOIN work w ON w.id = sil.work_id
+			 WHERE sil.service_instance_id = ? AND sil.remote_kind = ? AND sil.remote_id = ?
+			   AND sil.deleted_at IS NULL
+			   AND w.deleted_at IS NULL`,
+			p.ServiceInstanceID, p.RemoteKind, p.RemoteID).Scan(&workID)
 		if errors.Is(err, sql.ErrNoRows) {
-			return fmt.Errorf("%w: work %d", ErrNoSuchWork, p.WorkID)
+			return fmt.Errorf("%w: %s %q from service_instance %d",
+				ErrNoSuchWork, p.RemoteKind, p.RemoteID, p.ServiceInstanceID)
 		}
 		if err != nil {
-			return fmt.Errorf("read work %d: %w", p.WorkID, err)
+			return fmt.Errorf("look up link for %s %q: %w", p.RemoteKind, p.RemoteID, err)
 		}
 
 		// state is 'ready' and format is non-NULL together, and that pairing is
@@ -269,7 +314,7 @@ func (s *Store) PutPosterAsset(ctx context.Context, p PosterAsset) (int64, error
 			// The source URL is deliberately absent from this message. It has
 			// been asserted credential-free above, but an error string travels
 			// further than a row does and the id is what makes the row findable.
-			return fmt.Errorf("write image_asset for work %d: %w", p.WorkID, err)
+			return fmt.Errorf("write image_asset for work %d: %w", workID, err)
 		}
 
 		// `poster_asset_id IS NOT ?` keeps a re-import that renders an identical
@@ -279,9 +324,9 @@ func (s *Store) PutPosterAsset(ctx context.Context, p PosterAsset) (int64, error
 		if _, err := tx.ExecContext(ctx,
 			`UPDATE work SET poster_asset_id = ?
 			  WHERE id = ? AND (poster_asset_id IS NOT ?)`,
-			assetID, p.WorkID, assetID,
+			assetID, workID, assetID,
 		); err != nil {
-			return fmt.Errorf("point work %d at image_asset %d: %w", p.WorkID, assetID, err)
+			return fmt.Errorf("point work %d at image_asset %d: %w", workID, assetID, err)
 		}
 		return nil
 	})
