@@ -780,13 +780,35 @@ cover: ## Coverage report -> cover.html
 .PHONY: lint
 lint: lint-go lint-web ## Run all linters
 
+# THE BANNER COUNTS WHAT THE LINTER OPENS, NOT WHAT `go list` DEFAULTS TO.
+# It used to print `go list ./...` — 13 packages — while golangci-lint ran with
+# .golangci.yml's `run.build-tags` and therefore also opened internal/db/spike,
+# making 14. Understating coverage is the same class of defect as overstating
+# it: either way the line is not a report of the run that happened, and this one
+# was read as the linter's own figure. It prints both now, so the gap between
+# the default view of the tree and the linted view is visible rather than
+# silently absorbed.
+#
+# The tag list is READ OUT OF .golangci.yml rather than repeated here. A copy in
+# this file would be one more pin that can drift from the thing it describes —
+# the failure §7 of docs/reference/security.md is about — and adding a tag there
+# should widen this count with no Makefile edit. An empty extraction is not an
+# error: it means the config sets no tags, and then the two figures coincide.
 .PHONY: lint-go
 lint-go: ## golangci-lint (v2 config format: .golangci.yml must declare version: "2")
 	$(call require_tool,$(GOLANGCI_LINT),$(GOLANGCI_WANT),,$(GOLANGCI_PINVARS))
-	@n=$$($(GO) list ./... | wc -l); \
+	@tags=$$(awk '/^[[:space:]]*build-tags:[[:space:]]*$$/{f=1;next} \
+		f&&/^[[:space:]]*-[[:space:]]/{sub(/^[[:space:]]*-[[:space:]]*/,"");print;next} \
+		f{exit}' .golangci.yml | paste -sd,); \
+	u=$$($(GO) list ./... | wc -l); \
+	n=$$($(GO) list $${tags:+-tags=$$tags} ./... | wc -l); \
 	test "$$n" -gt 0 || { \
 		echo "lint-go: 0 packages — the linter would scan nothing and exit 0."; exit 1; }; \
-	echo "lint-go: linting $$n Go packages"
+	if [ "$$n" -eq "$$u" ]; then \
+		echo "lint-go: linting $$n Go packages"; \
+	else \
+		echo "lint-go: linting $$n Go packages — $$u untagged, plus $$((n - u)) behind .golangci.yml's build-tags ($$tags)"; \
+	fi
 	$(GOLANGCI_LINT) run
 
 .PHONY: lint-web
