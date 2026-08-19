@@ -700,12 +700,13 @@ func (g *registry) testKavita(ctx context.Context, req httpapi.TestRequest, si s
 //     not stop at (1).
 //  3. Does the bearer actually work? GET /api/v1/app-info declares no
 //     @RequirePermission and no library guard, so it answers for any valid JWT.
-//     A mint that succeeds and then cannot make one ordinary call is a real
-//     state — JwtAuthGuard 403s every non-@AllowDefaultPassword route when
-//     user.isDefaultPassword, and the login route is @Public() so the guard never
-//     ran there — and it is the state a "green tick after step 2" would hide.
-//     So an auth-class failure HERE fails the test; anything else is soft and
-//     costs only the version.
+//     A mint proves nothing about a GUARDED route: the login route is @Public(),
+//     so JwtAuthGuard never ran at (2). The link can be revoked, deactivated or
+//     expired in the window after it — the client re-mints once, so a 401 that
+//     survives is the stored token failing — and a 403 is the account behind the
+//     link being refused rather than the token. Either is what a "green tick
+//     after step 2" would hide. So an auth-class failure HERE fails the test;
+//     anything else is soft and costs only the version.
 //
 // WHAT IT NEVER DOES is read a library list. testKavita's credential proof is
 // GET /api/Library/libraries and this one's deliberately is not: knowing what a
