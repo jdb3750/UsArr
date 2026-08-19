@@ -200,20 +200,79 @@ ORDER BY rrf DESC LIMIT 200;
 > explicit rowid silently fuses unrelated documents and produces plausible-looking wrong results —
 > the hardest class of bug to diagnose. CI asserts the row counts match.
 
-Then re-rank the ≤200 candidates in Go — sub-millisecond for 200 short strings:
+Then re-rank the ≤200 candidates in Go — sub-millisecond for 200 short strings. The score is a
+weighted sum of three signals, each normalised to `[0,1]` **over the candidate set of this one
+answer**, so the weights are comparable to one another:
 
-| Signal | Weight | Why |
+```
+score  =  w_rrf · (this hit's RRF ÷ the best RRF in this answer)
+       +  w_jw  · JaroWinkler(the tokens the server searched, the hit's normalised title)
+       +  w_rec · (this hit's position in added_at order within this answer, newest = 1)
+```
+
+It is therefore in **`(0, 1]`**, and `1` is attainable: the RRF term is strictly positive for any row
+a retrieval leg returned, and a hit that is the best candidate, an exact title match and the newest
+row scores exactly `1`. A candidate with no `added_at` scores `0` on the third term — an absent date
+must never be able to claim the top.
+
+⚠️ **The weights are in the code, and this document does not keep a second copy of them.**
+`internal/store/searchlibrary.go`'s `rerankWeightRRF` / `rerankWeightJW` / `rerankWeightRecency`
+const block is authoritative; when it and any prose disagree, **it wins and the prose is stale**.
+What this section owns is the **ordering** those three encode — *retrieval evidence above string
+shape above recency* — and the reason for it, below. They are **chosen, not tuned**: there is no
+relevance-judgement set and no query log behind them, so calling them tuned would be invented status.
+
+⚠️ **Jaro-Winkler is not the primary signal, and this table used to say it was.** The correction is
+recorded as `REVIEW-LOG` LS-191, and the reason is the `people` column, which LS-100 added to the
+corpus *after* this section was first written. Jaro-Winkler sees `norm_title` and nothing else, so
+making it primary buries every hit retrieved through `people`, `alt_titles` or `original_title`: a
+search for "Susanna Clarke" scores JW ≈ 0 against *Piranesi* — the exact query the `people` column
+exists to answer, and one §2 calls settled. RRF is the only signal that knows the other columns
+matched at all, so **it leads and Jaro-Winkler discriminates among what retrieval found**, which is
+the job this table wanted it for.
+
+| Signal | Status | Why |
 |---|---|---|
-| **Jaro-Winkler** on `norm_title` | primary | Prefix-weighted, which matches how people type titles: they get the beginning right. |
-| **`popularity` prior** | high for short queries | For a 3-character query, popularity beats text score. |
-| **`in_library` boost** | high | Items you own outrank items you don't. The single most user-satisfying signal, and everyone forgets it. |
-| **`title_idf` penalty** | negative | Penalise short high-frequency titles ("It", "Her", "Us") hard, or they swamp everything. |
-| **Recency of `added_at`** | small | Mild tiebreak. |
+| **RRF ratio** against the best candidate in the answer | **live**, and the heaviest term | The only signal that sees the other indexed columns. Fusion scores are tiny (2/61 at most) and their absolute size means nothing, so the ratio is the signal. |
+| **Jaro-Winkler** on `norm_title` | **live** | Prefix-weighted, which matches how people type titles: they get the beginning right. Discriminates among retrieved rows rather than leading them. |
+| **Recency of `added_at`** | **live**, smallest | Mild tiebreak, by rank position rather than elapsed time — an absolute decay would need a half-life nobody has measured. |
+| **`popularity` prior** | **dead — hardcoded `0`** | Wanted for short queries, where popularity beats text score. No source this project reads reports popularity, and a fabricated ranking signal is worse than an absent one. |
+| **`in_library` boost** | **dead — hardcoded `1`** | Items you own outrank items you don't: the single most user-satisfying signal, and everyone forgets it. It cannot vary while the corpus holds only what the replica *has*. |
+| **`title_idf` penalty** | **dead — hardcoded `0`** | Would penalise short high-frequency titles ("It", "Her", "Us"), which otherwise swamp everything. It is a *corpus statistic* and nothing computes one. |
+
+The three dead columns stay in the schema and stay **unread**. A term for one of them is added in the
+same commit as the writer that starts computing it, never before: a live-looking weight on a dead
+column is *no invented status* failing in code rather than in prose.
 
 **Then: media-type diversity injection.** After ranking, guarantee the top 10 contains at least one
 item per media type that scored above a floor. **This is what makes the Train Dreams case work** —
 without it, whichever medium has better text statistics sweeps the list and the novella never
 appears, which is precisely the failure the feature exists to prevent.
+
+**The injection is a promotion, not a re-score.** The ranking above is left exactly as it is: for
+each media type absent from the top 10, that type's best-scoring row is moved up to the window's
+edge **carrying the lower score it earned**. Nothing is dropped, and nothing outside the window is
+reordered relative to itself, so asking for more rows returns the same list with the promoted rows
+lifted out of it. *"Above a floor"* is deliberately not a number — being a fused candidate at all is
+the floor, since a row exists only because a retrieval leg matched it against the typed tokens, and a
+second numeric threshold over a score already normalised per query would be a magic number with
+nothing to calibrate it against.
+
+**Two rules therefore bind anything that consumes the score, and each is mechanical rather than
+cautionary.** The number crosses the wire as `score` — [`http-api.md`](http-api.md) §6.2.1 is its
+contract and carries all five forbidden uses — but these two are restated here because this section,
+not the API reference, is where someone reasoning about ranking will be standing.
+
+1. ⛔ **Do not sort by it.** The served order is **not** score-descending, because diversity
+   injection runs *last* and promotes without re-scoring. Sorting by `score` sends every promoted row
+   straight back down and reproduces the single-media-type sweep this feature exists to prevent — the
+   film buries the novella of the same name again, silently, and the client ends up with a strictly
+   worse list than the one it was handed. **Render the order you were given.**
+2. ⛔ **Do not threshold it** — no "hide anything below 0.5", no "strong matches only". The RRF term
+   is normalised against the best candidate **in the same answer**, so the top hit of a query that
+   matched nothing good still scores at least the RRF weight. A high score means *"as good as
+   anything else that matched"*, never *"a good match"*. A threshold therefore hides everything or
+   nothing depending on the query, which is worse than no filter.
 
 **Ranking and grouping are different layers, and both are needed.** Diversity injection operates on
 *ranking* (both the film and the novella get retrieved and scored); **grouping** operates on

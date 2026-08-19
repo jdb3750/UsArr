@@ -34,21 +34,68 @@
 > bullet. **No other line moved, no sweep happened, and every other line citation in this file is
 > still unvetted.**
 >
+> **Extended 2026-08-19 by the ADR-0054 / stale-count pass, to exactly the lines it touched and to
+> NOTHING ELSE:** the baseline block's **ADRs** bullet · §1's objective bullet, its
+> *"highest on `main`"* clause **only** · §2's **relevance score on the wire** item · the **two items
+> that pass added** · §3's mockup-re-keying row, its *"no ADR number is cited"* clause **only**.
+> **No other line moved, no sweep happened, and every other line citation in this file is still
+> unvetted.** That pass also removed the last three places where an **ADR number stood in as a count
+> or a maximum**; numbers used to **cite a specific ADR** are untouched and stay.
+>
 > **Absence rule, added 2026-08-19 after this file wrongly recorded a probe as *"never run"*:**
 > a missing artefact **in the repo** does not establish that something never happened — a result can
 > live in a thread, on the owner's box, or nowhere. A claim of the form *"X was never done"* needs a
 > source that **would have recorded X**, not merely a place where X is not.
 
-**Last re-derived against:** `origin/main` `c7d9ed3` (2026-08-19).
-⚠️ **The baseline moved from `7bd45e9` by the ADR-0052/0053 consolidation pass, and what that pass
+**Last re-derived against:** `origin/main` `13878f2` (2026-08-19).
+⚠️ **Advanced from `c7d9ed3` by the ADR-0054 / stale-count pass, which re-derived FIVE things and
+NOTHING ELSE.** Everything else here is **inherited across that range, and the range is not
+documentation-only** — `13878f2` carries Go, `web/src/` and `docs/reference/` changes — so read every
+box this pass does not name as attested at `c7d9ed3`, not at the baseline line above.
+
+**FIRED at `13878f2` by this pass, and this is the whole list:**
+- [ADR-0054](./DECISIONS.md#adr-0054), read directly in `DECISIONS.md`.
+- **The score's wire path:** `searchItem.Score` and the store-order comment in
+  `internal/httpapi/librarysearch.go`; `SearchItem` in `web/src/lib/search.ts`;
+  `reference/http-api.md` §6.2.1.
+- **The re-rank:** `rerankWeightRRF` / `rerankWeightJW` / `rerankWeightRecency` and `rerank` in
+  `internal/store/searchlibrary.go`, against `reference/search.md` §4's signal table and
+  `REVIEW-LOG.md` LS-191 and LS-192.
+- **Test-citation checks:** `git grep TestSearchOrderIsTheServersAndIsNotScoreOrder`, and every test
+  citation in `web/src/` non-test sources.
+- `grep -rn 'SD-08' docs/` → **no hits**. The review round's own label is not in the tree yet, which
+  is why §2's two new items cite the evidence rather than the finding id.
+
+**NOT fired by this pass, and therefore inherited:** no migration and no schema read · no
+`ARCHITECTURE.md` read · no Go outside the two files named above · no §2 box except the score item and
+the two items it added · no §3 read except the one clause named in the citation note · **no
+line-citation sweep, again.**
+
+**COMMITS LANDED MID-PASS, and the baseline is deliberately NOT advanced past what was read.**
+`13878f2..81108d9` adds `internal/bookorbit` (slice 0), `internal/breaker`, `librarygrid.ts`'s Music
+A-to-Z notice and three `docs/` catch-ups. **It touches no file this pass fired on**, and the four
+checks above were **re-run against `81108d9`** and still hold: `search.md` §4 still marks
+Jaro-Winkler *"primary"*, the three `rerankWeight*` constants are unchanged,
+`TestSearchOrderIsTheServersAndIsNotScoreOrder` still has no `func`, and every `web/src/` test
+citation still resolves. **Nothing else in that range was read.**
+
+**INHERITED from the `c7d9ed3` baseline. Its own attestation follows, unchanged and NOT re-fired:**
+⚠️ **That baseline moved from `7bd45e9` by the ADR-0052/0053 consolidation pass, and what that pass
 fired is listed rather than summarised**, because the intervening range is large — it carries Go,
 `web/src/` and `docs/` changes alike, so **inheritance is not safe here the way it was for the two
 documentation-only passes before it**.
-**FIRED on this tree, at the baseline above:**
+**FIRED at `c7d9ed3`:**
 - **ADRs**, read directly: [ADR-0052](./DECISIONS.md#adr-0052) and [ADR-0053](./DECISIONS.md#adr-0053).
-  `grep -o '^## ADR-[0-9]*' docs/DECISIONS.md | tail -3` → **`0053` is the highest on `main`**.
-  ⚠️ **True of the baseline and not of `main` any more:** [ADR-0054](./DECISIONS.md#adr-0054) landed
-  after it, with §2's *relevance score on the wire* item. Re-run the grep rather than reading this.
+  ⚠️ **NO HIGHEST-ADR NUMBER IS RECORDED HERE ANY MORE, AND REMOVING IT WAS NOT HOUSEKEEPING.** This
+  bullet used to end `grep -o '^## ADR-[0-9]*' docs/DECISIONS.md | tail -3` →
+  *"~~`0053` is the highest on `main`~~"*. **An agent read that line, believed it, and self-allocated
+  ADR-0054 from it.** The number stands — ADR-0054 is merged and has in-tree references — but a
+  stale count in a file that is **not authoritative for the count** drove a real allocation decision.
+  [`DECISIONS.md`](./DECISIONS.md) is authoritative for ADR numbering; this file is not, so it now
+  **points instead of carrying a copy**: run `grep -o '^## ADR-[0-9]*' docs/DECISIONS.md | tail -1`
+  when you need the number. **The evidence is recorded rather than deleted because it is the best
+  worked example in this file for the bias the whole page is written under** — state what is *owed*,
+  and point at the authority for what *is*.
 - **Scope**, read directly: `ARCHITECTURE.md` §16's v0.1 entry and §16.1's sequencing table.
 - **Screen checks:** `web/src/routes/` and `web/src/routes/library/`; `TYPE_NAV` and `NAV_GROUPS` in
   `web/src/routes/+layout.svelte`; `MEDIA_TYPES` in `web/src/lib/library.ts`; the exports of
@@ -61,14 +108,14 @@ documentation-only passes before it**.
   `seedLibraryCorpus` (`internal/httpapi/library_test.go`) and
   `TestBrowseEndpointScopesByLibrarySlug` (`internal/httpapi/library_browse_test.go`).
 - **`REVIEW-LOG.md`:** LS-260's closure section and the cassette-scrubber entry (LS-340…LS-345).
-**THREE COMMITS LANDED MID-PASS and the baseline is deliberately NOT advanced past what was read.**
+**THREE COMMITS LANDED MID-PASS AND THAT PASS DELIBERATELY DID NOT ADVANCE PAST WHAT IT READ.**
 `adf8960`, `a6bf6c1` and `cad0563` touch `docs/DEVELOPMENT.md`, `docs/design/DESIGN-DIRECTION.md` and
 one blockquote in `docs/DECISIONS.md` — **no Go, no migration, no `web/src/`** — so the checks above
 are not stale by them. `cad0563` was read directly, because it marks ADR-0052's mockup re-draw
 discharged and §3's new deferred row turns on exactly what that mark does and does not cover.
-**NOT fired, and therefore inherited:** **no schema check and no migration read** — nothing below
-that rests on `internal/db/migrations` was re-derived by this pass — **no `make check` line citation
-was swept**, and **every §2 box this pass does not name is inherited, not re-fired.**
+**NOT fired by THAT pass, and therefore inherited:** **no schema check and no migration read** —
+nothing below that rests on `internal/db/migrations` was re-derived by it — **no `make check` line
+citation was swept**, and **every §2 box it does not name is inherited, not re-fired.**
 ⚠️ **Kept from the earlier riders, because the lines they attest to are unchanged:** the
 probe-correction pass re-derived exactly ONE fact — that `kavita-cover-probe.sh` did run — and fired
 NO grep and NO check on this tree. The Go, schema and `ARCHITECTURE.md` reads below were **fired**,
@@ -91,7 +138,10 @@ read directly for what §2's obligation 3 says about them.
    *"~~until that ADR lands, v0.1's proven source is UNDECIDED — it is not 'BookOrbit' yet~~"*.**
    Both are false now: the ADR landed (`6749365`), was reviewed against BookOrbit's source
    (`6601dce`) and closed out (`f4cc386`). The companion line *"~~`0051` is the highest on `main`~~"*
-   is dropped rather than corrected — **`0053` is**, and ADR-0053 is §2's sidebar decision.
+   is dropped rather than corrected — **and no replacement maximum is written in its place**, for the
+   reason the baseline block above now records at length: a maximum in this file mis-allocated an ADR
+   once already. [`DECISIONS.md`](./DECISIONS.md) is where the current highest lives. ADR-0053 is
+   §2's sidebar decision, and citing a specific ADR by number is not what went wrong.
 
    **What survives is the rule**, which no re-sequencing has ever moved: **one source, proven on
    real data, before a second adapter**. **What v0.1 now OWES against that rule is the run** — a
@@ -620,7 +670,62 @@ Items marked 🛑 **STOPPED** are the different case: those are stopped by the d
       was handed. `reference/http-api.md` §6.2.1 is the semantics — two permitted uses, five
       forbidden ones, each with its mechanism — and the guards are the `TestSearchScore*` family in
       `internal/store` and `internal/httpapi`.
-      *Authority:* §17.4 rule 2, `reference/http-api.md` §6.2 and §6.6, §16 v0.1 entry.
+      ✅ **THE PREREQUISITE IS DISCHARGED. §17.4's GROUPED SCREEN IS NOT BUILT, AND THIS BOX DOES NOT
+      CLAIM IT IS.** Both halves were checked against the tree rather than taken from the ADR.
+      **On the wire:** `searchItem` in `internal/httpapi/librarysearch.go` carries
+      ``Score float64 `json:"score"` `` and fills it from `store.SearchHit.Score`, unrounded.
+      **Semantics documented:** `reference/http-api.md` **§6.2.1** — *"`score` — what it is, and the
+      five things it must not be used for"* — states the formula, what the number is **not**, a
+      seven-row comparability table, the **two** permitted uses and the **five** forbidden ones, each
+      with its mechanism. That was the standing condition on this item and it is **met**.
+      ⚠️ **Nothing reads the field yet, and that is the shape of what remains.**
+      `web/src/lib/search.ts` declares `export type SearchItem = RecentItem`, a type with no `score`
+      key, so the number crosses the wire and the client drops it. §17.4 **rule 2**'s group ordering
+      and **rule 4**'s cross-media placement are both unbuilt, and rule 4 additionally waits on
+      `work_relation`, which v0.3 owns and no migration creates. **Unblocked is not built.**
+      *Authority:* §17.4 rule 2, `reference/http-api.md` §6.2, §6.2.1 and §6.6, §16 v0.1 entry.
+
+- [ ] **`reference/search.md` §4 never absorbed LS-191's re-rank divergence.** **RECORDED HERE, NOT
+      FIXED, AND NOT FIXED BY THIS FILE** — the backend thread is correcting it in-tree and its
+      `REVIEW-LOG.md` entry sits behind other writers in the queue, so this box stays open and claims
+      nothing about a fix. It is one of two findings from a search-docs review round; **the round's
+      own label is not in the tree** (`grep -rn 'SD-08' docs/` → no hits), which is why this item
+      cites the evidence rather than a finding id.
+      §4's re-rank table still marks **Jaro-Winkler on `norm_title`** as *"primary"* and tabulates
+      **five** signals with prose weights and no numbers. The shipped re-rank disagrees on both
+      counts: `internal/store/searchlibrary.go` defines `rerankWeightRRF = 0.55`,
+      `rerankWeightJW = 0.35`, `rerankWeightRecency = 0.10`, and `rerank` sums exactly those three —
+      **fused retrieval leads, Jaro-Winkler discriminates among what it found.** The other three of
+      §4's five are dead constants, guarded by `TestTheThreeDeadSignalsAreStillDead`.
+      The divergence is **argued and deliberate**, not a drift: [`REVIEW-LOG.md`](./REVIEW-LOG.md)
+      **LS-191** gives the reason — Jaro-Winkler sees `norm_title` only, so a primary weight buries
+      every hit retrieved through `people`, the column LS-100 added *after* §4 was written — and
+      **LS-192** records the three dead signals. `reference/http-api.md` §6.2.1 already prints the
+      real formula. **§4 is now the one place a reader meets the weights first and is told the wrong
+      signal leads.**
+      *Authority:* `REVIEW-LOG.md` LS-191 and LS-192, `reference/http-api.md` §6.2.1.
+      *Done when:* `search.md` §4's table stops marking Jaro-Winkler *"primary"* and names the three
+      live weights.
+
+- [ ] **A source comment cites a test that exists nowhere in the tree.** **RECORDED HERE, NOT FIXED**,
+      same round and same queue as the item above. `internal/httpapi/librarysearch.go`'s store-order
+      comment ends *"…`TestSearchOrderIsTheServersAndIsNotScoreOrder` holds it here"*, and
+      `git grep TestSearchOrderIsTheServersAndIsNotScoreOrder` returns **that comment and nothing
+      else** — no such function is defined anywhere. The guard it means is
+      **`TestSearchOrderIsNotScoreOrder`** in `internal/store/searchlibrary_test.go`: a different
+      name in a different package, so the citation is wrong about **where** the order is held as well
+      as **what** holds it. A citation that resolves to nothing fails invisibly, which is the same
+      failure mode the header's citation policy was written against.
+      ⚠️ **This was briefed to this pass as a WEB-code comment. The tree says otherwise — it is Go**,
+      and the brief is recorded as falsified rather than quietly adjusted. `web/src/` was checked for
+      the same fault and is clean: the five `Test*` names cited from non-test sources
+      (`TestListLibrariesShipsNoCredentialOrAddress`, `TestBrowseWorksUnfilteredIsBlockCsCorpus`,
+      `TestUnrecognisedQueryParametersAreIgnoredNotRefused`,
+      `TestBrowseEnvelopeOmitsLibOnlyWhenNoScopeWasApplied`, `TestSearchResponseKeysAreTheAllowlist`)
+      all resolve to a `func`, and every `*.test.ts` filename cited resolves to a file.
+      *Authority:* the tree; `CLAUDE.md`'s *verify, don't assert*.
+      *Done when:* `git grep TestSearchOrderIsTheServersAndIsNotScoreOrder` finds a `func`, or the
+      comment names the guard that exists.
 
 - [ ] **System tags `type:`, `format:`, `source:`, `quality:`, `indexer:` with the `downloadId`
       provenance join.**
@@ -687,7 +792,7 @@ Items marked 🛑 **STOPPED** are the different case: those are stopped by the d
 | ~~Wiring Kavita's `PluginVersion`, or any second Kavita endpoint taking a credential in a query or path~~ | **UNBLOCKED.** All four LS-170 steps landed (`REVIEW-LOG.md` LS-170 § *Applied*), so the ordering constraint that gated this is discharged. `PluginVersion` remains unwired: nothing calls it, and whether to wire it is a separate decision that LS-170 no longer gates. |
 | A second catalogue adapter (Navidrome, then Audiobookshelf, then Komga) | **v0.1's BookOrbit adapter, landed and run against the owner's real library.** ⚠️ **This row used to read *"~~THE SEQUENCE IS NOW CONTRADICTED BY AN OWNER DECISION AND CANNOT BE FIXED FROM THIS FILE~~"*, on the ground that §16.1 still called Kavita v0.1's source and an ADR was owed. Both are done.** [ADR-0052](./DECISIONS.md#adr-0052) landed, and §16.1 now records that Kavita left **v0.1** as well as the table, that the three entries **shift up by one without reordering** — no source refused, no order changed between them — and that the table is therefore *"the sequence after v0.1's own source"*. **The gate is re-pointed, not absent**, and the rule it enforces never moved: **one source, proven on real data, before a second adapter** (§16.0, §16.1, [ADR-0036](./DECISIONS.md#adr-0036)). |
 | **The Kavita adapter code itself — RE-SEQUENCED, NOT CUT** | **Nothing.** It **STAYS IN THE TREE**: `internal/kavita`, `internal/libsync`'s Kavita path, `00006_kavita_subtypes.sql` and the recorded fixtures all remain, because **other people run Kavita** and principle 3 (*pluggable by default*) is the reason the adapter exists at all. **What the sunset stops is INVESTMENT, not the code** — no deletion, no deprecation notice, no migration. Read any Kavita item in §2 as *"unfunded, still standing"*, never as *"dead"*. |
-| **Re-keying the design mockups' v0.1 DATA off BookOrbit** — a real design change, and a different thing from the label swap | **The owner's mixed-library answer, and the two ADRs the sync lane has pre-allocated for its structural findings.** ⚠️ **Both gates are relayed from other threads and are NOT readable in this tree** — recorded as sequencing, not as status. **The label swap already landed and is not this**: `a1995f9` moved the install switcher on all five screens to *"v0.1: BookOrbit, Prowlarr"*, while `mockups/README.md`'s v0.1 figures were **deliberately left un-re-keyed** — they are arithmetically derived from the Kavita-era install, and that section now **states its provenance where a reader meets the numbers** rather than letting a BookOrbit label sit over Kavita-shaped arithmetic. Re-deriving them changes what the drawings assert about a real install, which is why it is a decision rather than a rename. ⚠️ **[ADR-0052](./DECISIONS.md#adr-0052) marks its own mockup re-draw DISCHARGED by that commit** (`cad0563`), and that mark is about **the rendered label**, not the figures under it — reading it as covering both is the mistake this row exists to prevent. ⚠️ **No ADR number is cited: none is allocated** — `0053` is the highest on `main`. ⚠️ **The design thread is CLOSED, so this has NO OWNER at slotting time**, and naming one is part of slotting it: **a closed thread's sections do not pass to whoever next touches them.** |
+| **Re-keying the design mockups' v0.1 DATA off BookOrbit** — a real design change, and a different thing from the label swap | **The owner's mixed-library answer, and the two ADRs the sync lane has pre-allocated for its structural findings.** ⚠️ **Both gates are relayed from other threads and are NOT readable in this tree** — recorded as sequencing, not as status. **The label swap already landed and is not this**: `a1995f9` moved the install switcher on all five screens to *"v0.1: BookOrbit, Prowlarr"*, while `mockups/README.md`'s v0.1 figures were **deliberately left un-re-keyed** — they are arithmetically derived from the Kavita-era install, and that section now **states its provenance where a reader meets the numbers** rather than letting a BookOrbit label sit over Kavita-shaped arithmetic. Re-deriving them changes what the drawings assert about a real install, which is why it is a decision rather than a rename. ⚠️ **[ADR-0052](./DECISIONS.md#adr-0052) marks its own mockup re-draw DISCHARGED by that commit** (`cad0563`), and that mark is about **the rendered label**, not the figures under it — reading it as covering both is the mistake this row exists to prevent. ⚠️ **No ADR number is cited: none is allocated** — and **none is to be guessed from a maximum written here**, because reading one out of *this* file is exactly what mis-allocated an ADR once already (see the baseline block). [`DECISIONS.md`](./DECISIONS.md) is authoritative for the next free number. ⚠️ **The design thread is CLOSED, so this has NO OWNER at slotting time**, and naming one is part of slotting it: **a closed thread's sections do not pass to whoever next touches them.** |
 | The minimal write path — `monitor`, `unmonitor`, `delete`, `add`, the queue worker and its settlement loop | **v0.2**, with the first \*Arr adapter ([ADR-0042](./DECISIONS.md#adr-0042), [ADR-0045](./DECISIONS.md#adr-0045)). `write_queue` stays in the schema with **no writer for the whole of v0.1** — that is the seam, and it costs no migration ([ADR-0039](./DECISIONS.md#adr-0039)). |
 | [ADR-0039](./DECISIONS.md#adr-0039)'s outstanding Go `state`-vocabulary declaration and validation | The first `write_queue` writer, which is v0.2's. |
 | The minimal match-correction UI — the remedy for the badge in §2 | **v0.2** ([ADR-0043](./DECISIONS.md#adr-0043), [ADR-0045](./DECISIONS.md#adr-0045)). v0.1 ships the defect's badge without its remedy for a whole milestone, and §16 states that cost rather than burying it. |
