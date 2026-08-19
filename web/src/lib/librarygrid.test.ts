@@ -767,12 +767,30 @@ describe('all six media types are reachable from the shell', () => {
 		).toContain('TYPE_NAV.map(');
 	});
 
-	it('keeps Recently added as its own entry, with its own label', () => {
+	/*
+	 * ⚠️ THE LABEL IS `Library` AND IT USED TO BE `Recently added`. The old one
+	 * was right for the old screen: `/library` read `/library/recent`, which is
+	 * hard-ordered `added_at DESC, id DESC`. It now reads the browse endpoint and
+	 * carries a sort control, so a view a user has put in `popularity` order is
+	 * not a recently-added list, and the old label would contradict the screen.
+	 *
+	 * ⚠️ HOME'S BLOCK C KEEPS THE OLD WORDS, and that is not an inconsistency:
+	 * Block C really is recently added, being closed at one order and no filters
+	 * (§17.2, ADR-0028). `libraryscreen.test.ts` pins that the two screens still
+	 * agree about the EMPTY state, which is the fact they genuinely share.
+	 */
+	it('labels the all-types view Library, not Recently added', () => {
 		expect(
 			LAYOUT_SOURCE,
 			'routes/+layout.svelte dropped the /library entry. §17.2 keeps that view: it is the ' +
 				'one table across ALL six types and is not superseded by the per-type screens.'
-		).toContain("id: '/library', label: 'Recently added'");
+		).toContain("id: '/library', label: 'Library'");
+		expect(
+			LAYOUT_SOURCE,
+			'routes/+layout.svelte calls the /library entry Recently added again. The screen ' +
+				'sorts by popularity as well, so that label names a list the user may not be ' +
+				'looking at.'
+		).not.toContain("label: 'Recently added'");
 	});
 
 	it('links with a real href rather than a click handler', () => {

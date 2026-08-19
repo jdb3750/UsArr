@@ -19,12 +19,19 @@
 	 * endpoint that can feed it, and calling this line item finished would be the
 	 * invented status CLAUDE.md forbids.
 	 *
-	 * ⚠️ AND IT IS NOT `/library`. That screen is Home's Block C at full length —
-	 * one unified newest-first table across EVERY media type, over
-	 * `/library/recent`, which takes no filter at all. §17.2 keeps both, and
-	 * http-api.md §7 is explicit that the browse read *"is a different endpoint
-	 * from §1, not a superset of it"*. The two share a row shape and a paging
-	 * rule and share no cursor.
+	 * ⚠️ AND IT IS NOT `/library`. That screen is THE SAME READ WITH NO
+	 * `media_type` ON IT: every media type at once, sorted and scoped by the same
+	 * endpoint, modelled by the same `$lib/librarygrid`. The difference is one
+	 * optional field, which is why `BrowseQuery.mediaType` is optional and this
+	 * screen takes the narrowed `TypedBrowseRoute` — its `[type]` segment is
+	 * validated before anything is built, so its heading and its title never need
+	 * a fallback for a case the route already refused.
+	 *
+	 * ⚠️ AND NEITHER OF THEM IS HOME'S BLOCK C, which reads `/library/recent` and
+	 * keeps doing so: §17.2 as amended by ADR-0028 closes that block at one
+	 * table, one order and no filters, and http-api.md §7 is explicit that the
+	 * browse read *"is a different endpoint from §1, not a superset of it"*. The
+	 * two share a row shape and a paging rule and share no cursor.
 	 *
 	 * A LOCAL SQLITE READ, so principle 1 holds all the way through: one
 	 * statement per page plus at most one small statement to resolve `?lib=`
