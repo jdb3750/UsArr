@@ -12,7 +12,7 @@
 > **No dates and no estimates appear here, ever**, at the owner's standing instruction. Where a line
 > is inference rather than something read off §16, an ADR or the tree, it is marked 🔍.
 
-**Last re-derived against:** `origin/main` `19f5451` (2026-08-18).
+**Last re-derived against:** `origin/main` `9689e56` (2026-08-19).
 
 ---
 
@@ -92,10 +92,42 @@ Ordered roughly by what the rest depends on, not by size.
       *Authority:* §4.4, §16 v0.1 entry.
       *Done when:* `grep -rln image_asset --include=*.go internal/ cmd/` returns a non-test writer.
 
-- [ ] **Library grid: "Load more", keyset pagination, `content-visibility` on grid rows with explicit
-      ARIA roles.** `GET /api/v1/library/recent` is the only catalogue read on the wire.
-      *Authority:* §4.5, §16 v0.1 entry.
-      *Done when:* a paged library read exists beyond `/library/recent`.
+- [x] **FALSIFIED 2026-08-19 — ~~Library grid: "Load more", keyset pagination,
+      `content-visibility` on grid rows with explicit ARIA roles~~.** All three primitives ship.
+      Home's Block C walks keyset pages of 200 — `LOAD_MORE_PAGE_SIZE`
+      (`web/src/lib/list.ts:434`) against `RecentWorksMaxLimit` (`internal/store/recent.go:82-83`),
+      driven from `web/src/routes/+page.svelte:474` — with the stop rule tested: a short *or* empty
+      page that still carries a cursor does not stop the walk
+      (`web/src/lib/library.test.ts:453-466`). `web/src/lib/List.svelte` carries
+      `content-visibility` with `role="table"`, `aria-rowcount` and `aria-rowindex`.
+      ⚠️ The item read *"`GET /api/v1/library/recent` is the only catalogue read on the wire"* and
+      inferred a gap from the literal 100. **That 100 is `store.SearchMaxLimit`
+      (`internal/store/searchlibrary.go:109`) and binds only on `/api/v1/search`, where it is a
+      documented structural refusal rather than an omission:** `SearchLibrary` fuses at most 200
+      candidates (`retrievalLimit`, `internal/store/searchlibrary.go:99`) and re-ranks *the whole
+      set* in Go, so there is no keyset position a cursor could name — `reference/http-api.md` §6.5
+      publishes exactly that, and `web/src/lib/search.test.ts:74-82` asserts no second page exists.
+      **Lifting that cap would be a store redesign contradicting a published contract, and needs an
+      ADR first. It is not a missing feature.** What the falsification did surface is the next two
+      items.
+
+- [ ] **The library grid screen itself.** `ARCHITECTURE.md:2649-2651` puts it in v0.1: *"Library
+      grid with **"Load more" + `content-visibility` on grid rows carrying explicit ARIA roles
+      (§4.5)**, keyset pagination"*. The primitives ship (above); **the screen does not** —
+      `web/src/routes/` holds `libraries/` (§17.8's row view) and no grid route at all.
+      *Authority:* §16 v0.1 entry, §4.5.
+      *Done when:* a grid route exists under `web/src/routes/`, rendering over a catalogue read.
+
+- [ ] **A relevance score on the wire.** §17.4 rule 2 orders grouped results *"by the group's
+      best-scoring hit, descending"*, and §6.2 publishes no score — *"**`items` is ordered by
+      relevance and the ORDER IS THE CONTRACT.** No score is published"* — deliberately, because it
+      is normalised per query and publishing it would freeze §6.6's ranking. §17.4's grouped card
+      therefore cannot be built over the response as specified. 🔍 Inference: which way that
+      resolves — a published score, server-side grouping, or an amended §17.4 — is decided nowhere,
+      so it closes off an alternative and needs an ADR.
+      *Authority:* §17.4 rule 2, `reference/http-api.md` §6.2 and §6.6, §16 v0.1 entry.
+      *Done when:* the search response carries a field §6.2 documents for grouping, **or** an ADR
+      records the alternative.
 
 - [ ] **System tags `type:`, `format:`, `source:`, `quality:`, `indexer:` with the `downloadId`
       provenance join.**
