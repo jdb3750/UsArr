@@ -1083,6 +1083,72 @@ func dumpSchema(ctx context.Context, q *sql.DB) (string, error) {
 	return b.String(), nil
 }
 
+// schemaDump is a schema dump together with the migration version it was read
+// at.
+//
+// The version travels with the text because the round-trips below compare two
+// dumps and a bare string does not say which version it is: comparing a dump
+// read at 10 with one read at 11 produces a difference that reads as "the Down
+// block is broken" when the real fault is that unlike things were compared.
+// sameAs turns that into its own, loud failure.
+type schemaDump struct {
+	version int64
+	ddl     string
+}
+
+// dumpSchemaAt steps the database down to `version` and dumps the schema there.
+//
+// The version is a REQUIRED argument and the step down is the helper's job
+// rather than the caller's, because the failure being removed is an OMISSION.
+// openTestDB migrates to LATEST, so a dump taken without stepping back to the
+// migration under test captures whatever landed after it, and the "removed or
+// changed an object it did not create" comparison then blames THIS migration's
+// Down block for rolling back a later one. It is green when written and wrong
+// the moment a stranger lands the next migration.
+//
+// That is measured history, not a hypothetical: 0009's round-trip lacked the
+// step and 0010 broke it on all three of 0010's indexes. A COMMENT DID NOT STOP
+// THE REPEAT — 0010's author wrote out "the line 0011 will need" in so many
+// words and 0011 still landed without it. So the step is no longer something a
+// caller can forget to write: there is no way to take a dump without naming the
+// version it is taken at.
+//
+// Stepping is idempotent, so a caller that has already walked down to `version`
+// for its own assertions may still dump through this helper; migrateDownTo
+// fails loudly if the database is BELOW the version asked for.
+func dumpSchemaAt(t *testing.T, ctx context.Context, d *DB, version int64) schemaDump {
+	t.Helper()
+	migrateDownTo(t, ctx, d, version)
+	ddl, err := dumpSchema(ctx, d.Read())
+	if err != nil {
+		t.Fatal(err)
+	}
+	return schemaDump{version: version, ddl: ddl}
+}
+
+// sameAs reports whether two dumps hold identical DDL, and FAILS THE TEST
+// OUTRIGHT if they were read at different versions rather than reporting them
+// as unequal.
+//
+// The helper above removes one of this comparison's two failure modes — a dump
+// taken at head instead of at the migration under test. It cannot remove the
+// other, which is naming two different versions across the two calls, because
+// each call is individually well-formed. A version mismatch is never a
+// meaningful comparison, so it is not reported as a schema difference.
+//
+// Deliberate cross-version comparisons — "everything at N that this Down block
+// did not create is still there at N-1" — read .ddl directly and do not come
+// through here.
+func (s schemaDump) sameAs(t *testing.T, other schemaDump) bool {
+	t.Helper()
+	if s.version != other.version {
+		t.Fatalf("comparing a schema dump read at version %d with one read at version %d: "+
+			"these are not comparable, and the difference between them says nothing about "+
+			"any Down block", s.version, other.version)
+	}
+	return s.ddl == other.ddl
+}
+
 // TestMigration0004NeedsNoRebuild pins 0004's header, and pins the one thing
 // about indexer_catalog that is a security property rather than a performance
 // one: ITS COLUMN LIST IS AN ALLOWLIST.
@@ -2320,17 +2386,14 @@ func TestMigrate0006DownAndUp(t *testing.T) {
 	// one migration, so this walks down to 0006 first and back up past it at
 	// the end. Every assertion below is still about 0006's own block.
 	//
-	// ⚠️ IT IS migrateDownTo AND NOT A HAND-COUNTED RUN OF MigrateDown CALLS.
-	// This used to be one explicit step per migration stacked above, with a
-	// comment saying "each new migration adds one step here. That is the
-	// maintenance a migration on top of this one owes". 0008 and 0009 landed in
-	// the same week and both paid it; the loop retires the bill instead, and
-	// migrateDownTo has been in this file since 0006 for exactly this reason.
-	migrateDownTo(t, ctx, d, 6)
-	at6, err := dumpSchema(ctx, d.Read())
-	if err != nil {
-		t.Fatal(err)
-	}
+	// ⚠️ THE WALK DOWN IS dumpSchemaAt'S JOB, NOT A HAND-COUNTED RUN OF
+	// MigrateDown CALLS. This used to be one explicit step per migration
+	// stacked above, with a comment saying "each new migration adds one step
+	// here. That is the maintenance a migration on top of this one owes". 0008
+	// and 0009 landed in the same week and both paid it; migrateDownTo retired
+	// that bill, and dumpSchemaAt retires the one after it — see its doc for
+	// why the version is an argument and not a line a caller can forget.
+	at6 := dumpSchemaAt(t, ctx, d, 6)
 
 	migrateDownTo(t, ctx, d, 5)
 	for _, table := range created {
@@ -2344,12 +2407,11 @@ func TestMigrate0006DownAndUp(t *testing.T) {
 		}
 	}
 
-	at5, err := dumpSchema(ctx, d.Read())
-	if err != nil {
-		t.Fatal(err)
-	}
+	at5 := dumpSchemaAt(t, ctx, d, 5)
 	// Everything 0006 did NOT create must be byte-identical across the Down.
-	for _, line := range strings.Split(at6, "\n\n") {
+	// This one IS a cross-version comparison, so it reads .ddl rather than
+	// going through sameAs.
+	for _, line := range strings.Split(at6.ddl, "\n\n") {
 		if line == "" {
 			continue
 		}
@@ -2359,7 +2421,7 @@ func TestMigrate0006DownAndUp(t *testing.T) {
 				mine = true
 			}
 		}
-		if !mine && !strings.Contains(at5, line) {
+		if !mine && !strings.Contains(at5.ddl, line) {
 			t.Errorf("0006's Down block removed or changed an object it did not create:\n%s", line)
 		}
 	}
@@ -2376,17 +2438,13 @@ func TestMigrate0006DownAndUp(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Migrate goes all the way to head, so come back down to 6 — one step per
-	// migration stacked above this one. Another migration adds another step.
+	// Migrate goes all the way to head, so the dump below has to come back down
+	// to 6 before it is comparable with at6. That is the argument.
 	if err := d.Migrate(ctx); err != nil {
 		t.Fatalf("Migrate 5 to latest: %v", err)
 	}
-	migrateDownTo(t, ctx, d, 6)
-	again, err := dumpSchema(ctx, d.Read())
-	if err != nil {
-		t.Fatal(err)
-	}
-	if again != at6 {
+	again := dumpSchemaAt(t, ctx, d, 6)
+	if !again.sameAs(t, at6) {
 		t.Error("a Down followed by an Up did not reproduce the schema 0006 creates")
 	}
 }
@@ -2758,14 +2816,10 @@ func TestMigrate0007DownAndUp(t *testing.T) {
 	ctx := t.Context()
 	d := openTestDB(t)
 
-	// Later migrations sit on top of 0007; walk down to it first. See
-	// TestMigrate0006DownAndUp on why this is a loop and not a hand-counted run
-	// of MigrateDown calls.
-	migrateDownTo(t, ctx, d, 7)
-	at7, err := dumpSchema(ctx, d.Read())
-	if err != nil {
-		t.Fatal(err)
-	}
+	// Later migrations sit on top of 0007; dumpSchemaAt walks down to it first.
+	// See TestMigrate0006DownAndUp on why that is a loop and not a hand-counted
+	// run of MigrateDown calls.
+	at7 := dumpSchemaAt(t, ctx, d, 7)
 
 	migrateDownTo(t, ctx, d, 6)
 	var n int
@@ -2777,15 +2831,12 @@ func TestMigrate0007DownAndUp(t *testing.T) {
 		t.Error("work_credit survived the Down block")
 	}
 
-	at6, err := dumpSchema(ctx, d.Read())
-	if err != nil {
-		t.Fatal(err)
-	}
-	for _, obj := range strings.Split(at7, "\n\n") {
+	at6 := dumpSchemaAt(t, ctx, d, 6)
+	for _, obj := range strings.Split(at7.ddl, "\n\n") {
 		if obj == "" || strings.Contains(obj, "work_credit") {
 			continue
 		}
-		if !strings.Contains(at6, obj) {
+		if !strings.Contains(at6.ddl, obj) {
 			t.Errorf("0007's Down block removed or changed an object it did not create:\n%s", obj)
 		}
 	}
@@ -2802,16 +2853,12 @@ func TestMigrate0007DownAndUp(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Migrate goes all the way to head, so come back down to 7.
+	// Migrate goes all the way to head, so the dump below comes back down to 7.
 	if err := d.Migrate(ctx); err != nil {
 		t.Fatalf("Migrate 6 to latest: %v", err)
 	}
-	migrateDownTo(t, ctx, d, 7)
-	again, err := dumpSchema(ctx, d.Read())
-	if err != nil {
-		t.Fatal(err)
-	}
-	if again != at7 {
+	again := dumpSchemaAt(t, ctx, d, 7)
+	if !again.sameAs(t, at7) {
 		t.Error("a Down followed by an Up did not reproduce the schema 0007 creates")
 	}
 }
@@ -2987,14 +3034,10 @@ func TestMigrate0008DownAndUp(t *testing.T) {
 	ctx := t.Context()
 	d := openTestDB(t)
 
-	// Later migrations sit on top of 0008; walk down to it first. See
-	// TestMigrate0006DownAndUp on why this is a loop and not a hand-counted run
-	// of MigrateDown calls.
-	migrateDownTo(t, ctx, d, 8)
-	at8, err := dumpSchema(ctx, d.Read())
-	if err != nil {
-		t.Fatal(err)
-	}
+	// Later migrations sit on top of 0008; dumpSchemaAt walks down to it first.
+	// See TestMigrate0006DownAndUp on why that is a loop and not a hand-counted
+	// run of MigrateDown calls.
+	at8 := dumpSchemaAt(t, ctx, d, 8)
 
 	migrateDownTo(t, ctx, d, 7)
 	var n int
@@ -3006,15 +3049,12 @@ func TestMigrate0008DownAndUp(t *testing.T) {
 		t.Error("image_asset.format survived the Down block")
 	}
 
-	at7, err := dumpSchema(ctx, d.Read())
-	if err != nil {
-		t.Fatal(err)
-	}
-	for _, obj := range strings.Split(at8, "\n\n") {
+	at7 := dumpSchemaAt(t, ctx, d, 7)
+	for _, obj := range strings.Split(at8.ddl, "\n\n") {
 		if obj == "" || strings.Contains(obj, "image_asset") {
 			continue
 		}
-		if !strings.Contains(at7, obj) {
+		if !strings.Contains(at7.ddl, obj) {
 			t.Errorf("0008's Down block removed or changed an object it did not create:\n%s", obj)
 		}
 	}
@@ -3022,12 +3062,8 @@ func TestMigrate0008DownAndUp(t *testing.T) {
 	if err := d.Migrate(ctx); err != nil {
 		t.Fatalf("Migrate 7 to latest: %v", err)
 	}
-	migrateDownTo(t, ctx, d, 8)
-	again, err := dumpSchema(ctx, d.Read())
-	if err != nil {
-		t.Fatal(err)
-	}
-	if again != at8 {
+	again := dumpSchemaAt(t, ctx, d, 8)
+	if !again.sameAs(t, at8) {
 		t.Error("a Down followed by an Up did not reproduce the schema 0008 creates")
 	}
 }
@@ -3163,19 +3199,13 @@ func TestMigrate0009DownAndUp(t *testing.T) {
 		t.Fatalf("fixture: %v", err)
 	}
 
-	// ⚠️ TO VERSION 9 FIRST, and this line is owed by every migration that lands
-	// on top of one of these round-trips. The dump below is the schema THIS
-	// migration creates, and openTestDB migrates to LATEST — so on a tree where
-	// 0010 exists, dumping here without stepping back to 9 captures 0010's
-	// objects too, and the "removed an object it did not create" comparison
-	// below then blames 0009's Down block for rolling back 0010. Measured: it
-	// did, on all three of 0010's indexes, the moment 0010 landed.
-	migrateDownTo(t, ctx, d, 9)
-
-	at9, err := dumpSchema(ctx, d.Read())
-	if err != nil {
-		t.Fatal(err)
-	}
+	// ⚠️ THE 9 IS THE POINT. openTestDB migrates to LATEST, so a dump that did
+	// not step back to 9 would capture whatever landed after 0009, and the
+	// "removed an object it did not create" comparison below would then blame
+	// 0009's Down block for rolling back a later migration. Measured: it did,
+	// on all three of 0010's indexes, the moment 0010 landed. dumpSchemaAt is
+	// why that line can no longer be left out — its doc carries the history.
+	at9 := dumpSchemaAt(t, ctx, d, 9)
 
 	migrateDownTo(t, ctx, d, 8)
 	var n int
@@ -3195,15 +3225,12 @@ func TestMigrate0009DownAndUp(t *testing.T) {
 			"touch a row", n)
 	}
 
-	at8, err := dumpSchema(ctx, d.Read())
-	if err != nil {
-		t.Fatal(err)
-	}
-	for _, obj := range strings.Split(at9, "\n\n") {
+	at8 := dumpSchemaAt(t, ctx, d, 8)
+	for _, obj := range strings.Split(at9.ddl, "\n\n") {
 		if obj == "" || strings.Contains(obj, "ix_edition_format") {
 			continue
 		}
-		if !strings.Contains(at8, obj) {
+		if !strings.Contains(at8.ddl, obj) {
 			t.Errorf("0009's Down block removed or changed an object it did not create:\n%s", obj)
 		}
 	}
@@ -3212,13 +3239,11 @@ func TestMigrate0009DownAndUp(t *testing.T) {
 		t.Fatalf("Migrate 8 to latest: %v", err)
 	}
 	// Back to 9 for the same reason the first dump stepped back to it: `again`
-	// has to be the schema at the version this test is about.
-	migrateDownTo(t, ctx, d, 9)
-	again, err := dumpSchema(ctx, d.Read())
-	if err != nil {
-		t.Fatal(err)
-	}
-	if again != at9 {
+	// has to be the schema at the version this test is about. sameAs enforces
+	// that the two dumps name the SAME version, which the 9 above and the 9
+	// here would otherwise only agree on by inspection.
+	again := dumpSchemaAt(t, ctx, d, 9)
+	if !again.sameAs(t, at9) {
 		t.Error("a Down followed by an Up did not reproduce the schema 0009 creates")
 	}
 	if err := d.Read().QueryRowContext(ctx, `SELECT count(*) FROM edition`).Scan(&n); err != nil {
@@ -3404,18 +3429,15 @@ func TestMigrate0010DownAndUp(t *testing.T) {
 
 	created := []string{"ix_img_cache_key", "ix_work_poster", "ix_work_backdrop"}
 
-	// ⚠️ TO VERSION 10 FIRST — a no-op today and the line 0011 will need.
-	// openTestDB migrates to LATEST, so the dump below captures whatever landed
-	// after this migration, and the "removed an object it did not create"
-	// comparison then blames THIS Down block for rolling back a later one.
-	// 0009's round-trip lacked this line and 0010 broke it on all three
-	// indexes; the same warning is on 0009 now.
-	migrateDownTo(t, ctx, d, 10)
-
-	at10, err := dumpSchema(ctx, d.Read())
-	if err != nil {
-		t.Fatal(err)
-	}
+	// ⚠️ THE 10 IS THE POINT — openTestDB migrates to LATEST, so a dump that
+	// did not step back to 10 would capture whatever landed after this
+	// migration, and the "removed an object it did not create" comparison would
+	// then blame THIS Down block for rolling back a later one. 0009's
+	// round-trip lacked that step and 0010 broke it on all three indexes. The
+	// warning this comment used to carry — "the line 0011 will need" — did not
+	// stop 0011 landing without it, which is why the step now lives inside
+	// dumpSchemaAt rather than in a comment.
+	at10 := dumpSchemaAt(t, ctx, d, 10)
 
 	migrateDownTo(t, ctx, d, 9)
 
@@ -3442,18 +3464,15 @@ func TestMigrate0010DownAndUp(t *testing.T) {
 		}
 	}
 
-	at9, err := dumpSchema(ctx, d.Read())
-	if err != nil {
-		t.Fatal(err)
-	}
-	for _, obj := range strings.Split(at10, "\n\n") {
+	at9 := dumpSchemaAt(t, ctx, d, 9)
+	for _, obj := range strings.Split(at10.ddl, "\n\n") {
 		if obj == "" {
 			continue
 		}
 		if slices.ContainsFunc(created, func(name string) bool { return strings.Contains(obj, name) }) {
 			continue
 		}
-		if !strings.Contains(at9, obj) {
+		if !strings.Contains(at9.ddl, obj) {
 			t.Errorf("0010's Down block removed or changed an object it did not create:\n%s", obj)
 		}
 	}
@@ -3461,12 +3480,8 @@ func TestMigrate0010DownAndUp(t *testing.T) {
 	if err := d.Migrate(ctx); err != nil {
 		t.Fatalf("Migrate 9 to latest: %v", err)
 	}
-	migrateDownTo(t, ctx, d, 10)
-	again, err := dumpSchema(ctx, d.Read())
-	if err != nil {
-		t.Fatal(err)
-	}
-	if again != at10 {
+	again := dumpSchemaAt(t, ctx, d, 10)
+	if !again.sameAs(t, at10) {
 		t.Error("a Down followed by an Up did not reproduce the schema 0010 creates")
 	}
 }
@@ -3669,18 +3684,14 @@ func TestMigrate0011DownAndUp(t *testing.T) {
 			"no container is a real row and 0011 must index it", n)
 	}
 
-	// ⚠️ TO VERSION 11 FIRST — a no-op today and armed the moment 0012 lands.
-	// openTestDB migrates to LATEST, so without this the dump below captures
+	// ⚠️ THE 11 IS THE POINT, and it is armed the moment 0012 lands. openTestDB
+	// migrates to LATEST, so a dump that did not step back to 11 would capture
 	// whatever landed AFTER 0011, and the "removed an object it did not create"
-	// comparison then blames THIS Down block for rolling back a later one.
-	// 0009's round-trip lacked this line and 0010 broke it; 0010's test carries
-	// the same warning.
-	migrateDownTo(t, ctx, d, 11)
-
-	at11, err := dumpSchema(ctx, d.Read())
-	if err != nil {
-		t.Fatal(err)
-	}
+	// comparison would then blame THIS Down block for rolling back a later one.
+	// 0009's round-trip lacked that step and 0010 broke it. This test is the
+	// reason the step now lives inside dumpSchemaAt: 0010's comment spelled out
+	// the line 0011 would need, and 0011 landed without it anyway.
+	at11 := dumpSchemaAt(t, ctx, d, 11)
 
 	migrateDownTo(t, ctx, d, 10)
 	if err := d.Read().QueryRowContext(ctx,
@@ -3700,15 +3711,12 @@ func TestMigrate0011DownAndUp(t *testing.T) {
 			"touch a row", n)
 	}
 
-	at10, err := dumpSchema(ctx, d.Read())
-	if err != nil {
-		t.Fatal(err)
-	}
-	for _, obj := range strings.Split(at11, "\n\n") {
+	at10 := dumpSchemaAt(t, ctx, d, 10)
+	for _, obj := range strings.Split(at11.ddl, "\n\n") {
 		if obj == "" || strings.Contains(obj, "ix_sync_report_container_latest") {
 			continue
 		}
-		if !strings.Contains(at10, obj) {
+		if !strings.Contains(at10.ddl, obj) {
 			t.Errorf("0011's Down block removed or changed an object it did not create:\n%s", obj)
 		}
 	}
@@ -3717,13 +3725,10 @@ func TestMigrate0011DownAndUp(t *testing.T) {
 		t.Fatalf("Migrate 10 to latest: %v", err)
 	}
 	// TO VERSION 11 AGAIN, for the same reason: Migrate returns the DB to head,
-	// and `again` must be read at 0011 to be comparable with at11.
-	migrateDownTo(t, ctx, d, 11)
-	again, err := dumpSchema(ctx, d.Read())
-	if err != nil {
-		t.Fatal(err)
-	}
-	if again != at11 {
+	// and `again` must be read at 0011 to be comparable with at11. sameAs is
+	// what makes "the same version" checked rather than assumed.
+	again := dumpSchemaAt(t, ctx, d, 11)
+	if !again.sameAs(t, at11) {
 		t.Error("a Down followed by an Up did not reproduce the schema 0011 creates")
 	}
 	if err := d.Read().QueryRowContext(ctx, `SELECT count(*) FROM sync_report`).Scan(&n); err != nil {
