@@ -1591,10 +1591,13 @@ about the library and not a failure.
 ## 8 · `GET /api/v1/library/facets` — the per-media-type counts
 
 How many works of each of ARCHITECTURE §17.2's six navigation types the caller can see, as one
-call. It is the read [ADR-0053](../DECISIONS.md#adr-0053) names as its single reopening condition —
-*"a read that answers which of the six types have rows — under the current scope — in one
-statement"* — and it is what §17.2's **Block A**, the media-type summary, has been blocked on. One
-read, two consumers.
+call. It is what §17.2's **Block A**, the media-type summary, has been blocked on.
+
+⚠️ **It is NOT the read [ADR-0053](../DECISIONS.md#adr-0053) reopens on, and it looks like it.** That
+ADR wants a predicate answering *whether* each type has content; this answers *how many works are
+bucketed to* each type, and the two differ on exactly one case — see §8.4's split. ADR-0053's
+condition was **refined rather than discharged** on 2026-08-19 for that reason
+([ADR-0059](../DECISIONS.md#adr-0059)), so a client must not read these counts as presence.
 
 It is a local read (principle 1) — two SQLite statements, no \*Arr call, no metadata provider, no
 image fetch. Requires an authenticated session; without one it is `401 unauthorized`.
@@ -1682,7 +1685,8 @@ book works. This is the same assignment §1 and §7 already make for a row's `me
 is why the count and the grid agree. **The consequence, stated rather than left to be found: a
 library whose only audiobooks are second editions of ebooks reports `audiobooks: 0`** while §17.2's
 row-5 predicate would say the type has content. That matters the day something hides a type on this
-number.
+number — which is why [ADR-0059](../DECISIONS.md#adr-0059) records the decision, and why ADR-0053's
+reopening condition now names the existence predicate rather than a count.
 
 ### 8.5 Zero and invisible are the same answer, in one direction only
 

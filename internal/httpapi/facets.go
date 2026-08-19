@@ -9,16 +9,16 @@ import (
 // GET /api/v1/library/facets is the per-media-type facet count: how many works
 // of each of ARCHITECTURE §17.2's six navigation types the caller can see.
 //
-// It is the read ADR-0053 names as its single reopening condition — *"a read
-// that answers which of the six types have rows — under the current scope — in
-// one statement"* — and it is what §17.2's Block A (the media-type summary) has
-// been blocked on. One read, two consumers.
+// It is what §17.2's Block A (the media-type summary) has been blocked on.
 //
-// ⚠️ IT DOES NOT CHANGE THE SIDEBAR AND DOES NOT AMEND ADR-0053. That ADR closes
-// per-type hiding until this read exists; it exists now, and reopening the
-// decision is an amendment somebody has to write, not a consequence that follows
-// from a route being added. `TYPE_NAV` in `web/src/routes/+layout.svelte` still
-// maps all six with no predicate, deliberately.
+// ⚠️ IT IS NOT THE READ ADR-0053 REOPENS ON, AND IT LOOKS LIKE IT. That ADR wants
+// a predicate answering WHETHER each type has content; this answers HOW MANY
+// works are BUCKETED to each type, and the two differ on exactly one case — see
+// internal/store/facets.go's audiobookCountSQL. ADR-0053's condition was REFINED
+// rather than discharged on 2026-08-19 for that reason (ADR-0059); it now names
+// §17.2 rows 4-5's independent EXISTS over edition.format. `TYPE_NAV` in
+// `web/src/routes/+layout.svelte` still maps all six with no predicate,
+// deliberately, and nothing here changes the sidebar.
 //
 // IT IS A LOCAL READ (principle 1). Two SQLite statements, no \*Arr call, no
 // metadata provider, no image fetch. It is on the render path of the first
