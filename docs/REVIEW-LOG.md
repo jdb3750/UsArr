@@ -19274,6 +19274,69 @@ collision, and the `ssrf.RedactText` quotation — which is verbatim against `in
 not a paraphrase — are all still accurate. §1.4.1's *"not counted yet"* rendering, which §3.4 calls
 its missing half, is also unchanged.
 
+## SD-03 — `work_relation` "already carries" columns in a table no migration creates. **Applied in `FUTURE.md`; the `CLAUDE.md` half is split.**
+
+**An instance of `SD-01`, and a sharper one than any row of `SD-02`.** `SD-02`'s twenty-one rows are
+overwhelmingly claims that are *true now and will decay*; nineteen were verdicted true. This one was
+**already false when measured**, which puts it with `SD-02p` — the `make dev` **(not yet)** marker —
+rather than with the rest of the table.
+
+**Measured at `3c88b2e`, in a worktree off the fetched `origin/main`.** `grep -rn work_relation
+internal/db/migrations/` returns **two comment lines and no DDL**:
+`00005_library_sync.sql:47` and `00006_kavita_subtypes.sql:44`, both listing the table among the
+deferred, the second pinning it to **v0.3** explicitly. `internal/db/migrate_test.go:471` carries
+`"work_relation"` in the `deferred` slice of `TestDeferredTablesAreAbsent` (`:435`), under a `// v0.3`
+comment, and `:478` fails the build if the table is present. The design of record is
+`docs/reference/schema.md` **§11 *Cross-media edges · v0.3*** (`:1311`), whose DDL (`:1314-1328`) does
+declare `confidence REAL NOT NULL DEFAULT 1.0` (`:1322`) and `evidence TEXT NOT NULL` (`:1323`). So
+the *columns* are real as a design and the *table* is not real as a schema, and every site below
+collapsed that distinction into the present tense.
+
+**Every present-tense site, measured rather than assumed.** The brief predicted two in `FUTURE.md`;
+there are two there, but only one uses the word *"already"* — the second says plainly `work_relation`
+*"carries"*, inside a *"Three things, all already present"* list where the other two members
+(`edition.format` at `00005_library_sync.sql:373`, `external_id` in the same migration) genuinely
+**are** present. That framing is the more dangerous of the pair: it borrows the truth of two real
+columns to carry a third that does not exist.
+
+| Site | The claim | State |
+|---|---|---|
+| `docs/FUTURE.md:194` | *"**`work_relation` already carries `confidence REAL` and `evidence TEXT NOT NULL`**"* — the named seam for the cross-media fuzzy-match tier | ✅ **Applied.** Now *"is designed to carry"*, citing §11 as the design of record and naming the deferral plus `TestDeferredTablesAreAbsent` |
+| `docs/FUTURE.md:681` | *"Three things, **all already present** … `work_relation` **carries** `confidence` and `evidence`"* — the named seam for book edition-linking | ✅ **Applied.** Now *"two in the shipped schema, one designed"*, with the same citation |
+| `CLAUDE.md:109` | *"`work_relation` **already carries** confidence and evidence columns"* | 🔶 **Split — see below** |
+| `docs/ARCHITECTURE.md:1875` | *"`work_relation` **already carries** `confidence`…"* | ⏭️ **Open, not touched** — same defect, different owner |
+| `docs/DECISIONS.md:582`, `:729`, `:3240` | *"already carries the"* / *"carries"* | ⏭️ **Open, not touched** — ADR bodies are dated records; whether they may restate in the present tense is `SD-02t`'s question, not this entry's |
+| `docs/design/DESIGN-DIRECTION.md:2814` | *"`work_relation` **already carries** `confidence` and `evidence`"* | ⏭️ **Open** — design-area owned, on `SD-02r`'s precedent |
+| `internal/store/searchlibrary.go:27` | *"work_relation **carries** the confidence and evidence columns"* | ⏭️ **Open** — a code comment, and the one site a reader is least likely to check against the schema |
+
+**The `CLAUDE.md` half was split rather than committed whole, and the split is the finding's point.**
+`CLAUDE.md` additions need Joe's approval; **only factual corrections are exempt**. The tense fix
+alone — *"already carries"* → *"is designed to carry"* — names the **same seam**, the **same two
+columns** and the **same table**, redirects nobody, and adds no instruction. It is the exemption's
+central case, and leaving it would have `CLAUDE.md` failing its own *"No invented status. Never
+document a feature as existing when it does not."* So the tense fix is applied. The **enrichment**
+that `FUTURE.md` received — the §11 citation, the v0.3 deferral, the test name — is *new content in
+`CLAUDE.md`*, and telling agents a test forbids creating the table is guidance that is not there
+today. That half is **drafted and handed to Joe, not committed.**
+
+**The guard was fired, not trusted.** `TestDeferredTablesAreAbsent` is cited in the corrected prose
+as the thing that keeps the table out, so it was made to fail on purpose rather than assumed to work:
+a throwaway `00010_TEMP_guardprobe.sql` creating `work_relation` was added, and the test failed with
+`migrate_test.go:479: work_relation exists, but no shipped migration should create it`. The probe was
+then deleted and the test returns `ok`. It asserts the real table name against the real migrated
+schema — it is not a guard that has never been triggered, and not one probing a proxy for its
+condition.
+
+**What `make check` green is worth here.** Nothing, as evidence about this entry. This change is
+`docs/` prose plus one `CLAUDE.md` line; `make check` reads `docs/` only through `gitleaks`, so a
+green attests *"no credential-shaped string"* and **not** that the prose is now true. The claims
+above are load-bearing and each carries its own `file:line`, measured at `3c88b2e`, because that —
+and not the gate — is what a reader can re-run.
+
+**`SD-03` is the next free top-level id after `SD-01`, `SD-01a` and `SD-02`.** The `LS-`/`RK-` series
+run on their own threads and are not renumbered against it; a gap in either is fine and nobody
+closes one.
+
 # Cassette credential scrubber — `internal/vcrscrub`, and both directions of the drill
 
 Trigger: a live probe against the owner's Kavita established that the `/api/Image/*` routes **refuse
