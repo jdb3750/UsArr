@@ -18034,3 +18034,419 @@ whether `jpeg` was the right call. There is no link checker and no prose test in
 **What it does not attest:** anything about an image pipeline, because there is not one. Nothing
 fetches, downscales, encodes or serves an image, and nothing writes `image_asset` at all. This commit
 is a decision, a column, a vocabulary and two guards. Read `internal/` for what exists.
+
+---
+
+# Pre-merge adversarial review of `claude/adr0050-image-format-20260819-1` @ `5177fcf`
+
+**Date:** 2026-08-19. **Prefix:** `LS-290`–`LS-299`. **Tree:** a detached `git worktree` at
+`5177fcf`, which was **pushed and not merged**; `origin/main` was at `a020603` throughout and was
+never touched. **Why pre-merge:** the change adds a migration, and *"a merged migration is never
+edited"* — this is the one artefact in the repo where "fix it in the next commit" does not exist.
+**Toolchain for every measurement below:** `go1.25.13 linux/amd64`, driver
+`github.com/ncruces/go-sqlite3 v0.35.3`, `SELECT sqlite_version()` → **`3.53.4`**.
+
+⚠️ **Branch naming.** A stale `claude/adr0049-…` ref points at this same commit and could not be
+deleted. The branch this review is about is **`claude/adr0050-image-format-20260819-1`**; anything
+reading `adr0049` is the orphan.
+
+---
+
+## LS-290 — `format` is one column per row and §4.4 stores seven widths per asset; the ADR contradicted itself on `orig`
+
+**Severity: High. The only finding in this review that is a *schema* mistake rather than a
+documentation one, and therefore the only one with no cheap fix after merge.**
+
+`image_asset` is keyed one row per `source_url` (`00005_library_sync.sql:219`, `source_url TEXT NOT
+NULL UNIQUE`). `ARCHITECTURE.md` §4.4 stores **up to seven renditions per asset** — the width
+allowlist `92, 154, 200, 342, 500, 780, orig`, each independently addressable as
+`/img/{cache_key}?w=…` (§4.3). **One column cannot describe seven artefacts unless they share a
+codec**, and nothing in the change as pushed said they did. Worse, the change said both things at
+once, in artefacts of different permanence:
+
+| Artefact | What it said | Editable after merge? |
+|---|---|---|
+| ADR-0050, *Context* | *"UsArr already owns an encoder on every path **except `orig`**"* | yes |
+| ADR-0050, *Decision 1* | *"**Every** stored width is JPEG"* | yes |
+| `00008`'s header, *Why `format` and not `mime`* | *"every stored byte has been decoded and re-encoded"* | **NO** |
+| `schema.md` §12 | *"every stored byte has been decoded and re-encoded"* | yes |
+
+**Read §4.4 rather than assuming, which is what settles it:** `orig` is in the allowlist but `orig`
+is **not a downscale**, so §4.4's *"ingest-time downscale ⇒ re-encode"* argument — the ADR's own
+justification for owning an encoder — **does not reach it**. §4.4 says nothing about whether
+`?w=orig` serves UsArr's bytes or the upstream's. That silence is what the ADR's Context sentence
+correctly noticed and its Decision sentence then wrote over.
+
+**Why this is not survivable as-is.** Under a passthrough `orig`, `format='jpeg'` describes six of
+seven renditions and `/img?w=orig` would set `Content-Type: image/jpeg` on a PNG — which is precisely
+the defect the migration header names as the column's reason to exist (*"`/img` cannot set a
+Content-Type without sniffing bytes it already wrote"*). The column would fail its own justification
+on one of the seven widths, and the rows recording that failure would already be written.
+
+**"Nothing writes it yet" is not available as a rebuttal and was not used as one.** Nothing writing
+it yet is exactly why the meaning is free to pin now.
+
+> **Applied — forced to a stated answer, and the answer is the second option in the brief made
+> explicit: `format` describes every rendition, and `orig` is re-encoded like the other six.**
+>
+> **ADR-0050 clause 1** now reads *"EVERY rendition UsArr stores for an asset — all seven widths,
+> `orig` included — is produced by UsArr's own encoder in the codec `image_asset.format` names.
+> There is no passthrough width."* with three sub-clauses: per-**`role`** codec variation stays
+> expressible (the ADR's own PNG-for-logos idea is per-row, because `role` is a column on the same
+> row); per-**width** variation is foreclosed; and the invariant is discharged **by definition, not
+> by code**, because there is no pipeline — the first writer is the code that owes it, and the
+> clause-4 guard is what stops that writer landing without meeting it.
+>
+> The same ruling is written into the three other places, **including the one that can never be
+> edited again**: `00008`'s header gains a section headed *"ONE CODEC PER ROW, AND `orig` IS NOT AN
+> EXCEPTION"*, §4.4 carries it in the amendment banner, and `schema.md` §12 leads its `format`
+> paragraph with it. ADR-0050's Context sentence is corrected to *"an encoder on six of the seven
+> widths"* and now names `orig` as the width Decision 1 closes.
+>
+> **The reopening path is stated and priced rather than left implicit:** a passthrough `orig` is an
+> ADR amendment plus a **second** column for the passthrough codec — one more one-line
+> `ALTER TABLE ADD COLUMN`, measured in LS-291, not a rebuild.
+
+---
+
+## LS-291 — the migration's headline reason to land now was a false claim about SQLite, in the one file that can never be edited
+
+**Severity: High** (the claim is permanent), **and it is the reason this review does not end at
+"merge as is".**
+
+`00008`'s header said, as *"the whole reason this lands now"*:
+
+> *"doing this after the image pipeline has populated a cache would be a 12-step rebuild instead of a
+> one-line ALTER. That asymmetry is the whole reason this lands now."*
+
+**Measured on the pinned driver, one million rows in a table shaped like `image_asset` (STRICT,
+INTEGER PRIMARY KEY, a UNIQUE TEXT column, and two FK columns in a child table pointing at it):**
+
+| Statement | Time |
+|---|---|
+| `ALTER TABLE p ADD COLUMN f TEXT` | **540 ms** |
+| `ALTER TABLE p ADD COLUMN f TEXT NOT NULL DEFAULT 'jpeg'` | 602 ms |
+| `ALTER TABLE p ADD COLUMN f TEXT CHECK (f IS NULL OR f IN ('jpeg','avif'))` | 652 ms |
+| `ALTER TABLE p DROP COLUMN f` | 1.58 s |
+| the same `ADD COLUMN` against a **2-row** table in the same 98 MB database | **0.44 ms** |
+| control: `CREATE TABLE`/`DROP TABLE` in the same database | 1.1 ms / 0.2 ms |
+| control: `SELECT count(*)` over the million rows | 30 ms |
+
+**`ADD COLUMN` is a one-line `ALTER` at any row count.** A 12-step rebuild is what an added `CHECK`
+or an added `NOT NULL` costs — and this migration adds neither. Being a parent of `work` twice over
+makes the table expensive to **rebuild**; it has no bearing on `ADD COLUMN`, which touches no child
+table (`pragma_foreign_key_check` returned 0 violations throughout). So the stated asymmetry does not
+exist, and it was about to be frozen into a file the project's own rules forbid editing.
+
+**A second measurement, recorded because a future migration author will need it.** SQLite documents
+`ADD COLUMN` as *"independent of the amount of data in the table"*. On 3.53.4 **that holds for a
+plain rowid table and does not hold for a `STRICT` one** — the identical 1M-row trial:
+
+| Table | `ADD COLUMN` |
+|---|---|
+| `STRICT`, UNIQUE column | 486 ms |
+| `STRICT`, no UNIQUE column | 377 ms |
+| non-`STRICT`, no UNIQUE column | **1.6 ms** |
+| non-`STRICT`, UNIQUE column | **1.2 ms** |
+
+Every table in this schema is `STRICT`, so the documented O(1) is not the figure to plan against
+here. It is still a sub-second one-off and still nothing like a rebuild.
+
+> **Applied.** The header paragraph is replaced by one headed *"WHAT THIS COSTS NOW AND WHAT IT WOULD
+> COST LATER — MEASURED, BECAUSE THE FIRST DRAFT OF THIS PARAGRAPH GUESSED AND GUESSED WRONG"*,
+> carrying both tables, the ⚠️ correction naming the false claim, and the `STRICT` finding.
+>
+> **And the real reason to land now is stated in its place, because there is one and it is not DDL
+> cost:** what cannot be repaired later is a column whose **semantics** were never pinned. Rows
+> written by a pipeline that read the column one way cannot be re-read another way. That is LS-290,
+> and the header now says so — *"The paragraph below is therefore the load-bearing one, not this
+> one."*
+
+---
+
+## LS-292 — *"no v0.1 source is known to serve WebP"* was an assumption, and it is wrong about the only adapter v0.1 has
+
+**Severity: Medium.** ADR-0050 named WebP decode as *"the realistic residual risk"* and then wrote:
+*"No v0.1 source is known to serve WebP `MediaCover`, and that is an assumption, not a
+measurement."* Marking it was right; leaving it unmeasured was not, because the measurement is one
+page away and it changes the shape of the risk.
+
+**Primary source.** v0.1's catalogue source is **Kavita** (§16.1, ADR-0041; §7.1's per-source table
+says so twice). Kavita's **Admin settings → Media → "Save Media As"** *"tells Kavita what image
+format to use when creating thumbnails, covers and bookmarks"*, and the three options are **PNG (the
+default), WebP, and AVIF**
+([wiki.kavitareader.com/guides/admin-settings/media](https://wiki.kavitareader.com/guides/admin-settings/media/),
+read 2026-08-19).
+
+Against that, the decode side, also re-verified rather than recalled: `golang.org/x/image/webp`'s
+synopsis is *"Package webp implements a decoder for WEBP images"* and it exports exactly `Decode` and
+`DecodeConfig` ([pkg.go.dev](https://pkg.go.dev/golang.org/x/image/webp), 2026-08-19) — the ADR's
+*"decode-only"* claim holds. There is **no pure-Go AVIF decoder in `x/image` at all**.
+
+**So the risk is worse and differently shaped than the ADR said.** It is not a hypothetical upstream;
+it is a dropdown on the owner's own server, and one of its two non-default values is the very codec
+this ADR defers on the *output* side. The default is stdlib-decodable, so nothing is broken today —
+but *"no source is known to"* was false as written.
+
+> **Applied, and the decision is unchanged — deliberately.** The output codec is still JPEG and still
+> free; what moves is where the risk lives. ADR-0050's residual-risk bullet now carries the Kavita
+> measurement with its citation and states plainly that *"the thing most likely to force a dependency
+> is **input**, not output"*. §4.4's amendment banner carries the one-sentence version. A new
+> **Consequence** records the obligation this creates: *"the pipeline owes a decode-failure path that
+> names the format it could not read"*, so an unreadable cover surfaces as a nameable fault in the
+> attention block rather than a permanently grey card. The ADR summary-table row is updated to match.
+
+---
+
+## LS-293 — the AST guard missed four ordinary spellings, and its failing branch would have shipped never having run in-tree
+
+**Severity: Medium.** Two separate defects in `internal/store/imagelint_test.go`.
+
+**(a) The matcher.** The author flagged this themselves; it is worse than flagged. Measured by
+running the shipped `imageAssetWriteSQL` over candidate statements — every one of these returned
+**false**:
+
+```
+INSERT INTO "image_asset" (source_url) VALUES (?)      -> false
+INSERT INTO `image_asset` (source_url) VALUES (?)      -> false
+INSERT INTO [image_asset] (source_url) VALUES (?)      -> false
+INSERT INTO main.image_asset (source_url) VALUES (?)   -> false
+UPDATE OR IGNORE image_asset SET state = ?             -> false
+UPDATE main.image_asset SET state = ?                  -> false
+UPDATE "image_asset" SET state = ?                     -> false
+```
+
+None of those is exotic. A quoted identifier is what a developer writes the first time SQLite
+complains, and `UPDATE OR IGNORE` already had its `INSERT OR …` twin handled — the asymmetry was an
+oversight, not a decision.
+
+**(b) The walk.** LS-285 records that the guard *was* fired in both directions, with a throwaway
+`zz_fireprobe.go` — that is real and it is what `CLAUDE.md` §11 asks for. But the probe **is not
+committed**, so from the merge commit onward the failing branch executes in no run of `make check`,
+on a tree where the vacuous branch is the only reachable one. A guard fired once by hand and never
+again is a guard whose behaviour is a claim in a log file.
+
+**(c) A smaller thing, and it is the honest one to say out loud.** The vacuous pass *"is labelled as
+one in the log output"* — via `t.Log`, which prints only under `-v`, and `make check` does not pass
+`-v`. The label reaches whoever is already reading the file, which is not the audience a vacuous pass
+needs to reach.
+
+> **Applied, all three.**
+> **(a)** The pattern now matches an optional schema qualifier and an optional quote character on
+> either side of the table name, and gives `UPDATE` the same `OR <verb>` arm `INSERT` had. All seven
+> spellings above are added to the `shouldMatch` fixture — a matcher gap that is only described in a
+> comment comes back. Two new `shouldNotMatch` cases guard the widening itself
+> (`INSERT INTO main.work`, `UPDATE main.image_asset_thumbnail`), since a looser pattern's failure
+> mode is catching neighbours. What still escapes is stated in the comment rather than hidden: a
+> query assembled by concatenation, which no regex over `BasicLit`s can see. **The guard is a floor,
+> not a proof** — and the brief's point 2 stands unchanged and unclaimed: it checks the validator is
+> *referenced*, never that it is *called on the value being written*.
+> **(b)** The walk's judgement is extracted into `scanImageAssetWrites`, and **`TestImageLintGuardFires`**
+> runs it against two synthetic in-memory sources: a writer with no validator (must be caught) and a
+> writer with a `store.ValidImageFormat` selector (must be accepted — that arm catches the opposite
+> failure, a cross-package caller failing the build for doing the right thing). The firing is now
+> part of the suite instead of a sentence about a deleted file.
+> **(c)** The doc comment is corrected to say the `t.Log` label is invisible under `make check`, and
+> points at the new test as the part that does not depend on being read.
+
+---
+
+## LS-294 — the case for having no column at all, made properly, and where it fails
+
+**Severity: Medium as recorded — the finding is that the ADR rejected this alternative on a false
+ground, not that the alternative wins.**
+
+**The strongest case against the whole change: one codec means one constant.** Under LS-290's
+invariant every row is `jpeg`, so `format` is derivable — `jpeg` iff `state='ready'`, `NULL`
+otherwise. `/img` can read `store.ImageFormatJPEG` and never touch the row. On the day a second codec
+lands, `ALTER TABLE image_asset ADD COLUMN format TEXT` (540 ms per million rows, LS-291) followed by
+`UPDATE image_asset SET format='jpeg' WHERE state='ready'` is **provably correct**, because the
+invariant held for every pre-existing row. On that argument the column carries zero information today
+and the migration is unnecessary.
+
+ADR-0050's *Alternatives* answered this with: *"it makes the encoding of a stored row unrecoverable"*.
+**That answer is false** under the ADR's own clause 1 — the backfill above recovers it exactly.
+
+**Where the case actually fails, and it does fail.** The invariant is a **promise**, and the ADR
+itself contemplates breaking it: *"PNG remains the right choice for logos if the pipeline ever
+distinguishes them by `role`."* A per-`role` split is per-row and perfectly legal under LS-290 — and
+it makes the retroactive `UPDATE … SET format='jpeg' WHERE state='ready'` **silently wrong**, on rows
+nobody would think to re-examine. A column costs one nullable `TEXT` and no index; discovering after
+the fact that the promise was not kept costs the cache. The column is insurance against the
+project's own stated intention to vary, and that is worth 540 ms.
+
+> **Applied to the ADR.** The *Alternatives* bullet is rewritten: the false "unrecoverable" ground is
+> struck and named as struck, and the real ground — *"the invariant is a promise and the column is a
+> record"* — replaces it, with the PNG-for-logos case spelled out as the way the backfill goes
+> silently wrong. **The column survives the attack, on a different argument than the one it shipped
+> with.**
+
+---
+
+## LS-295 — the 2–3× JPEG-vs-AVIF figure was uncited while the binary delta was correctly marked unmeasured
+
+**Severity: Low, and it is a consistency finding.** ADR-0050 is careful in one place —
+*"⚠️ The binary-size delta is UNMEASURED … an estimate here would read as evidence"* — and careless
+in another, asserting flatly that JPEG is *"roughly **2–3× larger**"* than AVIF at equal perceptual
+quality, with no citation and no measurement on this project's own posters. `CLAUDE.md` requires a
+primary source for external claims and asks that reasoning be marked as inference. The same document
+cannot apply that standard to one number and not the other.
+
+> **Applied — marked, not deleted.** The figure now reads *"commonly reported at roughly 2–3×
+> larger"* followed by *"⚠️ that ratio is recollection, not a citation and not a measurement on this
+> project's own posters … an order-of-magnitude sanity figure, and nothing should be decided on its
+> third significant digit."* Deleting it would have been worse: the ADR's honesty rests on showing
+> the ledger it trades against, and a marked recollection does that where silence does not.
+
+---
+
+## LS-296 — `gen2brain/avif` is described a little wrong, and the detail cuts against the ADR's own argument
+
+**Severity: Low.** ADR-0050 says the library *"ships libaom compiled to WebAssembly and runs it under
+`tetratelabs/wazero`."* Its own README says it is *"based on **libavif** with **dav1d (decode)** and
+**aom (encode)** compiled to WASM and used with wazero runtime (CGo-free)"*, and that it tries a
+shared library through `purego` first, falling back to WASM
+([pkg.go.dev/github.com/gen2brain/avif](https://pkg.go.dev/github.com/gen2brain/avif), v0.6.0, MIT,
+read 2026-08-19).
+
+The correction matters slightly, and in the direction that *weakens* the deferral: the package brings
+an AVIF **decoder** as well as an encoder, which is the capability LS-292 shows the input side may
+actually need. Not enough to reopen anything — the unmeasured binary cost is untouched — but the ADR
+should describe the thing it is deferring accurately.
+
+> **Applied.** The Context paragraph now quotes the README verbatim with its citation, and names the
+> `purego`-then-WASM path. The deferral, its reopening condition and the ⚠️ unmeasured binary delta
+> are all unchanged.
+
+---
+
+## LS-297 — the two errors the author says their tests caught: both re-measured independently, both hold, and `00003`'s header is the second false comment
+
+**Severity: informational for the branch; a finding of its own for `00003`.** Re-measured here from
+scratch rather than read from the branch's tests.
+
+**(1) `ADD COLUMN … CHECK(…)` succeeds on a `STRICT` table and is then enforced.**
+
+```
+CREATE TABLE t1 (id INTEGER PRIMARY KEY, a TEXT NOT NULL) STRICT;
+ALTER TABLE t1 ADD COLUMN b TEXT CHECK (b IS NULL OR b IN ('x','y'));   -- OK
+INSERT INTO t1 (a,b) VALUES ('r','x');       -- OK
+INSERT INTO t1 (a,b) VALUES ('r2','zzz');    -- CHECK constraint failed: b IS NULL OR b IN ('x','y')
+INSERT INTO t1 (a)   VALUES ('r3');          -- OK
+SELECT strict FROM pragma_table_list WHERE name='t1';  -- 1
+```
+
+**So `00003`'s header sentence — a `CHECK` *"is the one thing ALTER TABLE cannot express"* — is
+false.** What `ALTER TABLE` cannot do is `ALTER` or `DROP` an **existing** `CHECK`. `00008`'s header
+already says this and is right to; recorded here as a finding against `00003` because `00003` is
+merged and its sentence stays wrong until something points at it. **`00003` is not edited** — a
+merged migration is never edited — and this entry is the pointer.
+
+**(2) A `STRICT TEXT` column coerces `INTEGER` and `REAL` and refuses only `BLOB`.**
+
+```
+INSERT INTO t2 (f) VALUES (7);        -- OK   -> typeof='text', value='7'
+INSERT INTO t2 (f) VALUES (1.5);      -- OK   -> typeof='text', value='1.5'
+INSERT INTO t2 (f) VALUES (x'00ff');  -- cannot store BLOB value in TEXT column t2.f
+```
+
+Identical results through Go driver parameter binding (`int`, `float64`, `[]byte`), so it is not a
+literal-parsing artefact. The author's LS-287 therefore stands: `migrate_test.go`'s
+`TestMigration0003NeedsNoRebuild` item 2 (*"losing STRICT here would silently accept an integer
+state"*) is false, and **`STRICT` is not what protects `image_asset.format`** — `internal/store/images.go`
+is, which is the argument for shipping the validator with the column.
+
+> **Both confirmed, no change needed to this branch.** ⚠️ **Two false comments now stand recorded
+> against merged files**: `00003`'s header (this entry) and `migrate_test.go`'s item 2 (LS-287,
+> where `migrate_test.go` *is* editable and the author deliberately left it to its own thread).
+> Neither is a defect in `00008`.
+
+---
+
+## LS-298 — the `Down` block, attacked and cleared
+
+**Severity: none found; recorded because the brief asked for it and an absence proved is worth more
+than an absence assumed.** `DROP COLUMN` has real restrictions in SQLite, so they were measured
+rather than reasoned about, on the same 3.53.4 build:
+
+| Column shape | `ALTER TABLE … DROP COLUMN` |
+|---|---|
+| plain nullable | **OK** |
+| covered by an index | `SQL logic error: error in index ix_p after drop column: no such column: s` |
+| `UNIQUE` | `cannot drop UNIQUE column: "u"` |
+| carrying its own `CHECK` | **OK** on 3.53.4 |
+| `pragma_foreign_key_check` afterwards | **0 violations** |
+
+`image_asset.format` is plain and nullable, no index covers it (`00008` creates none), and it is in
+no constraint — so the `Down` block is legal, and the header's claim that it needs no index dropped
+first (unlike `00003`'s) is correct.
+
+**The round-trip test genuinely exercises it rather than asserting a shape.** `TestMigrate0008DownAndUp`
+calls `MigrateDown`, asserts `Version()` is 7, asserts `pragma_table_info('image_asset')` has zero
+rows named `format`, and then asserts a following `Migrate` reproduces the pre-`Down` schema dump
+**byte-for-byte** (`again != at8`). Run at the review head: **PASS**, alongside
+`TestMigration0008NeedsNoRebuild`, `TestMigrationRoundTrip`, `TestMigrate0006DownAndUp` and
+`TestMigrate0007DownAndUp`.
+
+**One thing the header gets right for the wrong reason and one it gets right outright.** The `Down`
+`DROP COLUMN` costs 1.58 s per million rows — it rewrites every row, unlike `ADD COLUMN`. Irrelevant
+here (there are zero rows and downgrades are not a user path, `CONFIGURATION.md` §6.3), and recorded
+so nobody later cites `00008` as evidence that `DROP COLUMN` is cheap.
+
+---
+
+## LS-299 — the remaining items on the author's own list, each rebutted rather than dropped
+
+**Severity: none. Recorded because this project's rule is that a finding ends applied or rebutted in
+writing, and five of the author's eleven self-reported items are answered by "that is the right call"
+— which is only worth anything if it is written down with its reason.**
+
+- **`internal/store/images.go` is code with no caller.** *Rebutted — it is the right trade.* The
+  alternative the brief offers (a `CHECK` plus a later migration) is the one ADR-0039 already ran:
+  the `CHECK` was dropped, Go validation was promised, and **the promise was never kept**, so
+  `write_queue.state` is enforced nowhere that runs. Fifty lines with no caller, guarded by a test
+  that fails when the first caller arrives, is a cheaper insurance premium than a constraint whose
+  widening is the 12-step rebuild this table is genuinely expensive for. It is also exactly
+  `CLAUDE.md`'s *"the seam ships, the feature does not"*.
+- **The guard checks reference, not call.** *Rebutted — and, more to the point, the branch never
+  claimed otherwise.* The doc comment says so in a paragraph headed *"WHAT IT DOES NOT CLAIM"*. An
+  AST walk cannot know a validator was called on the value being written; a guard that removes the
+  silent-skip path is worth having and is not improved by over-claiming. Left as-is deliberately.
+- **It touched `migrate_test.go`'s shared version constant and two unrelated tests.** *Rebutted.* The
+  `latestSchemaVersion` bump and the extra `MigrateDown` steps in `TestMigrate0006DownAndUp` /
+  `TestMigrate0007DownAndUp` are **mechanically required** by adding a migration — that file's own
+  comment says the constant is *"asserted rather than derived so that adding a migration is a
+  deliberate edit here too"*. The edits are the maintenance the file asks for, and the comments
+  added say so. Merge-conflict exposure is real but unavoidable.
+- **Naming a spec defect in §4.4 while editing §4.4 as interim steward.** *Rebutted.* The edit is
+  minimal and factual: AVIF mentions **struck in place, not deleted**, with a pointer to the ADR,
+  which is `DECISIONS.md`'s own amendment convention. Naming the gap is not overreach — under *"no
+  invented status"*, leaving §4.4 reading as though it had always been complete would have been the
+  overreach.
+- **The ADR may be twice as long as its argument needs.** *Rebutted, narrowly, and it is the weakest
+  rebuttal here.* It is long. But three of this review's four applied corrections
+  (LS-290, LS-294, LS-296) were only findable **because** the ADR wrote its reasoning out far enough
+  to contradict itself — a shorter ADR asserting "JPEG, AVIF deferred, here is a column" would have
+  hidden the `orig` gap completely. Length that can be attacked is worth more than brevity that
+  cannot. **Not left unchanged in effect**: LS-290 and LS-294 both make it longer still, which is the
+  honest cost of the trade.
+- **One item outside the migration.** `internal/libsync/importer.go`'s `Progress.Total` doc comment
+  (LS-288) is unrelated to ADR-0050 and lands in a file other threads are working in. *Rebutted as
+  acceptable:* it is comment-only, and it is **correct** — verified independently, both call sites
+  are `Total: len(reqs)` (`importer.go:564`, `importer.go:647`), an UsArr-side count, never an
+  upstream figure. Noted as a scope excursion so the next conflict in that file has an explanation.
+
+---
+
+## Verdict
+
+**MERGE AFTER THE FIXES PUSHED HERE**, not as pushed at `5177fcf`. Two findings were merge-blocking
+and both are in artefacts that outlive the commit: **LS-290** (a schema whose column could not
+express a state the design elsewhere required, with the contradiction written into a migration header
+that can never be edited) and **LS-291** (a false claim about SQLite `ALTER TABLE`, in the same
+header). Both are now stated answers rather than silences. The column itself survives the attack on
+its necessity (LS-294) — on a different argument than the one it shipped with.
+
+**What would change this verdict back to SEND BACK:** evidence that the image pipeline should serve
+`?w=orig` as upstream passthrough bytes. That would make LS-290's ruling the wrong ruling and would
+need a second column decided before merge, not after.

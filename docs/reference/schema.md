@@ -1359,10 +1359,18 @@ the **row** rather than from the URL string, which is the fix for the derived-UR
 `token` or `key=`.
 
 **`format` records what UsArr's own encoder produced, not what the origin server served.**
-[ARCHITECTURE.md](../ARCHITECTURE.md) §4.4's ingest-time downscale to a seven-width allowlist means
-every stored byte has been decoded and re-encoded, so the upstream's declared media type is history.
-Three properties, each decided in [ADR-0050](../DECISIONS.md#adr-0050) and argued at length in
-`00008_image_asset_format.sql`'s header:
+[ARCHITECTURE.md](../ARCHITECTURE.md) §4.4's ingest-time downscale to a seven-width allowlist puts an
+encoder on six of the seven widths by construction, and [ADR-0050](../DECISIONS.md#adr-0050) clause 1
+puts one on the seventh, so the upstream's declared media type is history. Four properties, each
+decided in ADR-0050 and argued at length in `00008_image_asset_format.sql`'s header:
+
+- **It is ONE codec for the WHOLE row, `orig` included.** §4.4 stores **up to seven widths per
+  asset** and this column is **one per row**, so it is correct only if every rendition of an asset
+  shares a codec — which ADR-0050 clause 1 makes a rule: *there is no passthrough width*. Per-`role`
+  variation (PNG for logos) stays expressible, because `role` is a column on the same row;
+  per-**width** variation is foreclosed, and reopening it costs an ADR amendment plus a second
+  column. ⚠️ Nothing enforces this yet — there is no pipeline — so it is discharged by definition,
+  and the first writer is the code that owes it.
 
 - **It is a lowercase codec token, not a media type** — `jpeg`, not `image/jpeg`, and not the `jpg`
   file suffix. `Content-Type` is derived from it by the `/img` surface; the reverse is parsing, and

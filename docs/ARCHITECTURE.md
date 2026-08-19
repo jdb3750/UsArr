@@ -331,6 +331,13 @@ not what ships. AVIF is buildable here (`gen2brain/avif`, MIT, cgo-free) and is 
 measured trade — one dependency plus a **second** WASM runtime against bytes on the wire — with the
 condition that reopens it named in the ADR. `image_asset.format` (migration
 `00008_image_asset_format.sql`) is the seam that keeps the switch cheap.
+**One consequence lands in this section rather than in the ADR only: `format` is one column per
+`image_asset` row, while this section stores up to SEVEN widths per asset** — so ADR-0050 clause 1
+makes it a rule that every stored width, **`orig` included**, is produced by UsArr's own encoder in
+that one codec. **There is no passthrough width**, and `?w=orig` is a re-encode like the other six.
+⚠️ **Input is a separate question and is the likelier revisit**: Kavita — v0.1's catalogue source —
+writes covers as PNG by default and can be set to **WebP or AVIF**, neither of which the standard
+library decodes.
 
 Posters are the bottleneck: a 60-item viewport at 500×750 is ~5–9 MB per screenful against ~30 KB of
 JSON. **Ingest-time downscale** to a **fixed width allowlist** (`92, 154, 200, 342, 500, 780, orig`;

@@ -18,15 +18,71 @@
 -- reopened are indistinguishable, and `/img` cannot set a Content-Type without
 -- sniffing bytes it already wrote.
 --
--- THIS IS FREE TODAY AND WOULD NOT BE LATER. Nothing in Go writes image_asset —
--- measured on this tree: the only non-test references under internal/ are three
--- comments in internal/ssrf and one query-plan assertion in queryplan_test.go.
--- So there are zero rows, and the column costs a DDL rewrite and nothing else.
--- image_asset is a PARENT of `work` twice over (work.poster_asset_id and
--- work.backdrop_asset_id both REFERENCE it), which makes it one of the more
--- expensive tables in this schema to rebuild; doing this after the image
--- pipeline has populated a cache would be a 12-step rebuild instead of a
--- one-line ALTER. That asymmetry is the whole reason this lands now.
+-- WHAT THIS COSTS NOW AND WHAT IT WOULD COST LATER — MEASURED, BECAUSE THE
+-- FIRST DRAFT OF THIS PARAGRAPH GUESSED AND GUESSED WRONG.
+-- Nothing in Go writes image_asset — measured on this tree: the only non-test
+-- references under internal/ are three comments in internal/ssrf and one
+-- query-plan assertion in queryplan_test.go. So there are zero rows.
+--
+-- ⚠️ An earlier draft of this header said that adding this column after the
+-- image cache is populated would be "a 12-step rebuild instead of a one-line
+-- ALTER". THAT IS FALSE and it is corrected here rather than merged, because a
+-- merged migration is never edited and a false claim about SQLite in one is
+-- permanent. ADD COLUMN is a one-line ALTER at ANY row count. Measured on this
+-- tree's driver (ncruces/go-sqlite3 v0.35.3, SQLite 3.53.4), one million rows
+-- in a table shaped like this one (STRICT, INTEGER PRIMARY KEY, a UNIQUE TEXT
+-- column, two FK columns pointing at it from a child table):
+--
+--   ALTER TABLE p ADD COLUMN f TEXT                              ~0.54 s
+--   ALTER TABLE p ADD COLUMN f TEXT NOT NULL DEFAULT 'jpeg'      ~0.60 s
+--   ALTER TABLE p ADD COLUMN f TEXT CHECK (f IS NULL OR f IN ..) ~0.65 s
+--   ALTER TABLE p DROP COLUMN f                                  ~1.6 s
+--   (the same ADD COLUMN against a 2-row table in the same 98 MB database:
+--    ~0.4 ms — so the cost tracks the TARGET TABLE's row count, not the file's)
+--
+-- A second, unrelated measurement worth recording where a future migration
+-- author will find it: SQLite documents ADD COLUMN as *"independent of the
+-- amount of data in the table"*. On 3.53.4 that holds for a rowid table and
+-- does NOT hold for a STRICT one — the identical 1M-row trial takes ~1.6 ms
+-- without STRICT and ~0.4 s with it. Every table in this schema is STRICT, so
+-- the documented O(1) is not the number to plan against here. It is still a
+-- sub-second one-off, and it is nothing like a rebuild.
+--
+-- SO THE REASON THIS LANDS NOW IS NOT DDL COST. IT IS MEANING.
+-- The 12-step rebuild is what an added CHECK or an added NOT NULL costs, and
+-- this migration adds neither. What genuinely cannot be repaired later is a
+-- column whose SEMANTICS were never pinned: rows written by a pipeline that
+-- read this column one way cannot be re-read another way, and image_asset is a
+-- PARENT of `work` twice over (work.poster_asset_id and work.backdrop_asset_id
+-- both REFERENCE it), so the table the ambiguity would sit in is one of the
+-- more expensive in this schema to touch. The paragraph below is therefore the
+-- load-bearing one, not this one.
+--
+-- ONE CODEC PER ROW, AND `orig` IS NOT AN EXCEPTION — THE INVARIANT THIS
+-- COLUMN IS ONLY CORRECT UNDER, STATED SO IT CAN BE OBEYED.
+-- ARCHITECTURE.md §4.4 stores up to SEVEN widths per asset
+-- (92, 154, 200, 342, 500, 780, orig) and this column is ONE PER ROW, so it can
+-- only describe them all if they all share a codec. ADR-0050 clause 1 makes
+-- that a rule the pipeline must obey: EVERY rendition UsArr stores for an
+-- asset, `orig` INCLUDED, is produced by UsArr's own encoder in the codec this
+-- column names. There is no passthrough width.
+--
+--   * Per-ROLE variation stays expressible and is not foreclosed — ADR-0050
+--     floats PNG for logos, and `role` is a column on this same row, so a
+--     poster row reading 'jpeg' beside a logo row reading 'png' is exactly what
+--     one-column-per-row represents.
+--   * Per-WIDTH variation is what is foreclosed. Serving `?w=orig` as the
+--     upstream's untouched bytes would put a second codec behind one row —
+--     Kavita's cover encoder emits PNG by default and can be set to WebP or
+--     AVIF (wiki.kavitareader.com, Admin settings → Media, "Save Media As") —
+--     and this column could not express it. If that is ever wanted, it is an
+--     ADR-0050 amendment plus a SECOND column for the passthrough codec, and
+--     the measurements above are what that costs: one more one-line ALTER.
+--   * ⚠️ Nothing enforces this today because there is no pipeline. It is
+--     discharged by DEFINITION, in ADR-0050 clause 1 and here, and the first
+--     writer is the code that owes it — the same writer
+--     TestImageWritesValidateTheFormatVocabulary stops until it references the
+--     validator.
 --
 -- WHY `format` AND NOT `mime`. The column holds a short lowercase codec token —
 -- 'jpeg' today, 'avif' if ADR-0050's deferral is reopened, possibly 'webp' —
@@ -45,9 +101,11 @@
 --     from the token in a one-line lookup; the reverse — recovering the codec
 --     from an arbitrary media type string — is parsing.
 --   * The upstream's declared media type is NOT what this column records. This
---     column records what UsArr's own encoder produced, and §4.4's ingest-time
---     downscale to a seven-width allowlist means every stored byte has been
---     decoded and re-encoded. What the origin server called it is history.
+--     column records what UsArr's own encoder produced. §4.4's ingest-time
+--     downscale to a seven-width allowlist puts an encoder on six of the seven
+--     widths by construction, and ADR-0050 clause 1 puts one on the seventh —
+--     see the one-codec-per-row paragraph above. What the origin server called
+--     it is history.
 --
 -- NULLABLE, WITH NO DEFAULT, AND THAT IS THE LOAD-BEARING CHOICE.
 -- An image_asset row is created in state 'pending' — before any bytes are
