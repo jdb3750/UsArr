@@ -57,7 +57,7 @@ import (
 // account with an empty permission set reaches it today. ⚠️ IF BOOKORBIT ADDS A
 // PERMISSION GUARD, this call starts answering 403 and the check must degrade to
 // "completeness unverified" — never to "complete". internal/libsync's
-// completeness pass is built around that degradation, and ADR-XXXX records the
+// completeness pass is built around that degradation, and ADR-0061 records the
 // dependency with the guard-later scenario as its named degradation condition.
 
 // LibraryStats is the allowlisted projection of BookOrbit's LibraryStats

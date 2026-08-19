@@ -149,7 +149,7 @@ func (s *BookOrbitSource) completenessOf(ctx context.Context, l bookorbit.Librar
 	if err != nil {
 		c.State = store.CompletenessUnverified
 		// ⚠️ THE NAMED DEGRADATION CONDITION, AND IT IS A REASON RATHER THAN A
-		// FAILURE. The 403 arm is the guard-later scenario ADR-XXXX records:
+		// FAILURE. The 403 arm is the guard-later scenario ADR-0061 records:
 		// this check rests on GET /libraries/:id/stats carrying no
 		// @RequirePermission, which is a property of BookOrbit's source at
 		// 73b7877d and not a promise to UsArr. The other arm covers everything
@@ -195,7 +195,7 @@ func (s *BookOrbitSource) completenessOf(ctx context.Context, l bookorbit.Librar
 //
 // The 403 arm is separated from the rest because the OPERATOR'S NEXT ACTION
 // differs: a permission guard on the stats route is a BookOrbit change nobody
-// can configure around, and it is the scenario ADR-XXXX names, whereas a
+// can configure around, and it is the scenario ADR-0061 names, whereas a
 // timeout or a 500 is a service problem the Services screen already covers.
 func completenessReason(err error) string {
 	switch {
