@@ -1251,12 +1251,14 @@ a convention. A collision the build catches needs no rule. This class is invisib
   `web/src/lib/requests.ts`. Repaired in `0cb1a18` by prefixing the wire set
   (`wireOutcomeSentUnknown`, `internal/httpapi/grabs.go:206`), leaving both strings as each side
   ships them.
-* **A parameter named for the wrong vocabulary.** `ARCHITECTURE.md:2120` still budgets
-  `GET /api/v1/library?kind=movie`. `kind` is a real column that ships on that endpoint's wire under
-  its own name in every row, while the parameter's vocabulary is §17.2's six-value media-type enum —
-  so the row names one vocabulary and spends the other. Corrected to `?media_type=movies` on the
-  unmerged browse branch (`claude/hearth-thread-rd9ukh`, `f80097f`). Prose is compiled by nothing at
-  all, so nothing was ever going to catch it.
+* **A parameter named for the wrong vocabulary — and this one was prose, not code.** §13's
+  perf-budget table budgeted `GET /api/v1/library?kind=movie`. `kind` is a real column that ships on
+  that endpoint's wire under its own name in every row, while the parameter's vocabulary is
+  §17.2's six-value media-type enum — so the row named one vocabulary and spent the other. Corrected
+  to `?media_type=movies` in `f80097f` on the browse branch (`claude/hearth-thread-rd9ukh`), which
+  reached `main` in `1c13afd`; §13 now carries a note recording the correction, and the budget
+  itself never changed. Prose is compiled by nothing at all, so nothing was ever going to catch it —
+  a defect in a budget row could not have been a build error even in principle.
 * **Two spellings of one concept, each legal in its own set.** `series` is a `work.kind`, `tv` is a
   media type, and a filter that accepted either would silently mean the other.
   `TestBrowseWorksUnknownMediaTypeIsAnError` (`internal/store/browse_test.go`, same branch) asserts
