@@ -100,11 +100,15 @@ UsArr/
 │   ├── requests/               # v0.2 — request → route to the right *Arr by media type
 │   ├── crossmedia/             # v0.3 — Wikidata edge resolution
 │   ├── metadata/               # v0.2+ — tmdb, tvmaze, musicbrainz, openlibrary, wikidata
+│   ├── bookorbit/                  # v0.1's catalogue source as of ADR-0052
 │   ├── navidrome/ audiobookshelf/ kavita/ komga/  # catalogue adapters. This read "one milestone
 │   │                               #   each after v0.1, in that order subject to the §16.1 probe";
-│   │                               #   ADR-0041 moved kavita/ INTO v0.1 and the probe is discharged,
-│   │                               #   so only the other three are after it. The adapter that drives
-│   │                               #   a client like kavita/ lives in libsync/, not beside it.
+│   │                               #   ADR-0041 moved kavita/ INTO v0.1, then ADR-0052 moved v0.1 off
+│   │                               #   it onto bookorbit/. kavita/ is SUNSET, NOT DELETED — it stays
+│   │                               #   here and stays green — and it is not added back to the
+│   │                               #   after-v0.1 sequence, which is navidrome/, audiobookshelf/,
+│   │                               #   komga/ in that order. The adapter that drives a client like
+│   │                               #   kavita/ lives in libsync/, not beside it.
 │   ├── jellyfin/                # v1.0 southbound adapter
 │   ├── lazylibrarian/          # v0.3 as a Tier 1 YAML manifest (ARCHITECTURE §16); Go code only
 │   │                           #   if the manifest ceiling is hit — cmd= RPC, HTTP 200 + Success:false
@@ -643,12 +647,31 @@ The rule fires on the adjacent `apiKey=` keyword, not on the credential, so the 
 a bare path segment scans clean. Generate a fresh random GUID if you re-run this: a recognisable
 sample value may be allowlisted upstream, and would report a false negative.
 
-So: **do not record a cassette against a live instance until a `BeforeSave` scrubber strips
-credentials from the URL — path as well as query — and that scrubber has been fired against a
-known-bad recording.** An unfired scrubber is indistinguishable from no scrubber (§11), and this
-failure is silent and permanent rather than a red gate. `internal/kavita/vcr_test.go` is the worked
-example: it redacts the URL on both sides of the matcher, because a cassette that could only match
-by storing the credential is precisely what the hook exists to prevent.
+So: **recording against a live instance was frozen until a `BeforeSave` scrubber stripped
+credentials from the URL — path as well as query — and had been fired against a known-bad recording.
+Both conditions are discharged and the freeze is LIFTED**, by the scrubber that landed at `36d7f71`.
+Why it existed has not stopped being true, which is why the rule it left behind is that cassettes are
+opened through `vcrscrub.New` and nowhere else: a cassette records the request URL VERBATIM, so once
+committed the credential is in git history permanently, and an unfired scrubber is indistinguishable
+from no scrubber (§11) — a silent, permanent failure rather than a red gate.
+
+What discharged each half:
+
+* **Path as well as query.** `vcrscrub.RedactURL` runs `redactGUIDSegments` *before*
+  `ssrf.RedactRawURL`: it splits the raw string on `/` and replaces any whole segment that is a
+  canonical GUID. That is the `…/api/Opds/<guid>/series` row in the table above — the one `make
+  secrets` scans clean. `internal/ssrf`'s own path heuristic does not catch it and is right not to,
+  because ssrf writes immutable provenance rows and is biased towards missing a key rather than
+  eating a real path segment; the opposite bias belongs here, where an over-redaction shows up in a
+  diff before the commit.
+* **Fired.** `TestScrubDrillArmed` records against a local fake and asserts the cassette holds
+  `/api/Opds/REDACTED/series`; `TestScrubDrillNeutered` records the SAME interaction with the hook
+  removed and asserts the key DOES land, so the drill shows the hook is what did the work rather than
+  the client happening not to send the key. `TestRedactURLHandlesAPathSegmentGUID` pins the unit, and
+  `TestCassettesOnDiskCarryNoCredential` re-scans every committed cassette on every `make check`.
+
+`vcrscrub.New` redacts the URL on **both** sides of the matcher, because a cassette that could only
+match by having stored the credential is precisely what the hook exists to prevent.
 
 Kavita's image endpoints produced this rule; it generalises to any API that takes a key in a URL. On
 `api/specs/kavita-v0.9.0.2.json` — the release the owner runs — `GET /api/Image/series-cover`
@@ -1480,13 +1503,28 @@ paragraph describing a repo that no longer exists.
     exactly the shared-counter operation this rule exists to avoid — the cure is the disease.
     `docs/REVIEW-LOG.md` already says so of its own ids: *"a gap in either is fine and nobody closes
     one"*.
-  * 🔍 **The migrations half of the rule is stated, not evidenced here.** A `00008`→`00009` renumber
-    was reported as the same race in `internal/db/migrations/`; it does not reproduce at `36d7f71`.
-    Every migration from `00001` to `00009` was added once, at its final name — `git log --all
-    --diff-filter=A --name-only -- internal/db/migrations` lists those nine and nothing else, and the
-    same log with `--diff-filter=R` is empty. The rule still covers migration numbers, because they
-    are the same shared counter carrying a stronger no-edit rule on top; that instance is simply not
-    offered as fact.
+  * 🔍 **The migrations half now has its instance, and it is recorded in two halves on purpose,
+    because neither account alone was sufficient and collapsing them would misrepresent both.**
+    **Stated by the participating lane — the only source for the trigger and the timing, and not
+    independently checkable from here:** an agent was briefed to create migration `00008`; a collision
+    warning reached it mid-run, because another decision had taken that slot; it verified against a
+    fresh `origin/main`, wrote `00009_edition_format_index.sql` instead, and regenerated the golden
+    dump after rebasing. The correction happened **inside a working tree, before anything landed** —
+    and that lane explicitly **cannot** attest whether a `00008`-named file ever existed in a commit.
+    **Measured — the only source for what pushed history contains, and it settles a different
+    question:** `git log --all --diff-filter=R --summary -- internal/db/migrations` is **empty**, and
+    `00008_image_asset_format.sql` and `00009_edition_format_index.sql` are two separate files, each
+    added exactly once. **Pushed history carries no rename, which is consistent with the correction
+    landing before the first commit** — and is why reading that same absence as *"the reported
+    renumber does not reproduce"* proved too strong: an in-tree correction leaves `--diff-filter=R`
+    nothing to find, so the empty result never was evidence against it. ⚠️ **The extension is the part
+    worth carrying, and it makes the rule stronger than *"your read may be stale"*.** That agent
+    **had** checked the number against `main`, and **its read was correct at the moment it was made**.
+    The slot was taken underneath it *afterwards*, by a lane it could not see. So re-reading the
+    highest number — more carefully, later, or against a fresher fetch — **is not a fix**: there is no
+    moment at which such a read is safe, because it is only ever true of the tree as it was, and any
+    concurrent lane can invalidate it before you land. **Only allocation fixes it**, because only the
+    dispatcher sees every lane at once.
 * **Key the worktree decision to the operation, not to the size of your change.** Any *whole-tree*
   git operation — `git add -A`, a `git commit` of an index somebody else may have added to,
   `git checkout <branch>` — belongs in a detached worktree of your own. Targeted single-path

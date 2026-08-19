@@ -266,8 +266,9 @@ calendar can subscribe to.
 
 ⚠️ **Which of those sources can actually supply a date, stated because the sentence above promises
 aggregation over services that cannot.** **Only the \*Arrs expose a `/calendar` endpoint.** Lidarr is
-v1.0, and the book, audiobook and comic sources — Audiobookshelf and Kavita, which arrive after v0.1,
-then Komga — expose **no calendar endpoint at all**. So a catalogue-only source contributes `work.release_date`
+v1.0, and the book, audiobook and comic sources expose **no calendar endpoint at all** — measured for
+Audiobookshelf, Kavita and Komga, and **not** measured for **BookOrbit**, which became v0.1's
+catalogue source under [ADR-0052](./DECISIONS.md#adr-0052) after this paragraph was written. So a catalogue-only source contributes `work.release_date`
 where it happens to have one and nothing where it does not, and the calendar must be honest about
 which media types it can cover rather than rendering four empty lanes. The **seam**
 (`work.release_date`) is unaffected; the **promise** needed narrowing.
@@ -701,6 +702,11 @@ v0.2, so the two halves of that sentence swapped milestones: free Kavita's ident
 null and Komga supplies **no external identifiers at all**, which makes "not identified" the
 **ordinary** case from v0.1 rather than the rare one. What that changes is not the requirement — it
 was always v0.1's, on the same not-retrofittable grounds — but how hard v0.1 exercises it.
+⚠️ **v0.1's source is no longer Kavita: [ADR-0052](./DECISIONS.md#adr-0052) made it BookOrbit.** The
+requirement is untouched — ADR-0052 **confirms** [ADR-0043](./DECISIONS.md#adr-0043) on exactly the
+ground that it turns on a property of the source rather than on its name — and the *frequency* claim
+above is **measured for Kavita and unmeasured for BookOrbit**, so read it as the reason the path
+exists rather than as a count of how often v0.1 takes it.
 `internal/libsync` is where the null-identifier path is actually taken. It now lives in
 ARCHITECTURE §6.4 as a rule; it is recorded here only so the connection is not lost.
 
@@ -710,8 +716,9 @@ would have made this a deferred entry whose reopening condition fires one milest
 roadmap line that used to claim it. (⚠️ The parenthetical here read *"under
 [ADR-0036](./DECISIONS.md#adr-0036) no book catalogue source ships in v0.1 at all, so the old trigger
 would now fire later"*. [ADR-0041](./DECISIONS.md#adr-0041) amended ADR-0036 and put **Kavita** — a
-book, comic and manga source — back into v0.1, so the old trigger is back to firing at v0.1 and the
-round trip changed nothing: it was the wrong *kind* of condition each time round, being about data
+book, comic and manga source — back into v0.1; [ADR-0052](./DECISIONS.md#adr-0052) has since put
+**BookOrbit** in that slot, whose media types are the same three, so the old trigger is still back to
+firing at v0.1 and the round trip changed nothing: it was the wrong *kind* of condition each time round, being about data
 rather than about machinery, and the rewrite stands on that. A trigger that moves whenever the
 roadmap does is the defect the rewrite removed.) **The trigger is now: after v0.3, once the Wikidata edge pipeline has
 proved the confidence/evidence path on real data.** That is the machinery this pass writes into, and
@@ -868,7 +875,7 @@ trigger rewrite, and the decision in (2). Nothing about it is a one-way door.
 
 **What.** One capability array carried with each connected service on `GET /api/v1/services/health`:
 the media types that instance *actually* supplies, derived at ingest from the containers the
-instance itself reported. With it a screen can say *"Ebooks — your Kavita has no book library"*.
+instance itself reported. With it a screen can say *"Ebooks — your BookOrbit has no book library"*.
 Without it, the most it can say is *"Ebooks — empty"*.
 
 **Why deferred — and it is a wire gap, not a UI failure.** `ARCHITECTURE.md` §16.1's v0.1 entry
@@ -876,9 +883,10 @@ keeps the rule *every screen that would render a library says which source is mi
 drawing an empty one* as a standing requirement, and splits it into the half that is answerable and
 the half that is not. **Answerable:** which source *will* populate a type — §16 is that mapping, it
 covers all six types, and a renderer needs a constant derived from it rather than anything from a
-server. **Not answerable:** whether an already-connected source covers a type. §16 says Kavita
-covers books, so an install whose Kavita holds only comic libraries has an `ebooks` type whose named
-source is connected and healthy with nothing behind it, and **nothing UsArr serves separates that
+server. **Not answerable:** whether an already-connected source covers a type. §16 says v0.1's
+catalogue source — **BookOrbit** as of [ADR-0052](./DECISIONS.md#adr-0052) — covers books, so an
+install holding only comic libraries has an `ebooks` type whose named source is connected and healthy
+with nothing behind it, and **nothing UsArr serves separates that
 from an import that has not run**. `GET /api/v1/library/recent` returns `{items, limit,
 next_cursor}` with no per-type facet (`recentWorksResponse`, `internal/httpapi/library.go`), and
 `GET /api/v1/services/health` carries `kind` plus a `role` whose CHECK admits four values —
@@ -886,11 +894,13 @@ next_cursor}` with no per-type facet (`recentWorksResponse`, `internal/httpapi/l
 (`serviceHealthResponse`, `internal/httpapi/services.go`).
 
 **Why it is not built now, which is a scope judgement rather than an oversight.** The gap only
-became reachable at all when v0.1 gained a catalogue source: `mapLibraryType`
-(`internal/libsync/kavita.go`) emits exactly two `work.kind` values, `comic` and `book`, so two of
-the six media types have a source and four do not, and the rule has to hold on a mixed screen for
-the first time. But v0.1 connects **one** catalogue source, and with one source the static half
-carries the screen — Ebooks names Kavita, and the residual confusion is one milestone of polish
+became reachable at all when v0.1 gained a catalogue source, and two of the six media types have a
+source while four do not, so the rule has to hold on a mixed screen for the first time. (The measured
+instance of that shape is `mapLibraryType` in `internal/libsync/kavita.go`, which emits exactly two
+`work.kind` values, `comic` and `book`. That adapter is **sunset, not deleted**
+([ADR-0052](./DECISIONS.md#adr-0052)); v0.1's source is BookOrbit, whose media types §16.1 gives as
+books, comics and manga, and whose adapter is not written yet.) But v0.1 connects **one** catalogue source, and with one source the static half
+carries the screen — Ebooks names v0.1's one source, and the residual confusion is one milestone of polish
 rather than a missing capability. The array earns its cost when several sources are connected and
 the answer stops being derivable by hand. *Cut before you add.*
 

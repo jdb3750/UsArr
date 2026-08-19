@@ -3121,7 +3121,7 @@ Concretely, this constrains implementation:
 
 | Axis | What it is | Where it lives | Cardinality |
 |---|---|---|---|
-| **Media type** | a closed enum — movies, TV, music, ebooks, audiobooks, comics | **navigation**: one sidebar entry per type *that has content* | **bounded at 6, by construction** |
+| **Media type** | a closed enum — movies, TV, music, ebooks, audiobooks, comics | **navigation**: one sidebar entry per type — **all six, always** ([ADR-0053](./DECISIONS.md#adr-0053); this cell said *"that has content"* until 2026-08-19) | **bounded at 6, by construction** |
 | **Library** | a user-defined grouping (§6.5), configured separately from services | **scope**: a multi-select chip above the nav, reflected in the URL | **unbounded — and therefore never a nav list** |
 
 **"Media type" is not `work.kind`, and the mapping has to be written down or the sidebar cannot be
@@ -3213,8 +3213,10 @@ searchable upstream and grabbable — they are simply not catalogued yet, and th
   `733 series` sit in one column, and rendered bare, `Music 612` reads as a smaller library than
   `Movies 1,204` when it is 4,118 albums and 51,204 tracks. ADR-0031 already establishes the
   principle for exactly this — *"two artist-level numbers must never be rendered bare"* — and it
-  generalises: a mixed-unit column labels its unit or it is misinformation. The sidebar counts
-  follow the same rule.
+  generalises: a mixed-unit column labels its unit or it is misinformation. ⚠️ **This once ended
+  *"the sidebar counts follow the same rule"*, and the sidebar has carried no counts since
+  [ADR-0053](./DECISIONS.md#adr-0053).** The rule is unchanged and is Block A's; it binds the sidebar
+  again if the facet read that ADR names ever puts a number back on those rows.
   ⚠️ **That "gains from more types" claim is desktop-only, and the phone case needs a different
   layout.** Measured at 390×844, the stacked row treatment turns each type row into four labelled
   lines and costs **~105 px per media type**, which pushes Block B — the block that reports that
@@ -3272,22 +3274,42 @@ Posters view renders Block C as **one wrapping grid across all types**, which is
 for.
 
 **Where the two axes meet, and it is the two-axis model's hardest case: the sidebar reflects what you
-*own*, and never changes shape with the scope.** §17.2's hard rule (below) removes a type the user
-does not have; §8.1 says the sidebar counts respect the scope chip. Scoping to Comics takes the
-Movies count to zero — and the two rules together did not say whether the `Movies` row then
-disappears. **It does not.** A nav list whose entries appear and vanish as a side effect of ticking
-checkboxes *inside a popover that overlays it* is the most disorienting thing a sidebar can do, and
-it makes the sidebar's height jump under the user's cursor. **Only the counts narrow, and a narrowed
-count renders as `0 of 1,204` rather than `0`**, so the row states why it is empty instead of
-looking broken. Clicking it lands on the `scope-empty` state (§17.7), which names the scope and
-offers the control that clears it. Ownership decides shape; scope decides numbers.
+*own*, and never changes shape with the scope.** The question this paragraph was written to settle:
+the hard rule (below) removed a type the user does not have, §8.1 gave every sidebar row a count that
+respected the scope chip, and scoping to Comics therefore took the Movies count to zero — so did the
+`Movies` row then disappear? **It does not.** A nav list whose entries appear and vanish as a side
+effect of ticking checkboxes *inside a popover that overlays it* is the most disorienting thing a
+sidebar can do, and it makes the sidebar's height jump under the user's cursor. Clicking a row
+narrowed to nothing lands on the `scope-empty` state (§17.7), which names the scope and offers the
+control that clears it. Ownership decides shape; scope decides numbers.
 
-**What is unchanged from the earlier text, and is now a hard rule everywhere:** a type the user does
-not have is **not shown at all** — not in Block A, not in the sidebar, not as a search group. That
-rule is not a UsArr invention: Komga ships `v-if="collectionsCount > 0"`, Navidrome's
-`LibrarySelector` returns `null` at ≤1 library, and Sonarr's status badge returns `null` at zero.
-Each block is empty-state aware: a type that exists but has not finished importing shows its progress
-inline rather than an empty row.
+⚠️ **[ADR-0053](./DECISIONS.md#adr-0053) has since removed both mechanisms that question rested on**:
+every media-type row is unconditional, and no row carries a count. The answer is unchanged and is now
+reached without the argument — the shape of the nav cannot depend on the scope, because it depends on
+nothing. What is superseded is the *reconciliation*, including its worked example: this text read
+**"only the counts narrow, and a narrowed count renders as `0 of 1,204` rather than `0`"**, and there
+are no counts to narrow. `scope-empty` is unaffected and is doing more work than before, because the
+per-type screen is now the only place a scoped-to-nothing type can say so.
+
+**What is unchanged from the earlier text, and is a hard rule in Block A and in search groups:** a
+type the user does not have is **not shown at all**. That rule is not a UsArr invention: Komga ships
+`v-if="collectionsCount > 0"`, Navidrome's `LibrarySelector` returns `null` at ≤1 library, and
+Sonarr's status badge returns `null` at zero. Each block is empty-state aware: a type that exists but
+has not finished importing shows its progress inline rather than an empty row.
+
+🚩 **The sidebar is carved out of that rule, and the carve-out is a decision rather than a gap —
+[ADR-0053](./DECISIONS.md#adr-0053).** This sentence read *"not in Block A, not in the sidebar, not
+as a search group"* until 2026-08-19, and **the sidebar third of it was never buildable**:
+[`reference/http-api.md`](./reference/http-api.md) §7.1 states there are *"no facet counts beside the
+chips; each is its own aggregate and its own read"*, and no read UsArr serves answers per-type
+presence either. So **all six media-type entries render unconditionally**, and the honesty moves to
+the per-type screen, which says which of three things made it empty rather than vanishing from the
+nav with no explanation anywhere. **The other two thirds are untouched and remain buildable:** Block
+A's rollup is blocked on the same missing read and draws nothing at all rather than drawing rows it
+cannot source, and a search group's count is a property of the response §17.4 already has. **The
+sidebar clause returns the day a facet read does** — one statement answering which of the six types
+have rows under the current scope — and ADR-0053 is where that condition is recorded so it is not
+silently restored before then.
 
 ### 17.3 Services — setup and health
 

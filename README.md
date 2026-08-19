@@ -19,7 +19,7 @@ that plugs into the players you already use.**
 ## What it is
 
 UsArr is a self-hosted **aggregation gateway** for the whole media-acquisition ecosystem, and it
-arrives in stages rather than all at once. **v0.1 aggregates Kavita and Prowlarr** — one catalogue
+arrives in stages rather than all at once. **v0.1 aggregates BookOrbit and Prowlarr** — one catalogue
 source in front of the sync core, plus free-text search-and-grab. **The remaining library servers
 then arrive one at a time after it**, in the order §16.1 sets: Navidrome, then Audiobookshelf, then
 Komga. **Sonarr and Radarr are re-sequenced out of v0.1 rather than cut**, and land on a sync core
@@ -66,18 +66,18 @@ is not built yet, and which parts are changes faster than the table does — for
 
 | Feature | Status |
 |---|---|
-| **Six-media-type foundation** — the schema covers movies, TV, music, ebooks, audiobooks and comics, and requesting covers all six; **the v0.1 catalogue itself is books and comics/manga**, because Kavita is the one catalogue source that ships | 📋 Planned — v0.1 |
-| **The sync core, with Kavita as its first adapter** — full import, page-walk delta and reconciliation. It is what proves the local-first thesis on a real library, and Kavita carries it because it is the source the owner actually runs | 📋 Planned — v0.1 |
+| **Six-media-type foundation** — the schema covers movies, TV, music, ebooks, audiobooks and comics, and requesting covers all six; **the v0.1 catalogue itself is books and comics/manga**, because BookOrbit is the one catalogue source that ships as of ADR-0052 | 📋 Planned — v0.1 |
+| **The sync core, with BookOrbit as its first adapter** (ADR-0052, which replaced Kavita in that slot on the owner's decision to sunset it) — full import, the ordered page walk where the source supports one, and reconciliation. It is what proves the local-first thesis on a real library, and BookOrbit carries it because it is the source the owner actually runs | 📋 Planned — v0.1 |
 | **\*Arr library sync — Sonarr and Radarr** — **re-sequenced out of v0.1, not cut** (ADR-0041): the owner runs neither, so *"prove it on a real Sonarr and a real Radarr"* was a criterion no v0.1 could meet. They arrive onto a core already proven | 📋 Planned — §16 has not yet named the milestone |
-| Read-only catalogue sources: **Navidrome, then Audiobookshelf, then Komga** — one at a time after v0.1, each its own milestone. ✅ The delta-watermark probe that set the order **ran 2026-08-17 and passed**, which is what moved Kavita into v0.1 ahead of them (ARCHITECTURE §16.1) | 📋 Planned — after v0.1 |
+| Read-only catalogue sources: **Navidrome, then Audiobookshelf, then Komga** — one at a time after v0.1, each its own milestone. ✅ The delta-watermark probe that set the order **ran 2026-08-17 and passed** — that is what moved Kavita into v0.1 ahead of them, a placement ADR-0052 has since ended, and Kavita is **not added back** to this sequence (ARCHITECTURE §16.1) | 📋 Planned — after v0.1 |
 | **User-defined libraries**, configured separately from services, with a correction layer | 📋 Planned — v0.1 (correction UI v0.3) |
-| **Six-type schema** — `work_credit` M:N attribution, edition-scoped `work_track`, the `comic_issue` kind, **the `person` kind**, audiobook edition columns | 📋 Planned — v0.1 (migration 0001 **or a backfill** — ADR-0030, ADR-0031, ADR-0033; the six subtype *tables* each land with the source that writes them, ADR-0040 — and ADR-0044 applied that rule to `work_credit`, which lands with Kavita) |
+| **Six-type schema** — `work_credit` M:N attribution, edition-scoped `work_track`, the `comic_issue` kind, **the `person` kind**, audiobook edition columns | 📋 Planned — v0.1 (migration 0001 **or a backfill** — ADR-0030, ADR-0031, ADR-0033; the six subtype *tables* each land with the source that writes them, ADR-0040 — and ADR-0044 applied that rule to `work_credit`, which lands with v0.1's catalogue source — BookOrbit as of ADR-0052, which **confirms** ADR-0044 rather than amending it, because that ADR turns on a property of the source and not on its name) |
 | Local-first reads; no upstream call on any render path | 📋 Planned — v0.1 |
 | **Search-and-Grab mode** — free-text indexer search and grab via Prowlarr, **for all six types**, with no library. ⚠️ A fact about the indexer ecosystem, not about UsArr's design: 403 of the 543 indexer definitions Prowlarr ships are `type: private`, and the dedicated music and book trackers are invite-only, so on public indexers alone the results for music and books are materially thinner than for film. **A library's catalogue source and its request destination are separate bindings** (§8.3), and **Lidarr is deferred because no write-capable music service ships in v0.1** — not because music ranks lower | ✅ Shipped — v0.1 |
 | Instant search: client prefix index → FTS5 hybrid (prefix + substring; **no typo tolerance**) | 📋 Planned — v0.1 |
 | Source tagging: **usenet / torrent**, first-class and filterable | 🚧 Partial — v0.1: derived and served on search results; not yet filterable |
 | Minimal write path — monitor, unmonitor, delete, add — on a durable command queue. ⚠️ Its \*Arr targets left v0.1 with ADR-0041, so whether it re-sequences with them or stays for Prowlarr's grab path alone is **an open question §16 flags rather than answers** | 📋 Planned — v0.1, scope open |
-| Sync channels **1, 3b and 4**: full import + the **ordered page-walk delta (channel 3b)**, which is v0.1 work and **built** for Kavita rather than only specified + **reconciliation with 7-day tombstones**, which carries more weight here because a page walk cannot observe a deletion. `/history/since` (channel 3) does not apply to Kavita and lands with the first \*Arr adapter | 📋 Planned — v0.1 |
+| Sync channels **1 and 4**, with **3b reduced to the books half at best** (ARCHITECTURE §16.1, applying ADR-0052): full import + the **ordered page-walk delta (channel 3b)** expressible for `work_book` only, because BookOrbit exposes no series-level ordered read — so comics and manga fall back to **reconciliation with 7-day tombstones**, which carries more weight here because a page walk cannot observe a deletion. `/history/since` (channel 3) does not apply to BookOrbit and lands with the first \*Arr adapter. ⚠️ This row read *"channels 1, 3b and 4 … built for Kavita"*; ADR-0041 clause 4 earned that list from a live **Kavita** probe, and ADR-0052 **reopens** it rather than re-answering it | 📋 Planned — v0.1 |
 | **Services health screen** — what is broken, why, and the button that fixes it | 📋 Planned — v0.1 |
 | **Recent grabs** — the last ten grabs with their state, so the acquisition loop has a memory. Not the request model, which is v0.2 | 📋 Planned — v0.1 |
 | Image pipeline: proxy, downscale, ThumbHash, **viewport-prioritised cold start** | 📋 Planned — v0.1 |
@@ -89,7 +89,7 @@ is not built yet, and which parts are changes faster than the table does — for
 | Feature | Status |
 |---|---|
 | Requests: one Add that routes, availability states, per-season TV, approval workflow | 📋 Planned — v0.2 |
-| **The catalogue sources, one milestone each** — **Navidrome (#1), then Audiobookshelf (#2), then Komga (#3)**. Kavita left this sequence for v0.1 and is not a fourth entry. Each lights up its media types in the grid and search | 📋 Planned — after v0.1, ahead of v0.4 for Navidrome |
+| **The catalogue sources, one milestone each** — **Navidrome (#1), then Audiobookshelf (#2), then Komga (#3)**. Kavita left this sequence for v0.1 and then left v0.1 too when ADR-0052 sunset it; it is **not** added back as a fourth entry, on ADR-0042's refusal-to-invent-a-milestone precedent. Each lights up its media types in the grid and search | 📋 Planned — after v0.1, ahead of v0.4 for Navidrome |
 | One search box spanning owned **and** unowned (out-of-band provider search, streamed) | 📋 Planned — v0.2 |
 | **Cross-media linking** via a prebuilt Wikidata CC0 edge artifact — *Train Dreams* end to end | 📋 Planned — v0.3 |
 | Declarative YAML service manifests (add a service without code) | 📋 Planned — v0.3 |
