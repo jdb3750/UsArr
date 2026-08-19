@@ -68,11 +68,18 @@ type Config struct {
 	// supplied — including the empty string, which is a fatal condition rather
 	// than "absent" (see ResolveMasterKey). Use ResolveMasterKey; do not read
 	// this field directly.
-	SecretKey       string
-	SecretKeySet    bool
-	SecretKeyFile   string
-	TrustedProxies  []netip.Prefix
-	trustedRawEmpty bool
+	SecretKey    string
+	SecretKeySet bool
+	// SecretKeyFile is the resolved path, and SecretKeyFileFromFlag says which
+	// of the two settings it came from. The path has a flag twin and an
+	// environment twin that resolve into ONE field, so the field alone cannot
+	// answer "which one did the operator set?" — and a diagnostic that guesses
+	// sends someone to unset a variable they never set. `usarr key rotate`
+	// refuses when this path is set and has to name the right one.
+	SecretKeyFile         string
+	SecretKeyFileFromFlag bool
+	TrustedProxies        []netip.Prefix
+	trustedRawEmpty       bool
 
 	// Metadata.
 	MetadataUserAgent string
@@ -436,7 +443,11 @@ func Load(o Options) (*Config, error) {
 	// inspect output. The path twin below is a path, not a secret, so it does
 	// get a flag.
 	c.SecretKey, c.SecretKeySet = env["USARR_SECRET_KEY"]
+	// The provenance is recorded, not inferred: pick collapses the flag and the
+	// variable into one value and `set` is the only place that still knows
+	// which won.
 	c.SecretKeyFile = pick(set["secret-key-file"], f.secretKeyFile, env, "USARR_SECRET_KEY_FILE", "")
+	c.SecretKeyFileFromFlag = set["secret-key-file"]
 
 	trustedRaw := pick(set["trusted-proxies"], f.trustedProxies, env, "USARR_TRUSTED_PROXIES", "")
 	c.TrustedProxies, err = parseTrustedProxies(trustedRaw)

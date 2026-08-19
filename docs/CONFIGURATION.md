@@ -309,9 +309,11 @@ openssl rand -base64 32          # or: usarr keygen   (proposed CLI, v0.1)
 ### 3.4 Rotating — two-phase and resumable
 
 **`usarr key rotate` is implemented.** It rotates `$USARR_CONFIG_DIR/keys/secret.key` and nothing
-else: a key supplied through `USARR_SECRET_KEY` or `USARR_SECRET_KEY_FILE` lives somewhere UsArr does
-not own, so the command **refuses and names the variable**. Replace such a key yourself and follow
-§3.5.
+else: a key supplied through `USARR_SECRET_KEY`, `USARR_SECRET_KEY_FILE` or `--secret-key-file` lives
+somewhere UsArr does not own, so the command **refuses and names the setting the value actually came
+from** — the flag when the flag was passed, the variable when it was not, because the two resolve
+into one field and a refusal that guessed would send you to change a setting you never touched.
+Replace such a key yourself and follow §3.5.
 
 ```
 $ usarr key rotate --config-dir /config      # or: usarr --config-dir /config key rotate

@@ -436,6 +436,72 @@ func TestVersionFlagShortCircuitsLoad(t *testing.T) {
 	}
 }
 
+// TestUsageNamesTheSubcommand: `usarr --help` must mention `key rotate`.
+//
+// The FlagSet's default usage prints flags and nothing else, so for as long as
+// that was what -h reached, the subcommand was documented everywhere except in
+// the binary that implements it — an operator could read the whole of --help and
+// conclude UsArr has no way to rotate a key.
+//
+// It is asserted through Load rather than by calling the usage function, because
+// the usage function is unexported and, more to the point, what matters is that
+// the text reaches the path -h actually takes.
+func TestUsageNamesTheSubcommand(t *testing.T) {
+	_, err := Load(Options{Args: []string{"-h"}})
+	if err == nil {
+		t.Fatal("Load(-h) returned no error; -h has to surface the usage text somewhere")
+	}
+	for _, want := range []string{"key rotate", "Flags:", "-secret-key-file"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("`usarr -h` output does not contain %q:\n%s", want, err)
+		}
+	}
+}
+
+// TestSecretKeyFileRecordsItsSource pins the provenance the refusal in
+// cmd/usarr/keyrotate.go reads. The flag and the variable resolve into ONE
+// field, so without this bit the only honest thing a diagnostic could say is
+// "one of these two", and the message said the wrong one of them outright.
+func TestSecretKeyFileRecordsItsSource(t *testing.T) {
+	dir := t.TempDir()
+	const path = "/keys/elsewhere.key"
+
+	c, err := Load(Options{Args: []string{"--config-dir", dir, "--secret-key-file", path}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if c.SecretKeyFile != path || !c.SecretKeyFileFromFlag {
+		t.Errorf("--secret-key-file %q resolved to %q, from flag = %v; want the path and true",
+			path, c.SecretKeyFile, c.SecretKeyFileFromFlag)
+	}
+
+	c, err = Load(Options{
+		Args: []string{"--config-dir", dir},
+		Env:  map[string]string{"USARR_SECRET_KEY_FILE": path},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if c.SecretKeyFile != path || c.SecretKeyFileFromFlag {
+		t.Errorf("USARR_SECRET_KEY_FILE=%q resolved to %q, from flag = %v; want the path and false",
+			path, c.SecretKeyFile, c.SecretKeyFileFromFlag)
+	}
+
+	// The flag wins over the variable, and the provenance follows the winner
+	// rather than the loser — which is the case that made the old message wrong.
+	c, err = Load(Options{
+		Args: []string{"--config-dir", dir, "--secret-key-file", path},
+		Env:  map[string]string{"USARR_SECRET_KEY_FILE": "/keys/from-the-environment.key"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if c.SecretKeyFile != path || !c.SecretKeyFileFromFlag {
+		t.Errorf("flag and variable both set: resolved to %q, from flag = %v; want %q and true",
+			c.SecretKeyFile, c.SecretKeyFileFromFlag, path)
+	}
+}
+
 // TestKeyRotateSubcommand pins the parsing rule for the ONE positional form the
 // binary accepts, and — more importantly — that every other positional still
 // errors exactly as it did before subcommands existed. A parser that quietly

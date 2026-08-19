@@ -24,11 +24,19 @@ import (
 // command printed.
 func rotateOn(t *testing.T, dir string, env map[string]string) (string, error) {
 	t.Helper()
+	return rotateOnWith(t, dir, env)
+}
+
+// rotateOnWith is rotateOn with extra command-line arguments appended, for the
+// cases where the SETTING'S SOURCE is what is under test rather than its value.
+func rotateOnWith(t *testing.T, dir string, env map[string]string, extra ...string) (string, error) {
+	t.Helper()
 	if env == nil {
 		env = map[string]string{}
 	}
 	cfg, err := config.Load(config.Options{
-		Args: []string{"key", "rotate", "--config-dir", dir}, Env: env, Version: "0.0.0-test",
+		Args: append([]string{"key", "rotate", "--config-dir", dir}, extra...),
+		Env:  env, Version: "0.0.0-test",
 	})
 	if !errors.Is(err, config.ErrKeyRotateRequested) {
 		t.Fatalf("`key rotate` did not resolve to a rotation: %v", err)
@@ -320,21 +328,36 @@ func TestInterruptedKeyRotationStartsAndResumes(t *testing.T) {
 	assertRotationAudit(t, done, 1)
 }
 
-// TestKeyRotateRefusesAnEnvironmentSuppliedKey: the command can only manage
-// keys/secret.key. A key that arrives through the environment lives somewhere
-// UsArr does not own, and "rename a replacement into place" has no meaning
-// there — rotating anyway would re-wrap every row under material the next start
-// cannot find.
-func TestKeyRotateRefusesAnEnvironmentSuppliedKey(t *testing.T) {
+// TestKeyRotateRefusesAKeyItDoesNotOwn: the command can only manage
+// keys/secret.key. A key supplied from outside lives somewhere UsArr does not
+// own, and "rename a replacement into place" has no meaning there — rotating
+// anyway would re-wrap every row under material the next start cannot find.
+//
+// ⚠️ EACH CASE ALSO CHECKS THAT THE REFUSAL NAMES THE SETTING THE OPERATOR
+// ACTUALLY USED, and the third case is why. The path has a flag twin and an
+// environment twin that resolve into one config field, and this refusal used to
+// hardcode the variable's name for both — so `usarr key rotate
+// --secret-key-file …` sent an operator holding a broken install off to unset a
+// variable they had never set. It is the only diagnostic in this command that a
+// PERSON reads while something is wrong, so naming the wrong thing costs real
+// time. `notWant` is the half that has teeth: a message that named both would
+// satisfy `want` alone.
+func TestKeyRotateRefusesAKeyItDoesNotOwn(t *testing.T) {
 	dir := t.TempDir()
 	// A key that is obviously a fixture: 32 bytes of 0x00 would be rejected as
 	// all-zero, so this is 31 zero bytes and a trailing 1.
 	const suppliedKey = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="
 
+	elsewhere := filepath.Join(dir, "elsewhere.key")
+
 	for _, tc := range []struct {
 		name string
 		env  map[string]string
+		args []string
 		want string
+		// notWant is the setting the operator did NOT use. A refusal that names
+		// it is sending someone to change the wrong thing.
+		notWant string
 	}{
 		{
 			name: "USARR_SECRET_KEY",
@@ -342,18 +365,38 @@ func TestKeyRotateRefusesAnEnvironmentSuppliedKey(t *testing.T) {
 			want: "USARR_SECRET_KEY is set",
 		},
 		{
-			name: "USARR_SECRET_KEY_FILE",
-			env:  map[string]string{"USARR_SECRET_KEY_FILE": filepath.Join(dir, "elsewhere.key")},
-			want: "USARR_SECRET_KEY_FILE is set",
+			name:    "USARR_SECRET_KEY_FILE",
+			env:     map[string]string{"USARR_SECRET_KEY_FILE": elsewhere},
+			want:    "USARR_SECRET_KEY_FILE is set",
+			notWant: "--secret-key-file",
+		},
+		{
+			name:    "--secret-key-file",
+			args:    []string{"--secret-key-file", elsewhere},
+			want:    "--secret-key-file was passed",
+			notWant: "USARR_SECRET_KEY_FILE",
+		},
+		{
+			// Both set, flag wins — so the refusal has to name the flag. This
+			// is the case where "just print both" would still be wrong: the
+			// variable's value is not the one that broke the rotation.
+			name:    "--secret-key-file over USARR_SECRET_KEY_FILE",
+			env:     map[string]string{"USARR_SECRET_KEY_FILE": filepath.Join(dir, "ignored.key")},
+			args:    []string{"--secret-key-file", elsewhere},
+			want:    "--secret-key-file was passed",
+			notWant: "ignored.key",
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			out, err := rotateOn(t, t.TempDir(), tc.env)
+			out, err := rotateOnWith(t, t.TempDir(), tc.env, tc.args...)
 			if err == nil {
 				t.Fatalf("key rotate SUCCEEDED under %s; it can only manage keys/secret.key\n%s", tc.name, out)
 			}
 			if !strings.Contains(err.Error(), tc.want) {
 				t.Errorf("the refusal does not name %s: %v", tc.name, err)
+			}
+			if tc.notWant != "" && strings.Contains(err.Error(), tc.notWant) {
+				t.Errorf("the refusal blames %s, which this operator did not use: %v", tc.notWant, err)
 			}
 			if !strings.Contains(err.Error(), "secret.key") {
 				t.Errorf("the refusal does not say what it CAN rotate: %v", err)

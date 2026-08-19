@@ -92,6 +92,25 @@ func parseFlags(args []string) (flags, map[string]bool, error) {
 	// through ps(1) and appears in container inspect output; the master key
 	// belongs in the environment, a Docker secret, or the key file.
 
+	// The FlagSet's own usage prints flags and nothing else, which left `key
+	// rotate` undiscoverable from the binary: a subcommand the parser accepts,
+	// docs/CONFIGURATION.md §3.4 documents, and `usarr --help` never mentions.
+	// This is the one place every usage path already goes through — a parse
+	// error and -h alike — so naming the subcommand here reaches both.
+	fs.Usage = func() {
+		// The write error is discarded for PrintDefaults' own reason: it
+		// discards its writes too, so checking here would buy nothing and
+		// there is no useful action left when printing usage has failed.
+		_, _ = fmt.Fprintf(fs.Output(),
+			"Usage:\n"+
+				"  usarr [flags]\n    \trun the server\n"+
+				"  usarr %s [flags]\n    \trotate the master key in place "+
+				"(docs/CONFIGURATION.md §3.4)\n"+
+				"\nFlags:\n",
+			strings.Join(keyRotateArgs, " "))
+		fs.PrintDefaults()
+	}
+
 	if err := fs.Parse(args); err != nil {
 		var b strings.Builder
 		fs.SetOutput(&b)
