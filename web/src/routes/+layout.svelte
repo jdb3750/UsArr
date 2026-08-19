@@ -27,11 +27,11 @@
 	 * the correct rendering is no control. `?lib=` is honoured by the screens that
 	 * read it; the chip that WRITES it is a separate commit and is not faked here.
 	 *
-	 * The entry set is Home · the six types · Recently added · Search · Requests ·
+	 * The entry set is Home · the six types · Library · Search · Requests ·
 	 * Services · Libraries · Settings, grouped as the mockup groups them: content
-	 * nouns first, configuration last. `Recently added` heads the second content
-	 * group because it is the one view that is not per-type — one unified
-	 * newest-first table across all six (ADR-0028).
+	 * nouns first, configuration last. `Library` heads the second content
+	 * group because it is the one view that is not per-type: one unified table
+	 * across all six, which is the six rows above it with the filter taken off.
 	 *
 	 * THE SESSION GUARD IS UNCHANGED. Every /api/v1 route except the auth
 	 * bootstrap sits behind `authenticated` (internal/httpapi/server.go), so the
@@ -131,17 +131,25 @@
 		TYPE_NAV,
 		[
 			/**
-			 * ⚠️ `Recently added`, NOT `Library`, AND THE LABEL IS WHAT THE SCREEN IS
-			 * RATHER THAN WHAT THE ROUTE IS CALLED. `/library` renders one unified
-			 * newest-first table across every media type and nothing else — that is
-			 * ADR-0028's Block C at full length, not a half-built grid — while the
-			 * per-type grid §16 specifies is the six rows above, one place per type.
-			 * A row labelled `Library` would name neither, and it would sit two rows
-			 * above `Libraries`, which is a different noun entirely: a library is a
-			 * SCOPE the user defines over a service's containers (ADR-0027), not this
-			 * catalogue.
+			 * ⚠️ `Library`, AND IT USED TO BE `Recently added`. The old label was
+			 * right and the screen moved out from under it: `/library` renders the
+			 * catalogue across every media type in one of the orders the browse
+			 * endpoint serves, inside a `?lib=` scope, so a view a user has sorted by
+			 * `popularity` is not a recently-added list and calling it one would be a
+			 * label that contradicts what is on screen. It is the unfiltered parent of
+			 * the six type rows above it, which is what the word now names.
+			 *
+			 * ⚠️ AND IT SITS FOUR ROWS ABOVE `Libraries`, WHICH IS A DIFFERENT NOUN.
+			 * §17.2's own axes table assigns the singular to the SCOPE — *"Library | a
+			 * user-defined grouping (§6.5)"* — so the collision is real and is
+			 * recorded here rather than glossed. It is accepted rather than resolved:
+			 * the two are in different nav GROUPS (content nouns versus
+			 * configuration), the alternative label is now false rather than merely
+			 * ambiguous, and a false label is worse than an ambiguous one. If it ever
+			 * reads badly in use, the fix is a third word for this screen and not a
+			 * return to the old one.
 			 */
-			{ id: '/library', label: 'Recently added', href: resolve('/library') },
+			{ id: '/library', label: 'Library', href: resolve('/library') },
 			{ id: '/search', label: 'Search', href: resolve('/search') },
 			{ id: '/requests', label: 'Requests', href: resolve('/requests') }
 		],
@@ -164,7 +172,7 @@
 	const TITLES = new Map<string, string>([
 		[resolve('/'), 'Home'],
 		...TYPE_NAV.map((item): [string, string] => [item.href, item.label]),
-		[resolve('/library'), 'Recently added'],
+		[resolve('/library'), 'Library'],
 		[resolve('/search'), 'Search'],
 		[resolve('/requests'), 'Requests'],
 		[resolve('/services'), 'Services'],

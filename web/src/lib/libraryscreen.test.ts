@@ -13,15 +13,33 @@
  * ANYTHING ABOUT IT. The failure mode of a text guard is matching nothing at
  * all: an empty string passes every `not.toContain` there is, so a renamed
  * constant would turn each of these green rather than red.
+ *
+ * ⚠️ AND IT GUARDS THE ONE ROUTE INTO THE SCREEN AS WELL AS THE SCREEN. §17.8's
+ * Libraries rows link here with a `?lib=` slug on them, and the two halves of
+ * that link fail in opposite files: a row that stops linking is a dead end on
+ * the Libraries screen, and a row that links to the wrong shape of address is a
+ * wrong page on this one. Keeping both assertions together is what stops one of
+ * them being relaxed to match a change to the other.
  */
 
 import { describe, expect, it } from 'vitest';
 import { userFacingMarkup } from './copyguard';
 import { findContentSizedTracks } from './list';
+import {
+	BROWSE_AZ_UNAVAILABLE,
+	browseFeedFor,
+	browseParams,
+	browseSortNote,
+	browseSortsFor,
+	REFUSED_BROWSE_SORT,
+	type BrowseFeed,
+	type BrowseQuery
+} from './librarygrid';
 import { recentEmptyState } from './libraryscreen';
 import ROUTE_SOURCE from '../routes/library/+page.svelte?raw';
 import HOME_SOURCE from '../routes/+page.svelte?raw';
 import LAYOUT_SOURCE from '../routes/+layout.svelte?raw';
+import LIBRARIES_SOURCE from '../routes/libraries/+page.svelte?raw';
 
 const ROUTE = 'routes/library/+page.svelte';
 const MARKUP = userFacingMarkup(ROUTE_SOURCE);
@@ -159,17 +177,21 @@ describe('the /library route draws the shared Have cell', () => {
 	});
 });
 
-describe('the /library table offers no filter and no sort', () => {
+describe('the /library table sorts server-side or not at all', () => {
 	/*
-	 * NOT A PREFERENCE, AND NOT A GAP TO BE FILLED BY THE NEXT PASS. What this
-	 * screen holds is a keyset PREFIX of the catalogue — the newest N rows, for
-	 * whatever N `Load more` has been pressed up to — because the endpoint is
-	 * keyset-paginated and hard-ordered `added_at DESC, id DESC`. A control that
-	 * filtered or sorted the rows in the DOM would present itself as operating on
-	 * the library and would in fact operate on the prefix, so "no comics found"
-	 * would mean "no comics in the newest 200 rows". A confidently wrong answer
-	 * is worse than no control, so the controls wait for the browse read that can
-	 * apply them server-side.
+	 * ⚠️ THIS DESCRIBE USED TO BE `offers no filter and no sort`, AND THE OLD
+	 * REASONING IS WORTH KEEPING BECAUSE IT IS STILL THE REASON THE CONTROLS
+	 * TAKE THE SHAPE THEY DO. What the screen holds in the DOM is a keyset PREFIX
+	 * of the catalogue — the newest N rows, for whatever N `Load more` has been
+	 * pressed up to — so a control that sorted or filtered THOSE rows would
+	 * present itself as operating on the library and would in fact operate on the
+	 * prefix: "no comics found" would mean "no comics in the newest 200 rows".
+	 *
+	 * The screen now reads `GET /api/v1/library`, which applies the order and the
+	 * `?lib=` scope IN SQL over the whole table, so the control is honest. What
+	 * has NOT changed is that a client-side one would not be, and the guards
+	 * below are that distinction: the sort is a URL parameter the server acts on,
+	 * and nothing sorts or filters rows in the browser.
 	 */
 	it('declares no sortable column', () => {
 		expect(
@@ -189,14 +211,60 @@ describe('the /library table offers no filter and no sort', () => {
 		}
 	});
 
-	it('ships no filter control and no filtered-empty state', () => {
-		for (const control of ['<input', '<select', 'filteredEmpty']) {
+	it('ships no client-side filter over the keyset prefix', () => {
+		for (const control of ['<input', 'filteredEmpty']) {
 			expect(
 				MARKUP,
 				`${ROUTE} renders ${control}. A filter over a keyset prefix answers a question ` +
-					'about the newest N rows in the words of a question about the library.'
+					'about the newest N rows in the words of a question about the library, and ' +
+					'the endpoint offers no text filter to apply server-side either.'
 			).not.toContain(control);
 		}
+	});
+
+	/*
+	 * ⚠️ THE ORDER GOES TO THE SERVER, AND THAT IS THE WHOLE DIFFERENCE BETWEEN
+	 * THIS CONTROL AND THE ONE THE OLD HEADER REFUSED. `onSort` writes `?sort=`
+	 * into the address; `$lib/librarygrid`'s `browseParams` puts it on the wire
+	 * and `browseFeedFor` drops the feed so the next page is read from the start
+	 * of the new order. A control that reordered `feed.items` in place would look
+	 * identical on a first page and be wrong on every page after it.
+	 */
+	it('puts the order in the address rather than in the DOM', () => {
+		expect(
+			ROUTE_SOURCE,
+			`${ROUTE} no longer writes ?sort= into the address, so a sorted view is not ` +
+				'linkable and cannot survive a reload'
+		).toContain("params.set('sort', value)");
+		expect(
+			ROUTE_SOURCE,
+			`${ROUTE} sorts rows it already holds. That sorts the keyset prefix and claims ` +
+				'to have sorted the library.'
+		).not.toMatch(/\.items\.(sort|toSorted)\(/);
+	});
+
+	/*
+	 * ⚠️ THE OPTIONS ARE `browseSortsFor`'s AND ARE NEVER SPELT OUT IN MARKUP.
+	 * The store refuses `sort_title` when the corpus is not exactly one
+	 * `work.kind`, and an all-types view is six — so a hard-coded option list
+	 * here would offer A to Z and collect a 400. §17.1 wants a NATIVE control,
+	 * so it is a `<select>` rather than a custom listbox.
+	 */
+	it('draws a native select whose options the module decides', () => {
+		expect(MARKUP, `${ROUTE} no longer renders a native <select> for the order`).toContain(
+			'<select'
+		);
+		expect(
+			MARKUP,
+			`${ROUTE} no longer builds the options from browseSortsFor(), so the control can ` +
+				'offer an order the server refuses'
+		).toMatch(/#each sorts as sort/);
+		expect(
+			ROUTE_SOURCE,
+			`${ROUTE} no longer derives its options from browseSortsFor(query.mediaType). That ` +
+				"function is the store's own len(kinds) != 1 and is what keeps A to Z off an " +
+				'all-types control.'
+		).toContain('browseSortsFor(query.mediaType)');
 	});
 });
 
@@ -224,10 +292,10 @@ describe('the /library table pages to the end of the catalogue', () => {
 	it('reads "is there more" off the cursor rather than off a short page', () => {
 		expect(
 			ROUTE_SOURCE,
-			`${ROUTE} no longer asks nextRequest() for the next page. The stop rule lives ` +
+			`${ROUTE} no longer asks nextBrowsePage() for the next page. The stop rule lives ` +
 				'there and nowhere else: the server issues a second statement for the undated ' +
 				'tail, so a short page is legal and is not the end of the list.'
-		).toContain('nextRequest(');
+		).toContain('nextBrowsePage(');
 		expect(
 			ROUTE_SOURCE,
 			`${ROUTE} compares a page length against the page size. That is the stop rule ` +
@@ -279,5 +347,302 @@ describe('the /library screen is reachable', () => {
 			LAYOUT_SOURCE,
 			'routes/+layout.svelte has no /library title, so the toolbar and the h1 render empty'
 		).toContain("[resolve('/library')");
+	});
+});
+
+describe('the /library screen is the ALL-TYPES scoped view', () => {
+	/*
+	 * ⚠️ THE SCREEN READS THE BROWSE ENDPOINT, NOT `/library/recent`, and that is
+	 * the switch this whole block exists to hold. `/library/recent` takes no
+	 * `lib` and no `sort` — `handleRecentWorks` parses `limit` and `cursor` and
+	 * nothing else — so a sort control or a scope over it could only ever have
+	 * been a control over the keyset prefix in the DOM.
+	 *
+	 * The switch was safe because the two reads AGREE at the default: no `lib`,
+	 * no `media_type`, `sort=added_at` gives the same six `work.kind` values in
+	 * the same `added_at DESC, id DESC` order with the same undated-tail handoff.
+	 * `TestBrowseWorksUnfilteredIsBlockCsCorpus` in `internal/store/browse_test.go`
+	 * walks every page of the unfiltered browse and asserts it equals Block C's
+	 * order, undated rows included. This guard holds the client half of it.
+	 */
+	it('reads the browse endpoint and not the recent one', () => {
+		expect(
+			ROUTE_SOURCE,
+			`${ROUTE} no longer reads the browse endpoint, so its sort control and its ?lib= ` +
+				'scope have nothing behind them'
+		).toContain('fetchBrowsePage(');
+		expect(
+			ROUTE_SOURCE,
+			`${ROUTE} reads /library/recent again. That endpoint takes no lib and no sort, so ` +
+				'both controls on this screen would be operating on the keyset prefix.'
+		).not.toContain('fetchRecentPage(');
+	});
+
+	/*
+	 * ⚠️ NO `media_type` IS THE POINT OF THE SCREEN. Six per-type screens already
+	 * exist at `/library/[type]`; this one is the view that filters by no type at
+	 * all, which is what makes it safe for a library scope to land on — a library
+	 * spans media types (§17.8's flagship shape is one upstream library offered
+	 * as Ebooks AND as Audiobooks), so a type filter here would drop part of the
+	 * library a `?lib=` address names.
+	 */
+	it('sends no media_type of its own', () => {
+		expect(
+			ROUTE_SOURCE,
+			`${ROUTE} resolves a media type. This screen is the all-types view; a type filter ` +
+				'on it would hide part of any library that spans types.'
+		).not.toContain('browseRoute(');
+		expect(
+			ROUTE_SOURCE,
+			`${ROUTE} no longer resolves its address through browseAllTypesRoute(), which is ` +
+				'what applies §7.3s 32-slug bound before anything is sent'
+		).toContain('browseAllTypesRoute(');
+	});
+});
+
+describe('A to Z is stated as unavailable, in UsArr own words', () => {
+	/*
+	 * ⚠️ NEVER OFFERED AND THEN REFUSED. `sort_title` walks `ix_work_kind_sort`,
+	 * which is `(kind, sort_title, id)`, and SQLite cannot supply ORDER BY from
+	 * an index whose leading column is constrained by IN — so the order needs
+	 * exactly ONE `work.kind` and this corpus is six. That is knowable before a
+	 * request is sent, so the option is absent from the control and the reason is
+	 * printed beside it.
+	 */
+	it('offers added_at and popularity and neither sort_title nor year', () => {
+		const offered = browseSortsFor(undefined);
+		expect(offered, 'the all-types sort control lost its default order').toContain('added_at');
+		expect(offered, 'the all-types sort control lost popularity').toContain('popularity');
+		expect(
+			offered,
+			'the all-types sort control offers sort_title. The store refuses it whenever the ' +
+				'corpus is not exactly one work.kind, so this option collects a 400.'
+		).not.toContain('sort_title');
+		expect(
+			offered,
+			'the all-types sort control offers year. work.year has no index at all and the ' +
+				'endpoint refuses it by name.'
+		).not.toContain(REFUSED_BROWSE_SORT);
+	});
+
+	/*
+	 * ⚠️ THE CONDITION IS THE KIND COUNT AND NOT THE LIBRARY SCOPE. A scope
+	 * narrows rows and changes no index, so a rule keyed on `?lib=` would fire on
+	 * the wrong condition and still look right on the screen it was written for.
+	 */
+	it('is decided by the kind count and not by the scope', () => {
+		const scoped = browseSortsFor(undefined);
+		expect(
+			browseSortNote({ sort: 'added_at', libraries: [] }),
+			'the A to Z note went missing on an unscoped all-types view, so the absence of the ' +
+				'option is now unexplained'
+		).toBe(BROWSE_AZ_UNAVAILABLE);
+		expect(
+			browseSortNote({ sort: 'added_at', libraries: ['films', 'books'] }),
+			'the A to Z note changed with the library scope. A scope changes no index, so the ' +
+				'note must not be keyed on it.'
+		).toBe(BROWSE_AZ_UNAVAILABLE);
+		expect(
+			browseSortsFor(undefined),
+			'browseSortsFor stopped being a pure function of the media type'
+		).toEqual(scoped);
+		expect(
+			browseSortNote({ mediaType: 'movies', sort: 'added_at', libraries: [] }),
+			'a single-kind type lost A to Z, or gained the all-types note that would tell it ' +
+				'this view spans every media type when it spans exactly one'
+		).toBeUndefined();
+	});
+
+	/*
+	 * ⚠️ THE SERVER'S 400 TEXT MUST NOT BE THE THING THE READER SEES.
+	 * `handleBrowseWorks` answers an unservable sort with ONE shared sentence for
+	 * TWO different refusals: "sort_title needs a media_type of one kind — not
+	 * music — and there is no index behind year at all; added_at and popularity
+	 * work everywhere". It names a wire parameter, a media type nobody asked
+	 * about and a column with no index, to a reader who asked for none of the
+	 * three. Correct for a wire consumer, wrong for this audience.
+	 *
+	 * ⚠️ AND THE ABSENCE ASSERTION IS PRECEDED BY A PRESENCE ONE, because an
+	 * absence assertion over an empty string passes and proves nothing: the note
+	 * has to exist and be a sentence before "these words are not in it" means
+	 * anything at all.
+	 */
+	it('renders none of the words the server 400 uses', () => {
+		expect(
+			BROWSE_AZ_UNAVAILABLE.length,
+			'the A to Z note is empty, so every absence assertion below passes over nothing'
+		).toBeGreaterThan(20);
+		expect(
+			MARKUP,
+			`${ROUTE} no longer renders the note, so the missing option is unexplained on screen`
+		).toContain('{sortNote}');
+
+		// The distinctive tokens of the server's own sentence. Each is a fragment
+		// of `internal/httpapi/library.go`'s ErrUnservableSort arm, quoted from it
+		// rather than paraphrased.
+		for (const leak of [
+			'sort_title',
+			'media_type',
+			'no index',
+			'music',
+			'year',
+			'added_at',
+			'popularity'
+		]) {
+			expect(
+				BROWSE_AZ_UNAVAILABLE.toLowerCase(),
+				`the A to Z note contains "${leak}", which is the server's own 400 wording ` +
+					'reaching a reader. That sentence answers two refusals at once and names a ' +
+					'wire parameter, music and year to somebody who asked about none of them.'
+			).not.toContain(leak);
+		}
+	});
+});
+
+describe('a Libraries row leads to its own scoped view', () => {
+	const LIBRARIES_ROUTE = 'routes/libraries/+page.svelte';
+
+	/** The `libraryScopeHref` body, which is where the whole decision sits. */
+	const SCOPE_HREF = (() => {
+		const open = LIBRARIES_SOURCE.indexOf('function libraryScopeHref');
+		expect(
+			open,
+			`${LIBRARIES_ROUTE} no longer builds a scoped link, so its rows lead nowhere`
+		).toBeGreaterThanOrEqual(0);
+		const end = LIBRARIES_SOURCE.indexOf('\n\t}', open);
+		expect(end, 'libraryScopeHref is no longer a function body').toBeGreaterThan(open);
+		return LIBRARIES_SOURCE.slice(open, end);
+	})();
+
+	/*
+	 * ⚠️ THE ALL-TYPES VIEW, NEVER A PER-TYPE GRID. §17.8's flagship shape is one
+	 * upstream library offered as Ebooks AND as Audiobooks, so a row that led to
+	 * `/library/ebooks?lib=…` would silently drop every audiobook in the library
+	 * it claims to open — and the screen would look correct doing it.
+	 */
+	it('links to /library and not to a per-type grid', () => {
+		expect(
+			SCOPE_HREF,
+			`${LIBRARIES_ROUTE} builds its row link with the slug interpolated straight into a ` +
+				'string. Build it with URLSearchParams so escaping is a property of the code.'
+		).toContain('URLSearchParams');
+		expect(
+			SCOPE_HREF,
+			`${LIBRARIES_ROUTE}'s row link no longer carries the library as ?lib=`
+		).toContain('lib: slug');
+		expect(
+			LIBRARIES_SOURCE,
+			`${LIBRARIES_ROUTE} resolves a per-type route for its rows. A library spans media ` +
+				'types, so choosing one on the user behalf hides the rest of the library.'
+		).not.toContain("resolve('/library/[type]'");
+		expect(
+			LIBRARIES_SOURCE,
+			`${LIBRARIES_ROUTE} no longer resolves /library, so the base path of the link is ` +
+				'not carried and a configured base path breaks it'
+		).toContain("resolve('/library')");
+	});
+
+	/*
+	 * ⚠️ AN EMPTY `lib` IS A 400 AND NOT "no scope". The server tests PRESENCE,
+	 * so `?lib=`, `?lib=%20` and `?lib=,,` are all refusals — which means a row
+	 * whose slug did not parse must get NO LINK rather than a link to a refusal.
+	 * `libraries.ts` reads the field with `str()`, so a missing or non-string
+	 * slug arrives as `''` and is exactly the case this covers.
+	 */
+	it('emits no empty lib, and gives such a row no link at all', () => {
+		expect(
+			SCOPE_HREF,
+			`${LIBRARIES_ROUTE} builds a ?lib= link for a library with no slug. An empty lib ` +
+				'is a 400, so that row would link to a refusal.'
+		).toContain("if (slug === '') return undefined");
+		const cell = LIBRARIES_SOURCE.slice(LIBRARIES_SOURCE.indexOf("column.id === 'library'"));
+		expect(
+			cell.length,
+			'the Library cell was not found, so this guard is reading nothing'
+		).toBeGreaterThan(200);
+		expect(
+			cell.slice(0, 1600),
+			`${LIBRARIES_ROUTE} renders the Library cell without the undefined-href branch, so ` +
+				'a slugless row either links to a 400 or renders a broken anchor'
+		).toContain('href === undefined');
+	});
+
+	/*
+	 * §17.1: a real `<a href>`, because that is what middle-click, Ctrl-click and
+	 * "copy link address" act on. A click handler calling `goto` would look
+	 * identical on screen and break all three.
+	 */
+	it('is a real anchor rather than a click handler', () => {
+		const cell = LIBRARIES_SOURCE.slice(LIBRARIES_SOURCE.indexOf("column.id === 'library'"));
+		expect(
+			cell.slice(0, 1600),
+			`${LIBRARIES_ROUTE}'s Library cell is no longer an <a> carrying the href`
+		).toMatch(/<a class="trunc" \{href\}/);
+	});
+});
+
+describe('the cursor is dropped whenever the query moves', () => {
+	/*
+	 * ⚠️ NOTHING SERVER-SIDE WOULD CATCH THIS. A browse cursor binds to `sort`
+	 * ALONE: replaying one under a different sort is a loud 400, but replaying it
+	 * under a different `?lib=` is a `200 OK` whose page starts partway into a
+	 * different corpus — rows skipped, count wrong, no symptom anywhere. The rule
+	 * is `browseFeedFor`'s and it drops the whole feed rather than the cursor
+	 * alone, because keeping the rows would show one scope's items under
+	 * another's heading.
+	 */
+	it('drops the feed on a sort change and on a scope change', () => {
+		const base: BrowseQuery = { sort: 'added_at', libraries: ['films'] };
+		const feed: BrowseFeed = {
+			items: [],
+			cursor: '1aXYZ',
+			loaded: true,
+			limit: 50,
+			query: base
+		};
+		expect(
+			browseFeedFor(feed, base).cursor,
+			'the feed was dropped although nothing about the query changed, so every page ' +
+				're-reads page one'
+		).toBe('1aXYZ');
+		expect(
+			browseFeedFor(feed, { ...base, sort: 'popularity' }).cursor,
+			'a sort change kept the cursor. The server refuses it, so the screen would show a ' +
+				'400 instead of the order that was asked for.'
+		).toBeUndefined();
+		expect(
+			browseFeedFor(feed, { ...base, libraries: ['books'] }).cursor,
+			'a SCOPE change kept the cursor. The server accepts it with a 200 and serves a page ' +
+				'from partway into a different corpus, which has no symptom at all.'
+		).toBeUndefined();
+		expect(
+			browseFeedFor(feed, { ...base, libraries: [] }).items,
+			'clearing the scope kept the rows read under it, so a library scope stays on screen ' +
+				'after it was removed from the address'
+		).toEqual([]);
+	});
+
+	/*
+	 * The screen half: `browseParams` must never spell an empty scope as `?lib=`,
+	 * because that is the one parameter whose empty form is a refusal rather than
+	 * an absence.
+	 */
+	it('never puts an empty lib on the wire', () => {
+		const unscoped = browseParams({ sort: 'added_at', libraries: [] }, { limit: 50 });
+		expect(
+			unscoped.has('lib'),
+			'browseParams emitted lib on an unscoped query. `?lib=` is a 400: the server tests ' +
+				'presence, not emptiness.'
+		).toBe(false);
+		expect(
+			unscoped.has('media_type'),
+			'browseParams emitted media_type on the all-types query. It is omitted rather than ' +
+				'sent empty, so one rule covers both filters.'
+		).toBe(false);
+		expect(unscoped.get('sort'), 'browseParams stopped sending the order').toBe('added_at');
+		expect(
+			browseParams({ sort: 'added_at', libraries: ['films', 'books'] }, { limit: 50 }).get('lib'),
+			'browseParams stopped joining the scope, so a multi-library address loses libraries'
+		).toBe('films,books');
 	});
 });
