@@ -41,7 +41,8 @@ import (
 // artefact to the deployment, not the deployment. A real instance remains the
 // only evidence about a real instance.
 //
-// Vendored rather than fetched because CI has no network. Kavita differs from the
+// Vendored rather than fetched because the gate makes no network call for it —
+// `make check`'s only two are the vulnerability scans. Kavita differs from the
 // *Arrs in one way worth knowing: its spec is a CHECKED-IN file at the repository
 // root, not a debug-only endpoint, so both files are fetchable without a running
 // instance and the drift job for them is cheap.

@@ -1050,9 +1050,12 @@ func TestRebuildSearchDocFilesAStrandedDocAsUnfiled(t *testing.T) {
 // DELIBERATELY, by writing exactly the rows the builder is forbidden to write.
 //
 // Migration 0005 records both invariants as debts owed by "the search-document
-// builder … asserted in CI rather than pretended away". An assertion that has
-// never been triggered is indistinguishable from no assertion, so this test
-// breaks each one on purpose and requires the shared query to notice.
+// builder … asserted in CI rather than pretended away" — its words, quoted from
+// a migration that is merged and therefore never edited. The venue it names has
+// never existed; what actually asserts them is this file, run by `make check`.
+// An assertion that has never been triggered is indistinguishable from no
+// assertion, so this test breaks each one on purpose and requires the shared
+// query to notice.
 func TestSearchDocInvariantQueriesCatchABreak(t *testing.T) {
 	s := newTestStore(t)
 	inst := fixtureInstance(t, s, "kavita")

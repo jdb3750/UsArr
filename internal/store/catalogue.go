@@ -614,8 +614,8 @@ func insertLibrarySource(ctx context.Context, tx *sql.Tx, libraryID, instanceID 
 //     rowid is then inserted EXPLICITLY into both FTS tables. A single implicit
 //     rowid fuses unrelated documents, because RRF fuses on rowid.
 //
-// Both are asserted in CI by TestSearchDocInvariantsAfterImport and
-// TestSearchDocInvariantQueriesCatchABreak.
+// Both are asserted by TestSearchDocInvariantsAfterImport and
+// TestSearchDocInvariantQueriesCatchABreak, which `make check` runs.
 //
 // It is a replication write and takes no Scope. See the file header.
 func (s *Store) ApplyCatalogueBatch(
@@ -1044,9 +1044,9 @@ func creditedNames(ctx context.Context, tx *sql.Tx, workID int64) (string, error
 // corpusExcludedKinds is search.md §2's exclusion list, in the one place the
 // document writer can enforce it.
 //
-// It is a WRITER-SIDE refusal rather than only a CI query, because the CI query
-// (TestPeopleNeverEnterTheSearchCorpus) can only report a corpus that has
-// already been corrupted, and the FTS tables carry no foreign key, so a bad doc
+// It is a WRITER-SIDE refusal rather than only an after-the-fact assertion,
+// because that assertion (TestPeopleNeverEnterTheSearchCorpus) can only report a
+// corpus that has already been corrupted, and the FTS tables carry no foreign key, so a bad doc
 // cannot be cleaned up by a cascade. Failing the import is the correct blast
 // radius: an excluded doc is also a search_doc_library row, so it appears inside
 // the user's library grid as an item.

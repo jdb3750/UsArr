@@ -8,8 +8,9 @@ import (
 	"testing"
 )
 
-// Query-plan assertions. docs/DEVELOPMENT.md §5 puts these in CI because they
-// are deterministic and hardware-independent: ~30 lines that catch an index
+// Query-plan assertions. docs/DEVELOPMENT.md §5 puts these in the gate —
+// `make check`, run by hand before every commit — because they are
+// deterministic and hardware-independent: ~30 lines that catch an index
 // regression forever. Wall-clock budgets live in `make bench` and are never a
 // merge gate.
 //
@@ -583,9 +584,9 @@ func TestWorkGridKeysetPlanIsNormative(t *testing.T) {
 // which is the honest result and is recorded rather than dressed up.
 // EXPLAIN QUERY PLAN chooses from the schema, not from the data: with no
 // ANALYZE statistics the topology cannot change the plan, only its selectivity.
-// So what CI can assert is that the seek is on the primary key in both shapes;
-// what it CANNOT assert is the row-count difference §13.3 is really worried
-// about, and that belongs to `make bench`, which is not a merge gate.
+// So what this test can assert is that the seek is on the primary key in both
+// shapes; what it CANNOT assert is the row-count difference §13.3 is really
+// worried about, and that belongs to `make bench`, which is not a merge gate.
 func TestLibraryScopedKeysetIsASeek(t *testing.T) {
 	ctx := t.Context()
 	d := openTestDB(t)
@@ -765,8 +766,9 @@ func TestScopedSearchIsASeekNotAScan(t *testing.T) {
 	}
 }
 
-// The §1.1 CI assertion — "no work_track row's edition belongs to a different
-// work" — is NOT here, and its absence is deliberate rather than an oversight.
+// The §1.1 invariant — "no work_track row's edition belongs to a different
+// work" — is NOT asserted here, and its absence is deliberate rather than an
+// oversight.
 //
 // work_track does not exist: each subtype table lands with the catalogue source
 // that writes it (ADR-0040), and work_track's is Navidrome, which has no
@@ -781,9 +783,10 @@ func TestScopedSearchIsASeekNotAScan(t *testing.T) {
 // three carries an edition-scoped invariant of work_track's kind, so nothing
 // moved out of this note with them.
 //
-// It lands with work_track, in the migration that creates it, together with
-// §13.3's sibling assertion on library_member.edition_id. That one CAN be
-// written today, because both tables exist:
+// It lands with work_track, in the migration that creates it: a test in this
+// file, which `make check` runs, alongside §13.3's sibling assertion on
+// library_member.edition_id. That one CAN be written today, because both tables
+// exist:
 //
 //	SELECT m.library_id, m.work_id, m.edition_id FROM library_member m
 //	 WHERE m.edition_id <> 0
