@@ -334,6 +334,19 @@ func TestFullImportDeclinesTheImageLibraryAndSaysWhy(t *testing.T) {
 	if rep.ItemsApplied != 5 {
 		t.Errorf("ItemsApplied = %d, want 5", rep.ItemsApplied)
 	}
+	// ⚠️ SIX READ, FIVE APPLIED, AND THE GAP IS THE DECLINE ITSELF. This is the
+	// real-adapter half of TestTheAdapterCountOfAReadWinsOverTheHandOverCount:
+	// KavitaSource.StreamItems returns what StreamSeries handed IT, and the
+	// Desktop dump series in the declined Image library is counted there and
+	// then dropped before it reaches the importer's callback. `ItemsRead` means
+	// how far the READ got, so it must NOT be 5 — a suite that only ever saw
+	// adapters returning their own hand-over count could not tell the two
+	// apart, and this assertion is why deleting `rep.ItemsRead = read` stops
+	// being a no-op against a cassette.
+	if rep.ItemsRead != 6 {
+		t.Errorf("ItemsRead = %d, want 6: the cassette holds six series and one is in the "+
+			"declined Image library, so the read saw six and handed over five", rep.ItemsRead)
+	}
 	// ⚠️ THIS ASSERTION USED TO EXPECT A MERGE, AND THE MERGE WAS THE BUG.
 	// It read: "Two series claim the same AniList id: tier 1 resolves them onto
 	// one work … created 4 reused 1". The two Berserk rows in
@@ -723,5 +736,190 @@ func TestProgressFramesCarryTheReadCountAsItClimbs(t *testing.T) {
 	if len(frames) == 0 || frames[len(frames)-1].Phase != "done" ||
 		frames[len(frames)-1].ItemsRead != items {
 		t.Errorf("last frame = %+v, want the done frame with items_read = %d", frames[len(frames)-1], items)
+	}
+}
+
+// overReportingSource hands over N items and then reports having READ N+K.
+//
+// That is not a contrived adapter: it is `KavitaSource.StreamItems`. It returns
+// `page.Count` — what `StreamSeries` handed IT — while dropping any series whose
+// library was declined before that series ever reaches the importer's callback.
+// So the adapter's count legitimately exceeds the hand-over count, by exactly
+// the number of items §17.8 declined, and the same shape holds for the credit
+// and file passes.
+//
+// K is per-phase so a bug that reads one pass's counter into another's frame
+// cannot pass by coincidence.
+type overReportingSource struct {
+	fakeSource
+	extraItems   int
+	extraCredits int
+	extraFiles   int
+}
+
+func (o *overReportingSource) StreamItems(ctx context.Context, fn func(store.CatalogueItem) error) (int, error) {
+	n, err := o.fakeSource.StreamItems(ctx, fn)
+	return n + o.extraItems, err
+}
+
+func (o *overReportingSource) StreamCredits(
+	_ context.Context, reqs []CreditRequest, fn func(store.CreditSet) error,
+) (int, error) {
+	n := 0
+	for _, r := range reqs {
+		n++
+		if err := fn(store.CreditSet{
+			RemoteKind: r.RemoteKind, RemoteID: r.RemoteID,
+			Credits: []store.Credit{{
+				Role: "writer", Name: "Ann Author", NormalizedName: "ann author",
+			}},
+		}); err != nil {
+			return n + o.extraCredits, err
+		}
+	}
+	return n + o.extraCredits, nil
+}
+
+func (o *overReportingSource) StreamFiles(
+	_ context.Context, reqs []FileRequest, fn func(store.FileSet) error,
+) (int, error) {
+	n := 0
+	for _, r := range reqs {
+		n++
+		if err := fn(store.FileSet{
+			RemoteKind: r.RemoteKind, RemoteID: r.RemoteID,
+			Files: []store.MediaFileRow{{
+				Path: "test:file:" + r.RemoteID, RemoteFileID: r.RemoteID,
+				SizeBytes: 1, DateAdded: testNow,
+			}},
+		}); err != nil {
+			return n + o.extraFiles, err
+		}
+	}
+	return n + o.extraFiles, nil
+}
+
+// TestTheAdapterCountOfAReadWinsOverTheHandOverCount covers the OTHER half of
+// the read counter, and it was uncovered.
+//
+// Each streaming pass counts per hand-over so its mid-stream frames climb
+// (TestProgressFramesCarryTheReadCountAsItClimbs), and then OVERWRITES that
+// counter with the adapter's own return value before flushing the tail. Nothing
+// asserted the overwrite: `fakeSource` and `everyPhaseSource` both return
+// exactly the number of hand-overs, so `=` and a deleted assignment produced
+// identical output, and the declined-library case the overwrite exists for
+// (TestFullImportDeclinesTheImageLibraryAndSaysWhy, which now asserts the count
+// against the real Kavita adapter) inspected no counter at all. Deleting the
+// line was a silent no-op change to the whole suite.
+//
+// ⚠️ IT ASSERTS PROPERTIES, NOT A SEQUENCE OF FRAMES, for the reason its sibling
+// gives: how many frames a phase publishes is min(BatchRows, BatchWindow) and so
+// wall-clock dependent. Two constructions keep it deterministic anyway, and both
+// are load-bearing:
+//
+//   - `newImporter` pins `Now` to a constant, so `now().Sub(batchStarted)` is
+//     always zero and the WINDOW can never fire. Only the row bound flushes.
+//   - 250 items at BatchRows 100 leaves a tail of 50. That matters more than it
+//     looks: the overwrite happens between the stream closing and the tail
+//     flush, so a phase whose hand-over count divides exactly by BatchRows ends
+//     with an empty batch, publishes NO tail frame, and its last frame would
+//     legitimately carry the running count instead. The assertions below are
+//     about the phase's last frame, so the tail must exist.
+//
+// Everything asserted holds for every legal interleaving: no frame may report
+// more than the adapter's count, no mid-stream frame may report more than the
+// hand-over count, and the last frame of each phase carries the adapter's.
+func TestTheAdapterCountOfAReadWinsOverTheHandOverCount(t *testing.T) {
+	s := newTestStore(t)
+	inst := fixtureInstance(t, s)
+
+	const handedOver = 250
+	// Distinct K per phase: a frame carrying the wrong pass's counter is then
+	// wrong by an amount no other phase can produce.
+	const extraItems, extraCredits, extraFiles = 7, 3, 11
+
+	src := &overReportingSource{
+		fakeSource: fakeSource{
+			containers: []store.CatalogueContainer{{RemoteID: "1", Name: "Manga", Kind: "comic"}},
+			items:      genItems(handedOver, "1", "comic"),
+		},
+		extraItems: extraItems, extraCredits: extraCredits, extraFiles: extraFiles,
+	}
+	im := newImporter(t, s, src)
+	im.BatchRows = 100
+
+	var frames []Progress
+	im.Progress = func(p Progress) { frames = append(frames, p) }
+
+	rep, err := im.FullImport(t.Context(), inst)
+	if err != nil {
+		t.Fatalf("FullImport: %v", err)
+	}
+
+	// The Report is the durable half of the claim.
+	if rep.ItemsRead != handedOver+extraItems {
+		t.Errorf("Report.ItemsRead = %d, want %d: the adapter read %d items and handed over %d, "+
+			"and the field means HOW FAR THE READ GOT, not how many arrived",
+			rep.ItemsRead, handedOver+extraItems, handedOver+extraItems, handedOver)
+	}
+	if rep.CreditItemsRead != handedOver+extraCredits {
+		t.Errorf("Report.CreditItemsRead = %d, want %d", rep.CreditItemsRead, handedOver+extraCredits)
+	}
+	if rep.FileItemsRead != handedOver+extraFiles {
+		t.Errorf("Report.FileItemsRead = %d, want %d", rep.FileItemsRead, handedOver+extraFiles)
+	}
+	// Applied counts arrivals, and is untouched by the over-report. Without
+	// this, a counter that had simply been double-added would satisfy the above.
+	if rep.ItemsApplied != handedOver {
+		t.Errorf("Report.ItemsApplied = %d, want %d — the over-report must not reach `applied`",
+			rep.ItemsApplied, handedOver)
+	}
+
+	// The wire half: the phase's FINAL frame carries the adapter's count, which
+	// is what a client renders when the phase settles.
+	for _, phase := range []struct {
+		name  string
+		extra int
+	}{{"items", extraItems}, {"credits", extraCredits}, {"files", extraFiles}} {
+		var got []Progress
+		for _, f := range frames {
+			if f.Phase == phase.name {
+				got = append(got, f)
+			}
+		}
+		if len(got) < 2 {
+			t.Fatalf("%s published %d frame(s); 250 hand-overs at BatchRows 100 is three flushes "+
+				"under a pinned clock, so this test cannot see the tail frame", phase.name, len(got))
+		}
+		want := handedOver + phase.extra
+		if last := got[len(got)-1]; last.ItemsRead != want {
+			t.Errorf("the final %s frame reports items_read = %d, want %d: the pass dropped the "+
+				"adapter's own count and published the hand-over count instead, which under-reports "+
+				"every item the adapter read and declined to hand over", phase.name, last.ItemsRead, want)
+		}
+		// A mid-stream frame is published from inside the callback, before the
+		// overwrite, so it can never carry the adapter's extra. This is what
+		// stops the assertion above being satisfied by counting the extra twice
+		// or by counting it early.
+		for i, f := range got[:len(got)-1] {
+			if f.ItemsRead > handedOver {
+				t.Errorf("mid-stream %s frame %d reports items_read = %d, above the %d items handed "+
+					"over: the adapter's count leaked into a frame published before the stream closed",
+					phase.name, i, f.ItemsRead, handedOver)
+			}
+		}
+		for i, f := range got {
+			if f.ItemsRead > want {
+				t.Errorf("%s frame %d reports items_read = %d, above the adapter's own %d",
+					phase.name, i, f.ItemsRead, want)
+			}
+		}
+	}
+
+	// And `done`, which is the frame a client settles on.
+	last := frames[len(frames)-1]
+	if last.Phase != "done" || last.ItemsRead != handedOver+extraItems {
+		t.Errorf("last frame = %+v, want the done frame with items_read = %d",
+			last, handedOver+extraItems)
 	}
 }
