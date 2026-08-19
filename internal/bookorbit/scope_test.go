@@ -208,14 +208,15 @@ func TestAccountViewIsAnAllowlist(t *testing.T) {
 		AvatarURL: &avatar,
 		Settings:  map[string]any{"secretNote": "do not ship me"},
 		// The two flags that ARE carried, and why: one drives the §14 verdict,
-		// the other distinguishes "your token is bad" from "this account was made
-		// with createUser instead of createSharedUser".
+		// the other distinguishes "your token is bad" from an account state on
+		// BookOrbit's side — see ErrPasswordChangeRequired for why the mint path
+		// cannot produce that state.
 		IsSuperuser: false, IsDefaultPassword: true,
 		Permissions: []string{"kobo_sync"},
 	})
 
 	if !v.IsDefaultPassword {
-		t.Error("IsDefaultPassword was dropped; it is the whole diagnosis behind ErrPasswordChangeRequired")
+		t.Error("IsDefaultPassword was dropped; it is the one input that names the account state behind ErrPasswordChangeRequired")
 	}
 	if len(v.Permissions) != 1 || v.Permissions[0] != PermKoboSync {
 		t.Errorf("Permissions = %v, want the one grant", v.Permissions)
