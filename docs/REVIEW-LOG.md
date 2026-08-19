@@ -19387,16 +19387,30 @@ tests, so the demonstration repeats on every run.
 
 **Neutered** (`TestScrubDrillNeutered`) — identical wiring with the `BeforeSave` hook removed and
 nothing else changed. It **asserts the leak happens**, so if the scrubber ever became a no-op for a
-reason unrelated to the hook, this test would notice:
+reason unrelated to the hook, this test would notice. `$G` below stands for that run's freshly
+generated uuid4 — see the note under the block, which is not housekeeping:
 
 ```
-NEUTERED — leaked line: url: http://127.0.0.1:35145/api/Image/series-cover?seriesId=1&apiKey=21650be9-8342-4d63-a6fb-13eaf7b305fc
-NEUTERED — leaked line: url: http://127.0.0.1:35145/api/Opds/21650be9-8342-4d63-a6fb-13eaf7b305fc/series
-NEUTERED — leaked line: body: '{"refreshToken":"21650be9-…","next":"…&apiKey=21650be9-…"}'
-NEUTERED — leaked line: - 21650be9-8342-4d63-a6fb-13eaf7b305fc      ← the X-Api-Key header
+NEUTERED — leaked line: url: http://127.0.0.1:35145/api/Image/series-cover?seriesId=1&apiKey=$G
+NEUTERED — leaked line: url: http://127.0.0.1:35145/api/Opds/$G/series
+NEUTERED — leaked line: body: '{"refreshToken":"$G","next":"…&apiKey=$G"}'
+NEUTERED — leaked line: - $G      ← the X-Api-Key header
 ```
 
 Both credential **positions** leak with the hook off and neither survives with it on.
+
+⚠️ **`$G` is a substitution, and the reason for it is a third measurement of `LS-344`.** This block
+was first written with the run's actual GUID pasted in verbatim, and `make secrets` **failed on this
+very file** — one finding, `generic-api-key`, `docs/REVIEW-LOG.md`, matching
+`apiKey=<guid>`. The `/api/Opds/<the same guid>/series` line two rows below it, and the bare
+`- <guid>` header line below that, **did not fire**. Same value, same file, same scan: caught where a
+keyword sat beside it, missed where none did. The gate found a dead probe from a local fake in a
+review log and would have missed a live Auth Key in a cassette path — which is the entire argument
+for `TestCassettesOnDiskCarryNoCredential` existing, arrived at by accident.
+
+The value was substituted rather than waived in `.gitleaks.toml`, because that file asks callers to
+make a fixture obviously fake instead of extending its list, and because a waiver keyed on a value
+that will never recur buys nothing.
 
 ## LS-346 — the on-disk backstop, its two tiers, and firing it by planting
 
