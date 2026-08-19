@@ -47,6 +47,26 @@
 > live in a thread, on the owner's box, or nowhere. A claim of the form *"X was never done"* needs a
 > source that **would have recorded X**, not merely a place where X is not.
 >
+> **Done-when rule, added 2026-08-19, and scoped to *Done when* clauses in this file — it is not a
+> repo-wide rule and must not be read as one:** a *Done when* that a text editor alone can satisfy is
+> not a *Done when*. An acceptance criterion has to name an observation only the running system can
+> produce — a byte through the path, a guard fired, a command that exits zero on a real input.
+> *"The file exists"*, *"the function is written"*, *"the column is there"* are every one of them true
+> of a tree nothing has ever run. Where the running observation genuinely cannot be taken here — an
+> absent prerequisite such as a Docker daemon, or a live upstream this environment has no access to —
+> an item may still be ticked against its written criterion, on **two** conditions: the unfired
+> obligation is recorded immediately beneath the box, and the specific missing prerequisite is named.
+> A tick without both is a claim that something works.
+> This is the roadmap-shaped member of the same family as the repo's drill discipline — presence is
+> not being-called, a guard is proven by firing, a validator nothing calls mitigates nothing. Kin,
+> not an extension: it amends nothing in `docs/DEVELOPMENT.md`.
+> **It records what was already done rather than imposing something new.** Both of the cases that
+> prompted it were handled this way on the day: §2's **Docker / backup** item is ticked against
+> *"a `Dockerfile` exists"* — `deploy/Dockerfile`, content commit `000ac52` — with the unbuilt image
+> and the missing daemon written out beneath the box; and §2's **image-pipeline** item's third leg
+> stays **open** although its writer and its call site landed as code (content commits `7e5934d` and
+> `c4a3277`), because no real cover has been through the path yet.
+>
 > **Extended 2026-08-19 by the shipped-state batch pass, to exactly the items it touched and to
 > NOTHING ELSE:** §2's **Libraries-row link** item · §2's **all-types scoped view** item · §2's
 > **`?lib=` chip** item · §2's **facet-counts** item, the action-text rider on it **only** · the
