@@ -38,13 +38,62 @@ type flags struct {
 	// with its own opinion of what an argument means. It is not a configuration
 	// value either — it selects which program runs.
 	keyRotate bool
+
+	// backup is the `usarr backup` subcommand: one consistent VACUUM INTO
+	// snapshot, taken on demand. Same reasoning as keyRotate — it selects a
+	// program, and it goes through this parser so there is still exactly one.
+	backup bool
 }
 
-// keyRotateArgs is the ONLY accepted positional form. Two words rather than one
-// because `key` is a noun with more verbs coming (§3.4 pairs rotate with
-// keygen), and a flat `rotate` would have to be renamed the moment a second one
-// lands.
+// keyRotateArgs is two words rather than one because `key` is a noun with more
+// verbs possible under it, and a flat `rotate` would have to be renamed the
+// moment a second one landed.
 var keyRotateArgs = []string{"key", "rotate"}
+
+// backupArgs is one word because `backup` is the whole verb: there is no second
+// thing to back up, so `usarr backup something` would be a distinction without a
+// difference. It stays a leaf until there genuinely is one.
+var backupArgs = []string{"backup"}
+
+// subcommands is the ONE table of accepted positional forms. Parsing, the
+// mutual-exclusion check and the usage block all read it, so adding a verb is
+// one entry rather than four edits that can disagree — which is the same reason
+// there is one FlagSet rather than a second scan of os.Args.
+//
+// No entry may be a prefix of another. Nothing enforces that mechanically, and
+// the parser below relies on it: it lifts the FIRST matching form and never
+// reconsiders, so `foo` and `foo bar` as siblings would make `usarr foo bar`
+// mean whichever happens to be listed first.
+var subcommands = []struct {
+	words []string
+	// selected returns the field this form sets, so the table can both set it
+	// during parsing and read it back when deciding whether two programs were
+	// asked for at once.
+	selected func(*flags) *bool
+	summary  string
+}{
+	{
+		words:    keyRotateArgs,
+		selected: func(f *flags) *bool { return &f.keyRotate },
+		summary:  "rotate the master key in place (docs/CONFIGURATION.md §3.4)",
+	},
+	{
+		words:    backupArgs,
+		selected: func(f *flags) *bool { return &f.backup },
+		summary:  "write a consistent database snapshot, and say what it does not cover (docs/CONFIGURATION.md §6)",
+	},
+}
+
+// selectedSubcommand reports which form, if any, f names. It returns the index
+// so callers can name the form in an error without rebuilding the string.
+func selectedSubcommand(f *flags) int {
+	for i := range subcommands {
+		if *subcommands[i].selected(f) {
+			return i
+		}
+	}
+	return -1
+}
 
 // newFlagSet registers the command line into f. It is separate from parseFlags
 // for one reason: -h now answers on stdout and exits 0 (ErrHelpRequested), so
@@ -95,13 +144,14 @@ func newFlagSet(f *flags) *flag.FlagSet {
 		// The write error is discarded for PrintDefaults' own reason: it
 		// discards its writes too, so checking here would buy nothing and
 		// there is no useful action left when printing usage has failed.
-		_, _ = fmt.Fprintf(fs.Output(),
+		_, _ = fmt.Fprint(fs.Output(),
 			"Usage:\n"+
-				"  usarr [flags]\n    \trun the server\n"+
-				"  usarr %s [flags]\n    \trotate the master key in place "+
-				"(docs/CONFIGURATION.md §3.4)\n"+
-				"\nFlags:\n",
-			strings.Join(keyRotateArgs, " "))
+				"  usarr [flags]\n    \trun the server\n")
+		for _, sc := range subcommands {
+			_, _ = fmt.Fprintf(fs.Output(), "  usarr %s [flags]\n    \t%s\n",
+				strings.Join(sc.words, " "), sc.summary)
+		}
+		_, _ = fmt.Fprint(fs.Output(), "\nFlags:\n")
 		fs.PrintDefaults()
 	}
 
@@ -128,9 +178,12 @@ func parseFlags(args []string) (flags, map[string]bool, error) {
 	// first. The trailing form is handled after Parse; both reach the same
 	// FlagSet, so there is still exactly one parser and one idea of what a
 	// valid argument is.
-	if len(args) >= len(keyRotateArgs) && slices.Equal(args[:len(keyRotateArgs)], keyRotateArgs) {
-		f.keyRotate = true
-		args = args[len(keyRotateArgs):]
+	for _, sc := range subcommands {
+		if len(args) >= len(sc.words) && slices.Equal(args[:len(sc.words)], sc.words) {
+			*sc.selected(&f) = true
+			args = args[len(sc.words):]
+			break
+		}
 	}
 
 	fs := newFlagSet(&f)
@@ -156,18 +209,29 @@ func parseFlags(args []string) (flags, map[string]bool, error) {
 	// or a typo'd verb. A parser that quietly accepted a prefix of a subcommand
 	// would let `usarr key` mean something, and there is nothing it can mean.
 	if fs.NArg() > 0 {
-		if !f.keyRotate && slices.Equal(fs.Args(), keyRotateArgs) {
-			f.keyRotate = true
-		} else {
+		matched := false
+		// A trailing form is accepted only when nothing was lifted off the
+		// front. Without that condition `usarr backup key rotate` would select
+		// BOTH programs and run whichever Load happens to test for first.
+		if selectedSubcommand(&f) < 0 {
+			for _, sc := range subcommands {
+				if slices.Equal(fs.Args(), sc.words) {
+					*sc.selected(&f) = true
+					matched = true
+					break
+				}
+			}
+		}
+		if !matched {
 			return f, nil, fmt.Errorf("unexpected argument %q", fs.Arg(0))
 		}
 	}
-	if f.showVersion && f.keyRotate {
+	if i := selectedSubcommand(&f); f.showVersion && i >= 0 {
 		// Two programs asked for at once. Silently letting --version win would
-		// exit 0 having rotated nothing, which is the worst possible answer to
-		// "did my key rotate?".
+		// exit 0 having done nothing, which is the worst possible answer to
+		// "did my key rotate?" or "did my backup run?".
 		return f, nil, fmt.Errorf("--version and %q are two different commands; pass one",
-			strings.Join(keyRotateArgs, " "))
+			strings.Join(subcommands[i].words, " "))
 	}
 
 	set := map[string]bool{}

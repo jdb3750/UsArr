@@ -561,7 +561,12 @@ $USARR_CONFIG_DIR/                  # /config — IRREPLACEABLE. Back this up. M
 │   └── *.yaml                      #   0600.  NOT regenerable. Never place these under DATA_DIR.
 │
 ├── backups/                        # 0700 — `VACUUM INTO` output. Contains ciphertext, no key.
-│   └── usarr-2026-08-16T03-00-00Z.db   # 0600
+│   ├── usarr-2026-08-16T03-00-00Z.db        # 0600 — `usarr backup` (§6.2)
+│   ├── usarr-2026-08-16T03-00-00Z.kek.salt  # 0600 — its restore partner, NOT a secret
+│   └── usarr-pre-migration-2026-08-16T03-00-00Z-v7.db  # 0600 — automatic, before
+│                                   #   a migration runs; the trailing v<N> is the schema
+│                                   #   version it was taken AT. No salt copy: it is a
+│                                   #   rollback aid for an upgrade, not an off-host backup
 │
 └── tsnet/                          # 0700 [planned] — embedded-node identity. Only from the
                                     #   milestone that ships tsnet (§9); persist it or every
@@ -666,19 +671,46 @@ UsArr also **refuses to start** with encrypted rows present and no salt, naming 
 generating a fresh one over your ciphertext — but a refusal only helps if the file still exists
 somewhere to restore.
 
-UsArr's scheduled job writes `VACUUM INTO` output to `$USARR_CONFIG_DIR/backups/` at mode `0600` in a
-`0700` directory, retains N files, and **never** includes `keys/`. Same for the API backup endpoint
-and the UI download button, which additionally require the cookie session and sudo mode (§1) — a
-northbound API key can never reach them, and every download is audit-logged with actor and IP.
+Everything UsArr writes to `$USARR_CONFIG_DIR/backups/` is mode `0600` in a `0700` directory and
+**never** includes `keys/`. ⚠️ **What actually writes there today is two things, and neither is a
+schedule:** `usarr backup` (§6.2), and the automatic snapshot taken when a pending migration is about
+to run. The **scheduled** job, its retention count, `POST /api/v1/system/backup` and the UI download
+button are **not built** — read `cmd/usarr/backup.go` and `cmd/usarr/backupcmd.go` for what is, and
+`ARCHITECTURE.md` §16 for which milestone owns the rest. When they land they additionally require the
+cookie session and sudo mode (§1), so a northbound API key can never reach them, and every download is
+audit-logged with actor and IP.
 
 Encrypt the artifact itself (`age`, `gpg`) before it leaves the host for cloud storage: the database
 holds every wrapped DEK, every password hash and the full audit log.
 
-### 6.2 Taking one by hand
+### 6.2 Taking one on demand
+
+```bash
+usarr backup                    # or: docker exec <container> usarr backup
+```
+
+Safe while UsArr is running. It writes a **pair** into `$USARR_CONFIG_DIR/backups/`, both `0600`:
+
+| File | What it is |
+|---|---|
+| `usarr-<stamp>.db` | A `VACUUM INTO` snapshot of the committed database, WAL contents included |
+| `usarr-<stamp>.kek.salt` | A byte copy of `kek.salt`. **Not a secret**, and the snapshot does not restore stored credentials without it |
+
+and it prints, every run, what it did **not** capture: the master key, where that key lives on this
+install, and the actual restore step for that channel. That last part is the whole point of the
+command — see ADR-0062. A `.db` on its own looks exactly like a backup and is not one, and the
+salt-shaped version of that mistake has already cost this project every stored credential once.
+
+The salt copy is absent only when there is no salt anywhere, and the command says so rather than
+writing an empty file. A missing `kek.salt` on an install that *has* stored credentials means those
+credentials cannot be recovered from that snapshot.
+
+**By hand**, if you have no binary to hand:
 
 ```bash
 # Correct: atomic and consistent while UsArr is running.
 sqlite3 /config/usarr.db "VACUUM INTO '/config/backups/usarr-$(date -u +%FT%TZ).db'"
+cp /config/kek.salt "/config/backups/usarr-$(date -u +%FT%TZ).kek.salt"   # ← do not skip this
 # Also correct: stop UsArr, then copy the .db AND -wal AND -shm together.
 ```
 
@@ -686,15 +718,20 @@ sqlite3 /config/usarr.db "VACUUM INTO '/config/backups/usarr-$(date -u +%FT%TZ).
 transactions live in `usarr.db-wal`, so a bare copy of the main file is a torn, older database that
 may not even open.
 
+**Also wrong, and quieter:** the `VACUUM INTO` line above *without* the `cp` beside it. The database
+opens and every stored service credential in it is unrecoverable noise.
+
 ### 6.3 Restoring
 
 1. Stop UsArr. Move the damaged `usarr.db`, `-wal` and `-shm` aside — do not delete them until the
    restore is confirmed good.
 2. Copy the backup into place as `usarr.db`. There is no `-wal`/`-shm` to restore; SQLite recreates
-   them.
+   them. **From a `usarr backup` pair, copy its `usarr-<stamp>.kek.salt` to `/config/kek.salt`
+   (`0600`) in the same step** — the pair is two files precisely because the snapshot alone is not
+   enough, and they share a timestamp so you can tell which salt goes with which snapshot.
 3. **Restore the master key separately**, to the value it had when the backup was taken, as
-   `keys/secret.key` (`0600`) or via `USARR_SECRET_KEY_FILE`. `kek.salt` needs no separate step —
-   it is inside the archive from step 2, beside `usarr.db`. **From an archive taken before the salt
+   `keys/secret.key` (`0600`) or via `USARR_SECRET_KEY_FILE`. From a §6.1 volume archive `kek.salt`
+   needs no separate step — it is inside that archive, beside `usarr.db`. **From an archive taken before the salt
    moved**, it is not: recover `kek.salt` from the old install's `keys/` directory and drop it at
    either `/config/kek.salt` or `/config/keys/kek.salt`, and UsArr will pick it up. Startup refuses
    and names the file rather than destroying credentials, but it cannot recreate a salt it was

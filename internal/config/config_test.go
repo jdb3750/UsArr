@@ -463,7 +463,14 @@ func TestUsageNamesTheSubcommand(t *testing.T) {
 
 	var b strings.Builder
 	WriteUsage(&b)
-	for _, want := range []string{"Usage:", "key rotate", "Flags:", "-secret-key-file"} {
+	// "backup" alone would be satisfied by --config-dir's own description,
+	// which ends "provider manifests, backups (USARR_CONFIG_DIR)" — the
+	// assertion has to name the usage LINE, or it passes on a usage block that
+	// never mentions the subcommand at all. Confirmed by removing the entry.
+	for _, want := range []string{
+		"Usage:", "usarr key rotate [flags]", "usarr backup [flags]",
+		"Flags:", "-secret-key-file",
+	} {
 		if !strings.Contains(b.String(), want) {
 			t.Errorf("`usarr -h` output does not contain %q:\n%s", want, b.String())
 		}
@@ -511,6 +518,78 @@ func TestSecretKeyFileRecordsItsSource(t *testing.T) {
 	if c.SecretKeyFile != path || !c.SecretKeyFileFromFlag {
 		t.Errorf("flag and variable both set: resolved to %q, from flag = %v; want %q and true",
 			c.SecretKeyFile, c.SecretKeyFileFromFlag, path)
+	}
+}
+
+// TestBackupSubcommand pins the second positional form. It is a separate test
+// from TestKeyRotateSubcommand rather than a table row on purpose: the rules
+// that matter here are the ones that only appear once there is more than one
+// subcommand — that two of them cannot be selected at once, and that a
+// one-word form has not loosened the near-miss rejection the two-word form
+// established.
+func TestBackupSubcommand(t *testing.T) {
+	dir := t.TempDir()
+
+	for _, args := range [][]string{
+		{"backup", "--config-dir", dir},
+		{"--config-dir", dir, "backup"},
+	} {
+		c, err := Load(Options{Args: args})
+		if !errors.Is(err, ErrBackupRequested) {
+			t.Fatalf("Load(%v) = %v, want ErrBackupRequested", args, err)
+		}
+		if c == nil {
+			t.Fatalf("Load(%v) returned a nil Config; the backup needs the resolved settings", args)
+		}
+		if c.ConfigDir != dir {
+			t.Errorf("ConfigDir = %q, want %q", c.ConfigDir, dir)
+		}
+	}
+
+	// Near misses stay the pre-subcommand error, and `backup` being one word
+	// must not make a prefix of it mean anything.
+	for _, args := range [][]string{
+		{"backups"},
+		{"backup", "now"},
+		{"backu"},
+		{"back", "up"},
+	} {
+		_, err := Load(Options{Args: args})
+		if err == nil || !strings.Contains(err.Error(), "unexpected argument") {
+			t.Errorf("Load(%v) = %v, want the unchanged \"unexpected argument\" error", args, err)
+		}
+		if errors.Is(err, ErrBackupRequested) {
+			t.Errorf("Load(%v) resolved to a backup", args)
+		}
+	}
+
+	// Two subcommands at once. Without the guard in parseFlags the leading form
+	// is lifted off and the trailing one is matched as well, so BOTH fields are
+	// set and Load runs whichever it happens to test for first — a command that
+	// rotates a key when the operator asked for a backup.
+	for _, args := range [][]string{
+		{"backup", "key", "rotate"},
+		{"key", "rotate", "backup"},
+	} {
+		_, err := Load(Options{Args: args})
+		if err == nil || !strings.Contains(err.Error(), "unexpected argument") {
+			t.Errorf("Load(%v) = %v, want a refusal", args, err)
+		}
+		if errors.Is(err, ErrBackupRequested) || errors.Is(err, ErrKeyRotateRequested) {
+			t.Errorf("Load(%v) selected a program", args)
+		}
+	}
+
+	// Two programs at once is a refusal, not a silent win for one of them.
+	if _, err := Load(Options{Args: []string{"backup", "--version"}}); err == nil ||
+		errors.Is(err, ErrVersionRequested) || errors.Is(err, ErrBackupRequested) {
+		t.Errorf("`backup --version` = %v, want a refusal naming both commands", err)
+	}
+
+	// A backup still runs against validated settings.
+	if _, err := Load(Options{Args: []string{"backup"}, Env: map[string]string{"USARR_PORT": "0"}}); err == nil ||
+		!strings.Contains(err.Error(), "USARR_PORT") {
+		t.Errorf("`backup` with a bad USARR_PORT = %v, want the port error", err)
 	}
 }
 

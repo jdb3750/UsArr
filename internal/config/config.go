@@ -315,6 +315,14 @@ var ErrVersionRequested = errors.New("config: --version requested")
 // to prevent.
 var ErrKeyRotateRequested = errors.New("config: key rotate requested")
 
+// ErrBackupRequested is returned by Load when `usarr backup` was passed. It is
+// the same kind of signal as ErrKeyRotateRequested, and for the same reason it
+// carries a fully resolved Config: the backup needs the config directory, the
+// database path and the secret-key channels — the last of those not to read the
+// key, which it never does, but to say in its own output WHERE the key it is
+// deliberately leaving out actually lives.
+var ErrBackupRequested = errors.New("config: backup requested")
+
 // Options are the inputs to Load. Both Args and Env are supplied explicitly so
 // the whole of level 1 is testable without touching the process environment.
 type Options struct {
@@ -479,8 +487,11 @@ func Load(o Options) (*Config, error) {
 	// configuration, so a bad USARR_PORT or an unparseable
 	// USARR_TRUSTED_PROXIES is still the error the operator sees. The
 	// subcommand selects a program; it does not excuse the settings.
-	if f.keyRotate {
+	switch {
+	case f.keyRotate:
 		return c, ErrKeyRotateRequested
+	case f.backup:
+		return c, ErrBackupRequested
 	}
 
 	return c, nil
