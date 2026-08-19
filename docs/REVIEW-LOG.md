@@ -1033,7 +1033,7 @@ MINORs individually, not in a summary paragraph.**
 | **Applied in full** — the document changed and nothing is outstanding | **55** |
 | **Applied to the documents; the artefact half assigned to the concurrent mockup pass** | **19** |
 | **Assigned to the concurrent mockup pass** — the finding is wholly a change to `docs/design/mockups/`, which another agent owns and which this pass did not touch | **15** |
-| **Recorded, not applied** — outside this pass's remit, escalated with the exact change named (H-29) | **1** |
+| **Recorded, not applied** — outside this pass's remit, escalated with the exact change named (H-29). 🔻 **Superseded 2026-08-19: this is now **0**.** H-29 was applied at `cf3957f` and its row above carries the flip; the **1** is left standing as the round's own record rather than overwritten, per this file's practice for dated tables, but nothing in this round is *Recorded, not applied* any more. The **90** total is unchanged — a finding moved between dispositions, none was added or removed | **1** |
 | | **90** |
 
 **Nothing is rebutted in whole. One finding is rebutted in part** — H-11's first of two options —
@@ -1157,7 +1157,7 @@ the same finding also had a document half, that half is applied here and marked.
 | **H-26** | MINOR | §8.5's required grab-confirmation copy appears in no state | **Assigned to the mockup pass.** §8.5 already specifies the sentence literally — *"Sent to \<download client\>. UsArr does not import downloads."*, naming the watched folder when a library-bearing service is configured — so this is the artefact not carrying a requirement the document already states, and the `nosink` state's ABS line already implies the folder without naming it |
 | **H-27** | MINOR | The `permission-denied` state is required "from day one" and is drawn nowhere | **Applied to the document**, taking the reviewer's second option and sharpening it. §10's row now says what "exists from day one" actually means in a single-user product: **the *behaviour* exists — §14 rule 6 plus §1.3's access-scope parameter mean an unauthorized item is *absent* from the response** — so the honest rendering is the ordinary `empty`/`filtered-empty` state and **there is nothing distinct to draw**. A visibly *denied* surface is a v1.0 screen arriving with `user_library_access`. The reviewer's observation that Services' `denied` is a sudo re-auth prompt, i.e. a different thing, is recorded in the same row so the two are not conflated again |
 | **H-28** | MINOR | `FUTURE.md` §8's calendar description was not updated for six types | **Applied**, with the reviewer's note adopted in substance: **only the \*Arrs expose `/calendar`**, Lidarr is v1.0, and v0.1's book and comic sources expose no calendar endpoint at all, so a catalogue-only source contributes `work.release_date` where it has one and nothing where it does not — and the calendar must be honest about which types it can cover rather than rendering empty lanes. The **seam** (`work.release_date`) was never in question; the **promise** needed narrowing |
-| **H-29** | MINOR | `CLAUDE.md`'s "Where things live" table omits `docs/design/` | **Recorded, not applied — and the reason is a constraint on this pass rather than a disagreement.** The finding is correct: `docs/design/DESIGN-DIRECTION.md`, `tokens.css` and the mockups are normative for UI work and are cited by §17, and an agent following `CLAUDE.md` literally will not find them. **This pass may not edit `CLAUDE.md`**, so the change is escalated to the owner with the exact row to paste: <br>`| `docs/design/` | The visual system: DESIGN-DIRECTION.md, tokens.css (canonical values) and the v0.1 mockups. §17 stays authoritative over all three. |` <br>**Partially mitigated meanwhile:** README's documentation table gains the equivalent row, so the pointer exists somewhere a reader will hit |
+| **H-29** | MINOR | `CLAUDE.md`'s "Where things live" table omits `docs/design/` | **Recorded, not applied — and the reason is a constraint on this pass rather than a disagreement.** The finding is correct: `docs/design/DESIGN-DIRECTION.md`, `tokens.css` and the mockups are normative for UI work and are cited by §17, and an agent following `CLAUDE.md` literally will not find them. **This pass may not edit `CLAUDE.md`**, so the change is escalated to the owner with the exact row to paste: <br>`| `docs/design/` | The visual system: DESIGN-DIRECTION.md, tokens.css (canonical values) and the v0.1 mockups. §17 stays authoritative over all three. |` <br>**Partially mitigated meanwhile:** README's documentation table gains the equivalent row, so the pointer exists somewhere a reader will hit 🔻 **APPLIED 2026-08-19 at [`cf3957f`](https://github.com/jdb3750/UsArr/commit/cf3957f) — disposition flipped from *Recorded, not applied* to **applied**.** The owner approved the change directly and `cf3957f`, *"docs: five owner-approved `CLAUDE.md` changes land as one batch"*, landed it; the constraint this row records (*"This pass may not edit `CLAUDE.md`"*) was never lifted for a pass, it was satisfied by the owner deciding. ✅ **The drafted row shipped verbatim** — measured, not assumed: the `docs/design/` row in `CLAUDE.md`'s *Where things live* table at this tip carries the drafted description word for word, *"The visual system: DESIGN-DIRECTION.md, tokens.css (canonical values) and the v0.1 mockups. §17 stays authoritative over all three."*, and is not repeated here in table form because the drafted copy above is the one to keep in step. So **only the disposition moves**; no drafted text is superseded here. 🚩 **Two other places in this round point at this row and move with it, in the same commit**: the Counts table's *"Recorded, not applied … **1**"* line in §4.1, and item **5** of §4.6's *What still needs Joe* routing table. A count that stops matching its contents is the defect this file exists to catch, so the three were flipped together or not at all. See **`SD-08` — amended dispositions** below for the batch this belongs to. Nothing else about this row — its finding, its severity or its mitigation note — is re-verified or changed here |
 | **H-30** | MINOR | The Services mockup renders a delta channel no document specifies | **The document half is applied; the labelling is assigned to the mockup pass.** §7 now specifies channel 3b (H-02), so the mechanism exists — and §17.3 adds the labelling rule the reviewer asks for: **a source on channel 3b is labelled `page-walk delta`, and one with no ordering guarantee reads `no change feed — full compare at 09:12`** rather than printing a bare `delta HH:MM` at the same visual weight as Sonarr's real `/history/since`. §7.1a's per-source table gives each mechanism and watermark, which is what the mockup expanders should quote |
 
 ---
@@ -1254,7 +1254,7 @@ R4 items 1–4 above are unchanged. Three additions from this round:
 
 | # | Decision | Why it cannot be settled below him |
 |---|---|---|
-| **5** | **`CLAUDE.md`'s "Where things live" table is missing `docs/design/`** (H-29). The row is drafted in the disposition above and is a one-line paste | This pass may not edit `CLAUDE.md` |
+| ~~**5**~~ | **CLOSED 2026-08-19 — the owner approved it and it landed at [`cf3957f`](https://github.com/jdb3750/UsArr/commit/cf3957f).** ~~**`CLAUDE.md`'s "Where things live" table is missing `docs/design/`** (H-29). The row is drafted in the disposition above and is a one-line paste~~ — the drafted row shipped verbatim; H-29's row above carries the measurement and §4.1's count line moves with it | ~~This pass may not edit `CLAUDE.md`~~ — still true of a pass, and not the route taken: the owner decided it directly |
 | ~~**6**~~ | **CLOSED 2026-08-16 — the owner decided it; see §5.5 and [ADR-0033](./DECISIONS.md#adr-0033).** ~~Whether `work.kind` gains a `person` member in migration 0001~~ (§4.5 item 1). Authors and illustrators are currently `artist`-kind works, which puts them in the Music navigation type and in the client prefix index | It is a `kind_byte` allocation, which §5.3 states is unchangeable once clients cache ids — the same "now or never" shape as ADR-0030, and the same size of decision |
 | **7** | **The cold-boot shell** (P-17) is escalated a second time. It was D-20, was recorded rather than applied, and six media types made the blank first paint measurably worse | Unchanged from §D3 item 6: it is a build-config decision under ADR-0025 |
 
@@ -2104,7 +2104,7 @@ $ pgrep -a usarr
 | **DL-11** | **`write_queue` settled-row sweep would scan** — `SELECT id FROM write_queue WHERE state='done' AND settled_at < ?` → `SCAN write_queue`. `ix_wq_runnable` is partial on `('pending','inflight','verifying')` and deliberately excludes `done`/`failed`, so terminal rows are unreachable by index | **Open — recorded here rather than applied.** Latent until the queue ships. **Fix shape:** decide it at the same rebuild WQ-04 already schedules — that entry already requires all three `write_queue` indexes to be recreated by hand, so a fourth index is the cheapest it will ever be. **Distinct from the excluded `awaiting_choice` item** (§3): this is about terminal rows, that one is about non-terminal ones |
 | **DL-12** | **`schema.md` §6/§8/§10 print the DDL with `REFERENCES work(id) ON DELETE CASCADE`, `REFERENCES edition(id)`, `REFERENCES media_file(id)` and `REFERENCES tag_rule(id)` still attached.** Migration 0001 drops all six, documented in the migration and not in `schema.md` | **Open — recorded here rather than applied.** Strengthened by a mechanical diff the reviewer ran: across `schema.md`'s ten shipped `CREATE TABLE` blocks against the live `sqlite_schema`, **those six clauses are the only differences** — every other column, type, `NOT NULL`, `DEFAULT` and `CHECK` matches byte-for-byte after whitespace/comment normalisation. **Fix shape:** one line in `schema.md`, so a reader does not copy the reference DDL into migration 0002 🔻 **Partly falsified 2026-08-19 — 1 of 6 clauses fixed, 5 still live, clause by clause.** **FIXED — §10's `write_queue.work_id`.** Restored by the CONTENT commit **`b8bb500`**, *"feat: migration 0005 — the library-sync schema and the write_queue rebuild"*, 2026-08-17 16:01:17 UTC: the live table now carries `work_id INTEGER REFERENCES work(id) ON DELETE CASCADE` under a `-- RESTORED.` comment naming 0001's drop, so `schema.md:1225` is **correct** for that column and no longer a trap. **STILL TRUE — §6, one clause.** `schema.md:823` still prints `work_id             INTEGER REFERENCES work(id) ON DELETE CASCADE` for `release_candidate`; the live column is a bare `INTEGER`. 0005's header says why only `write_queue`'s came back (`:54-59`): *"neither table has a reader that is blocked on it"*. **STILL TRUE — §8, four clauses.** `schema.md` prints all four for `tag_assignment` — `work_id` `:1070`, `edition_id` `:1071`, `media_file_id` `:1072`, `rule_id … REFERENCES tag_rule(id) ON DELETE SET NULL` `:1079` — and the live table carries none of them. **RIDER 1 — the supporting count is stale, and it cuts against the reader rather than against the finding.** *"across `schema.md`'s ten shipped `CREATE TABLE` blocks … those six clauses are the only differences"* was a mechanical diff over a ten-table schema. Migrations 0001–0011 now produce **44 tables** in `sqlite_schema` (43 excluding `goose_db_version`), measured by applying every migration to a scratch database, and `schema.md` is **1850 lines**. That exhaustiveness claim no longer covers the schema, so the six clauses above were each re-checked individually rather than inherited from it. **RIDER 2 — §10 has a NEW mismatch, OUTSIDE DL-12's scope and not claimed as part of it.** `schema.md:1228-1229` still prints `state           TEXT NOT NULL DEFAULT 'pending' CHECK (state IN ('pending','inflight','verifying','done','failed'))`. Migration 0005 **deliberately dropped that CHECK**: the live column is a bare `state TEXT NOT NULL DEFAULT 'pending'`, and the rebuilt DDL carries decision (a) inline — the lifecycle vocabulary is still growing (`awaiting_choice` is named for FUTURE.md §11), SQLite cannot `ALTER` a `CHECK`, and `audit_log.result` plus 0003's `provenance.acquisition_state` are the shipped precedent for moving that vocabulary into Go. A reader copying §10 into a new migration would now **reintroduce a constraint that was removed on purpose** — the same class of harm DL-12 names, in the same section, but a different instance. **Scope: this annotation records what the tree says. It does not change DL-12's Open/Low status and the Counts tables above are not amended.** |
 | **DL-13** | **`sqlite_sequence` survives `Down`** — goose's `goose_db_version.id INTEGER PRIMARY KEY AUTOINCREMENT` creates it | **Open — recorded here rather than applied, and cosmetic.** The repo's own `userObjects` filters `sqlite_%`, so `TestMigrationDownLeavesNothingBehind` is unaffected. `goose_db_version` is also the only non-`STRICT` table in the file, and it isn't ours |
-| **DS-10** | **`CLAUDE.md:175`** — *"`docs/reference/` \| Vendored upstream specs and captured API reference material."* `docs/reference/` holds nine `.md` files and **zero specs**; the single vendored spec is `api/specs/prowlarr.json` (with `api/specs/SOURCES.md`) | **Open — recorded here rather than applied.** An agent following `CLAUDE.md`'s table looks in the wrong directory. **Fix shape:** one-line correction — but note `CLAUDE.md` is the project's instruction file, and Round 2 (§2.2) already established it is **left for the owner** rather than edited on an agent's say-so 🔻 **Amended 2026-08-19 — the supporting counts have drifted, and BOTH drifts STRENGTHEN the finding. The core defect is live, and it is DELIBERATELY owner-blocked, not neglected.** **The core defect is unchanged:** `docs/reference/` holds `.md` files and **zero specs**; the vendored specs are in `api/specs/`. **Count 1 — *"nine `.md` files"* is now TEN:** `arr-apis.md`, `crossmedia.md`, `gateway.md`, `http-api.md`, `providers.md`, `schema.md`, `search.md`, `security.md`, `sync.md`, `tags.md`. **Count 2 — *"the single vendored spec is `api/specs/prowlarr.json`"* is now FOUR:** `prowlarr.json`, `kavita-develop.json`, `kavita-v0.9.0.2.json`, and the `bookorbit-types/` TypeScript type package with its `bookorbit-types.manifest`, beside `api/specs/SOURCES.md`. Both drifts move more material into the directory `CLAUDE.md`'s table does **not** name, so an agent following that row lands further from what it wants, not closer. ℹ️ **The finding's own cite has moved too:** the sentence is `CLAUDE.md:194` today, not `:175`. ⚠️ **Not fixed here, and the reason is on the record rather than absent.** `CLAUDE.md` is the project's instruction file and is not edited on an agent's say-so — the disposition above states that standing position, and **`SD-08`** (`:21385`) exists precisely so a change put to the owner has somewhere in the repository to live instead of only a chat thread; it names DS-10 as one of the four. **Read this row as blocked on the owner, not as neglect.** **Scope: this annotation records what the tree says. DS-10 stays Open at Low and the Counts tables above are not amended.** |
+| **DS-10** | **`CLAUDE.md:175`** — *"`docs/reference/` \| Vendored upstream specs and captured API reference material."* `docs/reference/` holds nine `.md` files and **zero specs**; the single vendored spec is `api/specs/prowlarr.json` (with `api/specs/SOURCES.md`) | **Open — recorded here rather than applied.** An agent following `CLAUDE.md`'s table looks in the wrong directory. **Fix shape:** one-line correction — but note `CLAUDE.md` is the project's instruction file, and Round 2 (§2.2) already established it is **left for the owner** rather than edited on an agent's say-so 🔻 **Amended 2026-08-19 — the supporting counts have drifted, and BOTH drifts STRENGTHEN the finding. The core defect is live, and it is DELIBERATELY owner-blocked, not neglected.** **The core defect is unchanged:** `docs/reference/` holds `.md` files and **zero specs**; the vendored specs are in `api/specs/`. **Count 1 — *"nine `.md` files"* is now TEN:** `arr-apis.md`, `crossmedia.md`, `gateway.md`, `http-api.md`, `providers.md`, `schema.md`, `search.md`, `security.md`, `sync.md`, `tags.md`. **Count 2 — *"the single vendored spec is `api/specs/prowlarr.json`"* is now FOUR:** `prowlarr.json`, `kavita-develop.json`, `kavita-v0.9.0.2.json`, and the `bookorbit-types/` TypeScript type package with its `bookorbit-types.manifest`, beside `api/specs/SOURCES.md`. Both drifts move more material into the directory `CLAUDE.md`'s table does **not** name, so an agent following that row lands further from what it wants, not closer. ℹ️ **The finding's own cite has moved too:** the sentence is `CLAUDE.md:194` today, not `:175`. ⚠️ **Not fixed here, and the reason is on the record rather than absent.** `CLAUDE.md` is the project's instruction file and is not edited on an agent's say-so — the disposition above states that standing position, and **`SD-08`** (`:21385`) exists precisely so a change put to the owner has somewhere in the repository to live instead of only a chat thread; it names DS-10 as one of the four. **Read this row as blocked on the owner, not as neglect.** **Scope: this annotation records what the tree says. DS-10 stays Open at Low and the Counts tables above are not amended.** 🔻 **CLOSED 2026-08-19 at [`cf3957f`](https://github.com/jdb3750/UsArr/commit/cf3957f) — disposition flipped from *Open* to **applied**, and the block above is now history rather than status.** The owner approved the change directly, which is the route the disposition above always named — *"left for the owner rather than edited on an agent's say-so"* — so the rule was satisfied, not waived. ✅ **What shipped is wider than the fix shape this row proposed, and deliberately so.** The row asked for a *"one-line correction"*; `cf3957f` found the `docs/reference/` row **wrong rather than merely incomplete** and replaced it outright with *"The long-form companions to `ARCHITECTURE.md`, one per area … Prose only — no specs live here"*, **and added a separate `api/specs/` row** so that removing the false pointer did not also remove the true one. 📌 **The two drifted counts are not restated here.** They are measured in the annotation immediately above in this same cell — ten `.md` files, four spec artefacts — and that annotation is the citation of record for them; repeating the numbers in the flip would create a second copy to keep in step, which is the defect `SD-08` names. Note only that both drifts **strengthened** the finding and neither changed the fix. ℹ️ The finding's own cite had moved to `CLAUDE.md:194` before the fix; it names no line now, the row having been rewritten. See **`SD-08` — amended dispositions** below for the batch. |
 | **DS-11** | **`docs/DEVELOPMENT.md:98`** — the layout block names `api/specs/prowlarr.v1.json`; the actual file is `api/specs/prowlarr.json`, and `internal/servarr/contract_test.go:50` reads that exact path | **Open — recorded here rather than applied.** §2 is labelled "(target)", so this is naming drift rather than a false claim — but the one spec that *does* exist is named differently from the target it is supposed to be an instance of. **Fix shape:** align the target on the shipped name 🔻 **Cite drift, 2026-08-19 — original text stands; current sites recorded so the next reader is not chasing them:** `docs/DEVELOPMENT.md:98` → **`:120`**; `internal/servarr/contract_test.go:50` → **`:155-156`** (`specPath`, still joining `prowlarr.json`). Nothing else about this row is re-verified here, its status is unchanged, and the Counts tables above are not amended. |
 | **DS-12** | **`internal/crypto/derive.go:164-165`** — the godoc first line reads *"NormalizeHostPort reduces a service base URL to the canonical host:port that goes into the AAD."* Its own body ten lines later (`:174`) says *"The AAD does not use this function. It uses NormalizeOrigin."* | **Open — recorded here rather than applied.** The first line is what godoc shows, and it contradicts `docs/reference/security.md:57-61`, which warns implementers **by name** that using `NormalizeHostPort` for the AAD comparison produces credentials that can never be opened again — i.e. it points a reader at exactly the trap Round 2's CRYPTO-01 closed. **Fix shape:** rewrite the first godoc line. Route with SR-04, same function 🔻 **Cite drift, 2026-08-19 — original text stands; current sites recorded so the next reader is not chasing them:** `internal/crypto/derive.go:164-165` → **`:221-222`**; `:174` → **`:231`**. Nothing else about this row is re-verified here, its status is unchanged, and the Counts tables above are not amended. |
 | **DS-13** | **`docs/CONFIGURATION.md:412`** — §5's example backup filename is `usarr-2026-08-16T03-00-00Z.db`; `cmd/usarr/backup.go:73-74` produces `usarr-pre-migration-<ts>-v<N>.db` | **Open — recorded here rather than applied.** The §5 name presumably describes the not-yet nightly job; the only backups a user will actually see today are the pre-migration ones. **Fix shape:** show the real name and mark the nightly one as not-yet. Routes with DS-01 — same section, same edit. 🔻 **Closed 2026-08-19, both halves, by the change that added `usarr backup` (ADR-0062).** The §5 tree now lists all three real filename shapes — `usarr-<stamp>.db`, its `usarr-<stamp>.kek.salt` partner and `usarr-pre-migration-<stamp>-v<N>.db` — with a line saying what the trailing `v<N>` means and why the pre-migration one has no salt copy. §6.1's paragraph no longer describes the scheduled job in the present tense: it names the two writers that exist, marks the schedule, its retention count, `POST /api/v1/system/backup` and the UI button as not built, and points at `cmd/usarr/backup.go` / `cmd/usarr/backupcmd.go` rather than at a fresher status sentence 🔻 **Amended 2026-08-19 — the closure above holds and names no commit. The missing SHA is `ea7c855`**, *"feat(cli): add `usarr backup` — a snapshot with its salt, and an honest exclusion"*, 2026-08-19 14:06:51 UTC, an ancestor of `origin/main`. One diff carries the command, the ADR and the documentation the closure describes: `cmd/usarr/backupcmd.go` (new, 256 lines) with `cmd/usarr/backup.go`, `cmd/usarr/main.go`, `internal/config/flags.go` and their tests, **`docs/DECISIONS.md` +128 lines** (ADR-0062) and **`docs/CONFIGURATION.md`, 55 lines moved** — the §5 filename tree and the §6.1 rewrite. Recorded so the closure is checkable against the tree rather than only readable. **Scope: this adds a citation. DS-13's Closed status is unchanged and the Counts tables above are not amended.** |
@@ -2535,7 +2535,7 @@ that is why every measurement below names one.
 | **SR-01** | Open — recorded here rather than applied | **Closed in two commits, both verified by execution. `fdd40fb`, *"fix: stop storing private-tracker passkeys in SQLite"*, closed the QUERY-PARAMETER case; the PATH-SEGMENT case it did not reach is raised here as SR-13 and closed by `bb74081` (§6.3).** The fix landed at the boundary the entry named — `internal/servarr/redact.go:32,57`, in `SanitizeRelease`, not at the HTTP boundary — and it **went further than what this review reported**, which is worth recording plainly: this round found only `info_url` and `raw_release_json`; the code thread found `commentUrl` and `posterUrl` inside the blob as well, and `provenance.nzb_info_url` on the grab path (`internal/releases/grab.go`). **Verified on `15a7211`:** the passkey is gone from `release_candidate.info_url`, from all of `infoUrl`/`commentUrl`/`posterUrl` inside `raw_release_json`, and from `provenance.nzb_info_url` — confirmed down to a byte-grep of the **closed** `.db` and `-wal`, which is the check that matters, since the original reproduction found the plaintext key 0 times in the `.db` and **2 times in the `-wal`**. Tripwires re-run here and green: `go test ./internal/releases/ -run TestPersistedCandidateNeverCarriesATrackerPasskey` and `go test ./internal/servarr/ -run TestSanitizeReleaseRedactsTheIndexerSuppliedURLs` |
 | **FI-02** | Open — recorded here rather than applied | **Still open — and now diagnosed precisely rather than described.** The cause is one missing prerequisite: `fmt-check` (`Makefile:362`) invokes `prettier` through the `web` workspace but declares **no `web-deps` prerequisite**, while `lint-web` (`:351`) and `test-web` (`:274`) both declare it. `check-offline` (`:567`) runs `fmt-check` **first**, so a fresh clone dies at the very first target — and **any run after a single `make lint` hides it**, because `lint` → `lint-web` → `web-deps` has already populated `node_modules`. That is why the failure survives: it is invisible to anyone who has ever linted. **Verified by reproducing the identical failure on a fresh clone of `origin/main` at `15a7211`** (the original observation was on `56101c1`; the target has moved, the failure has not) — see the transcript in §6.4. **Fix shape unchanged and now exact:** add `web-deps` as a prerequisite of `fmt` and `fmt-check`. One line. Owned by the code thread |
 | **FI-03**, **FI-04** | Open — recorded here rather than applied | **Closed — GREEN on `main`, and this is the first `make check` result in the project that is trustworthy.** `make check` exits **0** on `15a7211` with the **pinned** `golangci-lint v2.12.2`, reporting **0 issues both capped and uncapped**, and `govulncheck` clean. FI-03's two failure modes are both gone: `lint-go` (`Makefile:341-348`) resolves the binary through `$(GOLANGCI_LINT)` and asserts it against the pin via `require_tool`, so a bare-`PATH` v2.5.0 can no longer answer for it. FI-04's 11 issues (4 gosec + 7 `noctx`) are fixed — GATE-03/04/05 in the Gate audit below. **Why this row is worth its space:** every earlier green in this project was measured with the wrong linter version, so "the gate is green" has never been evidence until now. Full transcript with the version banner in §6.4. **The gate did not stay green through the merge, and for a reason that has nothing to do with FI-03 or FI-04 — see FI-13.** |
-| **FI-11** | Open — fix in flight on another branch, and NOT on `main` as of this entry | **Closed on `main` — cross-referenced, not re-dispositioned.** The **Gate audit** section below already closes it as **GATE-02** (*"Applied, and the hole is closed"*), and the fix is in the tree: `.golangci.yml:37-39` now carries `issues: max-same-issues: 0 / max-issues-per-linter: 0`. The `grep -n "issues\|max-same\|max-issues" .golangci.yml` that returned **no match** when FI-11 was written now returns those three lines. FI-11 and GATE-02 are the same defect found twice, from two directions, and GATE-02 owns the disposition |
+| **FI-11** | Open — fix in flight on another branch, and NOT on `main` as of this entry | **Closed on `main` — cross-referenced, not re-dispositioned.** The **Gate audit** section below already closes it as **GATE-02** (*"Applied, and the hole is closed"*), and the fix is in the tree: `.golangci.yml:37-39` now carries `issues: max-same-issues: 0 / max-issues-per-linter: 0`. The `grep -n "issues\|max-same\|max-issues" .golangci.yml` that returned **no match** when FI-11 was written now returns those three lines. FI-11 and GATE-02 are the same defect found twice, from two directions, and GATE-02 owns the disposition 🔻 **Cite drift, 2026-08-19 — original text stands; the current site is recorded so the next reader is not chasing it:** the `issues:` block is at **`.golangci.yml:87-89`**, not `:37-39`. Measured at this annotation's own tip rather than taken on report: `sed -n '87,89p' .golangci.yml` returns `issues:` / `max-same-issues: 0` / `max-issues-per-linter: 0`, exactly the three lines this cell describes, while `:37-39` falls inside the `bench` build-tag commentary and contains no `issues:` key of any kind. The file is **94 lines** now; it was shorter when this row was written, and the block moved down as the comment above it grew. **Nothing else about this row is re-verified here** — its disposition, its cross-reference to `GATE-02` and its grep result all stand, and the Counts tables above are not amended |
 
 **Counts, restated for this round only.** Of the 49, **seven** are now closed on `main` — DL-01,
 DL-03, DS-01, SR-01, SR-02, FI-03, FI-04 — and **one more**, FI-11, is closed under another section's
@@ -3010,6 +3010,27 @@ vuln: auditing the pnpm dependency tree against the npm registry
 No known vulnerabilities found
 check: OK
 ```
+
+🔻 **The green above is a fact about a tree that was never a commit (annotated 2026-08-19; the
+closure itself stands).** The clone line says so in its own comment — *"`# + the Makefile fix,
+uncommitted at the time`"* — so the tree that printed `check: OK` was the repo at `c628bd1` **plus an
+uncommitted working-tree edit**, and no sha names it. ⚠️ **It therefore corroborates nothing a reader
+can re-run.** Checking out `c628bd1` and re-cloning reproduces §8.1's *failure*, not this green,
+because the fix was not in that commit; and the commit that first carried the fix is named nowhere in
+this section, so there is no tip to check out instead. The transcript is a record of bytes that never
+entered history.
+
+✅ **What survives is the §8.1 half**, and it is the half that mattered: the *defect* was reproduced
+from a named tip, by a procedure written out in full, and the diagnosis and fix shape were both
+confirmed correct. ⚠️ **What does not survive is the proof of the fix** — which is precisely the
+claim this row most needs to be re-checkable, given that FI-02's whole history is of greens asserted
+for it and then withdrawn. 📌 **This is `FI-13`'s rule one turn further on.** `FI-13` established
+that *"a gate result without a commit sha attached is not a result"*; this green is a step worse — it
+has **no sha available to attach**, not merely a missing one. ⏭️ **The green is annotated rather
+than deleted**, per this file's practice for dated records: it was almost certainly true of the bytes
+in front of whoever ran it, and deleting it would hide that the closure ever rested on it. Read the
+row below as closed on §8.1's reproduction plus the fix shape landing on `main`, **not** on this
+transcript. Nothing else in §8 is re-verified here and no disposition is changed.
 
 | # | Was | Now |
 |---|---|---|
@@ -20706,6 +20727,19 @@ finding text and table are **not edited**; the current state is below, re-measur
 | `docs/design/DESIGN-DIRECTION.md:2814` | ⏭️ Open — design-area owned, on `SD-02r`'s precedent | ✅ **CLOSED** — ⚠️ **anchor by text, not by line**: the bullet opening *"The cross-media review inbox (FUTURE §5)"*, which was `:2814` when `SD-03` measured it, `:2845` an hour ago and `:2873` after `fb58790` landed, all inside one working day. Carries the full `SD-03` shape: *"is designed to carry"*, the §11 citation, ⚠️ the deferral, both migrations' deferred lists and `TestDeferredTablesAreAbsent`, closing *"it is not a column pair already sitting in the schema waiting"*. `ab99c63` explicitly **left this one alone** as another session's, and that session took it |
 | `docs/FUTURE.md:194`, `:681`, `CLAUDE.md:109` | ✅ Applied / 🔶 Split | Unchanged. The `CLAUDE.md` **enrichment** half — the §11 citation, the v0.3 deferral and the test name — remains **drafted and handed to Joe, not committed**, and that is the one thing in `SD-03` still genuinely outstanding |
 
+🔻 **SD-03 IS NOW FULLY CLOSED (2026-08-19).** The one item this paragraph excepts — the
+`CLAUDE.md` **`work_relation` seam enrichment** — landed at
+[`cf3957f`](https://github.com/jdb3750/UsArr/commit/cf3957f) with the owner's approval, so the
+qualifier below no longer applies. ✅ **All three of the enrichment's parts shipped**, measured at
+this annotation's tip rather than taken from the commit message: the sentence in *Build the base with
+intentional space* now reads *"`work_relation` is designed to carry confidence and evidence columns
+— its DDL is `docs/reference/schema.md` §11, the table itself is deferred to v0.3, and
+`TestDeferredTablesAreAbsent` fails if a migration creates it early"*. §11, the v0.3 deferral and the
+guard's name are all three present, and the tense fix from `c6ce265` is untouched beside them.
+📌 **`SD-08`'s row 3 stated this arithmetic in advance** — *"that row is the single reason
+`SD-03` is not fully closed, so closing it closes `SD-03`"*. It is closed, so `SD-03` is. The table
+above and its verdicts are otherwise unchanged, and no other row's state is re-measured here.
+
 **⏭️ Nothing in `SD-03`'s site table is open any more**, other than the `CLAUDE.md` enrichment that
 was deliberately withheld for the owner. `git grep -n 'already carries' -- docs/ internal/ CLAUDE.md`
 returns no live `work_relation` line at `60c9286`; the surviving occurrences are the struck-through
@@ -21511,6 +21545,127 @@ in it is an absence.** `make check` reaches `docs/` through **`gitleaks` alone**
 really missing from `CLAUDE.md`. **An absence cannot be proved by a gate that never reads the file
 in question** — it is proved by the greps quoted in the table, every one of which was run at
 `76ae692` and every one of which anyone can re-run.
+
+## SD-08 — amended dispositions: all five are APPLIED at `cf3957f`, and a sixth change lands that had no row at all
+
+**Read this before routing anything off `SD-08`'s table.** The table above was accurate when written
+and every one of its five rows has since moved. ⚠️ **No id is allocated by this amendment** — it
+amends `SD-08` in place, in the shape `SD-03` and `SD-04` already use for this file, and the `LS-`,
+`DS-` and `RK-` series are untouched. **Measured at [`cf3957f`](https://github.com/jdb3750/UsArr/commit/cf3957f)
+and at this entry's own tip**, by reading `CLAUDE.md` and `git show cf3957f` directly rather than
+taking the landing on report.
+
+🚩 **The register did NOT authorise this, and that distinction is the whole point of the row
+below.** `SD-08`'s *Status of all five* says in terms that *"nothing in this entry authorises applying
+any of them"*. Nothing did. **The owner approved the five directly**, and `cf3957f` landed them on
+that authority — not on this register's, and not on any pass's reading of it. A register that could
+license its own execution would be a worse defect than the stale dispositions it was built to prevent,
+so it is stated here explicitly rather than left to be inferred from the fact that the edits exist.
+
+### The seven flips
+
+| # | The row | Was | Now |
+|---|---|---|---|
+| **1** | *Status of all five* (§ above) — *"All five are RAISED AND NOT APPLIED"* / *"Nothing in this entry authorises applying any of them"* | ⏭️ Raised and not applied | ✅ **All five APPLIED at `cf3957f`.** ⚠️ **The authorisation came from the owner directly, not from this entry** — the withholding rule was satisfied by Joe deciding, never waived, and `cf3957f`'s own subject says so: *"five owner-approved `CLAUDE.md` changes land as one batch"*. The sentence *"nothing in this entry authorises applying any of them"* remains true and is not struck: it was never the route |
+| **2** | *The four, re-verified* — the four-row table measured at `76ae692` | Four absences, measured | ✅ **Measurements STAND — all four were correctly absent at `76ae692`** — and the table **gains its landing commit**, `cf3957f`, per this file's practice of dating a verdict to a tip. The absences were true then; the presences are true now. No row's measurement is re-run or corrected |
+| **3** | The two drafted texts in *The two with no drafted text anywhere, drafted here* | Drafted proposals | 🔻 **SUPERSEDED by what shipped — and neither shipped as drafted.** Item 1's ROADMAP row was **not** used verbatim; item 4's wire-vocabulary sentence shipped **merged into another paragraph** with different wording. Detail below, because getting item 1's supersession note right requires correcting the draft as well as retiring it |
+| **4** | **`DS-10`** (`§1.4`, the `docs/reference/` row) | ⏭️ Open — recorded here rather than applied | ✅ **APPLIED at `cf3957f`**, and the fix shipped **wider than the proposed one line**. Flipped in DS-10's own row; the two drifted counts are **not** restated here but referenced there, per the note below |
+| **5** | **`H-29`** (`§4.4`, the `docs/design/` row) | ⏭️ Recorded, not applied | ✅ **APPLIED at `cf3957f`, drafted row shipped VERBATIM**, so only the disposition moves. 🚩 **Flipped together with its two dependants in the same commit**: §4.1's *"Recorded, not applied … **1**"* count line and §4.6's routing-table item **5**. Three sites, one flip |
+| **6** | **`SD-03`** — closed by consequence, not by its own work | 🔶 Split; one item outstanding | ✅ **FULLY CLOSED.** `SD-08` row 3 predicted the arithmetic — *"that row is the single reason `SD-03` is not fully closed, so closing it closes `SD-03`"* — and the `work_relation` enrichment landed at `cf3957f`. Annotated at `SD-03`'s amended-dispositions table |
+| **7** | ⚠️ **NEW ROW — a sixth `CLAUDE.md` change that this register never carried** | ❌ **No row anywhere in this file** | ✅ **APPLIED at `cf3957f`.** The *docstring-versus-behaviour* clause in *Verify, don't assert*. 🚩 **Its provenance is a DIFFERENT KIND from the other six** — see below |
+
+### Item 3, part one: the ROADMAP row was not used, and the draft was wrong about the file
+
+**The drafted row read:**
+
+> `| `docs/ROADMAP.md` | Milestone-by-milestone delivery detail. §16 of `ARCHITECTURE.md` stays authoritative for which milestone owns a thing. |`
+
+**What `cf3957f` actually shipped:**
+
+> `| `docs/ROADMAP.md` | A working checklist of what v0.1 still needs, each item with a check you can run. Authoritative for neither scope (§16 is) nor status (the tree is). |`
+
+⚠️ **The draft is not merely superseded, it was wrong about the file, and the supersession note must
+not carry the error forward.** *"Milestone-by-milestone delivery detail"* describes a document
+`docs/ROADMAP.md` is not. Read at this entry's tip, its own header disclaims authority **twice** and
+scopes itself to one milestone: *"**This file is NOT authoritative for scope.** `ARCHITECTURE.md` §16
+is, and it wins over every line here. This is a *working view* of what v0.1 still needs"*, then
+*"**It is not authoritative for status either.** Status is read off the tree … Every item below
+carries **a check you can run**"*. ✅ **So the shipped row is a correction of the draft and not just a
+rephrasing of it.** It is single-milestone where the draft implied all milestones, it is a checklist
+where the draft said delivery detail, and it subordinates the file on **both** axes where the draft
+subordinated it on one.
+
+📌 **The draft's own caveat was the half that survived, and it was right to be there.** The draft
+flagged its second sentence as *"the load-bearing half and … an inference, marked as one"*, arguing a
+bare `ROADMAP` row *"invites a reader to treat it as the authority instead"* and that the row *"has to
+name the file **and** subordinate it, or it trades an omission for a contradiction"*. The shipped row
+does exactly that, twice over. **The reasoning transferred; the description did not.**
+
+### Item 3, part two: the wire-vocabulary sentence shipped merged, not appended
+
+**The drafted text** was a free-standing sentence to append to the *gates* paragraph: *"**A wire
+vocabulary and a storage vocabulary never share a term.** `docs/DEVELOPMENT.md` §11 carries the rule
+and the three instances that earned it — **every one of which compiled clean**."*
+
+**What shipped** is folded into that paragraph's existing final sentence instead: *"`docs/DEVELOPMENT.md`
+§11 carries the mechanics. One class of defect no gate catches at all: **a wire vocabulary and a
+storage vocabulary never share a term** — §11 carries that rule as well, and the three instances that
+earned it, every one of which compiled clean."* ✅ **Same rule, same pointer, same "compiled clean"
+clause — one paragraph rather than two**, and the `§11 carries the mechanics` sentence it was to
+follow now carries it. `cf3957f`'s message gives the reason: the section is bullet-free, so a bullet
+would have been the only one in it. **The drafted text is retired as text and honoured as content.**
+
+### Item 4's rider is referenced, not restated
+
+📎 **`DS-10`'s two drifted supporting counts — ten `.md` files, four spec artefacts — are recorded in
+the annotation inside `DS-10`'s own row and are deliberately not repeated in the flip.** Both drifts
+**strengthened** the finding and neither changed the fix, which is what that annotation establishes;
+copying the numbers into a second cell would create a second place to keep them in step, and *"a second
+copy of a drafted row is a second thing to keep in step"* is `SD-08`'s own words about `H-29`. ⚠️ **The
+row's original counts — *"nine `.md` files"* and *"the single vendored spec is `api/specs/prowlarr.json`"*
+— are stale and are left standing as the round's record**, with the live numbers in the annotation
+beneath them.
+
+### Item 7: a sixth change, and a provenance of a different kind
+
+**`cf3957f` landed six changes to `CLAUDE.md`. This register carried five.** The sixth is the clause
+appended to *Verify, don't assert*:
+
+> The same holds inside the repo: a docstring, a code comment or a doc sentence describing behaviour
+> is a claim, not a specification — check it against the code before relying on it, and when one is
+> wrong, fix or delete it rather than annotating it.
+
+⚠️ **It appears nowhere in this file as a drafted change.** `SD-08`'s four plus `DS-10` make five and
+it is not among them; `grep -in 'docstring' docs/REVIEW-LOG.md` at this tip returns only `SD-07`'s
+`build_prototype.py` rows, which are a different subject entirely. 🚩 **Without this row the register
+would document five applied changes against a commit that made six** — precisely the shape `SD-08`
+was raised to prevent, arriving from the far side: not a change with no record while it waits, but a
+change with no record after it lands.
+
+🚩 **Its provenance is a DIFFERENT KIND from the other six, and this row says so in as many words
+so that a later reader does not go looking for a commit or a finding that does not exist.** The other
+six each trace to a **finding in this file** — `H-29`, `DS-10`, `SD-03`, and `SD-08`'s own rows 1 and
+4 — raised, measured at a named tip, and recorded before they were approved. **This one traces to an
+owner approval in the instructions-gatekeeper thread.** There is no prior finding behind it, no
+earlier measurement to re-run, and **no commit other than `cf3957f` itself to cite**: the approval is
+a conversation, not an artefact in the repository. ⏭️ **That is exactly the gap `SD-08` exists to
+name** — a `CLAUDE.md` change agreed with the owner has nowhere in the repository to live — and this
+row is that gap being closed retrospectively rather than in advance. 📌 **The lesson is the one
+`SD-08` already draws, with the direction reversed: a register that only records changes *put to* the
+owner will silently miss the ones he raises himself**, and the count of `CLAUDE.md` changes will read
+correct while being one short.
+
+### What a green gate is worth on this amendment
+
+**Nothing, and less than on `SD-08` itself.** `make check` reaches `docs/` through **`gitleaks`
+alone**, so a green attests that no credential-shaped string was added to this prose and nothing
+whatever about whether the seven flips above are true. 🔍 **The verification is manual and is listed
+so it can be repeated at any tip:** `git show cf3957f` for the six-change diff and its message;
+`git merge-base --is-ancestor cf3957f origin/main` for the landing; `grep -n 'docs/design\|docs/ROADMAP\|api/specs' CLAUDE.md`
+and `grep -n 'work_relation\|wire vocabulary\|docstring' CLAUDE.md` for what is present now;
+`sed -n '1,20p' docs/ROADMAP.md` for the header that falsifies the draft's description of that file;
+and `grep -in 'docstring' docs/REVIEW-LOG.md` for item 7's absence. ⚠️ **The shas above are content
+shas, never merges.**
 
 ---
 
@@ -22681,3 +22836,159 @@ must report **not** an ancestor for this entry to hold;
 **ADR-0024, ADR-0025 §6 and ADR-0025's 2026-08-16 amendment read in `docs/DECISIONS.md`** rather than
 taken on report. ⚠️ **The commit shas above are dated to `cf3957f` and are content shas, never
 merges.**
+
+---
+
+## LS-381 — `7e5934d` falsified *"nothing writes `image_asset`"* across the tree; one of the three sites given had already fixed itself, and a grep found two more
+
+**`LS-381`, allocated by the coordinator, and re-checked rather than taken on report.** The
+allocation was measured at `e43e236`; it was re-run at this entry's own tip, where
+`git grep 'LS-38[0-9]' -- docs/` returns **only `LS-380`** and `LS-379` before it, so `LS-381` was
+free and is taken. Nothing here touches the `SD-`, `DS-` or `RK-` series, and no ADR or migration
+number is allocated by this lane. The work is content commit
+[`2ae7830`](https://github.com/jdb3750/UsArr/commit/2ae7830), *"docs: 7e5934d falsified \"nothing
+writes `image_asset`\" — two sites plus two copies"* — **four files, 46 insertions, 12 deletions**,
+comment and prose only, no executable line touched.
+
+### ✅ The falsifier was MEASURED, not carried — and the difference is the entry
+
+🚩 **A register entry that cannot distinguish a measured attribution from a relayed one has
+recorded nothing**, so this is stated first. The lane was handed *"`7e5934d` falsified it"* as a
+report. It did not write that on the report's authority. Measured directly at the tip:
+
+| What | Measured |
+|---|---|
+| The commit | `7e5934dd38e89e268d996b74bcab28e9037f0841` |
+| Date | Wed Aug 19 15:22:19 2026 +0000 |
+| Subject | *"feat: the image pipeline's writer — fetch, render, record, tested against a fake"* |
+| Reachability | `git merge-base --is-ancestor 7e5934d origin/main` → **ancestor** |
+| The writer | adds `internal/store/imagewrite.go` (307 lines), whose `PutPosterAsset` (`:258`) runs `INSERT INTO image_asset (…) VALUES (…, 'ready')` at `:296` |
+| The bytes behind it | adds `internal/imagepipeline/` — `pipeline.go`, `render.go` and their tests — to produce what the writer stores |
+
+📎 **`docs/ROADMAP.md` corroborates and was NOT relied on.** ⚠️ **And the corroborating line the
+brief named does not corroborate.** `docs/ROADMAP.md:436` is about a *different* claim — `images.go`'s
+package header, *"What no code does is CALL it during an import"*, falsified by **`c4a3277`**, not by
+`7e5934d`. The lines that actually attribute *this* falsification are **`:527`** — *"✅ **DISCHARGED
+2026-08-19** by `7e5934d`. `grep -rn 'INSERT INTO image_asset' --include=\*.go internal/ cmd/ | grep -v
+_test.go` returns `internal/store/imagewrite.go:296`"* — and **`:609`**, *"in the future tense
+throughout, because no writer existed. `7e5934d` is that writer."* 📌 **The mis-cite is recorded
+rather than quietly corrected because it makes the point**: had the attribution been *taken* from
+ROADMAP instead of measured, it would have been taken from a line that says something else, and the
+entry would have been right by luck. ⚠️ **`2ae7830`'s own commit message carries the same `:436`
+citation** and is wrong in the same way; the message is history and is left standing, with the
+correction here.
+
+### The three sites the finding named — and only two needed an edit
+
+| Site | Verdict |
+|---|---|
+| `internal/httpapi/librarysearch_test.go:79` | ✅ **Corrected** |
+| `docs/reference/http-api.md:1627` | ✅ **Corrected** (the annotation opens at `:1626` now) |
+| `docs/DECISIONS.md:6733` | ⏭️ **NO EDIT — and this is a finding, not an omission** |
+
+⚠️ **The finding's own site count was over by one, and the lane established that by checking rather
+than by assuming.** `docs/DECISIONS.md:6733` — ADR-0052's Consequences bullet, *"⚠️ **This ADR
+describes a pipeline that does not exist.** Nothing in Go writes `image_asset`…"* — **already carried
+the rider this work would have written**, at `:6738`: *"🔻 **Superseded 2026-08-19 by `7e5934d`, which
+built it.**"*, naming `internal/imagepipeline` and `store.PutPosterAsset`, recording that two of three
+owed items discharge, and stating *"The deferral itself is untouched"*. The ADR index row at `:104`
+carries the same. ✅ **The surrounding argument survives intact and only the fact had dated — which is
+what the existing rider already says.** 📌 **Re-annotating it would have been a second opinion, not
+a correction**, and a second rider on one bullet is a second thing to keep in step. (Both line numbers
+are as measured *before* `2ae7830`; the bullet is `:6739` and its rider `:6744` at this tip, the file
+having gained six lines above them.)
+
+### The propagation grep — two further copies, corrected in the same commit and not silently
+
+**Neither was in the finding.** Both were found by grepping the claim rather than the sites, which is
+the step that turns three named instances into the actual population.
+
+**1. `docs/DECISIONS.md:6707`** — ADR-0052's *rejected alternative* bullet still read *"Nothing writes
+`image_asset` today"* in the **present tense**, sitting **outside the Consequences rider's cover**: the
+rider at `:6738` supersedes the Consequences bullet and says nothing about this one, so a reader of the
+alternatives section got the stale claim with no warning attached. Annotated in ADR form, pointing at
+that rider rather than restating it.
+
+✅ **And the dating VINDICATES the rejected alternative rather than undermining it.** The bullet rejected
+*"add the column later, when the encoder is written"* on cost asymmetry, its premise being that nothing
+wrote `image_asset` **yet**. The encoder arrived **after** the ADR — exactly as the bullet assumed it
+would — so the cheap one-line `ALTER` was taken at the only moment it was cheap, and the 12-step rebuild
+the bullet warned of was never owed. 🚩 **A correction that had read the stale premise as an
+embarrassment would have got this backwards.** The argument is unchanged and the alternative stays
+rejected; only the tense moved.
+
+**2. `internal/store/imagelint_test.go:193`** — a straggler in a file **whose sibling comment at `:59`
+had already been corrected**, so the file disagreed with itself. It read *"While nothing writes
+image_asset the walk above can only ever take its vacuous branch"*. ✅ **The extraction still earns its
+place, on a reason that does not depend on the tree being empty**: the branch that matters is *"a writer
+landed and nothing validates"*, and **no state of a green tree produces that** — a tree in which it
+fires is a tree where `make check` is already red — so without a synthetic source it would ship never
+having executed. **The justification was replaced, not deleted.**
+
+### `librarysearch_test.go:79` keeps its fixture, on a NARROWER reason
+
+⚠️ **This is the site where the obvious edit would have been wrong.** The comment justified a test-only
+`INSERT INTO image_asset` with *"nothing writes `image_asset`, so without it `poster_key` is absent from
+every row and every assertion about it is vacuous"*. The premise is false; **the fixture is still
+right**. ✅ **What changed is what the absence is a fact about.** No production writer runs inside *this*
+test, so without the INSERT `poster_key` would still be absent from every row **here** and the
+field-selection assertions would still pass vacuously. 📌 **The absence is now a fact about the test's
+isolation, not a fact about the tree** — and a reviewer who deleted the fixture on the strength of *"but
+there is a writer now"* would have re-vacuumed the assertions it protects.
+
+ℹ️ **Its neighbouring clause was false by the same commit and is corrected with it.** The comment added
+that `internal/store`'s format lint *"exempts `_test.go` and stays vacuous"*. The exemption holds; **"stays
+vacuous" does not** — `imagewrite.go` gives that lint a real writer to walk, so it now runs its
+load-bearing branch on every `make check`. One commit, two clauses, both dated.
+
+### ⏭️ Sites found in barred files, reported rather than edited
+
+**Every one of these carries the same stale claim and none was touched.** They are listed so the next
+lane does not have to re-grep for them.
+
+| Site | Why not edited |
+|---|---|
+| `internal/db/migrations/00010_image_serving_indexes.sql:74`, `:92`, `:109` | **A merged migration is never edited** — `CLAUDE.md`, `DEVELOPMENT.md` §11, `SD-11`. `:109` words it differently (*"`image_asset` has no writer at all"*) and is the same claim |
+| `internal/db/migrations/00008_image_asset_format.sql:23`, `:160` | Same rule. `:23` is *"Nothing in Go writes image_asset — measured on this tree"*; `:160` is the lint's *"passes vacuously while nothing writes image_asset"* |
+| `docs/REVIEW-LOG.md` — ⚠️ **anchor by text, not by line**: the *What it does not attest* paragraph of the `00008` review, whose second sentence ends *"and nothing writes `image_asset` at all"* | ⚠️ **Reported to this lane as `:18180`, which was the paragraph's opening line before this entry was written; the claim clause was `:18181` then and is `:18202` now**, this entry's own additions above it having moved the file. ✅ **And it needs no edit either way** — it is **already annotated**, four lines below it: *"🔻 **Still accurate about the commit it reviews; no longer accurate about the tree (2026-08-19).**"*, left verbatim *"because a review record is a statement about a commit and not about today"*. Correctly handled before this lane arrived. 📌 **Cited by text because a line citation into this file is stale the moment the file is appended to — as this row demonstrates twice over** |
+| `web/src/lib/library.ts:31` and `:322`; `web/src/lib/library.test.ts:510`; `web/src/routes/library/+page.svelte:55`; `web/src/routes/library/[type]/+page.svelte:21` | **Another lane's files.** ⚠️ **Three of the five were relayed to this lane under a path that does not exist** — `web/src/lib/services/library.ts` and `web/src/lib/services/library.test.ts`; there is no `web/src/lib/services/` directory at this tip. The files are `web/src/lib/library.ts` and `web/src/lib/library.test.ts`; **the line numbers `:31`, `:322` and `:510` are correct against the real paths** |
+
+ℹ️ **`web/src/routes/library/[type]/+page.svelte` was relayed to that lane as `:20` and the claim is at
+`:21`** — verified here rather than passed on, `sed -n '21p'` returning *"built, nothing writes
+`image_asset`, so every poster key is absent on every"*. 📌 **An off-by-one in a line citation is the
+failure mode `docs/ROADMAP.md`'s citation policy exists for** — *"a wrong line number still resolves to
+a plausible line, so it fails invisibly and reads as checked"* — and in a `.svelte` comment block `:20`
+resolves to a plausible line.
+
+### What a green gate is worth on this entry
+
+`make check` was run green on the tree carrying this change, and **the honest reading is that it
+attests very little about it.** Three of the four files are prose or comments; the fourth,
+`librarysearch_test.go`, changed only inside a comment block. `make check` reaches `docs/` through
+**`gitleaks` alone** — `fmt-check`'s prettier half runs against `web/` only — and while the two Go
+files are compiled and vetted, **a comment is invisible to every arm of the gate**. What the green
+means is *"nothing credential-shaped was added and the two Go files still build, lint and pass"*, and
+**nothing at all about whether any sentence above is true**.
+
+**Measured, with the tool and the tree named, as this project requires:**
+
+- `make check` → banner `check: OK`, **exit 0**. Run **twice** — once pre-commit on the working tree,
+  and again on the merged tree — green both times.
+- `govulncheck`: `/root/go/bin/govulncheck`, **v1.7.0**, asserted against the `Makefile` pin
+  (`GOVULNCHECK_VERSION ?= v1.7.0`); **18 Go packages** scanned against `vuln.go.dev`; **0
+  vulnerabilities**.
+- `pnpm audit` against the npm registry: **no known vulnerabilities**.
+- Web suite: **859 tests across 21 files**.
+
+🔍 **The verification is therefore manual, and is listed so it can be repeated at any tip:**
+`git show 2ae7830` for the four-file diff; `git log -1 --format='%H %ad %s' 7e5934d` and
+`git merge-base --is-ancestor 7e5934d origin/main` for the falsifier and its reachability;
+`grep -n 'INSERT INTO image_asset' internal/store/imagewrite.go` for the writer itself;
+`sed -n '6739,6745p' docs/DECISIONS.md` for the rider that made the third site a no-op;
+`sed -n '527p;609p' docs/ROADMAP.md` for the lines that actually corroborate the attribution, and
+`sed -n '436p' docs/ROADMAP.md` for the one that does not;
+`grep -n 'Still accurate about the commit it reviews' docs/REVIEW-LOG.md` for the already-annotated
+site — by text, not by line; and
+`git grep -n 'image_asset' -- web/src` for the five sites owned elsewhere. ⚠️ **The commit shas above
+are content shas, never merges** — `2ae7830` is the content commit and `1288282` is only the merge
+that carried it.
