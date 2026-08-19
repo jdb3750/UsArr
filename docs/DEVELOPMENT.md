@@ -626,6 +626,38 @@ not on the credential, so it closes the labelled half of the class and misses th
 `TestCassettesOnDiskCarryNoCredential` is the guard that covers the other half; it scans every
 committed cassette on every `make check`.
 
+**Scrubbing has to be fired before it is trusted, and the secrets gate is not a substitute for it.**
+A cassette records the request URL VERBATIM, so any credential an API accepts as a query parameter
+or a path segment lands in the YAML and, once committed, in git history permanently. `make secrets`
+closes only part of that class, and which part depends on the wording of the URL rather than on the
+credential. Measured on 2026-08-19 against gitleaks `v8.30.1` — build-info module
+`github.com/zricethezav/gitleaks/v8@v8.30.1`, the identity `secrets` asserts — under this repo's
+`.gitleaks.toml`, on an otherwise-clean tree plus one cassette carrying a freshly generated GUID:
+
+| Recorded URL | `make secrets` |
+| --- | --- |
+| `…/api/image/series-cover?seriesId=1&apiKey=<guid>` | **caught** — `generic-api-key`, exit 1 |
+| `…/api/Opds/<guid>/series` | **not caught** — "no leaks found", exit 0 |
+
+The rule fires on the adjacent `apiKey=` keyword, not on the credential, so the same key carried as
+a bare path segment scans clean. Generate a fresh random GUID if you re-run this: a recognisable
+sample value may be allowlisted upstream, and would report a false negative.
+
+So: **do not record a cassette against a live instance until a `BeforeSave` scrubber strips
+credentials from the URL — path as well as query — and that scrubber has been fired against a
+known-bad recording.** An unfired scrubber is indistinguishable from no scrubber (§11), and this
+failure is silent and permanent rather than a red gate. `internal/kavita/vcr_test.go` is the worked
+example: it redacts the URL on both sides of the matcher, because a cassette that could only match
+by storing the credential is precisely what the hook exists to prevent.
+
+Kavita's image endpoints produced this rule; it generalises to any API that takes a key in a URL. On
+`api/specs/kavita-v0.9.0.2.json` — the release the owner runs — `GET /api/Image/series-cover`
+declares both `seriesId` and `apiKey` `in: query`, and all twelve `/api/Image/*` cover routes accept
+the key that way; on `develop` they do not (`internal/kavita/doc.go:31`). The spec's one `AuthKey`
+scheme is `x-api-key`, `in: header`, declared globally — but a global declaration is not evidence
+about a particular controller, and Kavita has two that ignore it, so whether the header alone
+suffices on a cover fetch is a fact about the running controller rather than one the spec settles.
+
 Cassette hygiene:
 
 * One cassette per test, named after it. Cassettes are fixtures, not a shared corpus.
