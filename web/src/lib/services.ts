@@ -566,6 +566,23 @@ export function normaliseUrlBase(raw: string): UrlBaseFix {
 }
 
 /**
+ * A 401 or 403 AS AN UPSTREAM ERROR RENDERS ONE, and not as a port number
+ * happens to.
+ *
+ * Every client here formats a status identically — `bookorbit AppInfo: GET
+ * /api/v1/app-info -> 403: ...`, and internal/servarr and internal/kavita to the
+ * character — so the digits follow a space or a `>`. A bare `401` would also
+ * match `dial tcp 10.0.0.4:4013`, and this arm now runs before the transport one,
+ * so what precedes the digits is part of the pattern rather than left to luck.
+ *
+ * 403 is here because it was missing, not merely for symmetry: the password-change
+ * refusal reads `-> 403: Password change required` and contains the word
+ * "forbidden" nowhere, so it used to fall past the auth arm to the default one and
+ * be told the address might not be a BookOrbit at all.
+ */
+const AUTH_STATUS = /(?:^|[\s>])(?:401|403)\b/;
+
+/**
  * What a failed connection test most likely means, as prose.
  *
  * §17.3 requires the verbatim upstream text PLUS "the two or three most likely
@@ -597,28 +614,65 @@ export function likelyCauses(message: string, kind: string): string[] {
 			fromHere
 		];
 	}
-	if (/refused|no such host|dial tcp|timeout|timed out|deadline|unreachable/.test(text)) {
-		return [
-			`The wrong port. ${app} listens on its own port and it is not the one the reverse proxy uses.`,
-			`The service is not running, or a firewall between this host and it is dropping the connection.`,
-			fromHere
-		];
-	}
-	if (/401|unauthorized|forbidden|api key/.test(text)) {
+	// ⚠️ THE AUTH ARM RUNS BEFORE THE TRANSPORT ARM, AND THE ORDER IS THE FIX.
+	// An arm above another wins every message both would match, and these two
+	// overlap on real text: `testBookOrbit` reports an app-info auth failure as
+	// "that token was refused on GET /api/v1/app-info" (cmd/usarr/services.go),
+	// and the health note it may append carries whatever words the upstream's own
+	// indicators used. With the transport arm first, all three of those auth
+	// failures were answered with advice about the wrong port.
+	//
+	// The arms are therefore ordered by STRENGTH OF EVIDENCE: a status code proves
+	// the connection completed and the service answered, while a transport word is
+	// prose any upstream may repeat back at us.
+	//
+	// Narrowing the transport arm's `refused` instead was the other candidate, and
+	// it is REJECTED for three reasons, in ascending order of weight.
+	//
+	// It buys nothing. Every transport failure that reaches this function came
+	// through the pinned dialer, so it carries net.OpError's own prefix — `ssrf:
+	// dial host:port: dial tcp 10.0.0.4:9696: connect: connection refused`
+	// (internal/ssrf/dial.go) — and `dial tcp` catches it whatever `refused` does.
+	//
+	// It fixes one string, not the class. That auth message may carry an appended
+	// health note whose text is BookOrbit's own Terminus indicator prose, so an
+	// indicator reporting a timeout or an unreachable dependency re-creates the
+	// same shadowing through a word narrowing never touched.
+	//
+	// And it leaves the other half of the defect standing. `-> 403: Password
+	// change required` contains no "forbidden" and no "401", so it did not match
+	// the auth arm either way; it fell to the default arm and was told the address
+	// might not be a BookOrbit. Only matching the status fixes that.
+	if (AUTH_STATUS.test(text) || /unauthorized|forbidden|api key/.test(text)) {
 		if (kind.trim().toLowerCase() === 'bookorbit') {
 			// BookOrbit's credential is a magic-link token, not a key on a
 			// settings page, and it cannot be looked up again — BookOrbit returns
 			// the raw value once and stores only its hash. Sending a user to
 			// `Settings, General, API Key` would send them somewhere that does not
 			// exist, looking for something that no longer does.
+			//
+			// The two bullets are the two failures that reach here, in that order:
+			// the mint 401, and the 401/403 on the app-info read behind it. The
+			// second one used to say "before any call succeeds", which was false of
+			// the call that had just succeeded — the login route is @Public() and
+			// validates no password, so the mint is exactly the call a pending
+			// password change cannot touch. JwtAuthGuard is what refuses, and it
+			// only guards the routes after it.
 			return [
 				`The magic-link token is revoked, expired or deactivated. It cannot be re-read anywhere: mint a new one.`,
-				`The link was minted against an ordinary account rather than a shared one, so BookOrbit demands a password change before any call succeeds.`
+				`The link was minted against an ordinary BookOrbit account rather than a shared one. Logging in still works, and every guarded route refuses that token until the account changes its password.`
 			];
 		}
 		return [
 			`The API key is wrong or has been regenerated. It is ${app}'s Settings, General, API Key.`,
 			`The key belongs to a different instance. Two ${app} instances have two different keys.`
+		];
+	}
+	if (/refused|no such host|dial tcp|timeout|timed out|deadline|unreachable/.test(text)) {
+		return [
+			`The wrong port. ${app} listens on its own port and it is not the one the reverse proxy uses.`,
+			`The service is not running, or a firewall between this host and it is dropping the connection.`,
+			fromHere
 		];
 	}
 	return [
@@ -988,11 +1042,27 @@ export function syncRefusal(
 					'This press started nothing and disturbed nothing. The import that was already running carries on.'
 			};
 		case 'not_a_catalogue_source':
+			// ⚠️ THE LIMITATION IS UsArr's, AND THE TITLE MUST NOT MOVE IT ONTO THE
+			// SERVICE. The server's own sentence renders directly beneath this line
+			// and reads "UsArr has no catalogue reader for this service"
+			// (internal/httpapi/imports.go); a headline saying the service has no
+			// catalogue contradicted the line under it.
+			//
+			// The case that made the contradiction visible has since expired: a
+			// BookOrbit registers as `role: library`, so `canRunFullSync` renders the
+			// Sync button and the press passed the role gate and was refused deeper,
+			// until internal/libsync/bookorbit.go gave it an adapter. The RULE
+			// outlives it, and the Go comment now says the same thing: this sentence
+			// is shown to whichever kind has no adapter next, and a screen must not
+			// tell a user their books do not exist because UsArr cannot read them.
+			//
+			// No "yet": a Prowlarr reads this same title through the role gate, and
+			// there will never be an indexer catalogue to wait for.
 			return {
 				...base,
 				phase: 'refused',
 				tone: 'warn',
-				title: 'This service has no catalogue to import',
+				title: 'UsArr cannot import from this service',
 				consequence: NO_IMPORT_STARTED
 			};
 		case 'service_disabled':
