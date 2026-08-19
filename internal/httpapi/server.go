@@ -287,14 +287,16 @@ func (s *Server) routes(mux *http.ServeMux) {
 	mux.Handle("GET /api/v1/library", s.authenticated(s.wrap(s.handleBrowseWorks)))
 
 	// The per-type facet count: how many works of each of §17.2's six navigation
-	// types the caller can see. It unblocks TWO consumers with one read — Block
-	// A, the media-type summary, and ADR-0053's named condition for reopening
-	// per-type sidebar hiding. Two SQLite reads, both with a pinned plan, and no
-	// upstream call. See facets.go.
+	// types the caller can see. It unblocks Block A, the media-type summary.
+	// Two SQLite reads, both with a pinned plan, and no upstream call. See
+	// facets.go.
 	//
-	// ⚠️ ROUTING IT DOES NOT AMEND ADR-0053. That ADR closes per-type hiding
-	// until a facet read exists; the amendment that reopens it is a decision
-	// somebody writes, not a consequence of this line.
+	// ⚠️ IT IS NOT ADR-0053's REOPENING CONDITION, though it was routed as
+	// though it were. That condition needs a predicate saying WHETHER a type
+	// has content; this returns per-type COUNTS, which bucket a two-format book
+	// once and would hide Audiobooks from someone who has them. The condition
+	// was refined rather than discharged on 2026-08-19 (ADR-0059); the sidebar
+	// is unchanged either way.
 	mux.Handle("GET /api/v1/library/facets", s.authenticated(s.wrap(s.handleLibraryFacets)))
 
 	// §17.8's Libraries screen, row view: the user-defined libraries, each with

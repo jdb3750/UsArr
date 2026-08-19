@@ -52,10 +52,8 @@ neither is rejection:
 * **The response echoes what the server APPLIED** (§7.4), so a client that asked for a scope and got
   an envelope back without one can see that it did.
 
-`TestUnrecognisedQueryParametersAreIgnoredNotRefused`
-(`internal/httpapi/library_browse_test.go`) pins it on the library grid, which has the most
-parameters to typo. A new endpoint inherits this rule; adopting a different one is a decision to
-write down here first.
+The pin is the one named above — the library grid, which has the most parameters to typo. A new
+endpoint inherits this rule; adopting a different one is a decision to write down here first.
 
 ---
 
@@ -1309,9 +1307,17 @@ is how a screen ends up promising a feature the server does not have.
 * **Titles, alternate titles, original titles, credited people and the overview** are all searched.
   A search for a creator's **name** returns the **work** — "Susanna Clarke" finds *Piranesi*. Titles
   are weighted far above people, and people far above the overview.
-* **Reciprocal Rank Fusion** at k = 60, then a Go re-rank on Jaro-Winkler similarity against the
-  normalised title (prefix-weighted, because people get the beginning of a title right) with a mild
-  recency tiebreak.
+* **Reciprocal Rank Fusion** at k = 60, then a Go re-rank of the fused candidates. The score is a
+  weighted sum of **three** terms, each normalised over the candidates of this one answer: the hit's
+  RRF ratio against the best candidate, the Jaro-Winkler similarity of the searched tokens against
+  the normalised title (prefix-weighted, because people get the beginning of a title right), and a
+  mild recency position. **The RRF term carries the largest weight** — it is the only one that knows
+  a hit was retrieved through `people`, `alt_titles` or `original_title` rather than the title, so
+  Jaro-Winkler discriminates among what retrieval found rather than leading it. `score` is therefore
+  in `(0, 1]`, and `1` is attainable. ⚠️ **The weights are in the code and this file keeps no copy:**
+  `internal/store/searchlibrary.go`'s `rerankWeightRRF` / `rerankWeightJW` / `rerankWeightRecency`
+  const block is authoritative, and `search.md` §4 owns the ordering they encode and the reasoning
+  behind it.
 * **Media-type diversity injection.** If the top 10 would otherwise be swept by one medium, the
   best-scoring result of each absent media type is promoted into it — `search.md` §4's answer to the
   case where a film's richer text buries the novella of the same name. ⚠️ **This is why `items` is
@@ -1585,10 +1591,13 @@ about the library and not a failure.
 ## 8 · `GET /api/v1/library/facets` — the per-media-type counts
 
 How many works of each of ARCHITECTURE §17.2's six navigation types the caller can see, as one
-call. It is the read [ADR-0053](../DECISIONS.md#adr-0053) names as its single reopening condition —
-*"a read that answers which of the six types have rows — under the current scope — in one
-statement"* — and it is what §17.2's **Block A**, the media-type summary, has been blocked on. One
-read, two consumers.
+call. It is what §17.2's **Block A**, the media-type summary, has been blocked on.
+
+⚠️ **It is NOT the read [ADR-0053](../DECISIONS.md#adr-0053) reopens on, and it looks like it.** That
+ADR wants a predicate answering *whether* each type has content; this answers *how many works are
+bucketed to* each type, and the two differ on exactly one case — see §8.4's split. ADR-0053's
+condition was **refined rather than discharged** on 2026-08-19 for that reason
+([ADR-0059](../DECISIONS.md#adr-0059)), so a client must not read these counts as presence.
 
 It is a local read (principle 1) — two SQLite statements, no \*Arr call, no metadata provider, no
 image fetch. Requires an authenticated session; without one it is `401 unauthorized`.
@@ -1676,7 +1685,8 @@ book works. This is the same assignment §1 and §7 already make for a row's `me
 is why the count and the grid agree. **The consequence, stated rather than left to be found: a
 library whose only audiobooks are second editions of ebooks reports `audiobooks: 0`** while §17.2's
 row-5 predicate would say the type has content. That matters the day something hides a type on this
-number.
+number — which is why [ADR-0059](../DECISIONS.md#adr-0059) records the decision, and why ADR-0053's
+reopening condition now names the existence predicate rather than a count.
 
 ### 8.5 Zero and invisible are the same answer, in one direction only
 

@@ -9,18 +9,20 @@ import (
 // The per-media-type facet count: how many works of each of §17.2's six
 // navigation types the caller can see, in one call.
 //
-// It is the read ADR-0053 names as its single reopening condition — *"a read
-// that answers which of the six types have rows — under the current scope — in
-// one statement"* — and it is the read ARCHITECTURE.md §17.2's Block A (the
-// media-type summary) has been blocked on. It answers presence and count
-// together, because a count answers presence and a presence flag does not
-// answer a count: Block A's row renders a NUMBER with a unit, so a boolean read
-// would have to be replaced rather than extended the moment Block A is built.
+// It is the read ARCHITECTURE.md §17.2's Block A (the media-type summary) has
+// been blocked on: Block A's row renders a NUMBER with a unit, so a boolean
+// presence read would have to be replaced rather than extended.
 //
-// ⚠️ THIS FILE DOES NOT CHANGE THE SIDEBAR AND DOES NOT AMEND ADR-0053. That
-// ADR closes per-type hiding on a named condition; satisfying the condition is
-// not the same act as reopening the decision, which is an amendment somebody
-// has to write.
+// ⚠️ IT IS NOT THE READ ADR-0053 REOPENS ON, AND MISTAKING IT FOR ONE IS THE
+// WHOLE HAZARD. A count does NOT answer presence here, however much it looks
+// like it does — the Ebooks/Audiobooks block below is why: this read BUCKETS
+// every book exactly once, so a library whose only audiobooks are second
+// editions of ebooks counts `audiobooks: 0` while §17.2's row-5 EXISTS says the
+// type has content. Hiding a nav entry on this number would hide Audiobooks
+// from someone who has audiobooks. ADR-0053's reopening condition was REFINED
+// rather than discharged on 2026-08-19 for exactly that (ADR-0059); it now
+// names the independent EXISTS over edition.format, which is a different query
+// from anything in this file. This file does not change the sidebar.
 //
 // WHICH SIDE OF THE ACCESS-SCOPE RULE THIS IS ON. store.go rule 2 in its most
 // literal form: this IS a rollup across instances, and *"a rollup computed
@@ -280,7 +282,8 @@ func mediaTypeCountsSQL(scope Scope) (string, []any) {
 // rather than left to be discovered: a library whose ONLY audiobooks are second
 // editions of ebooks counts `audiobooks: 0` while §17.2's row-5 predicate would
 // say the type has content. That matters the day something hides a type on this
-// number, which is ADR-0053's decision to amend and not this read's to take.
+// number, which is ADR-0053's decision to amend and not this read's to take —
+// and ADR-0059 records why this count must not be the thing that discharges it.
 //
 // MEASURED on the real schema, this engine, no ANALYZE — see mediaTypeCountsSQL
 // for why that planner is the one pinned. Under the owner's full scope:
