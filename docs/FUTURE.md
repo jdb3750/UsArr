@@ -1104,3 +1104,11 @@ PM ever wants one, still lands as `usarr key <verb>` without renaming anything. 
 *"proposed CLI, v0.1"* — a feature on no milestone, described as proposed for a milestone. It now
 points here instead. `docs/reference/security.md` §1.5 already said flatly that `usarr keygen` is not
 implemented, which was true then and stays true.
+
+A third pointer surfaced after this section was written and is recorded here so the sweep is not
+re-done from scratch: `docs/reference/sync.md` §6 listed `usarr keygen` among the second processes
+that could contend for the single-instance lock. **It has been dropped from that row rather than
+annotated** — the row's value is that every process it names is one that can actually start, and a
+command that will never run inflates the hazard while teaching the reader nothing. Three real
+contenders remain there, including `usarr key rotate`, which is the near-identical example the
+deleted one was standing beside.
