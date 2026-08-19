@@ -400,7 +400,7 @@ func TestTheDirtyBatchPlanIsASeek(t *testing.T) {
 		t.Fatalf("QueryPlan: %v", err)
 	}
 	joined := strings.Join(plan, " | ")
-	if !strings.Contains(joined, "ix_work_dirty") {
+	if !planHas(joined, "ix_work_dirty") {
 		t.Errorf("the flush does not pick up its batch through ix_work_dirty, so it scans every "+
 			"work row for a column that is 0 almost always:\n  %s", joined)
 	}

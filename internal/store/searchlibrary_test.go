@@ -272,8 +272,12 @@ func TestSearchLibraryScopeActuallyFilters(t *testing.T) {
 
 	t.Run("the library half is in the SQL, not only in the signature", func(t *testing.T) {
 		pred, args := searchScopePredicate("f.rowid", []int64{0, 7})
+		// The inner alias is DERIVED from the correlated column
+		// (searchDocLibraryAlias, LS-379), so the assertion derives it too. A
+		// literal `sdl` here would go on matching `sdl_f` by prefix and would
+		// cover nothing.
 		if !strings.Contains(pred, "search_doc_library") ||
-			!strings.Contains(pred, "sdl.library_id IN (") {
+			!strings.Contains(pred, searchDocLibraryAlias("f.rowid")+".library_id IN (") {
 			t.Errorf("the library predicate does not constrain search_doc_library:\n  %s", pred)
 		}
 		if len(args) != 2 {
@@ -361,16 +365,25 @@ func TestSearchLibraryPlanIsSeeks(t *testing.T) {
 	}
 	joined := strings.Join(plan, " | ")
 
-	// Both legs seek the junction, on both of its key columns.
-	if n := strings.Count(joined, "SEARCH sdl EXISTS USING COVERING INDEX ix_sdl_doc "+
-		"(doc_rowid=? AND library_id=?)"); n != len(legs) {
-		t.Errorf("the permission filter is a covering seek on %d of %d legs:\n  %s\n"+
-			"schema.md §7 invariant 6: permission filtering must happen IN the "+
-			"index join. A scan here leaks existence through result counts and "+
-			"ranking positions.", n, len(legs), strings.Join(plan, "\n  "))
-	}
-	if strings.Contains(joined, "SCAN sdl") || strings.Contains(joined, "SCAN search_doc_library") {
-		t.Errorf("the scoped search SCANS search_doc_library:\n  %s", strings.Join(plan, "\n  "))
+	// Both legs seek the junction, on both of its key columns — each under ITS
+	// OWN derived alias, because the two legs correlate to different outers
+	// (searchDocLibraryAlias, LS-379). The assertion derives each name rather
+	// than spelling `sdl`, which would match `sdl_f` by prefix while covering
+	// nothing.
+	for _, outer := range []string{"f.rowid", "t.rowid"} {
+		want := "SEARCH " + searchDocLibraryAlias(outer) + " EXISTS USING COVERING INDEX " +
+			"ix_sdl_doc (doc_rowid=? AND library_id=?)"
+		if !strings.Contains(joined, want) {
+			t.Errorf("the permission filter for the %s leg is not a covering seek "+
+				"(%q absent):\n  %s\n"+
+				"schema.md §7 invariant 6: permission filtering must happen IN the "+
+				"index join. A scan here leaks existence through result counts and "+
+				"ranking positions.", outer, want, strings.Join(plan, "\n  "))
+		}
+		if strings.Contains(joined, "SCAN "+searchDocLibraryAlias(outer)+" ") ||
+			strings.Contains(joined, "SCAN search_doc_library") {
+			t.Errorf("the scoped search SCANS search_doc_library:\n  %s", strings.Join(plan, "\n  "))
+		}
 	}
 
 	// Neither FTS leg sorts: fts5 produces the order itself. The `r` in
@@ -419,7 +432,7 @@ func TestSearchableLibrariesPlanIsASeek(t *testing.T) {
 		t.Fatalf("QueryPlan: %v", err)
 	}
 	joined := strings.Join(plan, " | ")
-	if !strings.Contains(joined, "SEARCH library USING INDEX ix_library_kind") {
+	if !planHas(joined, "SEARCH library USING INDEX ix_library_kind") {
 		t.Errorf("the searchable-library read does not seek ix_library_kind:\n  %s",
 			strings.Join(plan, "\n  "))
 	}

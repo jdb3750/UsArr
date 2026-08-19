@@ -371,8 +371,9 @@ func bm25Rank(weights ...float64) string {
 // document filed in three visible libraries would otherwise appear three times
 // inside the leg, inflating ROW_NUMBER() and handing the same rowid three
 // different ranks to fuse. EXISTS stops at the first match. The plan is
-// `SEARCH sdl USING COVERING INDEX ix_sdl_doc (doc_rowid=? AND library_id=?)`,
-// which is schema.md §7 invariant 6's "doc set known" form: permission
+// `SEARCH <alias> USING COVERING INDEX ix_sdl_doc (doc_rowid=? AND library_id=?)`
+// — the alias is derived per leg, `sdl_f` and `sdl_t` today, see
+// searchDocLibraryAlias — which is schema.md §7 invariant 6's "doc set known" form: permission
 // filtering INSIDE the index join, never after it, because a post-filter leaks
 // existence through result counts and ranking positions.
 func searchScopePredicate(docRowidColumn string, libraryIDs []int64) (string, []any) {
@@ -388,9 +389,22 @@ func searchScopePredicate(docRowidColumn string, libraryIDs []int64) (string, []
 	for _, id := range libraryIDs {
 		args = append(args, id)
 	}
-	return `EXISTS (SELECT 1 FROM search_doc_library sdl
-	                 WHERE sdl.doc_rowid = ` + docRowidColumn + `
-	                   AND sdl.library_id IN (` + placeholders(len(args)) + `))`, args
+	sdl := searchDocLibraryAlias(docRowidColumn)
+	return `EXISTS (SELECT 1 FROM search_doc_library ` + sdl + `
+	                 WHERE ` + sdl + `.doc_rowid = ` + docRowidColumn + `
+	                   AND ` + sdl + `.library_id IN (` + placeholders(len(args)) + `))`, args
+}
+
+// searchDocLibraryAlias names the inner search_doc_library of the semi-join
+// above, derived from the outer doc-rowid column it correlates to. See
+// scopeLinkAlias for the whole argument and derivedInnerAlias for the
+// construction; docs/REVIEW-LOG.md LS-379 is where the class was found.
+//
+// The two legs correlate to different outers (`f.rowid` and `t.rowid`) and so
+// get different aliases inside one statement — which is correct, and is why the
+// plan guard derives the name it asserts rather than spelling it.
+func searchDocLibraryAlias(docRowidColumn string) string {
+	return derivedInnerAlias("sdl", docRowidColumn)
 }
 
 // searchableLibrariesSQL is the statement that resolves decision 1 and decision

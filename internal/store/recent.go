@@ -239,9 +239,12 @@ func (s Scope) workVisibilityPredicate(column string) (string, []any) {
 // yields a syntax error at first use rather than a leak. Every caller in this
 // package passes `alias.column`, and moving the failure from silent to loud is
 // the direction that matters.
+//
+// The derivation itself is derivedInnerAlias, shared with the two other
+// predicates that carry a correlated subquery (libraryVisibilityPredicate and
+// searchScopePredicate); only the table-naming prefix differs.
 func scopeLinkAlias(column string) string {
-	outer, _, _ := strings.Cut(column, ".")
-	return "sil_" + outer
+	return derivedInnerAlias("sil", column)
 }
 
 // recentWorksSQL renders the ListRecentWorks statement and its arguments.
