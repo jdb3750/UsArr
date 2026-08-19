@@ -2250,15 +2250,19 @@ The tailnet removes the "internet-exposed by design" leg and neither of the othe
    scoping. Images are proxied because `MediaCover` requires it. Nothing leaving UsArr carries a
    backend credential (§5.4).
 5. **Redaction is middleware, not convention.** A fixed deny-list of query parameters — the provider
-   and OpenSubsonic names (`apikey`, `api_key`, `token`, `access_token`, `auth_token`,
-   `refresh_token`, `refreshtoken`, `sig`, `signature`, `secret`, `secret_key`, `p`, `t`, `s`) **and
+   and OpenSubsonic names (`apikey`, `api_key`, `token`, `access_token`, `accesstoken`, `auth_token`,
+   `authtoken`, `refresh_token`, `refreshtoken`, `sig`, `signature`, `secret`, `secret_key`,
+   `secretkey`, `p`, `t`, `s`) **and
    the private-tracker passkey names**
    (`passkey`, `torrent_pass`, `torrentpass`, `rsskey`, `authkey`, `apipasskey`, `cookie`) — plus the
    `Authorization`/`X-Api-Key` headers is redacted **before** any log line, audit row, error message,
    SSE payload or support bundle, at every level including `trace`. The northbound credential rides in
    the request line of every Subsonic call, so this is not optional. The tracker names are not
    optional either: `ReleaseResource.infoUrl` is indexer-supplied and is surfaced to the browser as
-   `info_url`, and private trackers put the user's passkey in exactly that URL. The list lives once,
+   `info_url`, and private trackers put the user's passkey in exactly that URL. ⚠️ **Matching folds
+   case and nothing else, so every underscored name carries its underscore-free twin** — `accessToken`
+   lowercases to `accesstoken`, never to `access_token`, and three twins were missing until a drill
+   recorded a JWT into a cassette through the fully-armed scrubber. The list lives once,
    in `internal/ssrf`; see reference/security.md §5. `key_prefix`, never the key, appears in logs.
 6. **Do not outsource the authorization boundary.** Every UsArr response — northbound included — is
    filtered by UsArr's own permission model, with backend policy as a second layer. Never construct a

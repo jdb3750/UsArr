@@ -3,6 +3,7 @@ package vcrscrub_test
 import (
 	"context"
 	"crypto/rand"
+	"encoding/base64"
 	"fmt"
 	"io"
 	"net/http"
@@ -425,3 +426,192 @@ func TestBinaryDoesNotLinkTheRecorder(t *testing.T) {
 var _ recorder.HookFunc = vcrscrub.Scrub
 
 var _ = cassette.Interaction{}
+
+// ─── The camelCase gap ───────────────────────────────────────────────────────
+//
+// Everything above drills the QUERY and PATH positions with Kavita's shapes. The
+// tests below drill a third shape that neither covered: a credential returned as
+// a camelCase JSON FIELD whose lowercased form was not on the deny-list.
+//
+// ssrf.isCredentialParam lowercases the incoming name and looks it up, so an
+// underscored entry only covers its camelCase spelling if the UNDERSCORE-FREE
+// form is in the map too. `refresh_token` had `refreshtoken` beside it and
+// `access_token` did NOT have `accesstoken` — so `refreshToken` was redacted and
+// `accessToken` was not. A one-entry difference between two adjacent lines,
+// invisible unless you spell each name out and do the lookup by hand.
+//
+// The gap is real in both directions, and neither is hypothetical:
+//
+//   - BookOrbit — v0.1's catalogue source under ADR-0052 — returns its JWT as
+//     `{"accessToken": …}`. Verified from source: `login()` and
+//     `issueTokensForUser()` in `server/src/modules/auth/auth.service.ts` on
+//     `bookorbit/bookorbit@main` both return `{ accessToken, user }`, and
+//     `POST auth/login`, `POST auth/refresh` and `POST auth/magic-links/login`
+//     all land on one of them.
+//   - Kavita's own VENDORED SPEC already carries the name: `MalUserInfoDto`
+//     lists `accessToken` as required (`api/specs/kavita-v0.9.0.2.json`), and
+//     that is a MyAnimeList OAuth token. So a cassette in this tree could have
+//     captured the shape before BookOrbit was chosen, not only after.
+
+// fixtureJWT is the probe: a JWT's real SHAPE — three unpadded base64url
+// segments — GENERATED FRESH ON EVERY RUN, for both of the reasons
+// fixtureAuthKey is.
+//
+// Unpadded is load-bearing. A `=` in the value would let queryPairRe see a
+// `name=value` pair INSIDE the token and rewrite it for the wrong reason, and
+// the armed half would then pass without the deny-list entry doing any work.
+var fixtureJWT = freshJWT()
+
+func freshJWT() string {
+	seg := func(n int) string {
+		b := make([]byte, n)
+		if _, err := rand.Read(b); err != nil {
+			panic("no entropy for the probe credential: " + err.Error())
+		}
+		return base64.RawURLEncoding.EncodeToString(b)
+	}
+	return seg(24) + "." + seg(48) + "." + seg(32)
+}
+
+// fakeBookOrbit serves the one response shape under drill. Nothing in this file
+// may point at a real instance.
+//
+// The sibling `username` is the CONTROL. Without it a pass would show only that
+// the JWT is absent, which blanket-redacting the whole body would also achieve —
+// and a cassette that redacts everything has stopped being a fixture.
+func fakeBookOrbit(t *testing.T) *httptest.Server {
+	t.Helper()
+	mux := http.NewServeMux()
+	mux.HandleFunc("/api/auth/login", func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = fmt.Fprintf(w, `{"accessToken":%q,"user":{"id":1,"username":"joe"}}`, fixtureJWT)
+	})
+	s := httptest.NewServer(mux)
+	t.Cleanup(s.Close)
+	return s
+}
+
+// login drives one POST through doer, the way a headless client would.
+func login(t *testing.T, doer *http.Client, base string) {
+	t.Helper()
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodPost,
+		base+"/api/auth/login", strings.NewReader(`{"username":"joe","password":"pw"}`))
+	if err != nil {
+		t.Fatalf("request: %v", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := doer.Do(req)
+	if err != nil {
+		t.Fatalf("login: %v", err)
+	}
+	if _, err := io.ReadAll(resp.Body); err != nil {
+		t.Fatalf("read body: %v", err)
+	}
+	_ = resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status %d — the fake refused the shape under test", resp.StatusCode)
+	}
+}
+
+// TestAccessTokenDrillArmed is the positive half: record a real login against a
+// local fake and require the JWT never to reach the file.
+//
+// It was FIRED AGAINST THE UNFIXED DENY-LIST before `accesstoken` was added, and
+// reported the JWT verbatim in the recorded cassette. That failure is what makes
+// the pass afterwards evidence rather than an assumption — the gap was found by
+// reading redact.go, but it was confirmed by watching it leak.
+func TestAccessTokenDrillArmed(t *testing.T) {
+	t.Setenv("USARR_RECORD", "1")
+	srv := fakeBookOrbit(t)
+	path := filepath.Join(t.TempDir(), "armed-accesstoken")
+
+	rec, err := vcrscrub.New(path)
+	if err != nil {
+		t.Fatalf("recorder: %v", err)
+	}
+	login(t, rec.GetDefaultClient(), srv.URL)
+	if err := rec.Stop(); err != nil {
+		t.Fatalf("stop: %v", err)
+	}
+
+	got := readCassette(t, path)
+	if strings.Contains(got, fixtureJWT) {
+		t.Fatalf("SCRUBBER FAILED — the accessToken JWT reached the cassette:\n%s", got)
+	}
+	if want := `"accessToken":"<redacted>"`; !strings.Contains(got, want) {
+		t.Errorf("cassette is missing %q; full text:\n%s", want, got)
+	}
+	if want := `"username":"joe"`; !strings.Contains(got, want) {
+		t.Errorf("over-redacted — the benign sibling %q did not survive:\n%s", want, got)
+	}
+	t.Logf("ARMED — recorded cassette:\n%s", got)
+}
+
+// TestAccessTokenDrillNeutered is the other half, in the shape
+// TestScrubDrillNeutered established: record the same interaction with the
+// BeforeSave hook removed, and require the JWT to land in the file.
+//
+// It rules out the boring explanation for the armed half's silence — that go-vcr
+// declined to persist this body at all, or that the fake never sent it — and so
+// keeps the demonstration running on every `go test` rather than living once in
+// a commit message.
+func TestAccessTokenDrillNeutered(t *testing.T) {
+	srv := fakeBookOrbit(t)
+	path := filepath.Join(t.TempDir(), "neutered-accesstoken")
+
+	rec, err := recorder.New(path,
+		recorder.WithMode(recorder.ModeRecordOnce),
+		// Everything vcrscrub.New installs EXCEPT the BeforeSave hook.
+		recorder.WithMatcher(vcrscrub.Matcher),
+		recorder.WithSkipRequestLatency(true),
+	)
+	if err != nil {
+		t.Fatalf("recorder: %v", err)
+	}
+	login(t, rec.GetDefaultClient(), srv.URL)
+	if err := rec.Stop(); err != nil {
+		t.Fatalf("stop: %v", err)
+	}
+
+	got := readCassette(t, path)
+	if leak := `"accessToken":"` + fixtureJWT; !strings.Contains(got, leak) {
+		t.Fatalf("the neutered run did NOT leak %q, so the armed run proves nothing about it:\n%s", leak, got)
+	}
+	for _, line := range strings.Split(got, "\n") {
+		if strings.Contains(line, fixtureJWT) {
+			t.Logf("NEUTERED — leaked line: %s", strings.TrimSpace(line))
+		}
+	}
+}
+
+// TestRedactBodyCoversCamelCaseSpellings sweeps the whole CLASS rather than the
+// one name that was reported, which is the difference between fixing a bug and
+// closing a gap.
+//
+// Every deny-list entry carrying an underscore has a camelCase spelling a JSON
+// API would plausibly emit, and the lowercased lookup covers it only if the
+// underscore-free form is in the map too. Three of the six underscored entries
+// were missing theirs — `access_token`, `auth_token` and `secret_key`. Pinning
+// the class here means the next underscored name added without its sibling fails
+// a test, instead of waiting for someone to spell the names out by hand again.
+func TestRedactBodyCoversCamelCaseSpellings(t *testing.T) {
+	for _, name := range []string{
+		"accessToken",  // access_token  — BookOrbit's login JWT; Kavita's MalUserInfoDto
+		"authToken",    // auth_token
+		"secretKey",    // secret_key
+		"apiKey",       // api_key       — already covered; pinned so it stays covered
+		"refreshToken", // refresh_token — already covered; pinned so it stays covered
+		"torrentPass",  // torrent_pass  — already covered; pinned so it stays covered
+	} {
+		t.Run(name, func(t *testing.T) {
+			j := vcrscrub.RedactBody(`{"` + name + `":"` + fixtureJWT + `"}`)
+			if strings.Contains(j, fixtureJWT) {
+				t.Errorf("JSON form not redacted: %s", j)
+			}
+			q := vcrscrub.RedactBody("https://x/cb?" + name + "=" + fixtureJWT)
+			if strings.Contains(q, fixtureJWT) {
+				t.Errorf("query form not redacted: %s", q)
+			}
+		})
+	}
+}

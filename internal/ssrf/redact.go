@@ -39,24 +39,55 @@ import (
 // Prowlarr's own indexer definitions name these fields, which is where the list
 // comes from.
 //
+// ⚠️ AN UNDERSCORED NAME DOES NOT COVER ITS camelCase SPELLING. isCredentialParam
+// lowercases and looks up, which folds CASE and nothing else: `accessToken`
+// lowercases to `accesstoken`, NOT to `access_token`. So every underscored entry
+// needs its underscore-free twin sitting beside it, or the list silently covers
+// the wire format nobody uses and misses the one JSON APIs actually emit.
+//
+// Three were missing theirs — `accesstoken`, `authtoken`, `secretkey` — while
+// `apikey`, `refreshtoken` and `torrentpass` were present, so the list was
+// inconsistent with itself in a way that reads as complete. Found by spelling
+// each name out and doing the lookup by hand, then CONFIRMED BY DRILL: with
+// `accesstoken` absent, internal/vcrscrub's TestAccessTokenDrillArmed recorded a
+// JWT verbatim into a cassette through the fully-armed scrubber.
+//
+// `accessToken` is the concrete case. BookOrbit — v0.1's catalogue source under
+// ADR-0052 — returns its JWT under that name from `login()` and
+// `issueTokensForUser()` (bookorbit/bookorbit@main,
+// server/src/modules/auth/auth.service.ts), which is what POST auth/login,
+// auth/refresh and auth/magic-links/login all resolve to. It is not only a
+// BookOrbit shape either: Kavita's vendored spec requires `accessToken` on
+// MalUserInfoDto (api/specs/kavita-v0.9.0.2.json), a MyAnimeList OAuth token.
+//
+// Keep the twins paired when adding to this list. The pairing costs nothing —
+// no real parameter is named `accesstoken` in one system and means something
+// benign in another — and the alternative is normalising separators inside
+// isCredentialParam, which would silently widen every future entry rather than
+// leaving each widening written down here.
+//
 // Adding a name here also removes it from redirect targets (see
 // stripCredentials). That is the reason to prefer long, specific names: a short
 // generic one like "t" or "s" is a legitimate cache-buster or size parameter on
 // plenty of CDNs, so widening this list with short names has a functional cost
 // that the tracker-specific names do not.
 var credentialParams = map[string]struct{}{
-	// Provider / generic.
+	// Provider / generic. Underscored names carry their underscore-free twin;
+	// see the camelCase note above.
 	"apikey":        {},
 	"api_key":       {},
 	"token":         {},
 	"access_token":  {},
+	"accesstoken":   {},
 	"auth_token":    {},
+	"authtoken":     {},
 	"refresh_token": {},
 	"refreshtoken":  {},
 	"sig":           {},
 	"signature":     {},
 	"secret":        {},
 	"secret_key":    {},
+	"secretkey":     {},
 
 	// OpenSubsonic salt/token/password.
 	"p": {},
@@ -343,8 +374,10 @@ func RedactRawURL(raw string) string {
 // split the lists: keep the full list for redaction, and use a narrower one here
 // (apikey, api_key, access_token, auth_token, token, sig, signature, secret,
 // secret_key, and the tracker passkey names — all long enough to be unambiguous),
-// with a comment saying why the two differ. Splitting them now would create a
-// second deny-list with no consumer to validate it against.
+// EACH WITH ITS UNDERSCORE-FREE TWIN, for the reason the camelCase note above
+// gives; a narrower list that drops the twins reintroduces exactly the gap the
+// twins were added to close. Splitting them now would create a second deny-list
+// with no consumer to validate it against.
 func stripCredentials(u *url.URL) {
 	u.User = nil
 	if u.RawQuery == "" {

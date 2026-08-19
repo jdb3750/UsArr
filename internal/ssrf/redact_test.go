@@ -218,3 +218,69 @@ func TestRefreshTokenIsRedacted(t *testing.T) {
 		}
 	}
 }
+
+// TestUnderscoredNamesCarryTheirCamelCaseTwin pins the STRUCTURAL invariant
+// behind the accessToken gap, rather than re-listing the names by hand.
+//
+// isCredentialParam folds case and nothing else, so `accessToken` lowercases to
+// `accesstoken` and never to `access_token`. An underscored entry therefore
+// covers only the wire spelling that uses an underscore — which is the one a
+// JSON API is LEAST likely to emit. Three entries were missing their twin
+// (`access_token`, `auth_token`, `secret_key`) while three others had theirs, so
+// the list looked complete and was not.
+//
+// Asserting over the map means a name added in future fails HERE, at the moment
+// it is added, instead of when someone re-derives the spellings by hand or a
+// cassette records the missing one. That is the whole difference between fixing
+// the reported name and closing the class.
+func TestUnderscoredNamesCarryTheirCamelCaseTwin(t *testing.T) {
+	t.Parallel()
+
+	for name := range credentialParams {
+		twin := strings.ReplaceAll(name, "_", "")
+		if twin == name {
+			continue
+		}
+		if _, ok := credentialParams[twin]; !ok {
+			t.Errorf("credentialParams has %q but not %q — a JSON API spelling it %q "+
+				"in camelCase lowercases to %q and would NOT be redacted",
+				name, twin, name, twin)
+		}
+	}
+}
+
+// TestAccessTokenIsRedacted covers the name the drill found, in the spellings
+// that reach it.
+//
+// BookOrbit — v0.1's catalogue source under ADR-0052 — returns its JWT as
+// `{"accessToken": …}` from `login()` and `issueTokensForUser()`
+// (bookorbit/bookorbit@main, server/src/modules/auth/auth.service.ts), which is
+// what POST auth/login, auth/refresh and auth/magic-links/login all resolve to.
+// The shape predates that choice: Kavita's vendored spec requires `accessToken`
+// on MalUserInfoDto (api/specs/kavita-v0.9.0.2.json), a MyAnimeList OAuth token.
+func TestAccessTokenIsRedacted(t *testing.T) {
+	t.Parallel()
+
+	const secret = "ACCESSTOKENVALUE0123456789"
+	for _, spelling := range []string{"access_token", "accessToken", "ACCESSTOKEN", "accesstoken"} {
+		if got := RedactRawURL("https://bookorbit.example/x?" + spelling + "=" + secret); strings.Contains(got, secret) {
+			t.Errorf("RedactRawURL leaked %s: %q", spelling, got)
+		}
+		if !IsCredentialParam(spelling) {
+			t.Errorf("IsCredentialParam(%q) = false", spelling)
+		}
+	}
+	// The two other twins added with it, in the spelling that was missing.
+	for _, name := range []string{"authToken", "secretKey"} {
+		if !IsCredentialParam(name) {
+			t.Errorf("IsCredentialParam(%q) = false", name)
+		}
+	}
+	// Widening must not have reached a benign neighbour. `accessLevel` and
+	// `tokenCount` share a prefix with the names added and carry no secret.
+	for _, name := range []string{"accessLevel", "tokenCount", "secretary", "author"} {
+		if IsCredentialParam(name) {
+			t.Errorf("IsCredentialParam(%q) = true — over-broad", name)
+		}
+	}
+}

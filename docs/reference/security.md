@@ -471,7 +471,8 @@ The earlier redaction rule covered **southbound** `Field.privacy` fields only, a
 UsArr's own inbound URLs — which is exactly where the northbound credential lives.
 
 > **A fixed deny-list of query parameters — `apikey`, `api_key`, `token`, `access_token`,
-> `auth_token`, `refresh_token`, `refreshtoken`, `sig`, `signature`, `secret`, `secret_key`, `p`,
+> `accesstoken`, `auth_token`, `authtoken`, `refresh_token`, `refreshtoken`, `sig`, `signature`,
+> `secret`, `secret_key`, `secretkey`, `p`,
 > `t`, `s`, `passkey`,
 > `torrent_pass`, `torrentpass`, `rsskey`, `authkey`, `apipasskey`, `cookie` (matched
 > case-insensitively) — and the `Authorization` and `X-Api-Key` headers is redacted to
@@ -481,6 +482,32 @@ UsArr's own inbound URLs — which is exactly where the northbound credential li
 The list lives in exactly one place, `internal/ssrf`'s `credentialParams`, and there is deliberately
 no second copy: a drifting duplicate is how a parameter ends up redacted on one code path and not the
 other. Update the code and this list together.
+
+🚩 **"Case-insensitively" folds CASE and nothing else, which is why every underscored name above sits
+beside its underscore-free twin.** `isCredentialParam` lowercases the incoming name and does a map
+lookup, so `accessToken` lowercases to `accesstoken` — **not** to `access_token`. An underscored
+entry on its own therefore covers only the spelling that uses an underscore, which is the spelling a
+JSON API is least likely to emit. The list was inconsistent with itself here for some time:
+`apikey`, `refreshtoken` and `torrentpass` were present while `accesstoken`, `authtoken` and
+`secretkey` were not, so it read as complete and was not.
+
+That gap was **found by reading `redact.go` and then confirmed by a drill fired in both
+directions** — `internal/vcrscrub`'s `TestAccessTokenDrillArmed` recorded a freshly generated
+JWT-shaped probe **verbatim into a cassette through the fully armed scrubber** while `accesstoken`
+was absent, and redacts it once the name is present; `TestAccessTokenDrillNeutered` runs the same
+interaction with the `BeforeSave` hook removed, so the armed half's silence cannot be go-vcr
+declining to persist the body. The invariant itself is pinned structurally rather than by
+enumeration, in `internal/ssrf`'s `TestUnderscoredNamesCarryTheirCamelCaseTwin`, which walks the map
+and fails on any underscored key whose twin is missing — so the next name added without one fails a
+test rather than waiting for a cassette to capture it.
+
+The shape is not speculative in either direction. **BookOrbit** — v0.1's catalogue source under
+[ADR-0052](../DECISIONS.md#adr-0052) — returns its JWT as `{"accessToken": …}` from `login()` and
+`issueTokensForUser()` (`bookorbit/bookorbit@main`,
+`server/src/modules/auth/auth.service.ts`), which is what `POST auth/login`, `POST auth/refresh` and
+`POST auth/magic-links/login` all resolve to. And it predates that choice: **Kavita's own vendored
+spec** lists `accessToken` as required on `MalUserInfoDto` (`api/specs/kavita-v0.9.0.2.json`), a
+MyAnimeList OAuth token, so a cassette in this tree could have captured the shape already.
 
 **The private-tracker passkeys are not optional and were the gap.** The list originally stopped at
 the provider and OpenSubsonic names. But Prowlarr's `ReleaseResource.infoUrl` and `.commentUrl` are

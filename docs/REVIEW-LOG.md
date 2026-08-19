@@ -20457,3 +20457,144 @@ both and nothing about whether any of the prose is true. What is re-runnable is 
 `git show d16d1e7 --unified=0 -- docs/DECISIONS.md` returns six hunk headers including `@@ -81`,
 `@@ -2088`, `@@ -2118` and `@@ -2153`; `git show 92eff15 --unified=0 -- docs/DECISIONS.md` returns
 two, `@@ -106,0 +107` and `@@ -7216,0 +7218,95`. That difference is the whole finding.
+
+## SD-06 — `accessToken` was not on the ONE list, and the lookup folds case and nothing else
+
+**Found by reading source, not by a drill — and then confirmed by a drill fired in both directions.**
+That order is the point of the entry. `internal/ssrf`'s `isCredentialParam` lowercases the incoming
+name and does a map lookup, which folds **case** and nothing else. So an underscored entry covers its
+camelCase spelling only if the **underscore-free twin** is in the map too: `accessToken` lowercases
+to `accesstoken`, never to `access_token`. Spelling each of the twenty-one names out and doing the
+lookup by hand showed the list was **inconsistent with itself** — `apikey`, `refreshtoken` and
+`torrentpass` were present while `accesstoken`, `authtoken` and `secretkey` were not. Six entries
+carry an underscore; three had their twin and three did not, which is precisely the shape that reads
+as complete.
+
+**The consequence was a live credential in git.** `internal/vcrscrub` calls `ssrf.IsCredentialParam`
+for every named value including JSON object keys, so a name absent from the list is a name the
+cassette scrubber does not redact — and a cassette is committed. **BookOrbit**, v0.1's catalogue
+source under [ADR-0052](./DECISIONS.md#adr-0052), returns its JWT as `{"accessToken": …}`: verified
+from primary source, `login()` and `issueTokensForUser()` in
+`server/src/modules/auth/auth.service.ts` on `bookorbit/bookorbit@main` both return
+`{ accessToken, user }`, and `POST auth/login`, `POST auth/refresh` and `POST auth/magic-links/login`
+all resolve to one of them.
+
+⚠️ **And it was not a BookOrbit-only exposure, which is the part the report understated.** Kavita's
+**own vendored spec** lists `accessToken` as *required* on `MalUserInfoDto`
+(`api/specs/kavita-v0.9.0.2.json`) — a MyAnimeList OAuth token. The gap was reachable from this tree
+**before** the adapter moved off Kavita, so it is not a defect introduced by ADR-0052; it is one
+ADR-0052 made more likely to be hit.
+
+### The drill, both directions, run before it was trusted
+
+`LS-345` established that a guard is kept as standing tests rather than as a commit message, and
+`LS-348` that the probe is generated rather than written down. Both are honoured. The probe is a
+**JWT's real shape** — three unpadded base64url segments — generated fresh on every run. *Unpadded is
+load-bearing*: a `=` inside the value would let `queryPairRe` see a `name=value` pair **inside the
+token** and rewrite it for the wrong reason, and the armed half would then pass without the deny-list
+entry doing any work.
+
+**Neutered, before the fix** — `TestAccessTokenDrillArmed` run against the unfixed list recorded the
+JWT verbatim into the cassette **through the fully armed scrubber**, hook installed and all:
+
+```
+--- FAIL: TestAccessTokenDrillArmed
+    SCRUBBER FAILED — the accessToken JWT reached the cassette:
+        body: '{"accessToken":"fONuMFgQUCk6-6CnhOG9mYpN9slmVw3h.ZGFIbBAT_xq7…","user":{"id":1,"username":"joe"}}'
+```
+
+**Armed, after the fix** — the same test, same path, same fake:
+
+```
+--- PASS: TestAccessTokenDrillArmed
+    ARMED — recorded cassette:
+        body: '{"accessToken":"<redacted>","user":{"id":1,"username":"joe"}}'
+```
+
+Three things keep that pass from being worth less than it looks:
+
+1. **A control field.** The sibling `"username":"joe"` is asserted to **survive**. Without it, a pass
+   would show only that the JWT is absent — which blanket-redacting the whole body would also
+   achieve, and a cassette that redacts everything has stopped being a fixture.
+2. **A second, hook-removed direction.** `TestAccessTokenDrillNeutered` runs the same interaction
+   with the `BeforeSave` hook stripped, in the shape `TestScrubDrillNeutered` established, and
+   requires the JWT to land in the file. It rules out the boring explanation for the armed half's
+   silence — that go-vcr never persisted this body, or the fake never sent it.
+3. **The invariant guard was itself fired.** `TestUnderscoredNamesCarryTheirCamelCaseTwin` was proved
+   to fail by deleting `"accesstoken"` from the map and running it: *`credentialParams has
+   "access_token" but not "accesstoken"`*. It was restored immediately. A guard that has never been
+   triggered is indistinguishable from no guard.
+
+### Applied by extending the one list, and by pinning the class rather than the name
+
+**`accesstoken`, `authtoken` and `secretkey` added to `ssrf.credentialParams`** — the precedent
+`W-01` set and `LS-347` followed, extending the ONE list and never starting a second. No new list
+exists anywhere as a result of this work.
+
+**The fix is the class, not the reported name.** `TestUnderscoredNamesCarryTheirCamelCaseTwin` walks
+the map itself and fails on any underscored key whose underscore-free twin is missing, so the next
+name added without one fails a test **at the moment it is added** rather than when someone
+re-derives the spellings by hand or a cassette captures the missing one. Enumerating the six
+spellings instead would have fixed today's list and left tomorrow's to the same manual pass that
+missed these three. `TestRedactBodyCoversCamelCaseSpellings` covers the same six through
+`vcrscrub.RedactBody` in both the JSON and query forms, and `TestAccessTokenIsRedacted` covers the
+four spellings of the reported name through `RedactRawURL` and the exported predicate, with
+`accessLevel`, `tokenCount`, `secretary` and `author` asserted **not** to match so the widening did
+not reach a benign neighbour.
+
+**The alternative was considered and rejected.** Normalising separators *inside* `isCredentialParam`
+— stripping `_` and `-` before the lookup — would close the class in one line and need no twins. It
+was rejected because it **silently widens every future entry**: a name added later would acquire
+separator-insensitive matching that nobody wrote down, and `credentialParams` is also what
+`stripCredentials` removes from redirect targets, where over-breadth changes which resource is
+fetched. The twins cost one line each and leave every widening visible in the diff. The reasoning is
+in the code comment, not only here.
+
+### The maintenance contract was honoured, and one document was deliberately left alone
+
+`internal/ssrf/redact.go`'s comment names two mirrors that must move with the list, and **both were
+updated in the same commit**: `ARCHITECTURE.md` §14 item 5 and `reference/security.md` §5, each of
+which went from 21 names to 24 and each of which gained the twins rule in prose, so a future editor
+adds the pair rather than the name.
+
+⚠️ **`ARCHITECTURE.md` was touched, and it is a shared document with named section owners.** The edit
+is confined to §14's item 5 — the section the contract names — and changes nothing else in the file.
+
+**All three legs landed in ONE commit**, which the contract requires for a reason the drill cannot
+cover: landing the code alone would leave both mirrors one name short, and a short deny-list in a
+document reads as *"this parameter is NOT redacted"* when it is. That fails **quietly**, and no test
+in this tree reads the prose.
+
+🔍 **A count discrepancy was settled by counting rather than by trusting either report.** One account
+had `security.md`'s block quote as a **19**-name copy; another had **21** in each mirror. **The 21
+count was right, and there was no pre-existing shortfall in either mirror** — the three lists were
+in step before this change and are in step after it. Measured on the pre-change tree (`6283585`):
+
+| List | Before | After |
+| --- | --- | --- |
+| `credentialParams` in `internal/ssrf/redact.go` | 21 | 24 |
+| `reference/security.md` §5 block quote | 21 | 24 |
+| `ARCHITECTURE.md` §14 item 5 | 21 | 24 |
+
+The two mirror counts are of **parameter names only**. A naive backtick count returns 22 and 24
+respectively, because `security.md`'s quote also mentions `trace` (a log level) and
+`ARCHITECTURE.md`'s item additionally mentions `info_url`, `key_prefix` and `trace` — none of which
+are deny-list entries. **That is the most likely origin of any miscount**, and it is recorded so the
+next person to audit these mirrors subtracts the same three rather than re-deriving the discrepancy.
+
+✅ **`CONFIGURATION.md` §2.1 was deliberately NOT touched.** `DS-06` converted it from a stale copy
+into a pointer, and its illustrative names carry no count and claim no completeness, so it is
+**correct as it stands and adding the three names would undo `DS-06`**. This is recorded because the
+obvious reflex — "update every place the names appear" — is exactly the bug `DS-06` closed.
+
+### Residual, recorded rather than fixed
+
+**A camelCase name whose lowercased form is not a concatenation of an existing entry is still
+missed**, because the deny-list is a deny-list. `tokenHash` and `passwordHash` appear in BookOrbit's
+auth module (`tokenHash` is the SHA-256 of a refresh token, `passwordHash` a password hash); neither
+is returned in any JSON response body on the routes traced, and both are verifiers rather than
+bearer credentials, so neither was added — adding names that no observed response emits is how a
+deny-list acquires entries nobody can justify later. If a BookOrbit route is found returning either,
+it is a one-line addition under this same rule. This is the same residual `SR-13` and `LS-349` both
+record: the durable close is an explicit **declaration of which fields and positions an upstream
+treats as secret**, not a longer list of guessed names.
