@@ -2560,13 +2560,22 @@ the sequence is deliberately allowed to interleave with them.
 | 2 | **Audiobookshelf** | audiobooks (and ebooks where the install holds them) | `LibraryItem.updatedAt` probe at connect (§7.1a) |
 | 3 | **Komga** | a second comics source | Its own `sort=lastModified,desc` probe (§7.1a); reconciliation-only if that fails |
 
-⚠️ **Kavita is no longer in this table because it moved INTO v0.1, not because it was cut**
-([ADR-0041](./DECISIONS.md#adr-0041)). It held slot #1 here on the probe's result; it is now v0.1's
-one catalogue source and the sync core's first adapter, and the three that sat below it shift up by
-one **without reordering** — the order between them is unchanged, and no source is refused. **This table
-is therefore the sequence after v0.1's own source**, and its success criterion is unchanged: *this
-source's library appears in the grid, is searchable, delta-syncs, and its Services row is honest
-about what it cannot do.*
+⚠️ **Kavita is not in this table.** It left it because it moved **INTO v0.1**, not because it was cut
+([ADR-0041](./DECISIONS.md#adr-0041)); it then left **v0.1** on 2026-08-19, when
+[ADR-0052](./DECISIONS.md#adr-0052) made **BookOrbit** v0.1's catalogue source on the owner's decision
+to sunset Kavita. **It is not added back here**, and that is deliberate rather than an oversight:
+ADR-0052 clause 3 refuses to invent a milestone for work the owner never asked for, on
+[ADR-0042](./DECISIONS.md#adr-0042)'s precedent. **The adapter stays in the tree and stays green**;
+what stops is investment. The paragraph below is a **dated record of the ADR-0041 move** and is
+preserved as written:
+
+> It held slot #1 here on the probe's result; ~~it is now v0.1's
+> one catalogue source and the sync core's first adapter~~ 🚩 **STRUCK 2026-08-19 by
+> [ADR-0052](./DECISIONS.md#adr-0052) — BookOrbit is**, and the three that sat below it shift up by
+> one **without reordering** — the order between them is unchanged, and no source is refused. **This
+> table is therefore the sequence after v0.1's own source**, and its success criterion is unchanged:
+> *this source's library appears in the grid, is searchable, delta-syncs, and its Services row is
+> honest about what it cannot do.*
 
 **The order is the probe's result, not a preference.** §16.0 states the branch and why the other one
 is closed; ADR-0035 §2a is the run — and the branch it settled is what put Kavita ahead of Navidrome,
@@ -2592,9 +2601,19 @@ inattention.** It was funded by two things: the Prowlarr Search-and-Grab request
 release** — not toggling monitored or deleting through an \*Arr. That is still a real action that
 changes the world outside UsArr, which is what the label claims; it is one verb rather than five.
 Go binary + embedded SPA; SQLite + WAL with the §7.7 discipline; goose migrations. **The sync core,
-with one Tier 0 Go adapter in front of it: Kavita** — which is what proves the replica thesis on real
-data, because it is the source the owner runs and the only one whose delta has been verified against
-a live instance ([ADR-0035](./DECISIONS.md#adr-0035) §2a) — plus **Prowlarr in Search-and-Grab mode**
+with one Tier 0 Go adapter in front of it: BookOrbit** — which is what proves the replica thesis on
+real data, because it is the source the owner runs — plus **Prowlarr in Search-and-Grab mode**
+⚠️ **The catalogue source changed on 2026-08-19, applying
+[ADR-0052](./DECISIONS.md#adr-0052), and this entry read *"one Tier 0 Go adapter in front of it:
+Kavita — which is what proves the replica thesis on real data, because it is the source the owner
+runs and the only one whose delta has been verified against a live instance (ADR-0035 §2a)"*.** The
+owner is **sunsetting Kavita entirely**; BookOrbit takes its media types, which are unchanged — books,
+comics and manga. 🚩 **The struck half is the verification clause, and its loss is real:** BookOrbit
+has had **no equivalent of ADR-0035 §2a's live probe**, so the channel sentence below is an open
+question rather than an inherited answer. ⚠️ **"Sunset" does not mean deleted** — `internal/kavita`,
+`internal/libsync/kavita.go`, both vendored specs and [ADR-0046](./DECISIONS.md#adr-0046)'s contract
+guard stay in the tree and stay green; **investment stops, existence does not**, and ADR-0052 clause 3
+deliberately assigns further Kavita work **no milestone at all** rather than inventing one.
 (§8.5), which is the request path for **all six** media types. **Sonarr and Radarr re-sequence out of
 v0.1** (ADR-0041): the owner runs neither, so *"a real Sonarr and a real Radarr, imported"* was a
 criterion no v0.1 could meet. **They are re-sequenced, not cut — to v0.2**
@@ -2606,10 +2625,17 @@ were v0.1's *kept* sinks. [ADR-0041](./DECISIONS.md#adr-0041) removed those two 
 [ADR-0042](./DECISIONS.md#adr-0042) re-sequenced the write path that addressed them, so the honest
 statement is **zero command sinks and no command path to one** — Lidarr, LazyLibrarian, Mylar3 and
 Kapowarr are still out, and Sonarr and Radarr are out with them.
-Sync channels **1, 3b and 4**: full import; **channel 3b (§7.1a) — the ordered page walk with a
-client-side stop — for Kavita**, which is every library-bearing service v0.1 has, and which is
-therefore **built here rather than only specified** (ADR-0041). **Channel 3 (`/history/since`) is not
-applicable to Kavita** (§7.1a) and lands with the first \*Arr adapter, **which is v0.2**
+Sync channels **1 and 4**, with **3b open**: full import; and **channel 3b (§7.1a) — the ordered page
+walk with a client-side stop — pending a probe of BookOrbit**. ⚠️ **This read *"Sync channels 1, 3b
+and 4 … channel 3b … for Kavita … built here rather than only specified (ADR-0041)"*, and
+[ADR-0052](./DECISIONS.md#adr-0052) reopens the 3b half rather than re-answering it.** ADR-0041
+clause 4 earned that list from [ADR-0035](./DECISIONS.md#adr-0035) §2a's run against a live **Kavita**;
+BookOrbit has had no such run. What is known is that the walk is *expressible* — BookOrbit admits
+`updatedAt` as a sort key with page/size paging — and what is unknown is §7.1a's **ordering
+guarantee**, whether that timestamp moves on a tag, genre or author edit. **If the probe fails, §7.1a's
+documented fallback applies unchanged**: reconciliation only, surfaced as `no change feed — full
+compare at 09:12`. **Channel 3 (`/history/since`) is not applicable to BookOrbit** (§7.1a) any more
+than it was to Kavita, and lands with the first \*Arr adapter, **which is v0.2**
 ([ADR-0045](./DECISIONS.md#adr-0045)). **Reconciliation with 7-day
 tombstones and both sweep guards** for everything — and it carries more weight here than it would for
 an \*Arr, because a page walk cannot observe a deletion (§7.1a) and Kavita's watermark moves on a

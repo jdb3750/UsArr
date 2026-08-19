@@ -19246,3 +19246,208 @@ the Services screen an undercount — a number that says "12 could not be read" 
 is a worse falsehood than the silence this change removes. **The seam if it ever measures slow is a
 batched writer in `internal/store`** — one transaction, N inserts — which keeps every row and costs
 nothing at the call site.
+
+---
+
+# ADR-0052 — the catalogue-source swap to BookOrbit, and what the drafting brief got wrong
+
+**Drafter's own record, written before the adversarial pass rather than after it.** The brief that
+commissioned this ADR carried three factual claims and one framing; **two of the claims were right,
+one was wrong, and the framing was wrong.** Every one was re-measured against a primary source or
+against this tree before a word of the decision was written, and the ADR records the corrections
+rather than the brief. `CLAUDE.md`'s *"verify, don't assert"* is the whole reason this section is
+longer than the change.
+
+⚠️ **This is a docs-only change**, so the gate green below attests almost nothing about the decision.
+That is stated in `LS-359` rather than left for a reviewer to notice.
+
+## LS-350 — the repo's own record was read first, and it disagreed with the brief in two places
+
+The brief summarised a **2026-08-17 BookOrbit evaluation** and reported which of its findings had been
+falsified. **The evaluation is in the tree** — [`ROADMAP.md`](./ROADMAP.md) §3, *"Open decision —
+BookOrbit as a books backend"*, at BookOrbit HEAD `4a420a04` — and reading it first was what surfaced
+the divergences.
+
+| | The brief said | [`ROADMAP.md`](./ROADMAP.md) §3 actually says | Handling |
+|---|---|---|---|
+| Watermark | *"there is **no watermark** — no reliable 'changed since' signal"* | *"an `updatedAt` watermark that **misses tag, genre and author edits**"* | ⚠️ **Materially different.** Absent is not the same as incomplete, and only the second is what the repo recorded. See `LS-352`. |
+| Comics | comics not covered | *"no manga **or comic** external ids"* | ✅ As briefed. Falsified — see `LS-351`. |
+| Auth | no inbound API key; headless auth needs the password | *"**no inbound API key** — headless auth needs the account password"* | ✅ As briefed. Falsified — see `LS-351`. |
+
+🚩 **And one thing the brief did not carry at all: `ROADMAP.md` §3 ends with a standing
+recommendation, *"do NOT switch UsArr's first adapter off Kavita."*** An ADR that reverses a written
+recommendation without naming it is hiding its own cost, so ADR-0052's `Status:` line names it and
+alternative (a) argues against it at full strength.
+
+ℹ️ **`RESEARCH.md` holds nothing on BookOrbit** — checked, and recorded as a negative so the next pass
+does not re-derive it. `CLAUDE.md` says evidence lives there; the BookOrbit evidence has only ever
+lived in `ROADMAP.md` §3 and now in ADR-0052's table.
+
+## LS-351 — the two falsifications, re-measured from BookOrbit's own source rather than relayed
+
+Both were checked against `bookorbit/bookorbit@main` on 2026-08-19. ⚠️ **`4a420a04` was not checked
+out**, so each is a statement about `main` now — *the claim is false today*, not *the evaluation was
+careless*.
+
+| Claim | Verdict | What was read |
+|---|---|---|
+| *"no inbound API key — headless auth needs the account password"* | 🚩 **FALSIFIED** | `server/src/modules/auth/magic-link.service.ts`. A first-class magic-link module: raw token issued, **SHA-256 hash** stored, `loginWithToken()` checks existence + `isActive` + not-revoked + not-expired, then `issueTokensForUser()`. **No password is validated in that flow.** |
+| *"no manga or comic external ids"* | 🚩 **HALF FALSIFIED** | **Comics covered:** `server/src/modules/metadata-fetch/providers/comicvine/` holds `.client.ts`, `.mapper.ts`, `.provider.ts`, `.types.ts`; the README names *"ComicVine for comics"*. **Manga/anime absent:** repo-wide code search for `mangabaka`, `anilist`, `myanimelist` returns **zero hits** — which also independently confirms that native MangaBaka support has not shipped. |
+
+⚠️ **The brief's auth line was right and its reason was incomplete, in a way that matters to §14.** A
+magic link is **reusable** (`updateUsage()` does not invalidate it), **optionally non-expiring**,
+**capped at 25 per user**, **superuser-created**, and creatable **only for *shared* accounts**. So the
+credential improved from a password to a long-lived bearer token **scoped to an account that is not
+the owner's personal one**. That is better, and it is still a §14 credential. ADR-0052 carries it as
+open question 3 rather than as a solved problem.
+
+## LS-352 — the claim the ADR REFUSED, and why refusing it was the most important thing in the change
+
+The brief stated as *confirmed and not falsified*: **"no watermark → the sync design is full resync,
+with no delta channel."** **The strong form is false, and the primary source says so.**
+
+- `packages/types/src/query.ts` admits **`"updatedAt"`** in its sort union — alongside `addedAt`,
+  `title`, `lastReadAt` and eighteen others — with `pagination: { page, size }`.
+- The list read is `POST /books/query` with a `BookQuery` body (`server/src/modules/book/book.controller.ts`),
+  which is **structurally the same shape as Kavita's** `FilterV2Dto.SortOptions` on
+  `POST /api/Series/all-v2` — the endpoint [ADR-0035](./DECISIONS.md#adr-0035) §2 probed.
+
+**That is exactly what §7.1a's channel 3b requires**: an ordered walk on the source's own
+last-modified field with a **client-side** stop. Writing *"no delta channel"* into an accepted ADR
+would have **foreclosed v0.1 work on a premise the source refutes**, and a foreclosure costs far more
+to undo than an open question costs to close. So ADR-0052 reopens
+[ADR-0041](./DECISIONS.md#adr-0041) clause 4 as an **open question with the probe named**, and does
+not answer it.
+
+ℹ️ **What is genuinely unsettled, and the ADR says so.** `books.ts` sets `updatedAt` with Drizzle's
+`$onUpdateFn(() => new Date())` — **application-level, not a DB trigger** — and authors, tags and
+genres are **not columns on the book row**. So an edit confined to a join table plausibly never moves
+it, which is precisely the 2026-08-17 finding and is **not** re-measured here. §7.1a's
+**reconciliation-only** fallback is the named failure branch, and it is a *branch*, not a decision.
+
+🚩 **Note the symmetry that makes this cheap to accept:** Kavita's watermark has the same defect —
+[ADR-0035](./DECISIONS.md#adr-0035) §2a clause (c), `UpdateLastChapterAdded()` has one call site, in
+the new-chapter branch — and ADR-0041 shipped channel 3b anyway, with channel 4 covering the rest.
+
+## LS-353 — the framing on identity was falsified by the tree, and the inversion is the better record
+
+The drafting input first asked for BookOrbit's missing series-level external id to be recorded as a
+**structural degradation** against §6.2, possibly needing **a migration**. **A schema check against
+this tree falsified that.** Three citations, each verified before a word of the section was written:
+
+| Citation | Verified | Where |
+|---|---|---|
+| `external_id`: `source TEXT NOT NULL` with **no `CHECK`**, `confidence REAL NOT NULL DEFAULT 1.0`, `CHECK ((work_id IS NULL) != (edition_id IS NULL))`, unique `(source, value, COALESCE(work_id,-1), COALESCE(edition_id,-1))` | ✅ | `internal/db/migrations/00005_library_sync.sql:444` |
+| A series **is a work row** — `work.kind`'s CHECK admits `'series'` and `'comic'`, and the comment reads *"'comic' is the SERIES, 'comic_issue' the issue or chapter"* | ✅ | `00005_library_sync.sql:242` |
+| `kavitaExternalIDs` writes **seven** series-level ids, `mangabaka` among them at `WebLinkConfidence = 0.90` | ✅ | `internal/libsync/kavita.go:432-490`; `internal/libsync/weblinkid.go:111` (`WebLinkConfidence = 0.90`), `:162` (`MangaBakaSource = "mangabaka"`) |
+
+**So `external_id.work_id` already IS the series-level column, and no migration is owed.** The
+comparison the draft implied was never available: **Kavita supplies no first-class series ids
+either** — `kavita.go`'s own comment records `AniListId`, `MalId` and `MangaBakaId` as **weblink-parsed**
+from a `<Web>` element the user's tagger wrote, and that *"MangaBaka has no provider writer at all"*.
+That is why they are capped at 0.90. BookOrbit's user-populated custom field is the same arrangement
+under another name. **Series identity in this domain comes from what the user records, not from what
+the server models** — and `confidence` is the column that already grades exactly that.
+
+⚠️ **One wrinkle was found that the corrected framing did not carry either, and it is recorded rather
+than smoothed.** BookOrbit's custom metadata values are **book-scoped**:
+`server/src/db/schema/custom-metadata.ts`'s `bookCustomMetadataValues` carries
+`bookId: integer('book_id').notNull().references(() => books.id, …)` and declares **no series-scoped
+variant**. A series id recorded on a book must be hoisted to the work. ✅ **Kavita needs the identical
+hoist and does it lossily** (`LS-38`/`LS-39`: erased to `0` when the first chapter carries no link for
+that site), so this is a parity finding, not a new cost — but it is a real adapter question and the
+ADR says so instead of implying the mapping is trivial.
+
+## LS-354 — `work_relation` was kept out on purpose, and the ADR carries a 🚫 line saying so
+
+The identity discussion is a natural place to reach for `work_relation`, whose confidence and evidence
+columns `CLAUDE.md` names as a kept seam. **It does not exist in the tree**, and that was verified
+rather than assumed: no migration in `internal/db/migrations` creates it, and
+`internal/db/migrate_test.go`'s `deferred` list carries `"work_relation"` under a `// v0.3` comment
+with a `t.Errorf` if it is present. Its DDL lives only in a reference document. It is the **v0.3
+cross-media linking** seam, **not** the identity mechanism — that is `external_id`. ADR-0052 therefore
+cites it **only** in a line telling later readers not to add it, so that a phantom table never enters
+an accepted ADR.
+
+## LS-355 — the MangaBaka licence, verified first-party, and the trap it forecloses by name
+
+`https://mangabaka.org/data/database`, read 2026-08-19: *"MangaBaka-original data in this download is
+licensed under CC BY-NC-SA 4.0 — free for personal and non-commercial use with attribution,"* and
+*"Third-party data (from AniList, MAL, etc.) remains subject to each provider's own terms."*
+
+Two consequences, and the ADR states both as constraints rather than as notes:
+
+- **CC BY-NC-SA 4.0 is not AGPL-3.0-compatible.** `CLAUDE.md`'s dependency rule names MIT, BSD and
+  Apache-2.0 as fine; **NonCommercial** plus **ShareAlike** is neither. Vendoring the data would change
+  **UsArr's own** distribution terms — which is why this is a licensing constraint on the project, not
+  a preference about data sources.
+- 🚩 **Caching the nightly dump is the temptation and is foreclosed by name.** It is cheaper than an
+  API walk and it is the move a later implementer reaches for. **It is redistribution.** Fetching at
+  runtime, on the user's own server, on the user's behalf, is a different act. ⚠️ And the dump is not
+  even uniformly under that licence — the third-party sentence means a cached dump silently carries
+  AniList's and MAL's terms too.
+
+## LS-356 — "the owner decided this" was recorded as a decision, with its provenance marked
+
+`DECISIONS.md`'s preamble carries the `162dca5` post-mortem: a sentence that **no ADR ever decided**
+was written into an ADR body as though one had, and it was falsified the next day. So ADR-0052 states
+three things separately: **the decision is the owner's** (sunsetting Kavita entirely, BookOrbit takes
+everything, *"phenomenal"*); **it reached this record through the coordinating thread rather than
+first-hand**, marked 🔍; and **the repo's own verbatim record of the same direction is one day older**
+— `ROADMAP.md` §3, 2026-08-18, *"in my heart i kind of want to migrate to book orbit… it doesn't have
+a paid tier"*. What an agent did here is the re-measurement, which is evidence. **The choice is not an
+agent's and the ADR does not let a reader think otherwise.**
+
+Likewise **MangaBaka**: the owner expects official BookOrbit support *"in the near future"*. That is
+recorded as **his expectation and nobody's commitment**, and decision clause 4 forbids the adapter
+depending on it — reinforced by the measurement in `LS-351` that no such support exists in `main`, and
+by the open PR having no maintainer signoff.
+
+## LS-357 — "sunset" was pinned to mean "investment stops", never "delete"
+
+`CLAUDE.md`'s standing rule is that displaced things are **re-sequenced, not cut**, and
+[ADR-0041](./DECISIONS.md#adr-0041) clause 3 is the precedent — `internal/servarr` survived losing its
+milestone. ADR-0052 clause 2 keeps `internal/kavita`, `internal/libsync/kavita.go`, both vendored
+specs and [ADR-0046](./DECISIONS.md#adr-0046)'s two-spec contract guard **in the tree and green**.
+
+🚩 **And clause 3 refuses to invent a milestone for further Kavita work**, on
+[ADR-0042](./DECISIONS.md#adr-0042)'s precedent — *"Picking a number here would be inventing a
+commitment nobody made."* The owner said he is moving off it; **he did not say what happens to it
+afterwards**. Recording "sunset" without that refusal would have let a later reader supply either
+missing half — a deletion or a milestone — and neither was decided.
+
+## LS-358 — §16 was edited in the same change, and what else went stale was listed rather than swept
+
+§16 is scope authority and **must not disagree with an accepted ADR**, so three edits landed with it,
+each corrected in place quoting what it used to say — the preamble's rule for `ARCHITECTURE.md`, which
+is deliberately the opposite of how an ADR body is treated:
+
+1. **§16.1's v0.1 entry**, source line: *"one Tier 0 Go adapter in front of it: **Kavita**"* → **BookOrbit**. ⚠️ The struck half is the **verification clause** — *"the only one whose delta has been verified against a live instance"* — and its loss is real, so the amendment note says so rather than swapping a noun quietly.
+2. **§16.1's v0.1 entry**, channels line: *"Sync channels **1, 3b and 4**"* → **1 and 4, with 3b open** pending the probe, with §7.1a's reconciliation-only fallback named as the failure branch.
+3. **§16.1's ⚠️ Kavita paragraph**, which said Kavita left the post-v0.1 table *"because it moved INTO v0.1"*. It has now left v0.1 too, and is **not added back to the table** — clause 3's refusal. The old paragraph is preserved as a **blockquoted dated record** with its one stale clause struck.
+
+⚠️ **§7.1a was deliberately NOT touched.** Its Kavita row is a **dated record of a live run**, and
+`DEVELOPMENT.md` §11 is explicit that a citation inside a dated record is history rather than
+staleness. A BookOrbit row is owed **when the probe runs**, not before — writing one now would be
+inventing a measurement.
+
+**What is still stale, named so the next pass does not re-derive it** (ADR-0052's Consequences carries
+the same list): `README.md` (generated from §16), `ROADMAP.md` §1/§3/§4, `FUTURE.md`,
+`DEVELOPMENT.md`'s tree comment at :105, and — the largest — `design/DESIGN-DIRECTION.md` and
+`design/mockups/README.md`, which carry `v0.1: Kavita, Prowlarr` as **rendered strings in the
+mockups**, a design-asset change rather than a prose one. **Claiming they were fixed would be exactly
+the invented status `CLAUDE.md` forbids.**
+
+## LS-359 — what `make check` green is worth on this change, stated honestly
+
+**Very little about the decision, and the change is a decision.** This is a docs-only diff: three
+Markdown files, no Go, no SQL, no migration, no adapter code by design. A green gate attests that no
+credential-shaped string was added, that the tree still builds and its tests still pass, and that
+formatting and lint hold. **It attests nothing about whether BookOrbit is the right source, whether
+the falsifications in `LS-351` are correctly read, or whether §16 now says the right thing.**
+
+The evidence that carries this change is not the gate. It is: the primary-source reads in `LS-351` and
+`LS-352`, the three tree citations in `LS-353` (each of which the gate *does* keep honest, since a
+wrong file path or a renamed constant would be visible), the first-party licence quote in `LS-355`,
+and the adversarial pass this branch was pushed for. **The ADR gates the implementation precisely so
+that this review happens before code makes the decision expensive to revisit.**

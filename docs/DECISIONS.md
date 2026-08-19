@@ -92,7 +92,7 @@ because no ADR ever decided it. Annotating leaves that failure mode nowhere to h
 | [0038](#adr-0038) | A list freezes its order while a user is aiming at it | **Accepted** — 2026-08-16; amends no ADR; the argument lives in `design/DESIGN-DIRECTION.md` §9.1a and ARCHITECTURE §17.5, this record holds the rejected alternatives |
 | [0039](#adr-0039) | `write_queue.state` loses its `CHECK`; `work_id` gets its foreign key back | **Accepted** — 2026-08-17; **supersedes** `reference/schema.md` §10 step 1 and the seam in `FUTURE.md` §11 / §11.1; closes `REVIEW-LOG.md` WQ-05; ⚠️ **amended 2026-08-17** — decision 3's ground 1 is **struck**, on a misquotation of `reference/sync.md` §4 that dropped the words *toward the \*Arr*: the decision stands on grounds 2 and 3, which are independent of it; ⚠️ **corrected 2026-08-17** — decision 1 and the first rejected alternative wrote the Go `state` validation as **done**; it is **owed by the first `write_queue` writer** and nothing validates the vocabulary today (`REVIEW-LOG.md` M5-25) |
 | [0040](#adr-0040) | The six subtype tables land with the catalogue source that writes each | **Accepted** — 2026-08-17; records as a decision what `00005_library_sync.sql` did; **in tension with** ARCHITECTURE §16's enumerated v0.1 schema line, which is left to the thread that owns §16; ⚠️ **amended 2026-08-17 by [ADR-0044](#adr-0044)** — the RULE is confirmed and **applied**, not overridden, and one table moves under it: `work_credit` lands with **Kavita** rather than Navidrome, because Kavita is the source that writes credits. `work_album` and `work_track` are unaffected and this ADR's decision clause 1 is otherwise untouched |
-| [0041](#adr-0041) | The sync core ships with **Kavita** as its first adapter; Sonarr and Radarr re-sequence behind it | **Accepted** — owner-decided 2026-08-17; **amends [ADR-0036](#adr-0036)** (*"No catalogue source ships in v0.1"*) and **amends** ARCHITECTURE §16, whose replacement text is proposed here and routed to the thread that owns §16; **re-sequences, rejects nothing** — Sonarr and Radarr still arrive; confirms [ADR-0035](#adr-0035) and [ADR-0040](#adr-0040); ⚠️ **amended 2026-08-17 by [ADR-0042](#adr-0042)** — the write-path question this ADR flagged as *"NOT decided here"* is now answered: the minimal write path **re-sequences with the \*Arr adapters**, so its consequence bullet and the ⚠️ clause in its proposed §16 text are both settled |
+| [0041](#adr-0041) | The sync core ships with **Kavita** as its first adapter; Sonarr and Radarr re-sequence behind it | **Accepted** — owner-decided 2026-08-17; **amends [ADR-0036](#adr-0036)** (*"No catalogue source ships in v0.1"*) and **amends** ARCHITECTURE §16, whose replacement text is proposed here and routed to the thread that owns §16; **re-sequences, rejects nothing** — Sonarr and Radarr still arrive; confirms [ADR-0035](#adr-0035) and [ADR-0040](#adr-0040); ⚠️ **amended 2026-08-17 by [ADR-0042](#adr-0042)** — the write-path question this ADR flagged as *"NOT decided here"* is now answered: the minimal write path **re-sequences with the \*Arr adapters**, so its consequence bullet and the ⚠️ clause in its proposed §16 text are both settled · ⚠️ **amended 2026-08-19 by [ADR-0052](#adr-0052)** — clause 1's source is now **BookOrbit**, on the owner's decision to sunset Kavita; clauses 2 and 3 stand, and **clause 4's channel list is reopened**, not re-answered |
 | [0042](#adr-0042) | v0.1's minimal write path re-sequences with the \*Arr adapters; Sonarr and Radarr stay on the roadmap | **Accepted** — owner-decided 2026-08-17; **answers the question [ADR-0041](#adr-0041) flagged and refused**; **amends** ARCHITECTURE §16, [ADR-0041](#adr-0041), [ADR-0036](#adr-0036) and [ADR-0012a](#adr-0012a); **re-sequences, rejects nothing** — [ADR-0012a](#adr-0012a)'s queue design is untouched, the seam costs **no migration**, and Sonarr and Radarr stay on the roadmap at the owner's explicit condition; raises one open question it does not close (neither \*Arr has a milestone); ⚠️ **amended 2026-08-17 by [ADR-0045](#adr-0045)** — that open question is **closed**: the owner delegated the call and **Sonarr, Radarr and this write path all land in v0.2**. The decision, the measurement and the seam are untouched; only *"this ADR does not assign them a milestone"* (clause 5), alternative (e) and the open question itself are overtaken |
 | [0043](#adr-0043) | A **minimal** match-correction UI moves earlier than v0.3; the full correction surface stays there | **Accepted** — owner-decided 2026-08-17; **answers the scope call ARCHITECTURE §6.4 flagged and routed**; **amends [ADR-0026](#adr-0026)**'s correction-UI consequence and **amends** ARCHITECTURE §16.0, §16.1's v0.1 and v0.3 entries; **re-sequences, rejects nothing** — ADR-0026's model, verbs, tables and scoping are untouched and `library_override` is already in the tree; **source-independent** — it turns on v0.1 having a weak-identity catalogue source, not on that source being Kavita; **assigns no milestone**, which is carried as an open question; ⚠️ **amended 2026-08-17 by [ADR-0045](#adr-0045)** — that open question is **closed**: the owner delegated the call and the minimal case lands in **v0.2**, chosen **by elimination** (the only slot both earlier than v0.3 and not v0.1) with its cost recorded — v0.1 ships the *"not identified"* badge without its remedy for one milestone. The *"minimal"* boundary, the source-independence and the v0.3 cap on the full surface are all untouched |
 | [0044](#adr-0044) | Author and creator credits ship in v0.1; `work_credit` lands with **Kavita**, not Navidrome | **Accepted** — owner-decided 2026-08-17; **applies [ADR-0040](#adr-0040)'s rule rather than overriding it** — the landing point is the source that writes the table, and Kavita writes credits; **amends [ADR-0040](#adr-0040)** for `work_credit` **only** — `work_album` and `work_track` still wait for Navidrome; **confirms [ADR-0033](#adr-0033)**, whose `person` kind finally gets a writer; **costs a ROW, not a column** — an author is a `work` of kind `person`, which nothing in v0.1 created before; leaves [ADR-0035](#adr-0035), [ADR-0041](#adr-0041) and [ADR-0042](#adr-0042) untouched; raises one open question it does not close (nothing collects an uncredited person) |
@@ -103,6 +103,7 @@ because no ADR ever decided it. Annotating leaves that failure mode nowhere to h
 | [0049](#adr-0049) | Key ids are **derived from the key material**; there is no counter and no settings row | **Accepted** — 2026-08-19; **enables `usarr key rotate`** rather than being asked for by it; `crypto.KeyID(kek)` is the first four bytes big-endian of `sha256("usarr/kek-id/v1" || kek)`, forced nonzero, so **a key file names its own id** and no second artifact has to stay consistent with the key material across a crash — which is exactly the window rotation exists to survive, since the SQLite transaction and the key-file write are not one atomic unit; **closes off a monotonic counter and a `key_id` row in a settings table**, both of which reintroduce that window (and the settings row puts key identity *inside* the thing being rotated); startup registers the live key under both `KeyID(kek)` and the legacy id `1`, so **every existing row keeps opening with no migration** and the first rotation retires `1`; **costs no migration** — `service_instance.kek_id` is already `INTEGER`; **adds no HKDF label** and does not touch `derive.go`'s five frozen ones; ⚠️ **publishes a 32-bit hash of the KEK in every stored row**, accepted in writing because RFC 3394 key-wrap **already** gives an offline attacker an *exact* per-row oracle for the same question, so a 32-bit filter grants no capability the ciphertext did not |
 | [0050](#adr-0050) | The image pipeline's base output format is **stdlib JPEG**; **AVIF is deferred** with its seam kept | **Accepted** — 2026-08-19; **amends** ARCHITECTURE §4.4 and §4.4.1, which named AVIF as the only output codec and named **no base format at all** — a spec missing its base case, which is why this ADR was owed; the reason for stdlib is **zero new dependencies in a static binary** (UsArr has **five** direct dependencies; `image/jpeg` adds none), **not** "JPEG is good enough" — the ADR records the ledger it is traded against, roughly **2–3× larger** than AVIF on photographic content, so a future reader can weigh it; **AVIF is buildable here** (`gen2brain/avif` v0.6.0, MIT, cgo-free, libaom-as-WASM) and is deferred on a **measured trade with a named reopening condition**, not rejected — one MIT dependency plus a **second** WASM runtime, since `wazero` is **verified absent** from this module graph after `ncruces/go-sqlite3` moved to `wasm2go`, and the **binary-size delta is recorded as UNMEASURED rather than estimated**; **reopens when** someone measures the binary delta and the per-width encode cost and decides the bytes are worth it (an ADR amendment plus one map entry, **no migration**), or when an upstream is found serving a format the stdlib cannot decode — ⚠️ **measured, not assumed, and the first draft's assumption was wrong: Kavita is v0.1's catalogue source and its *Save Media As* setting writes covers as PNG (default), WebP or AVIF**, so one admin checkbox on the owner's own server produces input this binary cannot decode (`x/image/webp` is decode-only; there is no pure-Go AVIF decoder in `x/image`), which relocates the likeliest revisit from output size to **input decode**; **one codec per row is an explicit invariant** — clause 1 puts `orig` inside UsArr's encoder rather than leaving it a passthrough, because §4.4 stores **seven widths per asset** and the column is **one per row**, so per-`role` variation stays expressible and per-**width** variation is foreclosed in writing; the seam is **`image_asset.format`** (migration `00008_image_asset_format.sql`) — nullable `TEXT`, no default, **no `CHECK`** on [ADR-0039](#adr-0039)'s reasoning; ⚠️ **unlike ADR-0039 the Go validation SHIPPED WITH THE COLUMN** (`internal/store/images.go`, plus an AST-walk guard that fails `check` if a writer lands without it), because ADR-0039's promised validator was never written and repeating that would be worse than a `CHECK`; ⚠️ **describes a pipeline that does not exist** — nothing writes `image_asset`, so what ships is the decision, the column and the guard |
 | [0051](#adr-0051) | The library-scoped grid is a **work-driven `EXISTS`**, not a join to `library_member` | **Accepted** — 2026-08-19; **supersedes [ADR-0026](#adr-0026)'s materialisation as read by ARCHITECTURE §6.5 for the `added_at` order ONLY** — §6.5's denormalised `(library_id, sort_title, work_id, edition_id)` key stands, and `TestLibraryScopedKeysetIsASeek` still pins it, but it serves the **`sort_title`** order and **only** that one: measured on the real schema (`ncruces/go-sqlite3`, SQLite 3.53.4), a library-scoped page ordered by `added_at` gets `USE TEMP B-TREE FOR ORDER BY` in **both** topologies §6.5 names, **with and without `ANALYZE`**; the work-driven `EXISTS` over `ix_libmem_work` keeps `SEARCH w USING INDEX ix_work_added (added_at<?)` in **every** configuration measured, **including the multi-value `?lib=a,b` case** — which was a hypothesis until the plan was read, because an `IN` on the leading key column destroys the ordered index in every *member-driven* shape; it is also **the only shape that cannot return one work twice**, since a work filed in two of the named libraries carries **one membership row per library** and a browse row is work-keyed — ⚠️ per-**library**, not per-edition: `library_member`'s key carries `edition_id`, but the only production writer hardcodes the `0` sentinel, so membership is **not** edition-grained in the tree today (`REVIEW-LOG.md` LS-213), and the ADR body's argument, which is about two libraries over one work, is unaffected; **costs one migration** — `00009_edition_format_index.sql`, `ix_edition_format ON edition(format, work_id)`, for the Audiobooks filter and not for the scope; **`ix_libmem_added` is explicitly NOT owed** and must not be added on this ADR's authority; ⚠️ **reopens on `make bench` over a NARROW library** — the `EXISTS` walks the *global* `added_at` order and discards non-members, which suits a broad library and not a narrow one, so a 1%-selective library over a 25k-row kind is the measurement that would send this back to a member-driven shape with a new index; ⚠️ **amended 2026-08-19** — the *"says nothing about `year`"* non-decision gains the shape of the gap it leaves: `default_sort`'s CHECK admits four orders and this read serves three, `?sort=year` is **refused and never substituted**, the endpoint never reads `default_sort` at all, and nothing in the tree writes the column yet — so the trap arms the day §17.8's DETAIL view offers the choice. The decision is untouched |
+| [0052](#adr-0052) | v0.1's catalogue source is **BookOrbit**; **Kavita is sunset** and its adapter **stays in the tree** | **Accepted** — **owner-decided 2026-08-19**; **amends [ADR-0041](#adr-0041)** clause 1 (*"v0.1's catalogue source is **Kavita**"*) — ADR-0041's clauses 2 and 3 are **confirmed**, and its clause 4 (channels **1, 3b and 4**) is **REOPENED as an open question, not re-answered**, because BookOrbit has had no equivalent of [ADR-0035](#adr-0035) §2a's live probe; **amends ARCHITECTURE §16.1's v0.1 entry**, edited in the same change because §16 is scope authority; the decision is **the owner's, not an agent's** — he is sunsetting Kavita entirely, BookOrbit takes everything, his word is **"phenomenal"**, and the repo's own one-day-older record of the same direction is `ROADMAP.md` §3's *"in my heart i kind of want to migrate to book orbit"*; ⚠️ **it REVERSES `ROADMAP.md` §3's standing recommendation** *"do NOT switch UsArr's first adapter off Kavita"*, because **two of the three findings that produced it were re-measured on 2026-08-19 against BookOrbit `main` and are FALSE** — headless auth needs **no password** (`server/src/modules/auth/magic-link.service.ts`; SHA-256-hashed token, `loginWithToken()` validates no password), and **comics ARE covered** (a shipped ComicVine provider), leaving only **manga and anime** identifiers absent (zero hits for `mangabaka`/`anilist`/`myanimelist` repo-wide); 🚩 **and a third claim reached the ADR in relay and was REFUSED on primary source** — *"no watermark, so full resync with no delta channel"* is **false in its strong form**, since `packages/types/src/query.ts` admits `"updatedAt"` as a sort key with page/size paging, which is exactly channel 3b's shape, so writing it in would have foreclosed v0.1 work on a premise the source refutes; what is **genuinely unsettled** is whether that timestamp moves on tag, genre and author edits, since `$onUpdateFn` is **application-level, not a DB trigger** and those live off the book row — §7.1a's **reconciliation-only** fallback is the named failure branch, **not** this ADR's decision; **"sunset" explicitly does NOT mean delete** — `internal/kavita`, `internal/libsync/kavita.go`, both vendored specs and [ADR-0046](#adr-0046)'s contract guard stay and stay green, investment stops, and **no milestone for further Kavita work is invented**, on [ADR-0042](#adr-0042)'s refusal-to-number precedent; **MangaBaka is NOT a dependency** — the owner's *"in the near future"* is **his expectation, nobody's commitment**, native support is an **open PR with no maintainer signoff**, and the adapter is designed against what BookOrbit ships **today**; ⚠️ **MangaBaka data may be fetched at runtime and NEVER vendored, shipped or cached as a dump** — **CC BY-NC-SA 4.0**, verified at `mangabaka.org/data/database`, is **not AGPL-3.0-compatible**, and the dump additionally carries third-party terms it does not license; ✅ **identity needs NO migration and NO new mechanism, which INVERTS this ADR's own first draft** — the draft called BookOrbit's series-level identity a structural degradation and warned of a migration, and a schema check against the tree falsified it: `external_id`'s `source` is plain `TEXT` with **no `CHECK`** and it carries `confidence` (`00005_library_sync.sql:444`), a series **IS a work row** (`work.kind` admits `'series'` and `'comic'`, `:242`) so `work_id` **already is** the series-level column, and `kavitaExternalIDs` **already writes seven series-level ids** including **`mangabaka` at 0.90** (`internal/libsync/kavita.go`, `weblinkid.go:111,162`) — because Kavita's own series ids are **weblink-parsed from what the user tagged**, exactly as BookOrbit's would come from a user-populated custom field, so the two are **the same arrangement** and 0.90 is already the right grade; the one recorded wrinkle is that BookOrbit's custom fields are **book-scoped** (`custom-metadata.ts`, `bookId` FK, no series variant) so the id needs a hoist — **which Kavita also needs and does lossily**; 🚫 **`work_relation` is cited nowhere and must not be added** — it is **absent from the tree** and `internal/db/migrate_test.go` fails if it appears; ⚠️ **ships NO code by design** — it gates the adapter |
 
 ---
 
@@ -4380,7 +4381,8 @@ replacement text for §16.1's v0.1 entry is drafted below and **routed to the th
 rather than applied here** · **Re-sequences, rejects nothing** — Sonarr and Radarr both still arrive ·
 **Confirms [ADR-0035](#adr-0035)** (which source) and **[ADR-0040](#adr-0040)** (when each subtype
 table lands), neither of which is reopened. · ⚠️ **Amended 2026-08-17 by [ADR-0042](#adr-0042)** —
-see the flag below.
+see the flag below. · ⚠️ **Amended 2026-08-19 by [ADR-0052](#adr-0052)** — clause 1's
+source is no longer Kavita; see the second flag below.
 
 > ⚠️ **AMENDED 2026-08-17 by [ADR-0042](#adr-0042): the one question this ADR deliberately left open
 > is now closed, and this ADR is completed rather than corrected.** Its final consequence bullet
@@ -4393,6 +4395,20 @@ see the flag below.
 > max one attempt). **Nothing else in this ADR moves**, and its own *"re-sequenced, not cut"* framing
 > is what ADR-0042 extends to the write path, at the owner's explicit condition that Sonarr and
 > Radarr stay on the roadmap. Read ADR-0042 for the decision; the two places below carry inline flags.
+
+> ⚠️ **AMENDED 2026-08-19 by [ADR-0052](#adr-0052): clause 1's source is now BookOrbit, and
+> clause 4 is REOPENED rather than re-answered.** The owner is sunsetting Kavita entirely and moving
+> his books, comics and manga to BookOrbit — his decision, his word for it *"phenomenal"*. **What
+> falls:** clause 1's *"v0.1's catalogue source is **Kavita**"*, and clause 4's *"v0.1's sync channels
+> for its catalogue source are 1, 3b and 4"*, which rested on [ADR-0035](#adr-0035) §2a's live probe
+> of **Kavita** and has no BookOrbit equivalent — ADR-0052 carries it as an open question with the
+> probe named. **What stands, unchanged:** clause 2 (*the count is unchanged at one*), clause 3 (the
+> \*Arrs re-sequenced not cut), the whole *"the sync core is source-agnostic"* argument — which is
+> what ADR-0052 spends a second time — and the three subtype tables, which are not Kavita-specific.
+> ⚠️ **The Kavita adapter is NOT deleted**: ADR-0052 clause 2 keeps `internal/kavita`,
+> `internal/libsync/kavita.go`, both vendored specs and [ADR-0046](#adr-0046)'s contract guard in the
+> tree and green. This ADR's own *"re-sequenced, not cut"* framing is what ADR-0052 extends to it.
+> **No sentence of this ADR's body is reworded**; the two falsified clauses carry inline flags.
 
 ### Context
 
@@ -4452,6 +4468,10 @@ to the one that can be run against real data.
 > **1. The sync machinery is built now, and Kavita is its first adapter.** v0.1's catalogue source is
 > **Kavita**, not Sonarr and Radarr.
 >
+> 🚩 **STRUCK 2026-08-19 by [ADR-0052](#adr-0052)** — v0.1's catalogue source is **BookOrbit**.
+> *"The sync machinery is built now"* and *"its first adapter"* both survive; only the **name** of
+> the source changes, for the second time and for the same reason — it is the one the owner runs.
+>
 > **2. ADR-0036's rule survives; its membership changes.** The rule is *"prove the replica thesis on
 > real data, on one source, before a second adapter is written."* ADR-0036 named the wrong source for
 > it, on a fact it did not have. **The count is unchanged at one.**
@@ -4462,6 +4482,14 @@ to the one that can be run against real data.
 > `internal/servarr` is discarded — Prowlarr Search-and-Grab runs on it today.
 >
 > **4. v0.1's sync channels for its catalogue source are 1, 3b and 4 — not 1, 3 and 4.**
+>
+> 🚩 **REOPENED 2026-08-19 by [ADR-0052](#adr-0052)** — this clause is about **Kavita**, and it was
+> earned by [ADR-0035](#adr-0035) §2a's live run. **BookOrbit has had no such run**, so channel 3b's
+> applicability to it is an **open question**, not an inherited answer. What is known: `updatedAt` is
+> an allowed sort key with page/size paging, so the walk is *expressible*. What is not: whether that
+> timestamp moves on a tag, genre or author edit. §7.1a's **reconciliation-only** fallback is the
+> named failure branch. **Channel 3 remains inapplicable either way** — BookOrbit has no
+> `/history/since` any more than Kavita does.
 
 ### What "first adapter" means for the sync channels, stated exactly
 
@@ -6732,3 +6760,306 @@ while a production database has one because the importer runs `ANALYZE` after a 
 difference is not cosmetic — the unary `+` on `+w.kind` changes the plan **only** when statistics are
 absent. A plan that holds without statistics holds with them, so the guards are conservative and
 correct; they are simply not a measurement of production, and each one says so where it is written.
+
+---
+
+<a id="adr-0052"></a>
+## ADR-0052 — v0.1's catalogue source is **BookOrbit**; Kavita is sunset, and its adapter stays in the tree
+
+**Status:** Accepted · **owner-decided 2026-08-19** · **Amends [ADR-0041](#adr-0041)**, whose decision
+clause 1 — *"v0.1's catalogue source is **Kavita**, not Sonarr and Radarr"* — is the sentence this
+changes; ADR-0041's clauses 2 and 3 are **confirmed, not reopened**, and its clause 4 is **reopened as
+an open question rather than answered** (see *What this ADR does not settle*) ·
+**Amends [`ARCHITECTURE.md`](./ARCHITECTURE.md) §16**, which remains authoritative for scope; the §16.1
+edit lands **in this same change** · **Re-sequences, rejects nothing** — `internal/libsync/kavita.go`
+and `internal/kavita` **stay in the tree** · **Confirms [ADR-0043](#adr-0043)** and
+[ADR-0044](#adr-0044), both of which were written to turn on a property of the source rather than on
+its name · **Needs no migration**, and the schema check that established that is recorded below ·
+⚠️ **Reverses a standing recommendation**, [`ROADMAP.md`](./ROADMAP.md) §3's *"do NOT switch UsArr's
+first adapter off Kavita"*, on evidence that was re-measured after that recommendation was written
+
+### Context
+
+#### 1. The decision is the owner's, and it is a decision rather than a delegation
+
+This distinction has cost this project before — `DECISIONS.md`'s own preamble records the `162dca5`
+post-mortem, where a sentence that no ADR ever decided was written into an ADR body as though one
+had. So it is stated exactly.
+
+**The owner is sunsetting Kavita entirely and moving his books, comics and manga to BookOrbit.**
+BookOrbit takes everything Kavita held. His word for it, verbatim, is **"phenomenal"**. He runs a
+sidecar of his own that pulls data from MangaBaka into BookOrbit today, and he expects official
+BookOrbit support for MangaBaka **"in the near future"**.
+
+🔍 **Provenance, marked because it is not first-hand to this ADR.** Those words reached this record
+through the coordinating thread rather than from the owner directly in it. The repository's own
+verbatim record of the same direction is one day older and points the same way —
+[`ROADMAP.md`](./ROADMAP.md) §3, dated **2026-08-18**: *"in my heart i kind of want to migrate to book
+orbit… it doesn't have a paid tier"*. What that entry called *"tracking, not a decision"* is now the
+decision, and this ADR is what turns it into one. **Nothing here was decided by an agent**; what an
+agent did is the re-measurement in §2, and that is evidence, not the choice.
+
+#### 2. The evidence moved, and two of the three findings against BookOrbit are false
+
+[`ROADMAP.md`](./ROADMAP.md) §3 records a **2026-08-17 evaluation at BookOrbit HEAD `4a420a04`**. Its
+three *"against"* findings are what produced the standing *"do NOT switch"* recommendation. **All
+three were re-measured against BookOrbit `main` on 2026-08-19, from its own source and its own
+README, and the table below is that run.** ⚠️ **`4a420a04` was not checked out for this pass**, so
+each row states what is true of `main` now; where a row differs from the 2026-08-17 finding, that is
+recorded as *the claim is false today* and not as *the evaluation was careless*.
+
+| 2026-08-17 finding ([`ROADMAP.md`](./ROADMAP.md) §3) | 2026-08-19 verdict | Primary source |
+|---|---|---|
+| *"**no inbound API key** — headless auth needs the account password, which is worse than UsArr's Kavita credential model"* | 🚩 **FALSIFIED.** Headless auth exists and takes no password. `server/src/modules/auth/magic-link.service.ts` implements a first-class magic-link module: a raw token is issued, only its **SHA-256 hash** is stored, and `loginWithToken()` checks existence, `isActive`, not-revoked and not-expired, then calls `issueTokensForUser()`. **No password is validated anywhere in that flow.** | `bookorbit/bookorbit@main`, `server/src/modules/auth/magic-link.service.ts` |
+| *"**no manga or comic external ids**"* | 🚩 **HALF FALSIFIED, and the surviving half is the narrower one.** **Comics are covered:** ComicVine ships as a metadata provider — `server/src/modules/metadata-fetch/providers/comicvine/` holds `.client.ts`, `.mapper.ts`, `.provider.ts` and `.types.ts`, and the README names *"ComicVine for comics"* among fourteen providers. **Manga and anime are not:** a repository-wide code search for `mangabaka`, `anilist` and `myanimelist` returns **zero hits**. | `bookorbit/bookorbit@main` README and `server/src/modules/metadata-fetch/providers/` |
+| *"an `updatedAt` watermark that **misses tag, genre and author edits**"* | ⚠️ **NOT re-verified either way, and it is the one finding this ADR does not resolve.** The field is present and **is an allowed sort key** — `packages/types/src/query.ts` admits `"updatedAt"` in its sort union alongside `pagination: { page, size }`, and `books.ts` sets it with Drizzle's `$onUpdateFn(() => new Date())` — so an ordered page walk is *expressible*. What is **not** settled is whether the timestamp actually moves on a tag, genre or author edit: `$onUpdateFn` is **application-level, not a DB trigger**, and authors, tags and genres are **not columns on the book row**, so an edit confined to a join table plausibly never touches it. That is the same failure mode Kavita has and it is not measured here. | `bookorbit/bookorbit@main`, `packages/types/src/query.ts`, `server/src/db/schema/books.ts` |
+
+🚩 **One claim reached this ADR in relay and is REFUSED, because the primary source contradicts it.**
+The drafting brief stated that BookOrbit has *"no watermark — no reliable 'changed since' signal — so
+the sync design is full resync, with no delta channel."* **The strong form of that is false.**
+`sort: "updatedAt"` with page-and-size paging is exactly the shape §7.1a's channel 3b requires — an
+ordered walk on the source's own last-modified field with a **client-side** stop — and it is the same
+shape Kavita's `FilterV2Dto.SortOptions` on `POST /api/Series/all-v2` presents. Writing *"no delta
+channel"* into this ADR would have **foreclosed channel 3b on a premise the source refutes**, and the
+repository's own record never said it either: [`ROADMAP.md`](./ROADMAP.md) §3 says the watermark is
+**incomplete**, not absent. The honest position is the open question below, not a decision.
+
+#### 3. Why the swap is affordable, which is ADR-0041's argument reused rather than a new one
+
+[ADR-0041](#adr-0041) established that *"the sync core is source-agnostic"* — *"the streaming import
+and its two-phase rendering, the batched writes and the single-writer discipline, the upsert and
+identity path, the search-document builder, library membership derivation, and the reconciliation
+sweep with both its guards are the same work whichever adapter feeds them."* **That claim is what is
+being spent here, and this is the second time it has paid.** ADR-0041 swapped Sonarr and Radarr for
+Kavita on it; this swaps Kavita for BookOrbit on it. The media types are unchanged — books, comics
+and manga — so `work_book`, `work_comic` and `work_comic_issue` (migration `00006_kavita_subtypes.sql`)
+and `work_credit` ([ADR-0044](#adr-0044)) are all still the right tables, written by a different
+adapter.
+
+⚠️ **What is NOT reused is ADR-0041's strongest sentence.** Its case for Kavita was *"the only one
+whose delta has been verified against a live instance"* ([ADR-0035](#adr-0035) §2a — Kavita 0.9.0.2,
+151 series, page size 10, clause by clause). **BookOrbit has had no such run.** That is a real
+regression in evidence and it is the price of following the owner's stack, which is the same trade
+ADR-0041 itself made in the opposite direction when it refused a throwaway Radarr: *"it buys real HTTP
+and not real data."* The difference is that the owner **runs** BookOrbit, so the probe is available
+rather than hypothetical — it has simply not been run.
+
+### Decision
+
+> **1. v0.1's catalogue source is BookOrbit.** It replaces Kavita in that slot, on the owner's
+> decision. The media types v0.1 catalogues are unchanged: books, comics and manga.
+>
+> **2. Kavita is SUNSET, NOT DELETED.** `internal/libsync/kavita.go`, `internal/kavita`, the vendored
+> specs `api/specs/kavita-v0.9.0.2.json` and `api/specs/kavita-develop.json`, and the contract tests
+> [ADR-0046](#adr-0046) pins **all stay in the tree and stay green**. What stops is **investment**: no
+> new Kavita feature work is scheduled by this ADR, and no Kavita gap is a v0.1 blocker. **Nothing is
+> refused** — a user running Kavita keeps a working adapter, which is `CLAUDE.md` principle 3 applied
+> to a user who is not the owner, exactly as [ADR-0043](#adr-0043) applied it.
+>
+> **3. This ADR invents no milestone for further Kavita work, and that refusal is deliberate.** The
+> owner said he is moving off it; **he did not say what happens to it afterwards**. [ADR-0042](#adr-0042)
+> refused to number Sonarr and Radarr on precisely this ground — *"Picking a number here would be
+> inventing a commitment nobody made"* — and the same refusal applies. "Sunset" in clause 2 means
+> *investment stops*; it does **not** mean *delete*, and a later reader must not read it as one.
+>
+> **4. MangaBaka is NOT a dependency of the BookOrbit adapter.** The adapter is designed against what
+> BookOrbit ships **today**. The owner's expectation of official support *"in the near future"* is
+> **his expectation and nobody's commitment**; no line of the adapter may assume it, and no schedule
+> may be built on it. If native support lands, this ADR gains an amendment.
+>
+> **5. MangaBaka data may be fetched at runtime and MUST NEVER be vendored, shipped or cached as a
+> dump.** See the licence section below. This is a distribution constraint on UsArr itself, not a
+> style preference.
+>
+> **6. Identity needs no migration and no new mechanism.** A source-supplied series id lands in
+> `external_id` keyed on `work_id`, at a `confidence` that grades how much the source is trusted —
+> **the pattern `internal/libsync/kavita.go` already uses for seven ids**, `mangabaka` among them.
+> This ADR **does not design the mapping**, which a separate pass owes; it records that the mechanism
+> exists so nobody budgets a schema change for it.
+
+### The MangaBaka licence constraint, stated as a constraint
+
+**Verified from the primary source on 2026-08-19.** `https://mangabaka.org/data/database` states:
+*"MangaBaka-original data in this download is licensed under CC BY-NC-SA 4.0 — free for personal and
+non-commercial use with attribution,"* and, separately, *"Third-party data (from AniList, MAL, etc.)
+remains subject to each provider's own terms."*
+
+Two consequences, and the second is the one a later implementer will trip over:
+
+- **CC BY-NC-SA 4.0 is not AGPL-3.0-compatible.** `CLAUDE.md` requires an AGPL-compatibility check on
+  anything new, and names MIT, BSD and Apache-2.0 as fine. A **NonCommercial** and **ShareAlike** term
+  is neither. Vendoring MangaBaka-original data into this repository would change UsArr's own
+  distribution terms.
+- 🚩 **Caching a dump is the temptation, and it is foreclosed here by name.** A nightly dump is
+  published, it is far cheaper to walk than an API, and reaching for it is the obvious engineering
+  move. **It is redistribution.** Fetching at runtime, on the user's own server, on the user's own
+  behalf, is a different act from shipping the bytes; only the first is available to UsArr.
+  ⚠️ And the dump is not even uniformly under that licence — the third-party sentence above means a
+  cached dump carries AniList's and MAL's terms with it, unexamined.
+
+### What this ADR does not settle — and one thing it turns out to settle after all
+
+**Two open questions and one correction. Each open question names what would close it; the
+correction names what falsified the draft that preceded it.**
+
+🚩 **1. Whether channel 3b applies to BookOrbit.** [ADR-0041](#adr-0041) clause 4 fixed v0.1's channels
+at **1, 3b and 4** for Kavita, on a probe run in advance ([ADR-0035](#adr-0035) §2). **BookOrbit has
+had no equivalent run, so clause 4 is reopened rather than re-answered.** What is known: the sort key
+and paging exist (§2 above), so the walk is expressible. What is unknown is §7.1a's **ordering
+guarantee** — *"a monotonic last-modified field it maintains itself"* — since `$onUpdateFn` is
+application-level and authors, tags and genres live off the book row. **Closes by running
+[ADR-0035](#adr-0035) §2's pass condition against the owner's live BookOrbit**, clause by clause, and
+writing the result into §7.1a's per-source table the way Kavita's row was written.
+ℹ️ **The failure branch is already specified and costs no new design**: §7.1a says an instance without
+the ordering guarantee *"falls back to **reconciliation only**"*, with the Services row (§17.3) reading
+`no change feed — full compare at 09:12` in place of a delta time. **That is what "full resync" would
+mean here, and it is a documented degradation rather than a new one** — but it is a *branch*, not this
+ADR's decision.
+
+✅ **2. Identity needs no new design and no migration — which is the opposite of what this ADR's
+first draft said, and the correction is the more useful record.**
+
+**The draft carried a framing that a schema check falsified.** It said BookOrbit's series-level
+identity was a *structural degradation* against §6.2's *"External IDs are the **only** reliable
+cross-instance join key"*, and that closing it might need UsArr-side storage — a migration. **Three
+citations were checked against the tree on 2026-08-19, all three hold, and together they invert the
+conclusion:**
+
+| Checked | What the tree says | Where |
+|---|---|---|
+| `external_id`'s shape | `source TEXT NOT NULL` with **no `CHECK`**, `confidence REAL NOT NULL DEFAULT 1.0`, `CHECK ((work_id IS NULL) != (edition_id IS NULL))`, unique on `(source, value, COALESCE(work_id,-1), COALESCE(edition_id,-1))` | `internal/db/migrations/00005_library_sync.sql:444` |
+| A series **is a work row** | `work.kind`'s twelve-member `CHECK` admits `'series'` and `'comic'`, and the migration's own comment says *"'comic' is the SERIES, 'comic_issue' the issue or chapter"*. So **`external_id.work_id` already IS the series-level column** | `00005_library_sync.sql:242` |
+| UsArr already writes series-level ids from user-recorded data | `kavitaExternalIDs` writes seven: `hardcover_book` at 1.0; `metron_series` and `comicbookroundup` through `editableIdentity`; `anilist`, `mal_manga` and **`mangabaka`** through `webLinkIdentity` at `WebLinkConfidence = 0.90`; ComicVine through `comicVineIdentity` | `internal/libsync/kavita.go:432-490`, `internal/libsync/weblinkid.go:111,162` |
+
+🚩 **So the honest reading is that BookOrbit is NOT a degradation relative to Kavita, because Kavita
+was never the thing the draft implicitly compared it to.** Kavita's series table supplies no
+first-class series identifiers either — `internal/libsync/kavita.go`'s own comment records that
+`AniListId`, `MalId` and `MangaBakaId` are **weblink-parsed** from a `<Web>` element the user's tagger
+wrote, or typed into the Edit Series dialog, and that *"MangaBaka has no provider writer at all"*.
+That is exactly why they are capped at 0.90 rather than trusted at 1.0. **BookOrbit's admin-defined
+custom metadata field is the same arrangement under a different name** — user-populated,
+API-readable. What both assessments actually show is that **series identity in this domain comes from
+what the user records, not from what the server models**, and UsArr was built for precisely that, with
+`confidence` grading the trust.
+
+**Concretely: reading a MangaBaka id out of a BookOrbit custom field and writing `source='mangabaka'`
+at 0.90 uses the existing pattern, the existing source string and the existing confidence grade.** No
+new column, no new table, no new confidence tier, **no migration**. `source` carries no `CHECK`, so a
+new source string is a naming decision rather than a schema change.
+
+ℹ️ **The one real wrinkle, recorded because the adapter thread will meet it and it is still not a
+migration.** BookOrbit's custom metadata values are **book-scoped** — verified 2026-08-19 against
+`server/src/db/schema/custom-metadata.ts`, whose `bookCustomMetadataValues` carries
+`bookId: integer('book_id').notNull().references(() => books.id, …)` and which declares **no
+series-scoped variant**. UsArr's series is a **work** row, so a series id recorded on a book has to be
+hoisted a level. ⚠️ **Kavita has the identical hoist and it is documented as lossy** — its weblink ids
+are read off a *chapter's* `ComicInfo.xml` and erased to `0` when the first chapter carries no link
+for that site ([`REVIEW-LOG.md`](./REVIEW-LOG.md) LS-38/LS-39). **Same shape, same hoist, same 0.90.**
+How UsArr resolves disagreement between two books of one series is an adapter question for the
+implementation thread — not a schema question, and not this ADR's.
+
+⚠️ **What this section does NOT do.** It does not design the mapping, name the custom field, or
+enumerate MangaBaka's identifiers — a separate pass owns that input, and this ADR ships no adapter
+code. It records that **the mechanism those inputs will land in already exists**, so that nobody
+budgets a migration for it.
+
+🚫 **`work_relation` is deliberately cited nowhere in this ADR, and this line exists so a later reader
+does not add it.** It **does not exist in the tree**: `internal/db/migrations` creates no such table
+and `internal/db/migrate_test.go`'s `deferred` list **fails the suite if it appears**. It is a **v0.3
+cross-media linking** seam whose DDL lives only in a reference document — not the identity mechanism,
+which is `external_id`.
+
+ℹ️ **Context for the above, deliberately not a design.** MangaBaka is an id hub whose series endpoint
+returns a source block spanning several manga databases and which models merges explicitly. A
+BookOrbit issue and an open pull request exist for native MangaBaka support — **uncommitted, with no
+maintainer signoff**. Worth an amendment if it lands; **never a dependency** (decision clause 4).
+
+🚩 **3. The credential model, which improved but did not become free.** Magic-link auth removes the
+password, which is the whole of the falsification in §2 — but §14's rules do not relax. A magic link
+is **reusable, optionally non-expiring, capped at 25 per user, superuser-created, and creatable only
+for *shared* accounts** (`magic-link.service.ts`). So UsArr would store a **long-lived bearer secret
+scoped to an account that is not the owner's personal one**, which is better than a password and is
+still a §14 credential: encrypted at rest under the versioned AAD-bound scheme, never logged, never
+sent to the browser. **What a shared account can see, and whether that is the right scope for a
+catalogue read, is not decided here.**
+
+### Alternatives considered
+
+- **(a) Keep Kavita as v0.1's source and treat BookOrbit as a later adapter.** ⚠️ **The strongest
+  alternative, and it was the repository's own standing recommendation** ([`ROADMAP.md`](./ROADMAP.md)
+  §3). It has real weight: Kavita's delta is the **only** one this project has verified against a live
+  instance, the adapter is built, and [ADR-0046](#adr-0046)'s two-spec contract guard is running. **It
+  loses on the same sentence ADR-0041 turned on: *on real data*.** The owner is sunsetting Kavita, so
+  the instance that produced ADR-0035 §2a's run is going away. A v0.1 whose success criterion is
+  "proves the replica thesis on the owner's real library" cannot be met against a server he no longer
+  runs — which is, precisely, the argument that removed Sonarr and Radarr. ℹ️ And two thirds of the
+  evaluation that produced the recommendation is now false (§2), so the recommendation is not being
+  overridden so much as outlived.
+- **(b) Ship both adapters in v0.1.** Rejected on ADR-0036's rule as [ADR-0041](#adr-0041) clause 2
+  kept it — *"prove the replica thesis on real data, on one source, before a second adapter is
+  written"*, **count unchanged at one**. This is ADR-0041's own rejected alternative (e) at a different
+  size and its reason is unchanged: a milestone that tests two things at once learns nothing clean
+  from a failure. `CLAUDE.md`'s *"cut before you add"* points the same way.
+- **(c) Wait for BookOrbit's native MangaBaka support, then decide.** Rejected for
+  [ADR-0043](#adr-0043) alternative (e)'s reason, and for a sharper one: the support is an **open pull
+  request with no maintainer signoff**, so this defers v0.1's largest subsystem behind an event with
+  no date and no owner. `CLAUDE.md` names never shipping as this project's biggest risk.
+- **(d) Delete the Kavita adapter, since the owner is sunsetting it.** Rejected. It saves nothing —
+  the code is written, the contract tests are green and unattended, and `internal/servarr` is the
+  standing precedent that displaced work stays ([ADR-0041](#adr-0041) clause 3). It also costs a
+  working experience for any user who runs Kavita, which principle 3 exists to protect. **Deletion is
+  the one reading of "sunset" this ADR forbids** (clause 2).
+- **(e) Write "full resync, no delta channel" into the decision, as briefed.** Rejected because the
+  primary source refutes it (§2's 🚩). It would have foreclosed channel 3b — v0.1 work under
+  [ADR-0041](#adr-0041) — on a false premise, and a foreclosure is far more expensive to undo than an
+  open question is to close.
+
+### Consequences
+
+**What changes:**
+
+- **[`ARCHITECTURE.md`](./ARCHITECTURE.md) §16.1's v0.1 entry names BookOrbit**, and is edited in this
+  same change, because §16 is scope authority and must not disagree with an accepted ADR.
+- **[ADR-0041](#adr-0041) is annotated** per the preamble's four marks — index row, `Status:` line, a
+  dated block, and an inline flag at clause 1. **No sentence of its body is reworded.**
+- **§7.1a gains a BookOrbit row when the probe runs**, and not before. Kavita's row is a **dated
+  record** and is not touched; `DEVELOPMENT.md` §11 is explicit that a citation inside a dated record
+  is history rather than staleness.
+
+**What does not change:**
+
+- **The schema.** Six-type from migration 0001, three subtype tables from `00006_kavita_subtypes.sql`.
+  ⚠️ **The migration keeps its name**, because a merged migration is never edited and renaming one
+  would be worse than a stale filename. The tables it creates are `work_book`, `work_comic` and
+  `work_comic_issue` — none of them Kavita-specific.
+- **Prowlarr Search-and-Grab**, which is v0.1's request path for all six media types and touches no
+  catalogue source.
+- **[ADR-0043](#adr-0043) and [ADR-0044](#adr-0044).** Both were written to turn on a *property* of
+  v0.1's source rather than on its name — ADR-0043 on *"v0.1's catalogue source has weak identity"* —
+  which is exactly why they survive a source swap. ADR-0043's stated reopening condition is *"a v0.1
+  source that supplies strong external ids for the ordinary user"*, and BookOrbit is **not** that at
+  the series level: what it supplies there is what the user recorded, which UsArr writes at 0.90 and
+  never at 1.0 — the same grade Kavita's series ids earn (open question 2). **Neither is reopened**,
+  and the *"minimal match-correction UI"* ADR-0043 moved earlier is, if anything, better justified.
+- **[ADR-0045](#adr-0045)'s v0.2**, and §16.1's post-v0.1 sequence — Navidrome, Audiobookshelf, Komga,
+  in that order. This ADR touches none of it.
+
+**Documents that now assert a stale fact, listed rather than swept.** ⚠️ **This ADR fixes §16 only.**
+The rest are named here so the next pass does not have to re-derive them, and because `CLAUDE.md`'s
+*"no invented status"* cuts both ways — pretending they are already fixed would be the same fault:
+`README.md` (its status tables are generated from §16 and will regenerate), [`ROADMAP.md`](./ROADMAP.md)
+§1, §3 and §4, [`FUTURE.md`](./FUTURE.md), [`DEVELOPMENT.md`](./DEVELOPMENT.md) §105's tree comment,
+[`design/DESIGN-DIRECTION.md`](./design/DESIGN-DIRECTION.md) and `design/mockups/README.md` — the last
+two carry `v0.1: Kavita, Prowlarr` as a rendered string in the mockups, which is a design-asset change
+rather than a prose one and is the largest of them.
+
+**What would reverse this.** The owner changing his mind about his own stack, which is his to change;
+or the §2 probe failing so badly that BookOrbit cannot support even reconciliation-only honestly —
+which §7.1a says is a **surfaced** state rather than a blocking one, so this bar is high.
+
+### What is built
+
+**Nothing.** This ADR ships no code by design: it **gates** the adapter rather than being written
+alongside one, so that the decision is reviewable before an implementation makes it expensive to
+revisit. What lands with it is this record and the §16.1 edit that keeps scope authority consistent
+with it.
