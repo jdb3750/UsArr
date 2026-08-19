@@ -21460,3 +21460,138 @@ in it is an absence.** `make check` reaches `docs/` through **`gitleaks` alone**
 really missing from `CLAUDE.md`. **An absence cannot be proved by a gate that never reads the file
 in question** — it is proved by the greps quoted in the table, every one of which was run at
 `76ae692` and every one of which anyone can re-run.
+
+---
+
+# SD-10 — a document that never absorbed the code, and a guard that never existed
+
+**Finding pair, both applied.** Two failures of the same family — a citation that is easier to
+write than to check — found in the same sweep over the search-relevance work and fixed in two
+commits, `f2548ea` and `11c097f`, merged as `f2e9683`.
+
+⚠️ **This entry was prepared as `SD-08` and is filed as `SD-10`.** `SD-08` was assigned to it at
+dispatch and, while it was held, a different lane landed a real `SD-08` on `main` (`79d96f8`, the
+withheld-`CLAUDE.md`-changes register) and `SD-09` was allocated to another lane still in flight.
+Merged history wins, so this one took the next id rather than contesting one. `SD-05` records why
+this keeps happening — *"the merge that invalidates the answer lands between the read and the
+commit"* — and the gap at `SD-09` is deliberate: it belongs to that other lane and is not free.
+The `LS-`, `DS-` and `RK-` series are untouched by this entry, which cites `LS-191`, `LS-192` and
+`LS-199` and allocates none.
+
+## Half one: §4's re-rank table contradicted the shipped weights
+
+`search.md` §4's re-rank table marked **Jaro-Winkler on `norm_title`** as *"primary"* and listed
+five signals as though all five were live. Neither has been true since the score was built. The
+shipped `rerank` weights the fused-retrieval ratio at **0.55** against Jaro-Winkler's **0.35**,
+with recency at **0.10**, and three of the five columns the table names — `popularity`,
+`in_library`, `title_idf` — are hardcoded constants the re-rank does not read at all.
+
+**This was already known and already written down, in the wrong place.** `LS-191` recorded the
+weighting departure at length and `LS-192` recorded the three dead signals; the code comment above
+the const block states both, and ends *"REVIEW-LOG LS-191 carries this"*. What none of that did
+was reach the document. The divergence was declared honestly and then left to sit in the one place
+a reader does **not** go: §4 is where someone reasoning about ranking stands, and §4 was the one
+surface still stating the opposite.
+
+**§4 now carries the real formula**, its `(0, 1]` bound with `1` attainable, and a table whose
+second column is **status** rather than weight, so the three live signals and the three dead
+constants are separated on the page instead of implied to be peers.
+
+⚠️ **It does not carry a second copy of the numbers, deliberately.** The const block
+`rerankWeightRRF` / `rerankWeightJW` / `rerankWeightRecency` in `internal/store/searchlibrary.go`
+is named authoritative in the section itself, with the rule attached: *when it and any prose
+disagree, it wins and the prose is stale*. What §4 owns is the **ordering** those three encode —
+retrieval evidence above string shape above recency — and the reason for it, which is `LS-191`'s
+argument in prose: Jaro-Winkler sees `norm_title` and nothing else, so making it primary buries
+every hit retrieved through `people`, `alt_titles` or `original_title`. That is exactly what
+converts three numbers into a claim a reader can check, and it is the half that does not rot.
+
+**Both forbidden uses landed in §4 too, each with its mechanism kept attached**, because
+`http-api.md` §6.2.1 is the *wire* contract and is read by whoever is writing a client, while §4
+is read by whoever is reasoning about ranking:
+
+* ⛔ **Do not sort by the score.** `diversify` runs **last** and promotes without re-scoring, so a
+  promoted row carries a score lower than everything above it. A client re-sort sends it straight
+  back down and reproduces the single-media-type sweep the feature exists to prevent.
+* ⛔ **Do not threshold it.** The RRF term is normalised against the best candidate **in the same
+  answer**, so the top hit of a query that matched nothing good still scores at least the RRF
+  weight. High means *"as good as anything else that matched"*, never *"a good match"*.
+
+`searchlibrary.go`'s own `⚠️ JARO-WINKLER IS NOT PRIMARY HERE, AND §4 SAYS IT SHOULD BE` was
+updated in the same commit. It was true when written; leaving it would have made the fix produce
+the next stale claim, in the opposite direction.
+
+**`LS-191` is now closed rather than standing.** Its title — *"and §4 says it should be"* — no
+longer describes the tree.
+
+## Half two: a cited guard that never existed, and the one that replaced it
+
+`$lib/search.ts` and `searchHitResponse` both claim the search row's keys are the recently-added
+row's keys, and the web client imports `RecentItem` and `toRecentItem` rather than declaring a
+second item type **on the strength of that sentence**. Both cited
+**`TestSearchResponseKeysMatchRecentWorks`**, which does not exist and, checked across the whole
+history rather than the working tree, **was never defined in any commit**: it was cited from the
+endpoint's first commit (`04a28a4`) and again from the client (`cbf82bc`).
+
+**`cc3ecc3` had already removed it**, and took the correct route rather than the convenient one:
+the two key sets **do not match**. Search carries `score`, which Home has no analogue for and
+cannot have one for, so the claim was wrong at its root and not merely mis-cited. The comments now
+read *"recentWorkResponse's keys, PLUS `score`"* and point at
+`TestSearchResponseKeysAreTheAllowlist`, which is real.
+
+**That left the corrected claim uncited, which is the same defect one step smaller.**
+`TestSearchResponseKeysAreTheAllowlist` and `TestRecentWorksResponseKeysAreTheAllowlist` are
+**single-sided**: each compares one response against a hand-copied list of its own. Neither can see
+the pair drift apart. A key added to `recentWorkResponse` **with its own allowlist updated** — an
+ordinary, deliberate edit — leaves both green while the Search row silently loses a column, and the
+first symptom is a gap on a screen.
+
+**`TestSearchItemKeysAreRecentWorkKeysPlusScore` asserts the relationship itself**, off the struct
+tags rather than off a response body: four of these keys are `omitempty`, so a wire-level
+comparison would only ever see what the seeded fixture happened to populate and could pass
+vacuously. It deliberately does **not** assert emission — `media_type` is `omitempty` on search and
+unconditional on Home, which is a difference in *when* a key is sent, not in which keys exist, and
+the shared client row already handles it (`toRecentItem` reads it through `str()`). Both comments
+now name the new test and say what the two allowlists can and cannot see.
+
+**Fired three ways before landing**, restoring between each:
+
+| Mutation | The new guard | The two allowlists |
+| --- | --- | --- |
+| `year` renamed to `yr` on `searchHitResponse` | **red** | search's own also red |
+| `sort_title` added to `recentWorkResponse` **and to its own allowlist**, search left behind | **red** | **both green** |
+| `score` renamed to `relevance`, search's own allowlist updated to match | **red** | search's own green |
+
+The middle row is the entry: it is the drift no existing test in this tree can see, and the only
+thing that fires on it is the new guard.
+
+## Recorded with the pair, because it is the same failure in the tests
+
+⚠️ **Three of the nine mutation drills on the relevance-score work did not fire on the first
+attempt, and each one exposed a test that could not detect the failure it was written for.** This
+is worth more than the two fixes above: a citation that names a test nobody has watched fail and a
+test that cannot fail are the same defect wearing different clothes.
+
+* **The limit-invariance test compared only the top hit** — which is invariant *by construction*.
+  The best candidate's normalised RRF and its recency are both `1` under any cut, so it would score
+  identically even under a re-rank that had been narrowed to the page. `TestSearchScoreDoesNotDependOnTheLimit`
+  now seeds six works, compares a three-row page against `SearchMaxLimit`, and **fails outright**
+  if fewer than two works appear on both — the rows *below* the top are where a narrowed candidate
+  set shows.
+* **The scope-leak test used a one-row corpus**, under which the score is unchanged no matter what
+  leaks: with a single visible row every component normalises against itself and the ratio is `1`
+  whatever else is in the index. What a real leak moves is the **relative** rank of two visible
+  rows inside a retrieval leg, so it needed two. `TestSearchScoreIsBlindToWhatTheCallerCannotSee`
+  now holds two visible rows against three hidden ones, and says so in the test.
+* **The ordering test's fixture returned a single row**, making any reorder a no-op — one row is in
+  every order at once. `TestSearchOrderIsNotScoreOrder` now builds fifteen candidates, fourteen of
+  one media type and one of another, so both the promotion and the destructive re-sort are real
+  events.
+
+All three were rebuilt until they fired, and each carries the reason in the test rather than only
+here, so the next person to shrink a fixture reads why it is that size. This is `LS-199`'s lesson
+arriving a second time in the same area.
+
+**No ADR.** Nothing here closes off an alternative: one document was brought level with code that
+already had its reasoning written down, and one guard was written for a claim two existing guards
+could not reach.
