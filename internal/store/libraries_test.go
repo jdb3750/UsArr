@@ -635,7 +635,21 @@ func TestListLibrariesPlanIsSeeks(t *testing.T) {
 		t.Errorf("the count's scope EXISTS is not a seek on ix_sil_work.\n  got:  %s\n  want: %s",
 			scoped, wantSil)
 	}
-	if strings.Contains(scoped, "SCAN ls") {
+	// The visibility predicate's BOTH ARMS, under the alias the predicate derives
+	// (librarySourceAlias, LS-379). Deriving is what keeps this assertion honest:
+	// a literal `ls` would match `ls_l` by prefix and would pin nothing, and it
+	// would also collide with librarySourcesSQL's own outer `ls`, which is a
+	// different query entirely.
+	wantLs := "SEARCH " + librarySourceAlias("l.id") + " USING COVERING INDEX " +
+		"sqlite_autoindex_library_source_1"
+	if n := strings.Count(scoped, wantLs); n != 2 {
+		t.Errorf("the library visibility predicate seeks library_source on %d of its "+
+			"2 arms.\n  got:  %s\n  want: %s\n"+
+			"Both the orphan arm and the instance arm are correlated subqueries per "+
+			"library row; a scan in either walks library_source once per library.",
+			n, scoped, wantLs)
+	}
+	if strings.Contains(scoped, "SCAN "+librarySourceAlias("l.id")) {
 		t.Errorf("the library visibility EXISTS degraded to a scan of library_source: %s", scoped)
 	}
 }

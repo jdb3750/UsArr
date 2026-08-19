@@ -117,6 +117,31 @@ func (s Scope) userPredicate(column string) (string, []any) {
 	return column + " IN (?, ?)", []any{SystemUserID, s.UserID}
 }
 
+// derivedInnerAlias names the inner table of a CORRELATED subquery inside a
+// predicate, derived from the outer column that subquery correlates to. It is
+// the shared construction behind scopeLinkAlias, librarySourceAlias and
+// searchDocLibraryAlias, and the full argument for it is on scopeLinkAlias.
+//
+// In one line: a correlated subquery's only tie to the caller's row is
+// `<inner>.x = <outer>.y`, SQL resolves a qualifier to the innermost scope that
+// offers it, so an inner alias equal to the outer qualifier decorrelates the
+// subquery SILENTLY — no error, no syntax fault, just a scope that stops
+// filtering. Deriving the inner alias from the outer qualifier makes the
+// collision UNREPRESENTABLE: the result is that qualifier plus a prefix, so it
+// is strictly longer than the qualifier it must never equal, and the
+// construction has no fixed point.
+//
+// ⚠️ prefix MUST BE A NON-EMPTY CONSTANT — it is what makes the result strictly
+// longer, and therefore it is the whole proof. It names the inner TABLE (`ls`
+// for library_source, `sdl` for search_doc_library) rather than being chosen by
+// the caller, so a query plan still reads as the table it is about. It is not a
+// caller-supplied alias, and must never become one: a required alias argument
+// prevents omission, not misuse. See docs/REVIEW-LOG.md LS-379.
+func derivedInnerAlias(prefix, column string) string {
+	outer, _, _ := strings.Cut(column, ".")
+	return prefix + "_" + outer
+}
+
 func placeholders(n int) string {
 	if n <= 0 {
 		return ""
