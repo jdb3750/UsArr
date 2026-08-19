@@ -56,7 +56,7 @@ the option labels are:
 
 ```
 Full stack: a later milestone
-v0.1: Kavita, Prowlarr
+v0.1: BookOrbit, Prowlarr
 ```
 
 The separator is a colon and not an em dash, and that is not a style preference. Both labels are
@@ -96,6 +96,11 @@ Three more things follow from the same rule, and `check.mjs` §8b asserts all of
   from a previous visit would show a reviewer a different screen from the one being discussed.
 
 ### The v0.1 numbers are derived, not invented a second time
+
+⚠️ **Every figure below is arithmetically derived from the Kavita-era install, and none of them has
+been re-keyed for [ADR-0052](../../DECISIONS.md#adr-0052): the switcher now names BookOrbit, the
+arithmetic under it is still Kavita's, and it will be re-keyed once the BookOrbit adapter's shape
+settles.**
 
 Every v0.1 figure is the full stack's own figure with the absent services' contribution removed.
 That is what makes the two installs reconcile against each other rather than merely each being
