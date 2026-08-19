@@ -303,8 +303,13 @@ is strictly better than any value a human copies out of a README.
 Only needed if you want the key in a secrets manager rather than on the config volume.
 
 ```bash
-openssl rand -base64 32          # or: usarr keygen   (proposed CLI, v0.1)
+openssl rand -base64 32
 ```
+
+⚠️ **This line used to read `# or: usarr keygen (proposed CLI, v0.1)`.** There is no `usarr keygen`
+and there will not be one: it was **declined by the PM on 2026-08-19** and the reasoning is in
+`docs/FUTURE.md` §23. The first-run path generates the key by itself (§3.2), so this section is only
+for the secrets-manager case, and `openssl` is the whole answer to it.
 
 ### 3.4 Rotating — two-phase and resumable
 
