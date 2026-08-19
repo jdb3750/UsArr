@@ -395,8 +395,11 @@ func (s *Server) handleSetup(w http.ResponseWriter, r *http.Request) error {
 			"the owner password must be at least 12 characters")
 	}
 
-	hash, err := crypto.HashPassword(req.Password)
+	hash, err := crypto.HashPassword(r.Context(), req.Password)
 	if err != nil {
+		if kdfBusy(err) {
+			return kdfBusyStatus(err)
+		}
 		return errStatus(http.StatusInternalServerError, CodeInternal, "the password could not be hashed").wrapping(err)
 	}
 	id, err := s.store.CreateUser(r.Context(), store.User{
@@ -429,20 +432,46 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) error {
 	badCredentials := errStatus(http.StatusUnauthorized, CodeUnauthorized,
 		"that username and password do not match").withAction("Try again")
 
-	user, err := s.store.GetUserByUsername(r.Context(), strings.TrimSpace(req.Username))
-	if err != nil {
-		// Burn the same work an existing account would have cost, so the
-		// response time does not answer "does this account exist".
-		_ = crypto.VerifyPassword(dummyPHC, req.Password)
-		s.audit(r, "auth.login", "user", 0, "fail", `{"reason":"no such account"}`)
+	// THERE IS EXACTLY ONE KDF CALL BELOW, AND EVERY BRANCH GOES THROUGH IT.
+	// That is the point of this shape, and it used to be three separate calls
+	// with the two unknown-account ones discarding their error.
+	//
+	// The KDF is bounded by a semaphore now (crypto.maxKDFConcurrency), so a
+	// call can fail with ErrKDFBusy — and three call sites, two of them ignoring
+	// the result, would have meant a saturated server answering 401 fast on the
+	// unknown-account branch and 503 on the known one. That is a
+	// user-enumeration oracle, reachable by any attacker who can saturate the
+	// gate, and it would have been introduced by the fix for the memory problem.
+	// The dummy hash exists precisely to close that oracle; folding the branches
+	// into one gated call keeps it closed for the failure case too.
+	//
+	// It also means the unknown-account path CONSUMES a permit rather than
+	// skipping the bound, so the cheapest request an attacker can send — no
+	// valid username needed — is not the one that dodges the cap.
+	user, lookupErr := s.store.GetUserByUsername(r.Context(), strings.TrimSpace(req.Username))
+	phc, reason, targetID := user.PasswordHash, "", user.ID
+	switch {
+	case lookupErr != nil:
+		phc, reason, targetID = dummyPHC, "no such account", 0
+	case user.IsDisabled || user.PasswordHash == "":
+		phc, reason = dummyPHC, "account cannot sign in"
+	}
+
+	// Burn the same work an existing account would have cost, so the response
+	// time does not answer "does this account exist".
+	verifyErr := crypto.VerifyPassword(r.Context(), phc, req.Password)
+	if kdfBusy(verifyErr) {
+		// Identical for every branch above, which is what keeps the timing
+		// equaliser intact under saturation. No audit row: a shed request
+		// carries no information about the account, and an unauthenticated
+		// endpoint that appends a row per request is a log-flood vector.
+		return kdfBusyStatus(verifyErr)
+	}
+	if reason != "" {
+		s.audit(r, "auth.login", "user", targetID, "fail", `{"reason":"`+reason+`"}`)
 		return badCredentials
 	}
-	if user.IsDisabled || user.PasswordHash == "" {
-		_ = crypto.VerifyPassword(dummyPHC, req.Password)
-		s.audit(r, "auth.login", "user", user.ID, "fail", `{"reason":"account cannot sign in"}`)
-		return badCredentials
-	}
-	if err := crypto.VerifyPassword(user.PasswordHash, req.Password); err != nil {
+	if verifyErr != nil {
 		s.audit(r, "auth.login", "user", user.ID, "fail", `{"reason":"bad password"}`)
 		return badCredentials
 	}
@@ -457,7 +486,9 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) error {
 // dummyPHC is a real Argon2id hash of a value nobody knows, used only to make
 // the unknown-account branch cost what the known-account branch costs.
 var dummyPHC = func() string {
-	h, err := crypto.HashPassword("usarr-timing-equalizer-not-a-credential")
+	// context.Background(): this runs once at package initialisation, before
+	// any request exists, and the gate is empty then by construction.
+	h, err := crypto.HashPassword(context.Background(), "usarr-timing-equalizer-not-a-credential")
 	if err != nil {
 		// Only reachable if Argon2id itself is unusable, in which case no login
 		// can succeed anyway; an empty string makes VerifyPassword fail fast.
@@ -465,6 +496,24 @@ var dummyPHC = func() string {
 	}
 	return h
 }()
+
+// kdfBusy reports whether an error is the KDF concurrency bound shedding load.
+func kdfBusy(err error) bool { return errors.Is(err, crypto.ErrKDFBusy) }
+
+// kdfBusyStatus is the one answer every KDF-bounded endpoint gives when no
+// Argon2id permit came free in time.
+//
+// 503 rather than 429: 429 says "you have sent too many requests", which is a
+// per-caller statement UsArr cannot make — there is no rate limiter and no
+// per-caller state (FUTURE.md carries that half). 503 says "this server is not
+// doing that right now", which is exactly true and is true of every caller
+// equally. Spelled once so the login and sudo paths cannot drift apart, which
+// would itself be an enumeration signal.
+func kdfBusyStatus(err error) *apiError {
+	return errStatus(http.StatusServiceUnavailable, CodeBusy,
+		"the server is handling as many sign-in attempts as it can at once").
+		withAction("Try again in a moment").wrapping(err)
+}
 
 // startSession mints the session and regenerates the CSRF token.
 //
@@ -538,7 +587,13 @@ func (s *Server) handleSudo(w http.ResponseWriter, r *http.Request) error {
 		return errStatus(http.StatusForbidden, CodeForbidden,
 			"this account has no local password to confirm with")
 	}
-	if err := crypto.VerifyPassword(a.User.PasswordHash, req.Password); err != nil {
+	if err := crypto.VerifyPassword(r.Context(), a.User.PasswordHash, req.Password); err != nil {
+		if kdfBusy(err) {
+			// Not a failed sudo: the password was never checked. Auditing it as
+			// one would put "auth.sudo fail" rows in front of an operator for a
+			// load problem.
+			return kdfBusyStatus(err)
+		}
 		s.audit(r, "auth.sudo", "user", a.User.ID, "fail", "")
 		return errStatus(http.StatusUnauthorized, CodeUnauthorized,
 			"that password does not match").withAction("Try again")

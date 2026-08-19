@@ -647,16 +647,38 @@ carries the evidence. Not every §6 citation in the migrations is wrong: `00001_
   require `Content-Type: application/json` (which blocks simple cross-origin form POSTs). Keep the
   cookie and bearer/API-key auth paths **strictly separate**, so a browser cannot accidentally
   authenticate an API endpoint with an ambient credential.
-- **Rate limiting is owed and unbuilt.** No limiter exists anywhere in the tree, so
-  `POST /api/v1/auth/login` is unthrottled today — reachable by anything that can reach the app
-  port, against an Argon2id verify at m = 19 MiB, which makes it a memory-pressure vector as well
-  as a credential-stuffing one. What it owes when it lands: strict per-IP *and* per-username limits
-  on auth endpoints with exponential backoff and temporary lockout, and a tighter bucket for
-  expensive endpoints — search, scan trigger, image resize, release fan-out, **and `/rest/*` and
-  `/opds/*`**. The other half of this bullet **is** in force: constant-time comparison, and
-  **identical error text and timing** for unknown-user vs bad-password, with one error value on
-  every failing branch and a dummy PHC hash burning the equivalent Argon2id work on the
-  unknown-account path.
+- **Rate limiting is owed and unbuilt; the KDF concurrency bound is built.** These are two
+  different controls against two different problems, and only one of them is here. No limiter
+  exists anywhere in the tree, so `POST /api/v1/auth/login` is unthrottled today — reachable by
+  anything that can reach the app port. **Tailnet-only exposure is a control the deployment
+  provides and the code does not.** What a limiter owes when it lands: strict per-IP *and*
+  per-username limits on auth endpoints with exponential backoff and temporary lockout, and a
+  tighter bucket for expensive endpoints — search, scan trigger, image resize, release fan-out,
+  **and `/rest/*` and `/opds/*`**. `FUTURE.md` names the seam it attaches to.
+  What *is* built is the memory half. Every login attempt runs Argon2id at m = 19 MiB **including
+  for a username that does not exist**, because the dummy hash below is burned deliberately, so
+  request volume converted directly into memory pressure. `internal/crypto` now runs every KDF call
+  behind a semaphore of `min(NumCPU, 8)` permits, capping peak KDF memory at `permits × 19 MiB`
+  regardless of arrival rate — no state, no policy, and nowhere for state to live. The wait is
+  bounded (2 s) and a shed call answers **503 `busy`**, so a flood does not become an
+  unbounded-goroutine problem. The trade is stated rather than hidden: under load, login gets slow
+  instead of the box falling over, and a queue long enough to shed load sheds legitimate logins
+  first, because an attacker retries and a person gives up.
+  **The bound is on the primitive, not on the login handler.** `HashPassword` and `VerifyPassword`
+  each take a permit, so first-run setup and any future password change inherit the cap without
+  their author knowing it exists. `handleLogin` makes **exactly one** KDF call, shared by the
+  known and unknown branches, and answers the shed case identically for both — the semaphore
+  around only the real verify would have let the unknown-account path (the cheapest request an
+  attacker can send) skip the cap *and* would have reintroduced a 401-vs-503 asymmetry between the
+  branches, which is precisely the enumeration oracle the dummy hash exists to close. Two drills
+  pin it: `crypto.TestEveryKDFCallIsBounded` and
+  `httpapi.TestASaturatedKDFShedsUnknownAndKnownUsersIdentically`, the second driving unknown
+  usernames specifically.
+  The rest of this bullet **is** in force and unchanged: constant-time comparison, and **identical
+  error text and timing** for unknown-user vs bad-password, with one error value on every failing
+  branch and a dummy PHC hash burning the equivalent Argon2id work on the unknown-account path.
+  That equaliser is not negotiable — trading a user-enumeration oracle for a memory bound would be
+  a bad swap.
 - **Trusted headers are a footgun.** The `X-Forwarded-For` half is built: the header is stripped
   from every inbound request and re-read only from a peer inside the configured trusted-proxy CIDR
   allowlist, with a startup warning for an over-wide prefix. **`Remote-User`-style header
@@ -742,7 +764,8 @@ the internet-exposure bullet. Each says which below.
   middleware, the session cookie carries the secure flags (§6), the SSRF policy is on with no
   switch to turn it off, and first-run owner creation is one-shot and closes once an owner exists.
   Not built: HSTS, the plaintext-HTTP refusal and its "behind a TLS-terminating proxy" mode, login
-  rate limiting (§6), the trusted-proxy requirement as a *precondition* rather than a default, and
+  rate limiting (§6 — the Argon2id concurrency bound there is a memory control, not a request
+  control, and does not substitute for one), the trusted-proxy requirement as a *precondition* rather than a default, and
   a published security policy. The full list, as owed: HTTPS enforced with HSTS and secure cookie
   flags; reject plaintext HTTP for auth (with an explicit "behind a TLS-terminating proxy" mode); a
   forced admin setup wizard on first run; login rate limiting on by default; a strict CSP (no

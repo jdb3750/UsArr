@@ -10,14 +10,14 @@ import (
 func TestPasswordRoundTrip(t *testing.T) {
 	const pw = "correct horse battery staple"
 
-	phc, err := HashPassword(pw)
+	phc, err := HashPassword(t.Context(), pw)
 	if err != nil {
 		t.Fatalf("HashPassword: %v", err)
 	}
-	if err := VerifyPassword(phc, pw); err != nil {
+	if err := VerifyPassword(t.Context(), phc, pw); err != nil {
 		t.Fatalf("VerifyPassword: %v", err)
 	}
-	if err := VerifyPassword(phc, pw+"!"); !errors.Is(err, ErrPasswordMismatch) {
+	if err := VerifyPassword(t.Context(), phc, pw+"!"); !errors.Is(err, ErrPasswordMismatch) {
 		t.Fatalf("VerifyPassword with a wrong password = %v, want ErrPasswordMismatch", err)
 	}
 	if strings.Contains(phc, pw) {
@@ -28,7 +28,7 @@ func TestPasswordRoundTrip(t *testing.T) {
 // The stored form is a full PHC string carrying the parameters, so raising the
 // cost later does not invalidate existing hashes.
 func TestPasswordPHCFormat(t *testing.T) {
-	phc, err := HashPassword("hunter2")
+	phc, err := HashPassword(t.Context(), "hunter2")
 	if err != nil {
 		t.Fatalf("HashPassword: %v", err)
 	}
@@ -42,11 +42,11 @@ func TestPasswordPHCFormat(t *testing.T) {
 
 // A per-hash salt means two users with the same password get different hashes.
 func TestPasswordSaltIsPerHash(t *testing.T) {
-	a, err := HashPassword("same")
+	a, err := HashPassword(t.Context(), "same")
 	if err != nil {
 		t.Fatal(err)
 	}
-	b, err := HashPassword("same")
+	b, err := HashPassword(t.Context(), "same")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -71,7 +71,7 @@ func TestVerifyPasswordRejectsMalformedHashes(t *testing.T) {
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			err := VerifyPassword(tc.phc, "anything")
+			err := VerifyPassword(t.Context(), tc.phc, "anything")
 			if err == nil {
 				t.Fatal("VerifyPassword accepted a malformed hash")
 			}
@@ -85,7 +85,7 @@ func TestVerifyPasswordRejectsMalformedHashes(t *testing.T) {
 }
 
 func TestNeedsRehash(t *testing.T) {
-	current, err := HashPassword("x")
+	current, err := HashPassword(t.Context(), "x")
 	if err != nil {
 		t.Fatal(err)
 	}

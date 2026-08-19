@@ -41,6 +41,12 @@ const (
 
 	// Authentication, authorization and the sudo window.
 	CodeAlreadySetup ErrorCode = "already_setup"
+	// CodeBusy answers a request shed by the Argon2id concurrency bound
+	// (internal/crypto's maxKDFConcurrency), with 503. It is deliberately NOT
+	// service_unavailable, which means an upstream *Arr did not answer: this one
+	// is UsArr itself declining to start another password hash right now, and
+	// the fix — wait a moment — is nothing like "check the service".
+	CodeBusy         ErrorCode = "busy"
 	CodeCSRF         ErrorCode = "csrf"
 	CodeForbidden    ErrorCode = "forbidden"
 	CodeSudoRequired ErrorCode = "sudo_required"
@@ -98,6 +104,7 @@ const (
 var errorCodes = map[ErrorCode]struct{}{
 	CodeAlreadySetup:              {},
 	CodeBadRequest:                {},
+	CodeBusy:                      {},
 	CodeConflict:                  {},
 	CodeConnectionTestFailed:      {},
 	CodeCredentialReentryRequired: {},

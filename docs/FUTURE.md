@@ -982,3 +982,67 @@ so. `reference/schema.md` §12 carries the column's four properties and points h
 
 **Trigger.** The first commit that writes bytes for an `image_asset` row. Not the pipeline's design,
 not the fetcher — the write.
+
+---
+
+## 22. Login rate limiting — the credential-stuffing half of the auth control
+
+**What.** Strict per-IP *and* per-username limits on the auth endpoints, with exponential backoff
+and temporary lockout, plus a tighter bucket for the expensive endpoints (search, scan trigger,
+image resize, release fan-out, and the `/rest/*` and `/opds/*` surfaces when they land).
+`reference/security.md` §6 has owed this since it was written.
+
+**Why deferred, and what is NOT deferred with it.** The bullet that owed this named two problems in
+one sentence and they have different answers. The *memory* problem — every login attempt runs
+Argon2id at m = 19 MiB, including for a username that does not exist, because the timing equaliser
+burns a dummy hash on purpose, so request volume converts directly into memory pressure — is fixed
+and shipped: `internal/crypto` runs every KDF call behind a `min(NumCPU, 8)` permit semaphore with a
+bounded wait, capping peak KDF memory at `permits × 19 MiB` regardless of arrival rate. That needed
+no state, no policy and nowhere for state to live, which is exactly why it could ship now.
+
+A rate limiter is the opposite: it is *inherently* stateful. Per-IP and per-username counters, a
+decay schedule, a lockout table that has to survive a restart or be honest that it does not, and a
+policy decision about what a locked-out owner does next. Every one of those is a design question
+this project has not answered, and none of them is answered better by guessing early. **Tailnet-only
+exposure is a control the deployment provides and the code does not** — it narrows who can reach
+`POST /api/v1/auth/login` at all, which is why the credential-stuffing half is survivable as a
+deferral and the memory half was not.
+
+**What it costs.** A middleware, a store for the counters (in-memory is defensible for a single
+process; a table is not obviously better and is certainly more), and the lockout policy above. Small
+code, real design.
+
+**The seam — named so the later build is a fill-in rather than a redesign.**
+
+1. **`internal/httpapi`'s middleware chain in `server.go`'s route table** is where a limiter
+   attaches. Every auth route is already spelled as a composed chain —
+   `s.csrfProtected(s.wrap(s.handleLogin))` — so a limiter is one more wrapper in that expression,
+   applied per route rather than globally, which is what lets the auth bucket and the
+   expensive-endpoint bucket differ without a second mechanism. Nothing needs restructuring to
+   accept it.
+2. **`ClientIP(r.Context())` already exists and is already trustworthy.** The per-IP half of a
+   limiter is only as good as its notion of the client address, and the hard part of that — stripping
+   `X-Forwarded-For` from every inbound request and re-reading it only from a peer inside the
+   configured trusted-proxy CIDR allowlist — is built and in force (`reference/security.md` §6). A
+   limiter keyed on `ClientIP` inherits it. **This is the seam that would have been expensive to
+   retrofit**: a limiter built on `r.RemoteAddr` is trivially defeated behind a proxy, and one built
+   on a raw header is trivially defeated by anyone who can reach the port.
+3. **`kdfBusyStatus` in `internal/httpapi/auth.go` is the shed-response shape**, already spelled
+   once so the login and sudo paths cannot drift apart. A limiter's refusal is a different code —
+   429, which says "you have sent too many requests", a per-caller statement UsArr cannot make
+   today and a limiter is precisely what would let it — but the same single-definition discipline
+   applies, and for the same reason: two endpoints that shed differently are themselves an
+   enumeration signal.
+4. **The audit vocabulary is where a lockout becomes visible.** `store.AppendAudit` plus a new
+   action constant beside `AuditActionCredentialOpen` is all a lockout row needs; the actor rule
+   (`store.SystemUserID` rather than NULL, or the row is invisible to every scoped read) is already
+   written down in two places.
+
+**What the limiter must not do.** It must not be used as an excuse to skip the dummy-hash timing
+equaliser for unknown users. Trading a user-enumeration oracle for cheaper rejection is a bad swap,
+and it stays a bad swap after a limiter exists.
+
+**Trigger.** Either of: the first deployment that is not tailnet-only (the internet-exposure
+checklist in `reference/security.md` §7 names login rate limiting as required in that mode), or
+multi-user landing in v1.0, which turns "the owner locked themselves out" from an annoyance into a
+support path that needs designing.

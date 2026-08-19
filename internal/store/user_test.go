@@ -15,7 +15,7 @@ func TestUserCreateAndRead(t *testing.T) {
 	ctx := t.Context()
 	s := newTestStore(t)
 
-	phc, err := crypto.HashPassword("a good long passphrase")
+	phc, err := crypto.HashPassword(t.Context(), "a good long passphrase")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -37,7 +37,7 @@ func TestUserCreateAndRead(t *testing.T) {
 	if u.ID != id || !u.IsOwner || u.AuthSource != "local" {
 		t.Errorf("round trip wrong: %+v", u)
 	}
-	if err := crypto.VerifyPassword(u.PasswordHash, "a good long passphrase"); err != nil {
+	if err := crypto.VerifyPassword(t.Context(), u.PasswordHash, "a good long passphrase"); err != nil {
 		t.Errorf("stored password hash does not verify: %v", err)
 	}
 
