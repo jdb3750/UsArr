@@ -1,4 +1,4 @@
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
@@ -66,7 +66,33 @@ const SERVER_EVENT_NAMES = [
 const REPO = resolve(dirname(fileURLToPath(import.meta.url)), '../../..');
 const IMPORTER_GO = readFileSync(join(REPO, 'internal/libsync/importer.go'), 'utf8');
 
-/** `Phase      string `json:"phase"` // containers | items | credits | files | done` */
+/**
+ * THE PUBLISH SITES ARE READ FROM THE WHOLE PACKAGE, NOT FROM `importer.go`.
+ *
+ * ⚠️ This used to scan `importer.go` alone, which was true of the tree when it
+ * was written and stopped being true the moment a phase published from a
+ * sibling file: `covers` is declared on `Progress.Phase` in `importer.go` and
+ * published by `covers.go`, so the narrow scan would have reported the
+ * declaration as a phase nothing publishes and failed on a correct tree.
+ *
+ * Widening it does not weaken the pin — it strengthens it in the direction the
+ * comment above already claims. "The producer is the authority" means the
+ * PACKAGE, and a phase published from any file in it is now caught, where
+ * before a whole file's worth could have been invisible. The declaration is
+ * still read from `importer.go` only, because that is where `Progress` lives
+ * and there is exactly one of it.
+ *
+ * Test files are excluded deliberately: a `Phase: "…"` in a fixture is an
+ * assertion about the producer, not the producer.
+ */
+const LIBSYNC_DIR = join(REPO, 'internal/libsync');
+const PRODUCER_GO = readdirSync(LIBSYNC_DIR)
+	.filter((f) => f.endsWith('.go') && !f.endsWith('_test.go'))
+	.sort()
+	.map((f) => readFileSync(join(LIBSYNC_DIR, f), 'utf8'))
+	.join('\n');
+
+/** `Phase      string `json:"phase"` // containers | items | credits | files | covers | done` */
 function declaredPhases(): string[] {
 	const line = /\bPhase\s+string\s+`json:"phase"`\s*\/\/\s*([a-z |]+)/.exec(IMPORTER_GO);
 	if (line === null) throw new Error('internal/libsync no longer declares the phase list inline');
@@ -78,7 +104,7 @@ function declaredPhases(): string[] {
 
 /** Every `Phase: "…"` the importer actually publishes. */
 function publishedPhases(): string[] {
-	const found = [...IMPORTER_GO.matchAll(/\bPhase:\s*"([a-z_]+)"/g)].map((m) => m[1]);
+	const found = [...PRODUCER_GO.matchAll(/\bPhase:\s*"([a-z_]+)"/g)].map((m) => m[1]);
 	return [...new Set(found)].sort();
 }
 
@@ -93,7 +119,7 @@ function publishedPhases(): string[] {
  * a publisher behind it, the list stops being read off anything. The `stopped`
  * renderer is asserted on its own terms in services-screen.test.ts.
  */
-const CLIENT_PHASES = ['containers', 'credits', 'done', 'files', 'items'];
+const CLIENT_PHASES = ['containers', 'covers', 'credits', 'done', 'files', 'items'];
 
 describe('the import.progress phase set matches the producer', () => {
 	it('finds a plausible number of publish sites, so a stale regex fails rather than passes', () => {

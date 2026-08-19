@@ -136,6 +136,10 @@ type Report struct {
 	// Files is what the file walk wrote, on Credits's terms.
 	Files store.FileResult
 
+	// Covers is what the cover pass did. It is all zeroes when no PosterFetcher
+	// is configured, which is not a failure — see FullImport's phase D.
+	Covers CoverResult
+
 	// Rollups is what the flush computed. It is the pass that turns the file
 	// rows into have_count and the availability blob; without it the walk
 	// leaves 151 series with file rows underneath them and 151 crossed circles
@@ -158,7 +162,7 @@ func (r Report) Duration() time.Duration {
 // Progress is one progress observation, published as it happens.
 type Progress struct {
 	InstanceID int64  `json:"instance_id"`
-	Phase      string `json:"phase"` // containers | items | credits | files | done
+	Phase      string `json:"phase"` // containers | items | credits | files | covers | done
 
 	// ItemsRead is a RUNNING count, incremented per hand-over as the stream is
 	// consumed rather than settled when it closes. A mid-run frame is therefore
@@ -207,6 +211,11 @@ type Importer struct {
 	// table, so the owner is a caller's fact rather than an assumption made
 	// three layers down.
 	UserID int64
+
+	// Covers is the cover fetcher for phase D. NIL DISABLES THE PASS, which is
+	// the ordinary state for every adapter that has no cover route wired — see
+	// fetchCovers, and covers.go for where the pass sits and why.
+	Covers PosterFetcher
 
 	// Progress is optional.
 	Progress ProgressFunc
@@ -273,7 +282,15 @@ func (im *Importer) publish(p Progress) {
 //     Running it before the walk would aggregate over zero file rows — which
 //     internal/store/rollup.go refuses to do anyway, in the writer rather than
 //     by sequencing, because plans slip.
-//  6. ANALYZE, then last_full_sync_at, ON SUCCESS ONLY. Both are skipped on a
+//  6. THEN THE COVER PASS, if one is configured — phase D, and it is AFTER the
+//     rollup flush rather than beside the other two per-item passes. Covers are
+//     decoration and the rollup is truth: have_count and the availability blob
+//     are what stop the grid rendering 151 crossed circles, and putting a cover
+//     fetch per book ahead of them would delay every correct number on the Home
+//     screen behind the whole image queue. ARCHITECTURE.md §4.4.1 rule 4 asks
+//     for exactly that order — "the grid is never blocked on the image queue".
+//     ⚠️ IT CANNOT FAIL AN IMPORT: fetchCovers returns nothing. See covers.go.
+//  7. ANALYZE, then last_full_sync_at, ON SUCCESS ONLY. Both are skipped on a
 //     failed or partial import: a freshness claim written over half a library is
 //     worse than none, because the Services screen renders it as current.
 //
@@ -385,6 +402,10 @@ func (im *Importer) FullImport(ctx context.Context, instanceID int64) (rep Repor
 		return rep, fmt.Errorf("full import of service_instance %d: flush rollups: %w", instanceID, err)
 	}
 
+	// PHASE D. It takes no error return and therefore has no `if err != nil`
+	// arm — the absence is the contract, not an omission. See covers.go.
+	im.fetchCovers(ctx, instanceID, imported, &rep)
+
 	rep.Completed = true
 
 	// ANALYZE after a bulk import (reference/sync.md §6 rule 5). It runs on the
@@ -434,6 +455,13 @@ func (im *Importer) FullImport(ctx context.Context, instanceID int64) (rep Repor
 		"files_written", rep.Files.FilesWritten,
 		"files_removed", rep.Files.FilesRemoved,
 		"editions_created", rep.Files.EditionsCreated,
+		"covers_fetched", rep.Covers.Fetched,
+		"covers_already_held", rep.Covers.AlreadyHeld,
+		"covers_absent", rep.Covers.Absent,
+		"covers_forbidden", rep.Covers.Forbidden,
+		"covers_failed", rep.Covers.Failed,
+		"covers_deferred", rep.Covers.Deferred,
+		"cover_bytes", rep.Covers.Bytes,
 		"rollups_flushed", rep.Rollups.WorksFlushed,
 		"blobs_written", rep.Rollups.BlobsWritten,
 		"blobs_withheld", rep.Rollups.BlobsWithheld,

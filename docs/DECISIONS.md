@@ -114,6 +114,7 @@ because no ADR ever decided it. Annotating leaves that failure mode nowhere to h
 | [0062](#adr-0062) | `usarr backup` captures the database **and** the KEK salt, and leaves the master key out — loudly | **Accepted** — 2026-08-19 |
 | [0063](#adr-0063) | A walked container records a **zero-count skip row**; "none skipped" stops being an absence | **Accepted** — 2026-08-19; **supersedes [ADR-0061](#adr-0061) §5's absent-row semantics for `items_skipped`**, leaving ADR-0061's text standing and unreworded with an inline flag on §5, on the pattern [ADR-0052](#adr-0052) used against [ADR-0041](#adr-0041) clause 1; **the problem is a coupling, not a bug** — `42246c0` built a reader that needed three states from a table that offered two (*items left out* · *walked, nothing left out* · *nothing walked it*), and could only separate the last two by joining against the **completeness** row, which measures a **different axis** and was quietly the only per-container record in the schema that an import had gone near a container, so `cmd/usarr` recorded in as many words that *"stop writing a row for the clean containers and every one of those collapses back into silence"*; ⚠️ **and the two adjacent readers had OPPOSITE absence conventions** one §17.8 column apart — absent completeness meant *nothing was asked*, absent skip meant *nothing was found* — which is a hazard on its own; **the same-screen compensating control was ruled INSUFFICIENT by the owner**, in his words *"cross-referencing is what people stop doing"*; **the decision**: every container an import **walked** gets a row, zero or not, and a container nothing walked gets none; ⚠️ **the three states survive and only the EVIDENCE moves** — `left_out` is a non-zero row, `none` is a zero row, absent is no row, and the wire contract, the `SkipState` vocabulary and the §17.8 render are all unchanged (`none` still renders nothing, keeping that screen's standing invariant that it paints no positive health claim); **the completeness derivation is RETIRED rather than left as a fallback**, taking `ListLibraries`'s ordering constraint with it, because a dead cleverness kept just-in-case is a second code path nobody exercises; ⚠️ **the change belongs in the ADAPTER and not in `cmd/usarr`, which is load-bearing** — the tally map is populated by `tallyFor` at the top of one container's iteration **inside** the walk and is never pre-seeded, so the row set is the set of containers the walk **reached**; ✅ **the before-the-walk imprecision therefore genuinely DIES** — completeness is measured in `Containers()` before the walk, so an aborted import writes verdicts for containers it never reached, and those used to read *"nothing was skipped"* when the truth was *"not observed"*; ⚠️ **and what is STILL OPEN is stated rather than implied** — the one container the walk died **inside** carries a row from what it had read, so a clean partial read is indistinguishable from a clean complete one (at most one per import), not closed because withholding it loses genuine observed skips and contradicts the invariant, and marking it means a fourth state the screen cannot render; 🚫 **synthesising the zero rows in `cmd/usarr` from the container list is REJECTED and was fired deliberately** — the only list available there is `Containers()`'s, and seeding from it produces a clean zero for a container named `Never Reached`, which **moves** the imprecision into the field just decoupled from it; **a zero row carries no `reason` and no `effect`** (they explain a skip, and on a zero they assert a cause for a non-event) but keeps `covers`/`does_not_cover`, because a skip count is not a completeness verdict at any count; **the `StreamItems` LOG keeps its zero gate** — nobody infers "walked clean" from an absent log line, so the record is the row; **adds no migration, no column and no DDL** — same `kind`, and `sync_report.kind` carries no `CHECK` (migration `00005`, verified in the DDL); **no SQL and no plan change** — `librarySkipsSQL` and `libraryCompletenessSQL` still share one `containerReportSQL`, and `TestTheSkipStatementIsTheCompletenessStatement` was re-examined and **kept**; **the Libraries screen does not change**, since `skipMarks` and `skippedNote` already keyed on `left_out` and the absent key; ⚠️ **one reader behaviour inverts in the safe direction** — a library whose only skip row is undecodable now reads absent rather than `none`; **four existing assertions are INVERTED rather than deleted**, because an inverted assertion records that the decision changed and a deleted one is silence |
 | [0064](#adr-0064) | BookOrbit's wire vocabulary is pinned by vendoring `packages/types` under `api/specs/`, guarded by an offline git-tree pin plus a network drift check | **Accepted** — 2026-08-19; **extends [ADR-0047](#adr-0047)'s two-half guard shape from one file to a directory** and leaves [ADR-0046](#adr-0046), [ADR-0047](#adr-0047) and [ADR-0052](#adr-0052) standing and unreworded — the change carrying it edits no ADR at all; **the problem is that [ADR-0052](#adr-0052) made BookOrbit the SOLE catalogue source** while every wire shape in `internal/bookorbit` is **hand-transcribed** from BookOrbit's TypeScript citing `73b7877d`, so an upstream rename or retyped field was not the degradation of one adapter among several but a single point of failure for the whole library, **invisible until an import broke against a real server**; ⚠️ **there is nothing else to vendor** — BookOrbit commits no OpenAPI document, `server/src/swagger.ts` builds one at **runtime** and `main.ts` mounts it only under a default-false `SWAGGER_ENABLED`, so [ADR-0046](#adr-0046)'s floor/ceiling split has nothing to bite on and no "fetch it from the running instance" recipe exists either; **the decision**: vendor `packages/types` **verbatim and whole** — all **68 files** at `73b7877d` — to `api/specs/bookorbit-types/`; **`api/specs/` rather than `docs/reference/`, DECIDED rather than inherited**, settling an inference `docs/ROADMAP.md` explicitly flagged as one to settle — `api/specs/SOURCES.md` opens *"vendored verbatim, never fetched at build or test time"* and carries a provenance table contract tests read, while `docs/reference/` holds hand-written Markdown and **not one vendored artefact**; **the identity is a git TREE name** (`4cb990a36b8325845abb79eb4b7a4445e6df679b`) and not a SHA-256 of our own devising, which buys two things a home-grown hash would not — upstream is **comparable with no download**, since a blobless fetch resolves a path to its tree name out of the tree objects alone, and the value is **upstream's own name**, so nobody must trust that we hashed the right bytes in the right order; ⚠️ **nothing may be added inside the vendored directory** — one extra file changes the tree and destroys that identity, which is why the manifest lives **beside** it and never in it; **two authorities and one diagnosis**: the tree name moves for **any** byte (right offline, where the bytes are frozen), a comment-blind **declaration digest** moves only when a type, field, enum member or literal union changes (so an upstream comment rewrite does not read the same as a rename — **an alarm that is usually noise is an alarm nobody reads**), and the per-file manifest is *"a diagnosis and never an authority"*, read only to turn *"the tree hash differs"* into *"these files differ"*; ⚠️ **the digest is a LEXER THAT REFUSES RATHER THAN GUESSES, which is why five files are digested and not sixty-eight** — `stripTypeScript` cannot tell a regex literal from a division, and `src/pattern-resolver.ts:71` declares a character class **containing a double quote** that would trap the scanner in a string state it never leaves, so it **asserts it finished in code state** and errors otherwise rather than pinning a file to nonsense; **the guard is split across the network line** on [ADR-0047](#adr-0047)'s reason — three offline checks in **`make check`**, the upstream comparison behind the `upstream` tag in **`make spec-drift`** only, because `make check` makes exactly two network calls and a third would let a GitHub outage redden an unrelated commit; ⚠️ **the network half asks TWO questions and they are not the same news** — the tree at the **pinned commit** not matching is **our** bug and invalidates every transcription, while the tree at **`main`** having moved is **upstream news**, graded per file by whether `internal/bookorbit` transcribes it; ✅ **`SPEC_DRIFT_FLOOR` was raised 1 → 2 in the same change, and that is what makes the drift check non-vacuous** — `go test -run` matching nothing exits 0, so a floor is the only thing standing between a green and a green over zero checks; 🚫 **rejected**: vendoring only the five transcribed files (silently un-covers the next slice, and a guard that quietly shrank is indistinguishable from one that held), a plain SHA-256 over a concatenation (not upstream-comparable, and demands trust), the tree hash as the **only** signal (cries wolf on comment churn and on a Prettier rewrap), [ADR-0046](#adr-0046)'s floor/ceiling (no committed document and no release-tag line to split), and vendoring the NestJS server; ⚠️ **the honest limit is stated rather than implied** — it pins **the file we vendored, not the server the owner runs**; it sees **types, not behaviour**; it does **not** check whether our transcription reads them correctly (`TestMediaKindVocabularyMatchesTheSource` and `TestPermissionVocabularyMatchesTheSource` stay necessary); the server's own **NestJS DTOs are unpinned by anything**, the largest uncovered surface; and **nothing runs the network half on a schedule** — there is no CI and `make spec-drift` is a thing a person types, so this ADR claims no cadence |
+| [0065](#adr-0065) | The BookOrbit cover fetch runs **inside the import, between committed batches** — not on a render path, and not inside `applyOneItem`'s transaction | **Accepted** — 2026-08-19; **the SHAPE is a restatement of ARCHITECTURE §4.4.1 rule 4 rather than a novelty** — *"the grid paints from `work` rows as import phase A commits; images fill in behind, and the grid is never blocked on the image queue"* — so covers are fetched **during the import** and there is **no per-work on-demand entry point**, a render path being disqualified by principle 1 and [ADR-0004](#adr-0004) because a synchronous upstream call on a render is exactly what they refuse; ⚠️ **the LEVEL named in the first ruling was WRONG, and the correction is MEASURED** — `applyOneItem` runs inside `ApplyCatalogueBatch`'s single `BEGIN IMMEDIATE` transaction, which spans a whole batch at `min(2000 rows, 100 ms)` on a writer pool hard-capped to **one connection** (`write.SetMaxOpenConns(1)`, *"Exactly one. This is the entire single-writer discipline."*), so a fetch there would hold the process's only writer across a network round trip **per book** and serialise the entire import behind upstream latency — which `internal/db/sqlite.go`'s `Write` doc already forbids in writing: *"fn must not call Write, and must not hold the transaction across a network call: the whole process shares one writer connection"*; **so the pass sits in `internal/libsync`, between committed batches**, keyed by **remote id** with the work re-resolved inside the store's own transaction, because `ImportedItem` carries **no work id by design** and `PosterAsset`'s header names the hazard — an id read before a network round trip is an id read arbitrarily long ago, and `work.id` being `INTEGER PRIMARY KEY` turns a reused id into **the wrong book's cover**, silent and visible only as art that does not match its title; **two in-tree precedents, both built before this question was asked** — credits were moved OUT of the stream callback (`FullImport` phase 3: issuing per-item GETs from inside it *"would hold the streaming connection open across all of them"*) and `PutPosterAsset` opens *"The bytes are already on disk when this runs"*, a sentence a fetch inside the transaction would falsify; **a cover-fetch failure NEVER fails the import**, a partial catalogue that says it is partial beating no catalogue, on `FileReadFailures`' existing *"NOT an import failure"* shape; ⚠️ **concurrency is bounded and the bound is BUILT rather than INHERITED** — §4.4's `min(NumCPU, 4)` is **prose** and is about **transcoding**, so this decision's own first constraint was wrong and is carried verbatim rather than quietly fixed: *"§4.4's semaphore is scoped to transcoding… fetch concurrency needs its own bound, stated in its own terms, not borrowed from a limit that exists for a different resource"*; 🔍 **and one supporting claim was CHECKED AND IS FALSE, so it is not leaned on** — `internal/imagepipeline/pipeline.go`'s *"the tree's only one is the Argon2id gate"* does not hold, `internal/releases/search.go` having bounded its indexer fan-out at `DefaultConcurrency = 6` since `dd15d95`, which is a bound over concurrent **network legs** and therefore the closest precedent rather than a counter-argument; **a 404 is "absent for this credential" and never terminal** — BookOrbit throws the same `NotFoundException` for a missing cover file, a missing book, and a book the credential's content filters hide, so a 404 is **not evidence about a file** and the next import retries rather than inheriting a permanent verdict, which deliberately NARROWS `cover.go`'s own *"caching absence on a 404 is sound"*; ⚠️ **what it does NOT decide is stated rather than implied** — whether whole libraries are hidden from the account remains **unanswerable read-only** ([ADR-0061](#adr-0061)), the permit count and the pass's exact slot in `FullImport` are implementation (though `PutPosterAsset` sets no `rollup_dirty` — verified — so a cover pass does not compete with the file walk for the last-before-flush slot), and within-import retry is left open; **the pipeline's *"NEVER AGAINST A REAL COVER"* caveat is untouched and stays exactly as loud**; **adds no migration, no column and no DDL, and edits no other ADR's reasoning** — two mechanical anchor/rule repairs elsewhere in this file ride along in the same change and touch no decision |
 
 ---
 
@@ -6397,6 +6398,7 @@ representative. See `REVIEW-LOG.md` RK-06.
 
 ---
 
+<a id="adr-0050"></a>
 ## ADR-0050 — The image pipeline's base output format is **stdlib JPEG**; AVIF is deferred with its seam kept
 
 **Status:** Accepted · **2026-08-19** · **Amends** [`ARCHITECTURE.md`](./ARCHITECTURE.md) §4.4 and
@@ -8511,6 +8513,8 @@ paragraph stops naming the master key, its location on this install, or what to 
 `TestBackupNeverPrintsKeyMaterial` watches the process's real stdout and stderr as well as the
 report writer, because the first version of it passed a deliberate `fmt.Printf` of the salt bytes.
 
+---
+
 <a id="adr-0063"></a>
 ## ADR-0063 — A walked container records a **zero-count skip row**; "none skipped" stops being an absence
 
@@ -8860,3 +8864,216 @@ constant.
 and `make check-offline` its zero. **`api/specs/` is now the settled home for vendored upstream
 artefacts of any format**, not only OpenAPI JSON; `SOURCES.md` gained a BookOrbit section carrying
 the provenance, the tree name, the guard split and the five uncovered surfaces above.
+
+---
+
+<a id="adr-0065"></a>
+## ADR-0065 — The BookOrbit cover fetch runs **inside the import, between committed batches** — not on a render path, and not inside `applyOneItem`'s transaction
+
+**Status:** Accepted — 2026-08-19. **The shape is what ARCHITECTURE.md §4.4.1 rule 4 already
+specified**, and this ADR records it as such rather than as a novelty. **The LEVEL named in the
+first ruling was wrong and is corrected here on a measurement**, not on taste. **No other ADR's
+reasoning is edited** — [ADR-0050](#adr-0050) and [ADR-0052](#adr-0052) stand unreworded — though
+the change carrying this ADR also makes two **mechanical, additive** repairs elsewhere in this file:
+ADR-0050 gains the `<a id="adr-0050"></a>` anchor its existing index row was already pointing at,
+and ADR-0063 gains the `---` rule above its anchor that every other ADR carries. Neither touches a
+word of either decision.
+
+### Context
+
+#### 1 · A complete pipeline with no caller, waiting on one shape decision
+
+`internal/imagepipeline` fetches one cover, decodes it, renders every width on §4.4's allowlist,
+writes the bytes through `internal/imagecache` and records the row through
+`internal/store.PutPosterAsset`. Its package doc states its own honest end state: *"complete,
+tested, and waiting on ONE call site that is a shape decision about UsArr rather than either lane's
+to pick."* Nothing in the tree calls it — measured, not assumed: `imagepipeline.` appears in no file
+outside the package. This ADR is that decision, and nothing else.
+
+#### 2 · A render path is disqualified by principle 1, and §4.4.1 rule 4 already said where it goes
+
+Covers are the bottleneck the architecture is written around — §4.4 measures a 60-item viewport at
+~5–9 MB per screenful against ~30 KB of JSON, and §4.4.1 budgets a cold start of 10k posters. A
+per-work on-demand entry point would put a synchronous BookOrbit round trip on a render, which is
+what CLAUDE.md's first principle refuses in as many words and what [ADR-0004](#adr-0004) exists to
+prevent. **The design already answered this**, in §4.4.1 rule 4:
+
+> **Progressive rendering.** The grid paints from `work` rows as import phase A commits (§7.2);
+> images fill in behind, and the grid is never blocked on the image queue.
+
+"Images fill in behind" is a producer running in the import. So the fetch belongs to the import, and
+that half of this decision is a **restatement**, not a ruling — the shape the design specified.
+
+**Two in-tree precedents put it in the same place, and both were built before this question was
+asked.** They matter because they are the shape already load-bearing in this tree rather than an
+argument from first principles:
+
+- **Credits were moved OUT of the stream callback**, deliberately, and `FullImport`'s phase 3 says
+  why: *"it is after the stream rather than inside it because Kavita reports no creator on the
+  series list, so credits cost one HTTP GET per series and issuing those from inside the stream
+  callback would hold the streaming connection open across all of them."* A per-item HTTP read does
+  not belong inside the machinery that is streaming the items.
+- **`PutPosterAsset` opens with *"The bytes are already on disk when this runs"***
+  (`internal/store/imagewrite.go`). The store write was designed on the assumption that the fetch,
+  the decode and the render all happened **before** the transaction opened. Putting the fetch inside
+  a transaction would falsify that first sentence.
+
+#### 3 · ⚠️ The level was wrong in the first ruling, and the correction is MEASURED
+
+The original ruling named **`applyOneItem`** as the call site. That is where the work↔book-id pairing
+lives, which is why it looked right — `internal/imagepipeline`'s own package doc says the pairing
+*"exists in exactly ONE lexical scope in this tree — applyOneItem."* It is wrong anyway, and the
+numbers are in the tree rather than in a judgement:
+
+`applyOneItem` runs inside `ApplyCatalogueBatch`'s **single `BEGIN IMMEDIATE` transaction**, which
+spans a whole batch — `min(2000 rows, 100 ms)` (`reference/sync.md` §6 rule 3, restated on
+`ApplyCatalogueBatch` itself). The writer pool is hard-capped at **one connection**
+(`internal/db/sqlite.go`: `write.SetMaxOpenConns(1)`, commented *"Exactly one. This is the entire
+single-writer discipline."*). A fetch there would hold **the process's only writer across a network
+round trip, per book**, serialising the entire import — and every interactive write in the process —
+behind BookOrbit's latency. The prohibition is already written down, one line above the function
+that would have hosted it:
+
+> `fn` must not call `Write`, and must not hold the transaction across a network call: the whole
+> process shares one writer connection.
+
+**The pairing is not needed, which is what dissolves the problem rather than trading it away.**
+`store.PosterAsset` is keyed by `RemoteKind` + `RemoteID` and **re-resolves the work through
+`service_item_link` inside its own transaction** — and its header already gives this exact reason,
+quoting `CreditSet` verbatim and then sharpening it:
+
+> ⚠️ IT IS KEYED THIS WAY AND NOT BY A WORK ID, FOR `CreditSet`'s REASON VERBATIM (`credits.go`):
+> "Carrying a work id across the two passes would mean trusting an id read in a different
+> transaction, and an item deleted between the two passes would then have its credits written onto
+> whatever now holds that id." The same hazard is worse here, because the gap between resolving the
+> id and writing the row is not another local pass — it is a COVER FETCH, a network round trip
+> against a service that may be slow.
+
+`work.id` is `INTEGER PRIMARY KEY`, so SQLite may reuse a deleted row's id; a stale id is therefore
+not "no such work" but **the wrong book's cover**, silent and visible only as art that does not
+match its title. So a call site that has a work id in hand is not an advantage here — it is the
+hazard.
+
+### Decision
+
+1. **The cover fetch runs during the IMPORT.** There is no per-work on-demand entry point in v0.1.
+   §4.4.1 rule 4 is the authority; principle 1 and [ADR-0004](#adr-0004) are why.
+
+2. **It runs in `internal/libsync`, between committed batches — never inside a store transaction.**
+   `ImportedItem` is the carrier that already exists, and it already carries exactly what is needed
+   and nothing more: `RemoteKind`, `RemoteID`, `Kind`, `RemoteSubtype`, and **no work id, by
+   design**. `FullImport` already runs two per-item passes after the stream closes on precisely this
+   shape — credits (phase B) and the file walk (phase C) — and a cover pass is a fourth of the same
+   kind, not a new mechanism.
+
+3. **Keyed by remote id, with the work re-resolved inside the store's own transaction.** No work id
+   crosses the fetch. `PutPosterAsset` already does this and needs no change.
+
+4. **A cover-fetch failure NEVER fails the import.** A partial catalogue that says it is partial
+   beats no catalogue — the rule [ADR-0061](#adr-0061) and [ADR-0063](#adr-0063) already apply to
+   completeness and skips, applied here. The items that imported are correct either way, and a
+   missing poster degrades to §4.4.1's own fallback (title and year over a colour fill) rather than
+   to a failed sync. `Report` already has the shape for this: `FileReadFailures` is documented as
+   *"NOT an import failure"* and does not stop `last_full_sync_at` being stamped.
+
+5. **Concurrency is BOUNDED, and the bound is BUILT rather than inherited.** `imagepipeline.Poster`
+   is one synchronous fetch that holds no lock and no pool; its doc says *"Whoever writes the loop
+   owns the bound, and owes it a test that N+1 is refused."* This ADR accepts that debt on the
+   import's behalf. The bound is a fetch bound, stated in fetch terms, with its own constant and its
+   own refusal test.
+
+6. **A 404 is "absent for this credential", never a terminal verdict.** `bookorbit/cover.go`
+   enumerates four conditions that all produce one `NotFoundException` — no cover file; no such book
+   id; **a book the credential's content filters hide**, deliberately made indistinguishable from an
+   absent one; and the catch-all. So a 404 is **not evidence about a file**, and the next import
+   retries rather than inheriting a permanent verdict. ⚠️ This deliberately NARROWS `cover.go`'s own
+   sentence *"caching absence on a 404 is sound"*: that reasoning holds for the three book-shaped
+   conditions and is defeated by the content-filter one, which is a fact about the **credential**
+   and can change without the book changing. [ADR-0061](#adr-0061) already established that a
+   content filter makes an upstream absence a statement about scope rather than about content; this
+   is the same finding one route along.
+
+### ⚠️ Where this decision's own stated constraint was wrong
+
+**Recorded rather than quietly corrected, because a record that shows where its own reasoning failed
+is worth more than one that ships only the fixed version.** The bound in decision 5 was first
+justified by pointing at §4.4's existing semaphore. That was wrong, in the author's own words:
+
+> "§4.4's semaphore is scoped to transcoding… fetch concurrency needs its own bound, stated in its
+> own terms, not borrowed from a limit that exists for a different resource."
+
+And on the level, from the same correction:
+
+> "the level was the part of my answer I was least entitled to; the shape is the part I was arguing
+> for."
+
+§4.4's `min(NumCPU, 4)` is **prose**, and it is about **transcoding**: *"all transcoding behind a
+`min(NumCPU, 4)` semaphore (jellyfin#9795 is exactly this failure)"*. `internal/crypto/password.go`
+says the same of it from the other side — *"that is a design statement for a pipeline that is not
+built yet, so it is the shape being reused, not shipped code being copied."* A fetch bound and a
+transcode bound cap different resources (sockets and upstream load; peak decode memory and CPU), and
+one number serving both is a number serving neither.
+
+⚠️ **One supporting claim was checked and is FALSE, so it is not repeated here.**
+`internal/imagepipeline/pipeline.go` states that *"no such semaphore is implemented anywhere — the
+tree's only one is the Argon2id gate."* The **first** clause is true; the **second** is not.
+`internal/releases/search.go` bounds its indexer fan-out with `sem := make(chan struct{},
+s.cfg.Concurrency)` at `DefaultConcurrency = 6`, landed in `dd15d95` — **before** that comment was
+written. It is a bound over concurrent **network legs**, which makes it the closest precedent this
+tree has for decision 5 and the opposite of an argument against it. The stale comment is left for
+its owning lane; this ADR simply does not lean on it.
+
+### Rejected
+
+- **A per-work on-demand fetch, triggered by a render or by a work-detail route.** It is the shape
+  §4.4.1 rule 4 and principle 1 both refuse. `imagepipeline.Poster` stays per-work so that a future
+  trigger is not blocked — the seam ships, the feature does not — but nothing renders through it.
+- **The fetch inside `applyOneItem`.** The original ruling. Refused on the measurement in context 3:
+  one writer connection held across a network round trip per book.
+- **The fetch inside the `StreamItems` callback.** Refused for `FullImport` phase 3's reason
+  verbatim: it holds the streaming connection open across every per-item HTTP read.
+- **Carrying a work id from the import into the fetch.** It is what `applyOneItem` appeared to
+  offer, and it is the hazard `PosterAsset`'s header names — an id read before a network round trip
+  is an id read arbitrarily long ago, and `INTEGER PRIMARY KEY` reuse turns that into the wrong
+  book's cover.
+- **Failing the import on a cover error**, and **caching a 404 as permanent**. Decisions 4 and 6.
+- **Borrowing §4.4's `min(NumCPU, 4)`.** The self-correction above.
+
+### ⚠️ What this does NOT decide
+
+1. **Whether whole libraries are hidden from the account.** [ADR-0061](#adr-0061) recorded that
+   `LibraryAccessGuard` throws a byte-identical `ForbiddenException('No library access')` for *"the
+   library exists and this account has no access row"* and for *"there is no such library"*, so the
+   question is **unanswerable from a read-only account**. A cover 404 does not move it either way,
+   and decision 6 is careful to claim only that a 404 is not terminal — not that the missing set is
+   knowable.
+2. **The exact permit count, and where in `FullImport` the pass sits.** Both are implementation, and
+   both are constrained rather than free: the rollup flush must stay last among the writers
+   (ARCHITECTURE §6.3), and the file walk must stay the last pass that touches a work before it,
+   because it sets `work.rollup_dirty`. **`PutPosterAsset` sets no `rollup_dirty`** — verified in
+   `internal/store/imagewrite.go`, which writes `image_asset` and `work.poster_asset_id` and nothing
+   else — so a cover pass does not compete for that slot.
+3. **Whether the fetch is retried within one import.** Decision 6 says the *next* import retries; it
+   says nothing about a second attempt inside the current one.
+4. **Anything about a second catalogue source.** `imagepipeline.CoverSource` names `bookorbit.Cover`
+   and is BookOrbit-shaped on purpose (its own doc records that trade against
+   [ADR-0052](#adr-0052)). This ADR inherits that scope and does not widen it.
+
+### Consequences
+
+**`internal/libsync` gains an import of `internal/imagepipeline`, and that direction is acyclic** —
+`imagepipeline` imports `internal/bookorbit`, `internal/imagecache` and `internal/store`, and not
+`libsync`.
+
+**The pipeline's package doc stops being true in one clause and will need amending by whoever lands
+the caller**: *"AND THERE IS NO CALLER"* is a measured statement with a date on it, and the same doc
+already carries a standing note that a sentence in it has been falsified three times. Its harder
+caveat is **untouched by this ADR and stays exactly as loud**: this pipeline *"has been TESTED
+AGAINST A FAKE FETCHER AND NEVER AGAINST A REAL COVER."* Deciding where the fetch runs changes
+nothing about that, and nothing here should be read as claiming a byte from a running BookOrbit has
+been through it.
+
+**The cold-start budget in §4.4.1 is now owed a producer that respects it.** Viewport-prioritised
+fetching and smallest-size-first (rules 1 and 2) are not satisfied by an import-time pass alone;
+this ADR decides where the fetch runs, and the priority queue those rules describe remains unbuilt
+and unclaimed.

@@ -55,6 +55,14 @@ type registry struct {
 	log     *slog.Logger
 	version string
 
+	// imageCacheDir is Config.ImageCacheDir(), the same directory
+	// GET /img/{key} serves from. The registry holds it because runImport is
+	// where the cover pass's pipeline is built, and internal/imagecache is a
+	// value over a path rather than a shared handle — httpapi builds its own
+	// from the same string. Empty disables the cover pass rather than writing
+	// somewhere else: imagecache.Put refuses a rootless cache by design.
+	imageCacheDir string
+
 	// hub is the SSE stream, attached by buildApp AFTER the server exists.
 	// The registry is constructed first because httpapi.New takes it, so this
 	// is a one-way back-reference rather than a constructor argument. It is set
@@ -124,9 +132,16 @@ type registryEntry struct {
 	// is no bookorbit equivalent to start", WHICH IS NOW FALSE. internal/bookorbit
 	// grew the two catalogue reads (catalogue.go) and internal/libsync/bookorbit.go
 	// is the adapter over them, so this client is on the import path exactly as
-	// the kavita field is. What it still does NOT read is anything past slice 1 —
-	// no per-book detail, no covers, no delta walk — and the adapter's own header
-	// is where that list lives rather than here, so it cannot go stale twice.
+	// the kavita field is. What it still does NOT read is anything past slice 1,
+	// and the adapter's own header is where that list lives rather than here, so
+	// it cannot go stale twice.
+	//
+	// ⚠️ THAT LIST USED TO INCLUDE "no covers" HERE TOO, AND IT NO LONGER
+	// BELONGS: runImport hands this very client to internal/imagepipeline, which
+	// libsync's phase D calls once per imported book. The read does NOT go
+	// through libsync.BookOrbitReader — the pipeline takes *bookorbit.Client
+	// directly — so the adapter's own list is right to keep saying nothing about
+	// it, and this field is now on two paths rather than one.
 	bookorbit *bookorbit.Client
 
 	instance store.ServiceInstance
@@ -146,15 +161,18 @@ func (e *registryEntry) breakerState() (string, time.Time) {
 	return "closed", time.Time{}
 }
 
-func newRegistry(st *store.Store, keyring *crypto.Keyring, log *slog.Logger, version string) *registry {
+func newRegistry(
+	st *store.Store, keyring *crypto.Keyring, log *slog.Logger, version, imageCacheDir string,
+) *registry {
 	return &registry{
-		st:       st,
-		keyring:  keyring,
-		log:      log,
-		version:  version,
-		entries:  map[int64]*registryEntry{},
-		probes:   map[int64]httpapi.UpstreamHealth{},
-		probeReq: make(chan int64, 32),
+		st:            st,
+		keyring:       keyring,
+		log:           log,
+		version:       version,
+		imageCacheDir: imageCacheDir,
+		entries:       map[int64]*registryEntry{},
+		probes:        map[int64]httpapi.UpstreamHealth{},
+		probeReq:      make(chan int64, 32),
 
 		bootstrapped: map[int64]bool{},
 		importing:    map[int64]bool{},

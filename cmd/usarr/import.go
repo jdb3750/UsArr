@@ -8,6 +8,8 @@ import (
 	"log/slog"
 
 	"github.com/jdb3750/UsArr/internal/httpapi"
+	"github.com/jdb3750/UsArr/internal/imagecache"
+	"github.com/jdb3750/UsArr/internal/imagepipeline"
 	"github.com/jdb3750/UsArr/internal/libsync"
 	"github.com/jdb3750/UsArr/internal/store"
 )
@@ -116,6 +118,7 @@ func (g *registry) runImport(ctx context.Context, instanceID int64) (libsync.Rep
 		// behaviour change rather than a redesign (§1.3 rule 1).
 		UserID:   store.SystemUserID,
 		Progress: g.importProgress(),
+		Covers:   g.coverPipeline(entry, log),
 	}
 	rep, importErr := im.FullImport(ctx, instanceID)
 
@@ -133,6 +136,42 @@ func (g *registry) runImport(ctx context.Context, instanceID int64) (libsync.Rep
 		g.recordCompleteness(ctx, instanceID, bo.Completeness(), log)
 	}
 	return rep, importErr
+}
+
+// coverPipeline builds the cover fetcher for one instance, or returns nil.
+//
+// ⚠️ NIL IS A FIRST-CLASS ANSWER AND NOT A FAILURE. libsync.Importer.Covers nil
+// disables phase D entirely, which is the correct state for a Kavita — nothing
+// in internal/kavita satisfies imagepipeline.CoverSource and ADR-0052 makes
+// BookOrbit the source this milestone proves — and for any install with no image
+// cache directory. Returning nil is how "the feature degrades honestly when a
+// service is absent" is spelled for a pass rather than for a screen.
+//
+// IT LIVES IN cmd/usarr FOR §2.3 RULE 1'S REASON: this is the one package
+// allowed to hold an outbound client, and the pipeline is built AROUND the
+// client, taking *bookorbit.Client directly with no adapter. That is why
+// libsync.BookOrbitReader gained no method — the catalogue adapter and the cover
+// fetch are two independent users of one client, joined only here.
+//
+// THE CLIENT IS THE ENTRY'S OWN, so the cover fetch goes through the same
+// resolve-then-pin transport, the same breaker and the same credential every
+// other call to that instance uses. Building a second HTTP path for images would
+// be a second SSRF policy to keep in step, and the one that drifts is the one
+// that gets used (imagepipeline's CoverSource header says the same).
+func (g *registry) coverPipeline(entry *registryEntry, log *slog.Logger) libsync.PosterFetcher {
+	if entry.bookorbit == nil || g.imageCacheDir == "" {
+		return nil
+	}
+	pipe, err := imagepipeline.New(entry.bookorbit, imagecache.New(g.imageCacheDir), g.st, nil)
+	if err != nil {
+		// A construction failure is a programming error here — every argument
+		// is non-nil by the guard above — so it is logged and the pass is
+		// disabled rather than failing an import that has nothing to do with
+		// artwork.
+		log.Warn("no cover pass for this import: the image pipeline could not be built", "error", err)
+		return nil
+	}
+	return pipe
 }
 
 // catalogueSource picks the adapter for one instance's client stack.
