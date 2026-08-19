@@ -561,11 +561,15 @@ func seedSkip(t *testing.T, s *Server, instanceID int, ref, detail string) {
 // anybody opening the database.
 //
 // ⚠️ AND IT PINS THE THREE READINGS APART ON THE WIRE, WHICH IS THE PART THAT IS
-// EASY TO LOSE. A skip row is written only when something was skipped, so "the
-// walk left nothing out" and "nothing ever counted" are the same absence in the
-// table. They are NOT the same value here: one is `state: "none"` and the other
-// is no `skipped` key at all. Collapse them and an absent row starts reading as
-// an all-clear, which is the defect ADR-0061 exists to prevent one axis over.
+// EASY TO LOSE. "The walk left nothing out" is `state: "none"` and "nothing ever
+// walked it" is no `skipped` key at all. Collapse them and an absent record
+// starts reading as an all-clear, which is the defect ADR-0061 exists to prevent
+// one axis over.
+//
+// ⚠️ THE WIRE VALUES ARE UNCHANGED BY ADR-0063 AND THE EVIDENCE IS NOT, which is
+// why the seed below moved and this assertion did not. `none` used to be derived
+// from a completeness row standing in for "somebody walked this"; it now rests
+// on a zero-count skip row of its own.
 func TestWhatTheImportLeftOutReachesTheLibrariesWire(t *testing.T) {
 	s := newTestServer(t, nil)
 	seedLibrariesScreenCorpus(t, s)
@@ -574,10 +578,15 @@ func TestWhatTheImportLeftOutReachesTheLibrariesWire(t *testing.T) {
 	seedSkip(t, s, 1, "11", `{"name":"Manga","skipped_comics":2,"skipped_unknown":1,
 		"reason":"UsArr maps prose books only","effect":"e","covers":"c","does_not_cover":"d"}`)
 	seedCompleteness(t, s, 1, "11", `{"state":"complete","total_items":9,"visible_items":9}`)
-	// Library 2 (Ebooks) binds both containers, both OBSERVED, neither skipped.
+	// Library 2 (Ebooks) binds both containers, both WALKED, neither skipped —
+	// so each carries a ZERO-COUNT skip row of its own (ADR-0063). The
+	// completeness verdicts beside them are the sibling axis and are no longer
+	// what makes `none` legible.
+	seedSkip(t, s, 1, "12", `{"name":"Ebooks","skipped_comics":0,"skipped_unknown":0}`)
+	seedSkip(t, s, 2, "21", `{"name":"More Ebooks","skipped_comics":0,"skipped_unknown":0}`)
 	seedCompleteness(t, s, 1, "12", `{"state":"complete","total_items":3,"visible_items":3}`)
 	seedCompleteness(t, s, 2, "21", `{"state":"complete","total_items":1,"visible_items":1}`)
-	// Library 3 (Loose Ends) has no sources at all, so nothing observed it.
+	// Library 3 (Loose Ends) has no sources at all, so nothing walked it.
 
 	_, body := callListLibraries(t, s, true)
 	var got librariesResponse
@@ -618,14 +627,14 @@ func TestWhatTheImportLeftOutReachesTheLibrariesWire(t *testing.T) {
 	// ── the two silences, which are NOT one value ──────────────────────────
 	ebooks := byName["Ebooks"].Skipped
 	if ebooks == nil || ebooks.State != "none" {
-		t.Fatalf("Ebooks' skipped = %+v, want `none` — both its containers were observed "+
-			"and neither recorded a skip, which is a MEASURED negative: %s", ebooks, body)
+		t.Fatalf("Ebooks' skipped = %+v, want `none` — both its containers were walked "+
+			"and each recorded a zero, which is a MEASURED negative: %s", ebooks, body)
 	}
 	if ebooks.Items != 0 || ebooks.Reason != "" {
 		t.Errorf("the `none` verdict published a count or a reason: %+v", ebooks)
 	}
 	if loose := byName["Loose Ends"].Skipped; loose != nil {
-		t.Errorf("Loose Ends carries %+v — nothing has ever observed it, and a verdict "+
+		t.Errorf("Loose Ends carries %+v — nothing has ever walked it, and a verdict "+
 			"there reports silence as a measurement", loose)
 	}
 

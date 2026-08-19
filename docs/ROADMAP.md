@@ -960,8 +960,24 @@ Items marked 🛑 **STOPPED** are the different case: those are stopped by the d
       *Done when:* `git grep TestSearchOrderIsTheServersAndIsNotScoreOrder` finds a `func`, or the
       comment names the guard that exists.
 
-- [ ] **NEW OBLIGATION — VENDOR BookOrbit's `packages/types` UNDER `docs/reference/`, WITH A DRIFT
-      CHECK. Rated ABOVE ordinary hygiene, and the reason is the item.**
+- [x] **DONE — BookOrbit's `packages/types` IS VENDORED, WITH A DRIFT CHECK.** Landed 2026-08-19 at
+      `api/specs/bookorbit-types/` (68 files, upstream `packages/types` at
+      `73b7877d`, git tree `4cb990a3…`), with `api/specs/bookorbit-types.manifest` beside it.
+      ⚠️ **The `docs/reference/` in this item's original heading was the INFERENCE it asked to have
+      settled, and it was settled the other way** — `api/specs/` is where this tree keeps vendored
+      upstream artefacts and where `SOURCES.md` registers them; `docs/reference/` holds hand-written
+      Markdown and no vendored artefact. The reasoning is in `api/specs/SOURCES.md` and in
+      `internal/bookorbit/vendoredtypes_test.go`'s `vendoredTypesRoot`. Guards: three offline tests
+      in `make check` (tree identity, manifest currency, and a comment-blind **declaration digest**
+      over the five transcribed files) plus `TestSpecDriftBookOrbitTypesStillMatchUpstream` in
+      `make spec-drift`, which is network-only and **runs only when a person types it** — there is
+      no CI, and the item's *"a check fails when it diverges"* is true of the check, not of any
+      schedule. What none of it covers is listed under *What this does NOT cover* in
+      `api/specs/SOURCES.md`. **Original item kept below for its reasoning.**
+
+- [ ] ~~**NEW OBLIGATION — VENDOR BookOrbit's `packages/types` UNDER `docs/reference/`, WITH A DRIFT
+      CHECK. Rated ABOVE ordinary hygiene, and the reason is the item.**~~ (superseded by the row
+      above)
       **Why it is not hygiene: BookOrbit is now v0.1's ONLY catalogue source (§1), so upstream drift
       is a single point of failure for the WHOLE library** — not the degradation of one source among
       several, which is what the same bug would have been while more than one adapter was in play. A

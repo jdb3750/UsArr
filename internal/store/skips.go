@@ -31,16 +31,18 @@ package store
 // SyncReportItemsSkipped is sync_report.kind for items an adapter read and
 // deliberately did not map.
 //
-// ⚠️ A ROW IS WRITTEN ONLY WHEN SOMETHING WAS SKIPPED — one per container per
-// import, and none at all for a container that was walked clean. That is the
-// OPPOSITE of SyncReportContentCompleteness's rule, it is deliberate, and
-// ADR-0061 §5 records it: an absent skip row means nothing was skipped, an
-// absent completeness row means nothing was ASKED.
+// ⚠️ A ROW IS WRITTEN FOR EVERY CONTAINER AN IMPORT WALKED, ZERO OR NOT — one
+// per container per import — and none at all for a container nothing walked.
+// That is the SAME rule as SyncReportContentCompleteness's, and ADR-0063 records
+// why it was made the same: an absent row of either kind now means nothing
+// looked, so two readers rendered one column apart no longer have opposite
+// absence conventions.
 //
-// ⚠️ WHICH IS EXACTLY WHY THE READ CANNOT STOP AT THIS TABLE. "Nothing was
-// skipped" and "no import ever counted" are both an absent row, so the read
-// pairs the absence with the completeness row to tell them apart. See
-// LibrarySkips.
+// ⚠️ IT USED TO BE THE OPPOSITE, under ADR-0061 §5 — a row only where something
+// was skipped — which made "nothing was skipped" and "no import ever counted"
+// the same absence, and forced the read to pair it with the completeness row to
+// tell them apart. ADR-0063 supersedes that clause; the read stands on these
+// rows alone. See LibrarySkips.
 //
 // It is distinct from `container_declined`, a whole container UsArr has no kind
 // for, and from `container_bind_failed`, a container that had a kind and lost a
@@ -63,8 +65,10 @@ const (
 	// containers and mapped none of them.
 	SkipsLeftOut SkipState = "left_out"
 
-	// SkipsNone is the measured negative: an import observed this library's
-	// containers and recorded nothing left out.
+	// SkipsNone is the measured negative: an import WALKED this library's
+	// containers and recorded nothing left out. Since ADR-0063 it rests on a
+	// zero-count row of this kind rather than on the neighbouring completeness
+	// verdict.
 	//
 	// ⚠️ IT IS NOT "THIS LIBRARY IS COMPLETE". It says one thing only — that the
 	// adapter recorded no unmapped items — and it is silent about whether the

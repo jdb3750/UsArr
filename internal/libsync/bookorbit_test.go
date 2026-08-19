@@ -340,12 +340,21 @@ func TestOnlyProseIsMappedAndTheRestIsCounted(t *testing.T) {
 		}
 	}
 
+	// ⚠️ TWO TALLIES, AND THIS ASSERTION IS INVERTED RATHER THAN DELETED. It read
+	// *"want exactly one container's tally — library 2 skipped nothing"*, because
+	// Skipped() dropped every zero. ADR-0063 reversed that: library 2 was WALKED,
+	// so it gets a tally saying so, and only a container the walk never reached
+	// is absent.
 	skips := src.Skipped()
-	if len(skips) != 1 {
-		t.Fatalf("Skipped() = %+v, want exactly one container's tally — library 2 skipped nothing", skips)
+	if len(skips) != 2 {
+		t.Fatalf("Skipped() = %+v, want a tally for BOTH walked containers — library 2 "+
+			"skipped nothing and that is a measured zero, not an absence", skips)
 	}
 	if skips[0].RemoteID != "1" || skips[0].Name != "Fiction" {
 		t.Errorf("the tally names the wrong container: %+v", skips[0])
+	}
+	if skips[1].RemoteID != "2" || skips[1].Total() != 0 {
+		t.Errorf("library 2's tally = %+v, want remote id 2 and a total of 0", skips[1])
 	}
 	if skips[0].Comics != 2 {
 		t.Errorf("comics skipped = %d, want 2 (cbz and cbr)", skips[0].Comics)
@@ -390,6 +399,68 @@ func TestAFailedWalkAbortsTheWholeStream(t *testing.T) {
 	}
 	if len(r.walkedAt) != 1 {
 		t.Errorf("walked %v; the stream must stop at the failure rather than skipping to the next library", r.walkedAt)
+	}
+}
+
+// THE INVARIANT ADR-0063 TURNS ON, AND THE HALF THAT IS EASY TO GET WRONG:
+// every container the walk REACHED reports, zero or not, and a container the
+// walk never reached reports NOTHING.
+//
+// ⚠️ IT IS THE DIFFERENCE BETWEEN RETIRING AN IMPRECISION AND MOVING IT. The
+// completeness verdict beside this one is measured in Containers(), before a
+// single book is read, so an aborted import leaves a verdict on containers it
+// never touched — and while the skip read derived its "walked clean" state from
+// that verdict, it inherited the same reach. Now that cmd/usarr writes a row per
+// element of Skipped(), the ONLY thing keeping the skip rows honest is that this
+// slice is built from tallies raised DURING the walk. Seed the map from
+// s.containers instead and library 3 comes back with a clean zero it never
+// earned, which is the old defect wearing the new mechanism.
+//
+// Library 1 walks and skips a comic; library 2 walks clean and fails at the end
+// of its walk; library 3 is never reached.
+func TestSkippedNamesOnlyTheContainersTheWalkReached(t *testing.T) {
+	boom := errors.New("upstream 500")
+	r := &fakeBookOrbitReader{
+		libs: []bookorbit.Library{
+			{ID: 1, Name: "Fiction"}, {ID: 2, Name: "Audio"}, {ID: 3, Name: "Never Reached"},
+		},
+		books: map[int64][]bookorbit.Book{
+			1: {proseBook(101, "The Hobbit"), withFormat(proseBook(102, "Saga"), "cbz")},
+			2: {proseBook(201, "Project Hail Mary")},
+			3: {withFormat(proseBook(301, "Unseen"), "cbz")},
+		},
+		walkErr: map[int64]error{2: boom},
+	}
+	src := NewBookOrbitSource(r)
+	if _, err := src.Containers(context.Background()); err != nil {
+		t.Fatalf("Containers: %v", err)
+	}
+	if _, err := src.StreamItems(context.Background(),
+		func(store.CatalogueItem) error { return nil }); !errors.Is(err, boom) {
+		t.Fatalf("err = %v, want the walk failure", err)
+	}
+
+	skips := src.Skipped()
+	if len(skips) != 2 {
+		t.Fatalf("Skipped() = %+v, want exactly the two containers the walk reached — "+
+			"library 3 was never walked and a row for it would say UsArr left nothing out "+
+			"of a container it never opened", skips)
+	}
+	if skips[0].RemoteID != "1" || skips[0].Comics != 1 {
+		t.Errorf("library 1's tally = %+v, want one comic", skips[0])
+	}
+	// ⚠️ THE RESIDUAL, ASSERTED SO IT CANNOT BE MISTAKEN FOR A CLOSED CASE. The
+	// container the walk died INSIDE still reports, from what it had read — so a
+	// clean partial read is indistinguishable from a clean complete one. That is
+	// at most one container per import, it is unchanged by ADR-0063, and the ADR
+	// records it as still open rather than implying it went away.
+	if skips[1].RemoteID != "2" || skips[1].Total() != 0 {
+		t.Errorf("library 2's tally = %+v, want remote id 2 with a total of 0", skips[1])
+	}
+	for _, s := range skips {
+		if s.RemoteID == "3" {
+			t.Errorf("library 3 was never walked and still reports %+v", s)
+		}
 	}
 }
 
@@ -576,9 +647,16 @@ func TestBookOrbitFullImportFromCassettes(t *testing.T) {
 		t.Errorf("ItemsApplied = %d, want 2 — the cbz is skipped", rep.ItemsApplied)
 	}
 
+	// ⚠️ INVERTED BY ADR-0063, NOT DELETED: this wanted *one* container back,
+	// because the other was walked clean and clean containers were dropped. Both
+	// walked containers now report, and the second one's zero is the point.
 	skips := src.Skipped()
-	if len(skips) != 1 || skips[0].Comics != 1 || skips[0].Unknown != 0 {
-		t.Fatalf("Skipped() = %+v, want one container with exactly one comic", skips)
+	if len(skips) != 2 || skips[0].Comics != 1 || skips[0].Unknown != 0 {
+		t.Fatalf("Skipped() = %+v, want both walked containers, the first with exactly "+
+			"one comic", skips)
+	}
+	if skips[1].Total() != 0 {
+		t.Errorf("the second container's tally = %+v, want a measured zero", skips[1])
 	}
 
 	var works, comics, links, extIDs, aliases int

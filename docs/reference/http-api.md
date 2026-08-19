@@ -366,7 +366,7 @@ express. There is nothing to clamp, so unlike §1 there is no `400` path at all.
       },
       // What that import READ in those containers and deliberately did not map.
       // ⚠️ A DIFFERENT AXIS FROM `completeness`, NOT ITS INVERSE, and ABSENT
-      // means nothing observed this library — never "nothing was skipped". §2.6a.
+      // means nothing WALKED this library — never "nothing was skipped". §2.6a.
       "skipped": {
         "state": "left_out",
         "items": 42,
@@ -409,7 +409,7 @@ from a failure.
 | `items[].item_count` | yes | `library_member` rows in this library **that the caller's access scope admits**. Edition-grained by the table's key; equal to a count of distinct works today, because the only writer files every work under the `edition_id = 0` "whole work" sentinel. |
 | `items[].orphaned_at` | **no** | RFC 3339 UTC. §6.5 rule 5's retained-with-a-reason state, set when the last source goes away. ⚠️ **Nothing writes it** — see §2.4. |
 | `items[].completeness` | **no** | What the last import measured about how much of this library's upstream containers UsArr's credential could see. ⚠️ **Absent means nothing was measured, never "complete"** — see §2.7. |
-| `items[].skipped` | **no** | What the last import **read and did not map** in this library's containers. A different axis from `completeness`, not its inverse. ⚠️ **Absent means nothing observed this library, never "nothing was skipped"** — see §2.6a. |
+| `items[].skipped` | **no** | What the last import **read and did not map** in this library's containers. A different axis from `completeness`, not its inverse. ⚠️ **Absent means nothing walked this library, never "nothing was skipped"** — see §2.6a. |
 | `items[].sources` | yes | Possibly `[]`. Never absent: an absent key reads as *"unknown"*, and *"this library has no sources"* is precisely what §17.8's orphaned state renders. |
 | `sources[].id` | yes | `library_source.id`. |
 | `sources[].service_instance_id` | yes | What §17.8's cross-link needs: *"a degraded source on a library row links to that instance's Services row"*. |
@@ -564,27 +564,35 @@ unit of work for part of it — and **neither is evidence for the other**. Like 
 | Value | Means |
 | --- | --- |
 | `state: "left_out"` | An import read items in this library's containers and mapped none of them. |
-| `state: "none"` | An import **observed** this library's containers and recorded nothing left out. A measured negative. |
-| key absent | **Nothing observed this library at all** — no import has run, or the adapter that ran records neither skips nor completeness. |
+| `state: "none"` | An import **walked** this library's containers and recorded nothing left out. A measured negative. |
+| key absent | **Nothing walked this library at all** — no import has run, or the one that ran never reached these containers, or the adapter that ran counts no skips. |
 
-⚠️ **The last two are different values because in the database they are the same silence.** A skip
-row is written to `sync_report` only when something was skipped ([ADR-0061](../DECISIONS.md#adr-0061)
-§5), so "the walk left nothing out" and "nothing has ever counted" are both an absent row. The
-server separates them by pairing the absence with the **completeness** row, which is written for
-every container an import observed including the clean ones. Collapse the two and an absent record
-starts reading as an all-clear, which is the defect ADR-0061 exists to prevent, one axis over.
+⚠️ **The last two are different values because collapsing them makes an absent record read as an
+all-clear** — the defect [ADR-0061](../DECISIONS.md#adr-0061) exists to prevent, one axis over. They
+are different rows in the database too: `sync_report` carries an `items_skipped` row for **every
+container an import walked, zero or not** ([ADR-0063](../DECISIONS.md#adr-0063)), so `none` is a
+recorded zero and the absent key is an absent row.
+
+⚠️ **It used to be one silence with two meanings.** ADR-0061 §5 wrote a skip row only where
+something had been skipped, and the server told the last two apart by pairing the absence with the
+**completeness** row. ADR-0063 superseded that clause: the wire values are unchanged, and only the
+evidence behind them moved.
 
 ⚠️ **`none` IS NOT A COMPLETENESS CLAIM.** It says the adapter recorded no unmapped items. It says
 nothing about whether the credential saw the whole container — that is §2.6, a different
 measurement with a different failure mode — and no client may render it as a statement that the
 library is complete.
 
-⚠️ **One known imprecision, in the safe direction, stated rather than hidden.** The completeness row
-is recorded before the walk, so an import that dies part-way leaves the containers it never reached
-carrying `none` where the truth is "not observed". The compensating fact is on the same screen and
-is not this field's: an instance whose import did not finish renders *"An import did not finish ·
-this count may be short"* on every one of its libraries. `none` also renders nothing, so the cost is
-a sentence that was not shown rather than a claim that was made.
+⚠️ **One known imprecision, in the safe direction, stated rather than hidden — and it is now a
+smaller one.** It used to be that the completeness row this state was derived from is recorded
+*before* the walk, so an import that died part-way left every container it never reached carrying
+`none`. ADR-0063 closed that: skip rows are raised during the walk, so a container the walk never
+reached has no row and the key is absent. **What is still open** is the one container the walk died
+*inside* — it carries a row from what it had read so far, so a container that had skipped nothing
+before failing reads `none` for a partial read. At most one per import. The compensating fact is
+unchanged and is not this field's: an instance whose import did not finish renders *"An import did
+not finish · this count may be short"* on every one of its libraries. `none` also renders nothing,
+so the cost is a sentence that was not shown rather than a claim that was made.
 
 **The adapter's per-reason vocabulary does not cross.** `sync_report.detail` carries
 `skipped_comics` and `skipped_unknown`; the wire carries the **total** and UsArr's sentence, because
