@@ -1036,6 +1036,12 @@ here so that whoever writes it inherits them rather than discovers them.
    | doc set known — the RRF fusion, candidates from `search_fts`, scope applied per candidate | `SEARCH sdl USING COVERING INDEX ix_sdl_doc (doc_rowid=? AND library_id=?)` |
    | scope leading — browse a scope with no query text | `SEARCH sdl USING PRIMARY KEY (library_id=?)` |
 
+   ⚠️ **The `sdl` in those two plan lines is the alias, not the table**, and in the statement
+   `internal/store` ships it is no longer that constant: the junction is aliased per leg —
+   `sdl_f`, `sdl_t` — because a hard-coded inner alias could be shadowed by the caller's own
+   (`searchDocLibraryAlias`, REVIEW-LOG LS-379). The plan assertions derive the name; an assertion
+   spelling `SEARCH sdl` would go on matching `SEARCH sdl_f` by prefix while covering nothing.
+
    Both are seeks and neither is a scan, which is the invariant's substance: permission filtering
    happens **in** the index join. `TestScopedSearchIsASeekNotAScan` asserts it in both directions,
    plus the full FTS arm.

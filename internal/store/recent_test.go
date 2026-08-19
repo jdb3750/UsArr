@@ -480,7 +480,10 @@ func TestRecentWorksCursorRoundTrips(t *testing.T) {
 // one way and fired against a different condition has proved nothing.
 func recentWorksPlanFaults(plan string) []string {
 	var faults []string
-	if !strings.Contains(plan, "USING INDEX ix_work_added") {
+	// planHas, not strings.Contains: `ix_work_added` is a prefix of
+	// `ix_work_added_at`, and a substring match would survive that rename while
+	// pinning nothing (planassert_test.go).
+	if !planHas(plan, "USING INDEX ix_work_added") {
 		faults = append(faults, "does not use ix_work_added")
 	}
 	if strings.Contains(plan, "ix_work_kind_sort") {
@@ -559,7 +562,7 @@ func TestRecentWorksFirstPagePlanIsAnOrderedIndexWalk(t *testing.T) {
 	seedRecentCorpus(t, s)
 
 	joined := recentWorksPlan(t, s, OwnerScope(1), RecentWorksCursor{})
-	if !strings.Contains(joined, "SCAN w USING INDEX ix_work_added") {
+	if !planHas(joined, "SCAN w USING INDEX ix_work_added") {
 		t.Errorf("the first page is not an ordered walk of ix_work_added: %s", joined)
 	}
 	if faults := recentWorksPlanFaults(joined); len(faults) > 0 {
@@ -600,8 +603,8 @@ func TestRecentWorksScopedPlanKeepsTheIndex(t *testing.T) {
 	// The inner alias is derived from the correlated column (scopeLinkAlias),
 	// so this derives it too: a literal `sil` is a prefix of every derived alias
 	// and would keep matching without covering anything.
-	if !strings.Contains(joined, "SEARCH "+scopeLinkAlias("w.id")) ||
-		!strings.Contains(joined, "ix_sil_work") {
+	if !planHas(joined, "SEARCH "+scopeLinkAlias("w.id")) ||
+		!planHas(joined, "ix_sil_work") {
 		t.Errorf("the scope EXISTS is not a seek on ix_sil_work: %s", joined)
 	}
 	if strings.Contains(joined, "SCAN sil") {

@@ -287,13 +287,21 @@ func TestPrimaryFileFollowsTheSourcePredicate(t *testing.T) {
 // ⚠️ IT PINS A TRANSCRIPTION, NOT A VENDORED SPEC, AND THAT IS THE HONEST LIMIT
 // OF IT. BookOrbit commits no OpenAPI document — server/src/swagger.ts builds
 // one at RUNTIME and main.ts mounts it only when SWAGGER_ENABLED is true, which
-// parseBooleanFlag defaults to false — so neither ADR-0046's two-spec shape nor
-// ADR-0047's blob-identity shape transfers. What this test can do is prove the
-// derivation is internally consistent and that every format in each set lands
-// where the source's own getBookMediaKind puts it. What it CANNOT do is notice
-// BookOrbit adding a seventh audio format; only a person re-reading
-// packages/types/src/book.ts can, and vendoring that file is the substitute
-// worth proposing.
+// parseBooleanFlag defaults to false — so ADR-0046's two-spec shape does not
+// transfer. ADR-0047's blob-identity shape DOES, to source files: 72207f8
+// vendored packages/types under api/specs/bookorbit-types/, and src/book.ts —
+// where AUDIO_FORMATS and COMIC_FORMATS live — is one of the five files
+// carrying a pinned declaration digest. (This paragraph used to say neither
+// transferred, and called that vendoring a substitute "worth proposing"; it
+// landed. Corrected 2026-08-19, see scope_test.go's header.)
+//
+// What this test can do is prove the derivation is internally consistent and
+// that every format in each set lands where the source's own getBookMediaKind
+// puts it. What it CANNOT do is notice BookOrbit adding a seventh audio format:
+// the offline pin freezes the bytes we vendored, so upstream moving leaves it
+// green. TestSpecDriftBookOrbitTypesStillMatchUpstream is what notices, and it
+// runs only when a person types `make spec-drift` with network access and
+// USARR_SPEC_DRIFT=1 set.
 func TestMediaKindVocabularyMatchesTheSource(t *testing.T) {
 	// AUDIO_FORMATS and COMIC_FORMATS at bookorbit/bookorbit@73b7877d, written
 	// out again rather than derived from the maps under test: a table built from
