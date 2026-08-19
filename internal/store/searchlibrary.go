@@ -15,7 +15,7 @@ import (
 // IT IS A LOCAL READ AND NOTHING ELSE (principle 1). Two SQLite statements
 // against the local file: one that resolves which libraries the caller can
 // search, and one that retrieves, fuses and hydrates. No upstream call, no
-// metadata provider, no image fetch. ARCHITECTURE.md §2073 budgets this
+// metadata provider, no image fetch. ARCHITECTURE.md §13 budgets this
 // endpoint at p50 < 15 ms and p99 < 50 ms, which is the reason the Prowlarr
 // fan-out was moved off /api/v1/search and onto /api/v1/releases/search: that
 // one cannot meet this budget by construction, and this one has to.

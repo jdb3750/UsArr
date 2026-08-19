@@ -137,7 +137,7 @@ func TestLibrarySearchAnswersFromTheLocalCorpus(t *testing.T) {
 // routing layer, which is the property the endpoint move exists for.
 //
 // They answer different questions over different corpora, with budgets three
-// orders of magnitude apart (ARCHITECTURE.md §2073 against §8.4). This asserts
+// orders of magnitude apart (ARCHITECTURE.md §13 against §8.4). This asserts
 // the observable difference: the library search answers 200 with results IN THE
 // BODY, and the release search answers 202 with results on the SSE stream.
 func TestLibrarySearchIsNotTheReleaseSearch(t *testing.T) {

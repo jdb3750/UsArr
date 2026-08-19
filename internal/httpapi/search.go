@@ -16,7 +16,7 @@ import (
 )
 
 // The route is /api/v1/releases/search, not /api/v1/search, and the reason is a
-// budget rather than a taste. ARCHITECTURE.md §2073's performance table assigns
+// budget rather than a taste. ARCHITECTURE.md §13's performance table assigns
 // `GET /api/v1/search?q=…` (the FTS hybrid over the local corpus) p50 < 15 ms
 // and p99 < 50 ms — a target §8.4 says a release search cannot meet by
 // construction, because it is an upstream fan-out and not a local read. Two
