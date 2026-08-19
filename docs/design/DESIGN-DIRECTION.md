@@ -844,7 +844,8 @@ it; §9.2 puts the title and year below the tile, on the chrome's own ground.
 **Tier 0 — the data is in local SQLite. Nearly every read.**
 Show **nothing at all**. No skeleton, no spinner, no fade-in. Render the content. Target **< 50 ms
 click-to-paint; hard fail at 100 ms.** A local read over 100 ms is a **query-plan bug**, and it
-belongs in the `EXPLAIN QUERY PLAN` assertions in CI (§13 of ARCHITECTURE), not behind a spinner.
+belongs in the `EXPLAIN QUERY PLAN` assertions `make check` runs (§13 of ARCHITECTURE), not behind
+a spinner.
 
 **Tier 1 — 100 ms to ~1 s, and the wait is unavoidable.** First SPA boot; a cold cover-art fetch.
 No indicator. **Progressive content**: render the shell, the nav, the headers and every field
@@ -2912,7 +2913,8 @@ the feature does not.** These are layout obligations, not v0.1 work.
 
 ## 13. The lint checklist
 
-`[grep]` = enforceable as a CI grep, ESLint or Stylelint rule. `[review]` = human judgement at PR
+`[grep]` = mechanically enforceable — a grep, an ESLint or a Stylelint rule; §13.0 names
+`docs/design/check.mjs` as where those live and `make design` as what runs them. `[review]` = human judgement at PR
 time. This is the reviewable form of §1, and it is the artefact that makes "don't look
 AI-generated" an actual gate rather than a vibe.
 

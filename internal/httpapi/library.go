@@ -62,12 +62,18 @@ import (
 //   - No cover art, here or on the grid. server.go routes no image endpoint at
 //     all, so shipping poster_asset_id would be an id the client cannot turn
 //     into anything.
-//   - No Block A and no Block B. Those are a per-type rollup and an attention
-//     list. ⚠️ THIS BULLET USED TO END "and server.go routes neither", WHICH IS
-//     NOW HALF WRONG: Block A's per-type COUNT is routed — facets.go,
-//     GET /api/v1/library/facets, http-api.md §8. What is still not built is
-//     Block A itself and the rest of its row (the availability rollup and the
-//     last-import time are further aggregates), and Block B in its entirety.
+//   - No Block A. It is §17.2's per-type rollup row. ⚠️ THIS BULLET USED TO
+//     READ "No Block A and no Block B ... and server.go routes neither", AND
+//     BOTH HALVES OF THAT WERE WRONG BY THE TIME IT WAS READ. Block A's
+//     per-type COUNT is routed — facets.go, GET /api/v1/library/facets,
+//     http-api.md §8 — so what is still unbuilt is Block A itself and the rest
+//     of its row: the availability rollup and the last-import time are further
+//     aggregates and nothing serves them. AND BLOCK B IS DRAWN. It is the
+//     attention block, computed in web/src/lib/home.ts from
+//     GET /api/v1/services/health and rendered by web/src/routes/+page.svelte,
+//     so it hangs off SERVICE state rather than off a catalogue route — which
+//     is why nothing in this file serves it, and why its absence from this
+//     file is not evidence of its absence from the screen.
 
 // recentWorkResponse is one Block C row as it crosses to a browser.
 //

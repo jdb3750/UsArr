@@ -104,10 +104,11 @@ because no ADR ever decided it. Annotating leaves that failure mode nowhere to h
 | [0050](#adr-0050) | The image pipeline's base output format is **stdlib JPEG**; **AVIF is deferred** with its seam kept | **Accepted** — 2026-08-19; **amends** ARCHITECTURE §4.4 and §4.4.1, which named AVIF as the only output codec and named **no base format at all** — a spec missing its base case, which is why this ADR was owed; the reason for stdlib is **zero new dependencies in a static binary** (UsArr has **five** direct dependencies; `image/jpeg` adds none), **not** "JPEG is good enough" — the ADR records the ledger it is traded against, roughly **2–3× larger** than AVIF on photographic content, so a future reader can weigh it; **AVIF is buildable here** (`gen2brain/avif` v0.6.0, MIT, cgo-free, libaom-as-WASM) and is deferred on a **measured trade with a named reopening condition**, not rejected — one MIT dependency plus a **second** WASM runtime, since `wazero` is **verified absent** from this module graph after `ncruces/go-sqlite3` moved to `wasm2go`, and the **binary-size delta is recorded as UNMEASURED rather than estimated**; **reopens when** someone measures the binary delta and the per-width encode cost and decides the bytes are worth it (an ADR amendment plus one map entry, **no migration**), or when an upstream is found serving a format the stdlib cannot decode — ⚠️ **measured, not assumed, and the first draft's assumption was wrong: Kavita is v0.1's catalogue source and its *Save Media As* setting writes covers as PNG (default), WebP or AVIF**, so one admin checkbox on the owner's own server produces input this binary cannot decode (`x/image/webp` is decode-only; there is no pure-Go AVIF decoder in `x/image`), which relocates the likeliest revisit from output size to **input decode**; **one codec per row is an explicit invariant** — clause 1 puts `orig` inside UsArr's encoder rather than leaving it a passthrough, because §4.4 stores **seven widths per asset** and the column is **one per row**, so per-`role` variation stays expressible and per-**width** variation is foreclosed in writing; the seam is **`image_asset.format`** (migration `00008_image_asset_format.sql`) — nullable `TEXT`, no default, **no `CHECK`** on [ADR-0039](#adr-0039)'s reasoning; ⚠️ **unlike ADR-0039 the Go validation SHIPPED WITH THE COLUMN** (`internal/store/images.go`, plus an AST-walk guard that fails `check` if a writer lands without it), because ADR-0039's promised validator was never written and repeating that would be worse than a `CHECK`; ⚠️ **describes a pipeline that does not exist** — nothing writes `image_asset`, so what ships is the decision, the column and the guard |
 | [0051](#adr-0051) | The library-scoped grid is a **work-driven `EXISTS`**, not a join to `library_member` | **Accepted** — 2026-08-19; **supersedes [ADR-0026](#adr-0026)'s materialisation as read by ARCHITECTURE §6.5 for the `added_at` order ONLY** — §6.5's denormalised `(library_id, sort_title, work_id, edition_id)` key stands, and `TestLibraryScopedKeysetIsASeek` still pins it, but it serves the **`sort_title`** order and **only** that one: measured on the real schema (`ncruces/go-sqlite3`, SQLite 3.53.4), a library-scoped page ordered by `added_at` gets `USE TEMP B-TREE FOR ORDER BY` in **both** topologies §6.5 names, **with and without `ANALYZE`**; the work-driven `EXISTS` over `ix_libmem_work` keeps `SEARCH w USING INDEX ix_work_added (added_at<?)` in **every** configuration measured, **including the multi-value `?lib=a,b` case** — which was a hypothesis until the plan was read, because an `IN` on the leading key column destroys the ordered index in every *member-driven* shape; it is also **the only shape that cannot return one work twice**, since a work filed in two of the named libraries carries **one membership row per library** and a browse row is work-keyed — ⚠️ per-**library**, not per-edition: `library_member`'s key carries `edition_id`, but the only production writer hardcodes the `0` sentinel, so membership is **not** edition-grained in the tree today (`REVIEW-LOG.md` LS-213), and the ADR body's argument, which is about two libraries over one work, is unaffected; **costs one migration** — `00009_edition_format_index.sql`, `ix_edition_format ON edition(format, work_id)`, for the Audiobooks filter and not for the scope; **`ix_libmem_added` is explicitly NOT owed** and must not be added on this ADR's authority; ⚠️ **reopens on `make bench` over a NARROW library** — the `EXISTS` walks the *global* `added_at` order and discards non-members, which suits a broad library and not a narrow one, so a 1%-selective library over a 25k-row kind is the measurement that would send this back to a member-driven shape with a new index; ⚠️ **amended 2026-08-19** — the *"says nothing about `year`"* non-decision gains the shape of the gap it leaves: `default_sort`'s CHECK admits four orders and this read serves three, `?sort=year` is **refused and never substituted**, the endpoint never reads `default_sort` at all, and nothing in the tree writes the column yet — so the trap arms the day §17.8's DETAIL view offers the choice. The decision is untouched |
 | [0052](#adr-0052) | v0.1's catalogue source is **BookOrbit**; **Kavita is sunset** and its adapter **stays in the tree** | **Accepted** — **owner-decided 2026-08-19**; **amends [ADR-0041](#adr-0041)** clause 1 (*"v0.1's catalogue source is **Kavita**"*) — ADR-0041's clauses 2 and 3 are **confirmed**, and its clause 4 (channels **1, 3b and 4**) is **REOPENED as an open question, not re-answered**, because BookOrbit has had no equivalent of [ADR-0035](#adr-0035) §2a's live probe; **amends ARCHITECTURE §16.1's v0.1 entry**, edited in the same change because §16 is scope authority; the decision is **the owner's, not an agent's** — he is sunsetting Kavita entirely, BookOrbit takes everything, his word is **"phenomenal"**, and the repo's own one-day-older record of the same direction is `ROADMAP.md` §3's *"in my heart i kind of want to migrate to book orbit"*; ⚠️ **it REVERSES `ROADMAP.md` §3's standing recommendation** *"do NOT switch UsArr's first adapter off Kavita"*, because **two of the three findings that produced it were re-measured on 2026-08-19 against BookOrbit `main` and are FALSE** — headless auth needs **no password** (`server/src/modules/auth/magic-link.service.ts`; SHA-256-hashed token, `loginWithToken()` validates no password), and **comics ARE covered** (a shipped ComicVine provider), leaving only **manga and anime** identifiers absent (zero hits for `mangabaka`/`anilist`/`myanimelist` repo-wide); 🚩 **and a third claim reached the ADR in relay and was REFUSED on primary source** — *"no watermark, so full resync with no delta channel"* is **false in its strong form**, since `packages/types/src/query.ts` admits `"updatedAt"` as a sort key with page/size paging, which is exactly channel 3b's shape, so writing it in would have foreclosed v0.1 work on a premise the source refutes; what is **genuinely unsettled** is whether that timestamp moves on tag, genre and author edits, since `$onUpdateFn` is **application-level, not a DB trigger** and those live off the book row — §7.1a's **reconciliation-only** fallback is the named failure branch, **not** this ADR's decision; **"sunset" explicitly does NOT mean delete** — `internal/kavita`, `internal/libsync/kavita.go`, both vendored specs and [ADR-0046](#adr-0046)'s contract guard stay and stay green, investment stops, and **no milestone for further Kavita work is invented**, on [ADR-0042](#adr-0042)'s refusal-to-number precedent; **MangaBaka is NOT a dependency** — the owner's *"in the near future"* is **his expectation, nobody's commitment**, native support is an **open PR with no maintainer signoff**, and the adapter is designed against what BookOrbit ships **today**; ⚠️ **MangaBaka data may be fetched at runtime and NEVER vendored, shipped or cached as a dump** — **CC BY-NC-SA 4.0**, verified at `mangabaka.org/data/database`, is **not AGPL-3.0-compatible**, and the dump additionally carries third-party terms it does not license; ✅ **identity needs NO migration and NO new mechanism, which INVERTS this ADR's own first draft** — the draft called BookOrbit's series-level identity a structural degradation and warned of a migration, and a schema check against the tree falsified it: `external_id`'s `source` is plain `TEXT` with **no `CHECK`** and it carries `confidence` (`00005_library_sync.sql:444`), a series **IS a work row** (`work.kind` admits `'series'` and `'comic'`, `:242`) so `work_id` **already is** the series-level column, and `kavitaExternalIDs` **already writes seven series-level ids** including **`mangabaka` at 0.90** (`internal/libsync/kavita.go`, `weblinkid.go:111,162`) — because Kavita's own series ids are **weblink-parsed from what the user tagged**, exactly as BookOrbit's would come from a user-populated custom field, so the two are **the same arrangement** and 0.90 is already the right grade; the one recorded wrinkle is that BookOrbit's custom fields are **book-scoped** (`custom-metadata.ts`, `bookId` FK, no series variant) so the id needs a hoist — **which Kavita also needs and does lossily**; 🚫 **`work_relation` is cited nowhere and must not be added** — it is **absent from the tree** and `internal/db/migrate_test.go` fails if it appears; ⚠️ **ships NO code by design** — it gates the adapter |
-| [0053](#adr-0053) | All six media types are **always** in the sidebar; per-type hiding is closed until a facet read exists | **Accepted** — 2026-08-19; **amends [ADR-0027](#adr-0027)** for its sidebar clause **only** — that ADR's *"a type with zero items is not rendered anywhere"* stands for Block A and for search groups, both of which are unaffected — and amends ARCHITECTURE §17.2 and `design/DESIGN-DIRECTION.md` §8.1 to match the shipped shell; the data-driven sidebar those two specified **cannot be built over the wire UsArr serves**, because `reference/http-api.md` §7.1 states there are *"no facet counts beside the chips; each is its own aggregate and its own read"* and no read answers per-type presence at all; so **all six render unconditionally, no row carries a count**, and the honesty moves to the per-type screen, where `browseEmptyState` names which of three reasons the grid is empty; ⚠️ **the rejected alternative that looks like compliance is hiding a type on a count nobody measured** — it fails silently and removes the very row that would have explained the absence; **adds no endpoint, no migration and no backend change**; ⚠️ **reopens on exactly one condition** — a read answering which of the six types have rows under the current scope, in one statement — at which point the seam is one predicate on `TYPE_NAV`, and §13 has already priced the shape at *"1 keyset page + 6 sidebar `COUNT(*)`"* < 15 ms p50 without deciding whether it rides the browse response or its own endpoint |
+| [0053](#adr-0053) | All six media types are **always** in the sidebar; per-type hiding is closed until a facet read exists | **Accepted** — 2026-08-19; **amends [ADR-0027](#adr-0027)** for its sidebar clause **only** — that ADR's *"a type with zero items is not rendered anywhere"* stands for Block A and for search groups, both of which are unaffected — and amends ARCHITECTURE §17.2 and `design/DESIGN-DIRECTION.md` §8.1 to match the shipped shell; the data-driven sidebar those two specified **cannot be built over the wire UsArr serves**, because `reference/http-api.md` §7.1 states there are *"no facet counts beside the chips; each is its own aggregate and its own read"* and no read answers per-type presence at all; so **all six render unconditionally, no row carries a count**, and the honesty moves to the per-type screen, where `browseEmptyState` names which of three reasons the grid is empty; ⚠️ **the rejected alternative that looks like compliance is hiding a type on a count nobody measured** — it fails silently and removes the very row that would have explained the absence; **adds no endpoint, no migration and no backend change**; ⚠️ **reopens on exactly one condition** — a read answering which of the six types have rows under the current scope, in one statement — at which point the seam is one predicate on `TYPE_NAV`, and §13 has already priced the shape at *"1 keyset page + 6 sidebar `COUNT(*)`"* < 15 ms p50 without deciding whether it rides the browse response or its own endpoint; ⚠️ **reopening condition REFINED 2026-08-19, citing [ADR-0059](#adr-0059) — refined, not discharged.** `GET /api/v1/library/facets` shipped and looks like the named read; it is not. It answers *how many works are bucketed to each type*, and every book is bucketed exactly once, so discharging the condition with it would hide **Audiobooks** from a user who has audiobooks held as second editions of ebooks. The condition now reads as a predicate answering **whether a type has content** — the independent `EXISTS` over `edition.format` of §17.2 rows 4–5, which `ix_edition_format` already serves — **and not a read returning per-type counts**. The decision itself is untouched: the nav stays all-six-always for v0.1 |
 | [0054](#adr-0054) | The search response publishes a per-hit relevance `score`, and the ORDER stays the contract | **Accepted** — 2026-08-19; **amends [`reference/http-api.md`](./reference/http-api.md) §6.2**, which said *"No score is published"*; **unblocks ARCHITECTURE §17.4 rule 2**, whose grouped results are ordered *"by the group's best-scoring hit"* — a comparison **no ordering can answer**, because a row's ordinal position says nothing about the distance between two groups' best rows; the withheld field was stopping the screen from being built, not stopping the misuse it was withheld for, so the misuse is **documented and tested against instead**: §6.2.1 lists two permitted uses and five forbidden ones, each with its mechanism; ⚠️ **the order is still authoritative and is NOT score order** — the media-type diversity injection promotes a row without re-scoring it, so a client re-sorting by the published number silently produces a **worse** list than the one it was given; **adds no migration, no column and no query** — the value was already computed per hit and discarded at the boundary |
 | [0057](#adr-0057) | The circuit breaker is **one package with an injected open sentinel**, not a copy per client | **Accepted** — 2026-08-19; **taken at the trigger the tree itself named** — `internal/kavita/breaker.go` carried the standing instruction *"worth taking the first time a THIRD client needs one: lift this file into `internal/breaker` with an injected sentinel … two copies is cheaper than a package that exists to serve two callers; three is not"*, and `internal/bookorbit` is that third client; **closes off each client keeping its own copy of the state machine**, which was the live alternative and would have made three; the open sentinel is a **constructor argument**, which is the one reason the copy ever existed — `errors.Is(err, kavita.ErrBreakerOpen)` and `errors.Is(err, servarr.ErrBreakerOpen)` keep meaning exactly what they meant, and a Kavita failure never reads `servarr: circuit breaker open`; **`internal/kavita` and `internal/servarr` keep their exported names as type aliases** (`BreakerState`, `BreakerConfig`, `Breaker`, the three state constants, `NewBreaker`), so **`internal/releases` and `internal/libsync` are untouched** — verified, neither appears in `568ddbc`'s diff at all; **the only test change outside the new package is one line**, `BreakerConfig{}.withDefaults()` → `.WithDefaults()` in `internal/kavita/client_test.go`, and `internal/servarr/breaker_test.go` was not touched; **the §7.5 tuning does not move** (5 failures to open, 5 s → 15 m capped, ±20% jitter) and is pinned in **three** packages — `internal/breaker`'s own `TestDefaultsAreTheArchitectureNumbers`, plus a client-side assertion in `internal/kavita/client_test.go` and `internal/bookorbit/client_test.go`, while `internal/servarr` pins the same numbers **behaviourally** through its five untouched breaker tests — and the client-side assertions deliberately stay in the client packages, which is why `withDefaults` becomes the exported `WithDefaults`; ⚠️ **the line ledger is a deduplication, not a net saving, and this ADR states the measured numbers rather than the headline** — the commit deletes **347** lines (346 of them the two copied state machines, the 347th that one test line), the two client files go from **202** and **192** lines to **52** and **49** (101 lines of alias wrapper, **53** of them newly written), and the new package costs **245** lines plus a **103**-line test; what is bought is **one** state machine instead of two, not a smaller tree; **adds no dependency, no migration, no behaviour change and no exported-API break** |
 | [0058](#adr-0058) | UsArr **grades the scope a stored service credential actually carries**, and **reports rather than refuses** | **Accepted** — 2026-08-19; **discharges [ADR-0052](#adr-0052)'s §14 credential-scope gate** — ⚠️ a **discharge is not an amendment**, so ADR-0052 gains a dated inline note pointing here and **nothing in its text is struck**; **closes off assuming a service account is minimal** because it was created as a service account — the grading is done **in code, not in prose**, so `TestEveryBookOrbitPermissionIsClassified` notices a 24th permission upstream where a paragraph could not; all **23** members of BookOrbit's `Permission` enum are classified **elevated** (14: write or admin reach beyond a catalogue read) or **unneeded** (9: harmless but more than UsArr uses), with the superuser flag (elevated), a non-`shared` `provisioningMethod` (unneeded) and an inactive account (unneeded) as **separate findings** rather than permissions; ⚠️ **an unrecognised permission grades ELEVATED, never harmless** — chosen, not fallen into, so the verdict gets *more* conservative on its own when BookOrbit's vocabulary grows, at the named cost that a genuinely harmless upstream addition is over-flagged until someone classifies it (the grading is a **maintenance obligation**, not a self-maintaining one); **costs ZERO extra requests** — `AuthService.buildUserResponse` ships `permissions`, `isSuperuser` and `provisioningMethod` in the same body as the `accessToken`, which is why the verdict can be recomputed on **every** mint; **the client REPORTS and WARNS, it does not REFUSE**, because refusing leaves an operator with a service that will not talk to them and no visible reason — the opposite of principle 3, and the §14 finding would be **less** visible, not more; ⚠️ **what ships is the mechanism, not the gate's enforcement** — ADR-0052's condition is on the **catalogue read**, so the first `StreamItems` in slice 1 must consult `ScopeVerdict.Elevated()`, and slice 0 ships the thing it will consult; **adds no migration, no column, no crypto and no new HKDF label** — the secret rides the existing versioned AAD-bound `service_instance` envelope |
+| [0059](#adr-0059) | The per-media-type facet count is an **assignment**: every work lands in **exactly one** bucket | **Accepted** — 2026-08-19; **records the counting semantics that shipped with `GET /api/v1/library/facets`** (`2711926`), whose wire contract is [`reference/http-api.md`](./reference/http-api.md) §8 and whose reasoning is `internal/store/facets.go` — **the numbers and the predicates live there and this ADR does not copy them**; a count cannot put one work in two buckets and remain a count, so the column would stop summing to the library and the same work would be reported twice in a summary whose whole question is *"what do I have?"*; the assignment is **`mediaTypeOf`'s**, the one that already renders every Block C and grid row's Type cell, so **a book held as both an EPUB and an M4B counts under Ebooks** and the count therefore equals the list a user reaches by clicking it — that equality is the decision's whole argument, and `TestMediaTypeCountsAgreeWithTheBrowseRead` pins it from the consumer's side; ⚠️ **the consequence, stated rather than buried: a library whose only audiobooks are second editions of ebooks reports `audiobooks: 0`**, while ARCHITECTURE §17.2's row-5 predicate — an independent `EXISTS` over `edition.format` — says that type has content; **the two disagree by design**, and this ADR is where a reader is meant to meet that; **closes off §17.2's independent-`EXISTS` shape as the counting rule** — it is the right shape for a *presence* test and the wrong one for a *count*, and the two are not interchangeable; **adds no endpoint, no migration, no column and no UI change** — the read, the index (`ix_edition_format`, migration `00009`) and the tests were already in the tree when this was written; ⚠️ **it is a live input to [ADR-0053](#adr-0053)**, whose reopening condition these counts appear to satisfy and do not — see that ADR's 2026-08-19 refinement, which this ADR is cited by |
 
 ---
 
@@ -1043,7 +1044,7 @@ injection**. **There is no Tier 3.** An external engine is deferred behind the r
    sending ThumbHashes as raw bytes and capping at 25,000 items makes it ~1.5–2.1 MB and *true*.
 3. **Both FTS tables need `contentless_delete=1`** (SQLite ≥ 3.43) or deleted works stay in the index
    forever, and the three tables must share one rowid space or RRF silently fuses unrelated
-   documents. Both are now invariants with CI assertions.
+   documents. Both are now invariants asserted by `make check`.
 
 **Meilisearch is deferred, not rejected.** This ADR previously kept it as a named tier with config
 variables, a checklist row and a README row — implying someone would build and support it — while
@@ -2029,8 +2030,10 @@ catalogue comics with no sink at all beyond Prowlarr free-text.
   `work_id` / `link_id`**, with `target_identity_hash` as the durable key — an `ON DELETE CASCADE`
   would let a tombstone expiry destroy the correction, which *is* the failure being designed
   against.
-- **Library membership is never an input to identity**, enforced by a CI assertion that no query in
-  the identity path references `library_member`, `library_source` **or `library_override`**.
+- **Library membership is never an input to identity**, to be enforced by an assertion in
+  `make check` that no query in the identity path references `library_member`, `library_source`
+  **or `library_override`** — owed, not written: there is no identity cascade and no correction
+  applier yet for it to read (`reference/schema.md` §13.5).
   jellyfin#10985 is the counter-example — the same film in three per-language libraries collapsed
   into one item and watch state leaked across all three. The third table is named because it is the
   one library-named table that by design *does* feed identity: its `relink` verb repoints a
@@ -2079,8 +2082,8 @@ catalogue comics with no sink at all beyond Prowlarr free-text.
   invalidation problem. This is the honest cost.
 - ⚠️ **The library-scoped grid query is unmeasured** at the §13 reference library size. Mitigation in
   order: the common case is `work.kind = ?` with membership as a one-row lookup; failing that,
-  denormalise the sort key onto `library_member`. It is a CI `EXPLAIN QUERY PLAN` assertion and a
-  `make bench` line, not an assumption.
+  denormalise the sort key onto `library_member`. It is an `EXPLAIN QUERY PLAN` assertion in
+  `make check` and a `make bench` line, not an assumption.
 
 ### Alternatives rejected
 
@@ -7294,7 +7297,30 @@ with it.
 sidebar and for nothing else** · **Amends [`ARCHITECTURE.md`](./ARCHITECTURE.md) §17.2** and
 `design/DESIGN-DIRECTION.md` §8.1 · **Adds no endpoint, no migration, no column and no backend
 change** · **Reopens on exactly one condition: a per-type facet read on
-[`reference/http-api.md`](./reference/http-api.md)**
+[`reference/http-api.md`](./reference/http-api.md)** · ⚠️ **reopening condition refined 2026-08-19,
+citing [ADR-0059](#adr-0059)** — see the block below
+
+> ### ⚠️ Refinement, 2026-08-19 — the condition is REFINED, not discharged
+>
+> **The decision is untouched. All six media-type entries still render unconditionally, no row
+> carries a count, and `TYPE_NAV` still maps six with no predicate.** What moves is the reopening
+> condition below, which was about to be discharged by the wrong read.
+>
+> `GET /api/v1/library/facets` shipped ([ADR-0059](#adr-0059), `reference/http-api.md` §8), and it
+> looks like the read this ADR named. **It is not, and the gap is invisible until a two-format
+> book.** The facets read answers *how many works are **bucketed** to each type*; every book lands
+> in exactly one bucket, so a book held as both an EPUB and an M4B counts under **Ebooks** and under
+> nothing else. Discharging this condition with it would hide **Audiobooks** from a user who has
+> audiobooks — the silent drop this ADR's own rejected alternative is written against, arriving
+> through a read that looks like compliance.
+>
+> **So the condition now reads:** a predicate answering **whether each of the six types has
+> content** — the independent `EXISTS` over `edition.format` of ARCHITECTURE §17.2 rows 4–5, which
+> `ix_edition_format` (migration `00009`) already serves — **and not a read returning per-type
+> counts.** A count is not that predicate and cannot be substituted for it.
+>
+> Nothing else in this ADR moves: the Alternatives, the Consequences and the seam (*"one predicate
+> on `TYPE_NAV`"*) all stand as written.
 
 ### Context
 
@@ -7322,7 +7348,11 @@ something on every install today.
 > that is empty says so on its own screen, in words that name which of the reasons it is.**
 >
 > **Per-type hiding is closed, not abandoned, and it reopens on one named condition: a read that
-> answers which of the six types have rows — under the current scope — in one statement.** Until such
+> answers which of the six types have rows — under the current scope — in one statement.** ⚠️ **This
+> sentence is REFINED as of 2026-08-19 — see the Refinement block under `Status:`, and read it before
+> treating any read as satisfying this.** *"Have rows"* means **has content**, an existence question
+> over `edition.format`; the per-type **counts** on `GET /api/v1/library/facets` are a different
+> answer and do not discharge it ([ADR-0059](#adr-0059)). Until such
 > a read exists on `reference/http-api.md`, re-specifying *"one entry per type that has content"* is
 > specifying a screen the wire cannot serve, and this ADR is the reason a future pass should not
 > "restore" it as though it had been dropped by accident.
@@ -7763,3 +7793,115 @@ session, logged at WARN when non-minimal, and read back through `Client.Scope()`
 `TestScopeIsPopulatedByTheMintAtNoExtraCost` and `TestAccountViewIsAnAllowlist` in
 `internal/bookorbit/scope_test.go`. **There is no UI half and no schema half:** nothing renders the
 verdict yet, and nothing persists it — it is recomputed from the login response on every mint.
+
+---
+
+<a id="adr-0059"></a>
+## ADR-0059 — The per-media-type facet count is an assignment: every work lands in exactly one bucket
+
+**Status:** Accepted · **2026-08-19** · Landed with `GET /api/v1/library/facets` at `2711926` ·
+**Records the counting semantics that shipped**, which had nowhere decision-shaped to live ·
+**Closes off** ARCHITECTURE §17.2's independent-`EXISTS` shape *as the counting rule* — it stays
+correct as a **presence** test · **Adds no endpoint, no migration, no column and no UI change** —
+the read, `ix_edition_format` (migration `00009`) and the tests were all in the tree when this was
+written · ⚠️ **A live input to [ADR-0053](#adr-0053)**, whose reopening condition is refined rather
+than discharged on the strength of this
+
+### Context
+
+`GET /api/v1/library/facets` answers §17.2's six navigation types with a count each. The wire
+contract is [`reference/http-api.md`](./reference/http-api.md) §8 and the reasoning behind every
+predicate is `internal/store/facets.go`. **Those two are authoritative and this ADR copies neither**
+— it exists for the one thing neither is shaped to hold: the decision that was taken when a work
+could plausibly have been counted twice, and the consequence that follows from taking it.
+
+The question is forced by `book`. It is the one `work.kind` that two media types share (§17.2 rows 4
+and 5), separated by `edition.format` — and a book can carry both an EPUB and an M4B at once. Every
+other type is a `work.kind` equality and has no such case, which is why this decision is about one
+kind and reads as though it were about all six.
+
+### Decision
+
+> **The Ebooks/Audiobooks split is an ASSIGNMENT, not two independent tests. Every `book` work lands
+> in exactly one of the two buckets, and a book with both an ebook edition and an audiobook edition
+> lands in Ebooks.**
+>
+> The assignment is `mediaTypeOf`'s — **the same function that renders the Type cell of every Block C
+> row and every library-grid row** — reached by calling it rather than by restating its rule.
+
+**A count cannot do otherwise and remain a count.** If a work could occupy two buckets, the column
+would stop summing to the library, and the same work would be reported twice inside a summary whose
+entire question is *"what do I have?"*. A number that double-counts is not a smaller error than a
+number that under-counts; it is a different kind of object.
+
+**And the choice of *which* bucket is what makes the count equal the list.** The count's consumer is
+a row a user clicks, and the click lands on `GET /api/v1/library?media_type=X`. That endpoint filters
+Audiobooks on `browseAudiobookPredicate` and Ebooks on its complement — the same predicate the facet
+read binds, shared by reference rather than retyped. So the count is not merely *a* consistent
+bucketing; it is the bucketing the grid already performs, and the two agree row for row.
+`TestMediaTypeCountsAgreeWithTheBrowseRead` pins that equality **from the consumer's side**, by
+paging the grid and counting what comes back rather than by re-deriving it from the facet query.
+That equality is the argument for the decision, not a pleasant side effect of it.
+
+### Alternatives rejected
+
+- **§17.2's independent-`EXISTS` shape, used as the counting rule.** Rows 4 and 5 give each type its
+  own `EXISTS` over `edition.format`, under which a book with an EPUB *and* an M4B makes **both**
+  types "have content". **That is the right answer to the question §17.2 is asking and the wrong
+  answer to this one**, and the distinction is worth stating rather than assuming: *presence* is
+  monotone and may overlap — two true answers about one work are not in conflict, because neither
+  claims exclusivity — while a *count* is a partition and overlap breaks it. Adopting the `EXISTS`
+  shape here would produce two columns that each look right and together exceed the library.
+- **Count a mixed book under Audiobooks instead.** Symmetric on the arithmetic and worse on the
+  equality above: `mediaTypeOf` answers Ebooks for a book with no edition rows at all, so making the
+  mixed case Audiobooks would put the two arms of one function on different rules and re-open the
+  drift the shared call exists to prevent.
+- **A third bucket for mixed books.** §17.2's enum is closed at six *by construction* and the whole
+  navigation model rests on that; a seventh value is a change to the axis, not to this read.
+
+### Consequences
+
+- ⚠️ **A library whose only audiobooks are second editions of ebooks reports `audiobooks: 0`, while
+  §17.2's row-5 predicate says that type has content. The two disagree by design.** This is the
+  sentence this ADR exists to put somewhere a reader will meet it: it is stated in
+  `reference/http-api.md` §8.4 and in `internal/store/facets.go`, and neither is where someone
+  reasoning about *whether to trust a count* will look.
+- **The disagreement is only a defect if something reads the count as a presence test.** Nothing
+  does today. It becomes one the day something hides a type on this number — which is
+  [ADR-0053](#adr-0053)'s territory, below.
+- `ebooks + audiobooks` is exactly the number of `book` works, with no work in both and none in
+  neither. The Ebooks half is the complement rather than its own statement, so no third plan has to
+  be kept honest to confirm arithmetic.
+- **This ADR does not own the numbers or the predicates.** `internal/store/facets.go` owns the
+  reasoning, `reference/http-api.md` §8 owns the wire contract, and the code is right about
+  behaviour whenever the two disagree. Restating a predicate here would make this a third place it
+  lives, which is the failure the search weights were just fixed for.
+
+### Its relation to ADR-0053, which is not this ADR's decision to take
+
+[ADR-0053](#adr-0053) closes per-type hiding in the sidebar and reopens *"on exactly one condition:
+a read answering which of the six types have rows under the current scope, in one statement"*. The
+facets read is one statement per half of one read, under scope, per type — **and it does not satisfy
+that condition**, for the reason this whole ADR is about: it answers *how many works are bucketed to
+each type*, and the condition needs *whether a type has content*.
+
+The gap is invisible until a two-format book, and then it is the failure mode this project keeps
+refusing: **hiding Audiobooks from someone who has audiobooks.** ADR-0053's own rejected
+alternatives already name that shape — *"hide a type on a count nobody measured"* — and it would
+have arrived here through a count somebody did measure, which is worse, because it would have looked
+like compliance.
+
+**The amendment was considered and declined.** The nav stays all-six-always for v0.1. What was done
+instead is recorded on ADR-0053: its reopening condition is **refined, not discharged**, so that it
+now names an existence predicate over `edition.format` — the independent `EXISTS` of §17.2 rows 4–5,
+which `ix_edition_format` already serves — and cannot be re-discharged by these counts on a later
+pass. **The decision about what eventually hides an empty type is not taken here**, and whoever
+takes it inherits the question this ADR is the answer to: what to do about a book whose audiobook
+edition is invisible to the count.
+
+### What is built
+
+`internal/httpapi/facets.go`, `internal/store/facets.go` and `internal/store/facets_test.go`, at
+`2711926`; the wire contract at `reference/http-api.md` §8. Nothing rendered it when this was
+written — §17.2's Block A is still undrawn, and `internal/httpapi/library.go` says so — so the
+decision recorded here is currently load-bearing for exactly one consumer, the next one.
