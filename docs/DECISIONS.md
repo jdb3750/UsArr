@@ -109,6 +109,7 @@ because no ADR ever decided it. Annotating leaves that failure mode nowhere to h
 | [0057](#adr-0057) | The circuit breaker is **one package with an injected open sentinel**, not a copy per client | **Accepted** — 2026-08-19; **taken at the trigger the tree itself named** — `internal/kavita/breaker.go` carried the standing instruction *"worth taking the first time a THIRD client needs one: lift this file into `internal/breaker` with an injected sentinel … two copies is cheaper than a package that exists to serve two callers; three is not"*, and `internal/bookorbit` is that third client; **closes off each client keeping its own copy of the state machine**, which was the live alternative and would have made three; the open sentinel is a **constructor argument**, which is the one reason the copy ever existed — `errors.Is(err, kavita.ErrBreakerOpen)` and `errors.Is(err, servarr.ErrBreakerOpen)` keep meaning exactly what they meant, and a Kavita failure never reads `servarr: circuit breaker open`; **`internal/kavita` and `internal/servarr` keep their exported names as type aliases** (`BreakerState`, `BreakerConfig`, `Breaker`, the three state constants, `NewBreaker`), so **`internal/releases` and `internal/libsync` are untouched** — verified, neither appears in `c324cbf`'s diff at all; **the sha moved from `568ddbc` because that is the merge that carried slice 0, not the commit that contains it** — `568ddbc`'s own diff is seventeen files of library-screen, search and docs work with no breaker file in it, and `c324cbf` is its first parent, *"feat(bookorbit): slice 0 — the client and the credential path"*, so the verification re-runs on `c324cbf` and nobody restores the merge sha; **the only test change outside the new package is one line**, `BreakerConfig{}.withDefaults()` → `.WithDefaults()` in `internal/kavita/client_test.go`, and `internal/servarr/breaker_test.go` was not touched; **the §7.5 tuning does not move** (5 failures to open, 5 s → 15 m capped, ±20% jitter) and is pinned in **three** packages — `internal/breaker`'s own `TestDefaultsAreTheArchitectureNumbers`, plus a client-side assertion in `internal/kavita/client_test.go` and `internal/bookorbit/client_test.go`, while `internal/servarr` pins the same numbers **behaviourally** through its five untouched breaker tests — and the client-side assertions deliberately stay in the client packages, which is why `withDefaults` becomes the exported `WithDefaults`; ⚠️ **the line ledger is a deduplication, not a net saving, and this ADR states the measured numbers rather than the headline** — the commit deletes **347** lines (346 of them the two copied state machines, the 347th that one test line), the two client files go from **202** and **192** lines to **52** and **49** (101 lines of alias wrapper, **53** of them newly written), and the new package costs **245** lines plus a **103**-line test; what is bought is **one** state machine instead of two, not a smaller tree; **adds no dependency, no migration, no behaviour change and no exported-API break** |
 | [0058](#adr-0058) | UsArr **grades the scope a stored service credential actually carries**, and **reports rather than refuses** | **Accepted** — 2026-08-19; **discharges [ADR-0052](#adr-0052)'s §14 credential-scope gate** — ⚠️ a **discharge is not an amendment**, so ADR-0052 gains a dated inline note pointing here and **nothing in its text is struck**; **closes off assuming a service account is minimal** because it was created as a service account — the grading is done **in code, not in prose**, so `TestEveryBookOrbitPermissionIsClassified` notices a 24th permission upstream where a paragraph could not; all **23** members of BookOrbit's `Permission` enum are classified **elevated** (14: write or admin reach beyond a catalogue read) or **unneeded** (9: harmless but more than UsArr uses), with the superuser flag (elevated), a non-`shared` `provisioningMethod` (unneeded) and an inactive account (unneeded) as **separate findings** rather than permissions; ⚠️ **an unrecognised permission grades ELEVATED, never harmless** — chosen, not fallen into, so the verdict gets *more* conservative on its own when BookOrbit's vocabulary grows, at the named cost that a genuinely harmless upstream addition is over-flagged until someone classifies it (the grading is a **maintenance obligation**, not a self-maintaining one); **costs ZERO extra requests** — `AuthService.buildUserResponse` ships `permissions`, `isSuperuser` and `provisioningMethod` in the same body as the `accessToken`, which is why the verdict can be recomputed on **every** mint; **the client REPORTS and WARNS, it does not REFUSE**, because refusing leaves an operator with a service that will not talk to them and no visible reason — the opposite of principle 3, and the §14 finding would be **less** visible, not more; ⚠️ **what ships is the mechanism, not the gate's enforcement** — ADR-0052's condition is on the **catalogue read**, so slice 1 must consult `ScopeVerdict.Elevated()` at **both `Containers()` and `StreamItems()`** — a container list **is** catalogue data (it is what the Libraries screen renders and what `BindContainers` writes rows from) and `Containers()` runs first, so gating the item walk alone would bind a library list under an ungraded credential; one `sync.Once` makes the wider gate free — and slice 0 ships the thing both reads will consult; ✅ **that obligation is DISCHARGED, 2026-08-19, at `862a0ca`** — `BookOrbitSource.gate()` consults the verdict from both entry points; ⚠️ **discharged is not vacated**: the condition is on the *catalogue read*, so a future read path that lands without consulting it makes the obligation live again; **adds no migration, no column, no crypto and no new HKDF label** — the secret rides the existing versioned AAD-bound `service_instance` envelope |
 | [0059](#adr-0059) | The per-media-type facet count is an **assignment**: every work lands in **exactly one** bucket | **Accepted** — 2026-08-19; **records the counting semantics that shipped with `GET /api/v1/library/facets`** (`2711926`), whose wire contract is [`reference/http-api.md`](./reference/http-api.md) §8 and whose reasoning is `internal/store/facets.go` — **the numbers and the predicates live there and this ADR does not copy them**; a count cannot put one work in two buckets and remain a count, so the column would stop summing to the library and the same work would be reported twice in a summary whose whole question is *"what do I have?"*; the assignment is **`mediaTypeOf`'s**, the one that already renders every Block C and grid row's Type cell, so **a book held as both an EPUB and an M4B counts under Ebooks** and the count therefore equals the list a user reaches by clicking it — that equality is the decision's whole argument, and `TestMediaTypeCountsAgreeWithTheBrowseRead` pins it from the consumer's side; ⚠️ **the consequence, stated rather than buried: a library whose only audiobooks are second editions of ebooks reports `audiobooks: 0`**, while ARCHITECTURE §17.2's row-5 predicate — an independent `EXISTS` over `edition.format` — says that type has content; **the two disagree by design**, and this ADR is where a reader is meant to meet that; **closes off §17.2's independent-`EXISTS` shape as the counting rule** — it is the right shape for a *presence* test and the wrong one for a *count*, and the two are not interchangeable; **adds no endpoint, no migration, no column and no UI change** — the read, the index (`ix_edition_format`, migration `00009`) and the tests were already in the tree when this was written; ⚠️ **it is a live input to [ADR-0053](#adr-0053)**, whose reopening condition these counts appear to satisfy and do not — see that ADR's 2026-08-19 refinement, which this ADR is cited by |
+| [0060](#adr-0060) | A stored credential can be **readable upstream**: BookOrbit's `raw_token` is bounded by **service-account privilege, not rotation** | **Accepted** — 2026-08-19; **records a measured property of the service v0.1 replicates from** ([ADR-0052](#adr-0052)) rather than a design UsArr chose — BookOrbit at `73b7877` stores the magic-link token in **plaintext beside its hash** (`magic_access_tokens.raw_token`, written by `MagicLinkRepository.create`, which is **not** what `loginWithToken` authenticates on) and **returns every token's plaintext to any superuser** through `findAll` behind `GET /api/v1/auth/magic-links`; **the two axes are deliberately NOT collapsed, which is this ADR's whole value** — *plaintext-at-rest is the class norm, which **Kavita confirms** (measured at tag `v0.9.0.2` / `6bcd568`, **not `main`**, which is frozen at v0.7.8 and has planted a wrong fact in these docs before: `AppUserAuthKey.Key` is plaintext with **no hash column at all**, plus the legacy `AppUser.ApiKey` the v0.8.9 migration copied verbatim); admin-retrievable-over-the-API is **not**, which **Kavita refutes** (no route returns another user's key — `MemberDto` carries no key field, every read resolves `UserId` from the caller's own claims, and rotate/delete each assert `authKey.AppUserId == UserId`)*; so the listing is **a step down the threat model names as such, not the ecosystem baseline**, and it is a fact about **the switch**, not a defect *of BookOrbit*; ⚠️ **because the credential is retrievable and rotation does not change that, the privilege of the account UsArr authenticates as is the ONLY control that bounds the consequence** — not one mitigation among several but the whole of UsArr's leverage, and it is already built ([ADR-0058](#adr-0058)'s grading); 🚫 **periodic re-minting is REJECTED, explicitly so nobody re-proposes it** — a re-minted token lands in the same plaintext column and the same listing, so rotation stays available for an **incident** and is **not advised on a schedule**; the difference the retrievability axis actually makes is **attribution** — minting emits `AuditAction.MagicLinkCreate`, reading emits nothing, and later use is counted against UsArr's own row; ⚠️ **the Trace-logging hedge qualifies RETRIEVABILITY ONLY and leaves plaintext-at-rest untouched** — a Kavita admin can reach live keys indirectly (`AuthKeyService.UpdateLastAccessedAsync` logs a **valid** key at Trace, the level is an admin-writable setting, `GET /api/server/logs` downloads the zip), so *"not admin-retrievable"* is true of the API surface and true by default, **not absolute** — a deliberate multi-step through a config change and a wait, **not a read**, and **not exercised on any live instance**; **amends ARCHITECTURE §14** with one clause that **generalises and names no service** — a credential UsArr stores may be readable by the service that issued it, so **UsArr's protections are necessary and not sufficient** and the model says which side of the boundary each protection sits on, a question **every future adapter** gets asked; ✅ **CLOSES** — rather than standing forever over a mutable upstream — when BookOrbit drops `raw_token` (both axes) or the listing stops returning plaintext (retrievability), which doubles as the concrete ask any upstream report carries; **ships no code, no migration, no column and no schema change** |
 
 ---
 
@@ -7682,7 +7683,12 @@ and none of the three amendment marks is owed · **Closes off assuming a service
 because it was created as a service account** · **Adds no migration, no column, no crypto and no new
 HKDF label** — the stored secret rides the existing versioned AAD-bound `service_instance` envelope
 · **Costs zero extra requests** · **Ships the mechanism the gate will be enforced with, not the
-enforcement** — that is slice 1's
+enforcement** — that is slice 1's · ✅ **Slice 1's enforcement LANDED 2026-08-19 at `862a0ca`** —
+`BookOrbitSource.gate()` consults `ScopeVerdict.Elevated()` from **`Containers()` as well as
+`StreamItems()`**, behind one `sync.Once`; **this is a note and not an amendment**, on the same
+principle as the discharge notes below — the clause before it describes what *this* ADR shipped and
+stays true as written — and ⚠️ **discharged is not vacated**: the obligation is on the catalogue
+read, so a future read path landing without consulting the verdict makes it live again
 
 ### Context
 
@@ -7933,3 +7939,265 @@ edition is invisible to the count.
 `2711926`; the wire contract at `reference/http-api.md` §8. Nothing rendered it when this was
 written — §17.2's Block A is still undrawn, and `internal/httpapi/library.go` says so — so the
 decision recorded here is currently load-bearing for exactly one consumer, the next one.
+
+---
+
+<a id="adr-0060"></a>
+## ADR-0060 — A stored credential can be readable upstream: BookOrbit's `raw_token` is bounded by the service account's privilege, not by rotation
+
+**Status:** Accepted · **2026-08-19** · **Records a measured property of the service v0.1 replicates
+from** ([ADR-0052](#adr-0052)) rather than a design UsArr chose · **Measured, not recalled** —
+BookOrbit at `73b7877`, and Kavita at tag **`v0.9.0.2`** (`6bcd568`) for the class comparison, which
+is the release the owner runs and the commit [`api/specs/SOURCES.md`](../api/specs/SOURCES.md)
+records · **Amends [`ARCHITECTURE.md`](./ARCHITECTURE.md) §14** with one clause that **generalises
+and names no service**; the edit lands in this same change · **Keeps two axes apart** — *plaintext at
+rest* and *retrievable over the API* — because collapsing them turns a class norm into a scandal in
+one direction and a real step down into a shrug in the other · **Closes off periodic re-minting as a
+mitigation** · **Names a CLOSING condition, not only reopening ones** · **Ships no code, no
+migration, no column and no schema change** — the one control this ADR names already exists
+([ADR-0058](#adr-0058))
+
+### Context
+
+UsArr authenticates to BookOrbit with a magic-link token it stores encrypted, AAD-bound and
+never-to-the-browser, per §14. **That is a statement about UsArr's side of the boundary and it says
+nothing about the other side.** This ADR is what happens when the other side is measured.
+
+#### 1. What BookOrbit does with the token it issued, measured at `73b7877`
+
+Three facts, each read from source at that commit rather than inferred from the module's shape:
+
+- **The plaintext is a column.** `server/src/db/schema/auth.ts` declares `magic_access_tokens` with
+  **both** `tokenHash: varchar('token_hash', {length: 255}).notNull().unique()` **and**
+  `rawToken: varchar('raw_token', {length: 255}).notNull()`. The hash is not a replacement for the
+  secret; it sits beside it.
+- **The write puts it there.** `MagicLinkRepository.create` (`magic-link.repository.ts`) generates
+  `randomBytes(32).toString('hex')`, computes `sha256(rawToken)`, and inserts **both** values.
+  Authentication itself is hash-based — `loginWithToken` hashes the presented token and calls
+  `findByTokenHash` — so the plaintext column is **not load-bearing for login**. It is stored so it
+  can be shown again.
+- **A superuser can read every one of them back.** `MagicLinkRepository.findAll` selects
+  `rawToken` for **every** row, joined to the owning and creating usernames, behind
+  `GET /api/v1/auth/magic-links` → `AuthController.listMagicLinks`, which throws
+  `ForbiddenException('Only superusers can view magic links')` unless `user.isSuperuser`. ⚠️ **That
+  check is the whole of the authorization for this read, and it lives in the controller alone** —
+  `MagicLinkService.listTokens()` is two lines with no guard of its own, where `createToken`,
+  `setActive` and `revokeToken` each re-assert `actor.isSuperuser` in the service. This is an
+  observation about **where** the gate sits, **not** a claim that the gate is missing: on the code
+  as measured, the route is superuser-only.
+
+✅ **None of that is a mis-implementation of the surrounding design, and this ADR says so before it
+says anything else.** Minting is superuser-only and restricted to `shared` accounts, issuance and
+revocation emit audit events, and expiry, revocation, an active flag and a 25-token-per-user cap are
+all enforced on the login path. The `raw_token` column is a deliberate product decision — *"show me
+the link I made"* — with a foreseeable cost, not an accident.
+
+#### 2. What the comparison is worth, and the ref it was taken at
+
+The obvious defence of the finding above is that this is simply what the class does. **That is worth
+testing rather than assuming, so it was tested against the other catalogue source this repo has a
+measured adapter for.**
+
+🚩 **The ref matters, and is named for a reason this repo has already paid for.** Kavita's `main` is
+frozen at v0.7.8 and has planted a wrong fact in these docs before; the measurement below was taken
+at **tag `v0.9.0.2`, commit `6bcd568`** — the release the owner runs and the same commit
+[`api/specs/SOURCES.md`](../api/specs/SOURCES.md) pins the vendored spec to. Reading `main` for this
+would have described a build nobody in this project runs.
+
+| Question | Kavita, at tag `v0.9.0.2` / `6bcd568` | Source |
+|---|---|---|
+| Is the auth key hashed at rest? | **No — and there is no hash column at all.** `AppUserAuthKey.Key` is a plain `string` under `[Index(nameof(Key), IsUnique = true)]`, and authentication is **raw-value equality**: the handler resolves the presented key against that column directly. BookOrbit at least *has* a `token_hash` and authenticates on it. | `Kavita.Models/Entities/User/AppUserAuthKey.cs` |
+| Is there a second plaintext copy? | **Yes, a lingering legacy one.** `AppUser.ApiKey` is `[Obsolete("Migrated to AuthKey in v0.8.9")]`, and the migration that moved it copied it **verbatim** — `Key = user.ApiKey` — without clearing the old column. | `Kavita.Models/Entities/User/AppUser.cs`, `Kavita.Server/ManualMigrations/v0.8.9/MigrateToAuthKeys.cs` |
+| Can an admin read **another user's** key over the API? | **No route does — admin-gated or otherwise.** `MemberDto` carries **no key field at all**. `GET /api/account/auth-keys` resolves `GetAuthKeysForUserId(UserId)` from the caller's own claims; `ConstructUserDto` fills `ApiKey`/`AuthKeys` from the user the response is *about*, on that user's own flows. Rotate and delete each fetch by id and then assert **`if (authKey?.AppUserId != UserId) return BadRequest();`**. | `Kavita.Models/DTOs/Account/MemberDto.cs`, `Kavita.Server/Controllers/AccountController.cs` |
+
+**So the class norm splits into two different answers, and that split is the reason this ADR
+exists.**
+
+#### 3. The two axes, and why keeping them apart is the whole value
+
+- **Plaintext at rest.** BookOrbit stores it; Kavita stores it and has no hash to store instead. On
+  this axis BookOrbit is **not** an outlier, and is if anything ahead — it authenticates on a hash,
+  which Kavita cannot.
+- **Retrievable over the API.** BookOrbit returns every token's plaintext to any superuser on one
+  documented route; Kavita returns no user's key to anybody but that user. On this axis BookOrbit is
+  behind, and the gap is **a route that exists** versus **a route that does not**.
+
+⚠️ **Collapsing the two is how this gets reported wrong in both directions.** Collapsed one way, a
+class-normal storage choice reads as BookOrbit's scandal. Collapsed the other, a real widening of
+the boundary reads as *"everyone does this"* and disappears. The axes are held apart in the decision
+below, and every later note is labelled with the axis it qualifies.
+
+### Decision
+
+> **Plaintext-at-rest is the class norm, which Kavita confirms; admin-retrievable-over-the-API is
+> not, which Kavita refutes — BookOrbit's superuser `rawToken` listing is a step down the threat
+> model names as such, not as the ecosystem baseline.**
+>
+> **This is not recorded as a defect *of BookOrbit*. It is recorded as a fact about THE SWITCH**
+> ([ADR-0052](#adr-0052)): moving v0.1's catalogue source from Kavita to BookOrbit **widened the
+> boundary on the retrievability axis**, and left the storage axis where it already was. The switch
+> stands; what changes is that its price is written down where the next reader meets it.
+>
+> **Because the credential is retrievable, and because rotation does not change that, the privilege
+> of the account UsArr authenticates as is the ONLY control that bounds the consequence.** It is not
+> one mitigation among several. It is the whole of UsArr's leverage — and it is already built:
+> [ADR-0058](#adr-0058)'s scope grading is what keeps the retrievable thing worth as little as
+> possible.
+>
+> **Rotation is available and is NOT advised on a schedule.** A re-minted token is written to the
+> same plaintext column and returned by the same listing. See the Alternatives.
+
+### Why privilege is the only control, stated as the link rather than left adjacent
+
+A reader who takes the finding and the recommendation as two neighbouring paragraphs has missed the
+argument, so it is made in one line: **UsArr cannot make the token unreadable, so the only variable
+left is what reading it is worth.**
+
+Everything §14 gives UsArr — AES-256-GCM with a key-version prefix, AAD bound to the row and to the
+instance's `host:port`, redaction before every log line, never sending the secret to the browser —
+protects the copy **UsArr** holds. None of it touches the copy **BookOrbit** holds, and the copy
+BookOrbit holds is the one on the API. So the residual question is not *"can the token leak"* but
+*"what does a leaked token authorize"*, and that has exactly one answer-shaped input: the
+permissions on the shared account. [ADR-0058](#adr-0058) grades those on **every** mint and warns
+when they are not minimal. It was written for the opposite question — *what does the credential we
+stored let **us** do* — and it is load-bearing here for this one.
+
+⚠️ **The concrete difference the retrievability axis makes is ATTRIBUTION, and it is named because
+*"a superuser could just mint their own link anyway"* is the reply this finding attracts.** They
+could — `createToken` is superuser-only and **emits an audit event** (`AuditAction.MagicLinkCreate`).
+Reading the existing token emits **nothing**: `listTokens()` performs no audit write, and use of the
+token afterwards increments `useCount`/`lastUsedAt` on **UsArr's own row**. Minting a second link is
+a recorded act by a named actor; reading UsArr's is an unrecorded one whose consequences are
+attributed to UsArr. That is the step down, precisely.
+
+### Alternatives rejected
+
+- **Re-mint the token periodically, on a schedule.** 🚫 **Rejected, and rejected explicitly so
+  nobody re-proposes it as an easy win.** It is the reflex answer to a credential-exposure finding
+  and it is **inert** here: the new token is written to `raw_token` exactly as the old one was, and
+  listed by `findAll` exactly as the old one was, so the window it shortens is not the one that is
+  open. It buys **churn**, a sync that fails whenever a re-mint and a walk interleave, and an
+  operator who believes a control is in place. **Rotation stays available for what it is actually
+  for** — an **incident**, where a specific token is believed compromised and a superuser revokes it
+  — and that use is untouched here.
+- **Refuse to connect to BookOrbit until the plaintext column is gone.** This refuses v0.1's
+  catalogue source over a property the whole class shares on one of the two axes, and leaves the
+  operator with a service that will not talk to them — the same trade [ADR-0058](#adr-0058) turned
+  down for the same reason, and principle 3 says which way it goes.
+- **Encrypt UsArr's copy harder.** Already done, and it addresses the wrong side of the boundary. A
+  stronger scheme on UsArr's disk does nothing about a route that returns the same secret in a JSON
+  body.
+- **Record it in [`RESEARCH.md`](./RESEARCH.md) as an ecosystem finding and leave it there.** Half
+  right — the measurement *is* research, and belongs there too — but the finding closes off an
+  alternative (scheduled rotation) and names one control as the only one, which is decision-shaped.
+  `CLAUDE.md`'s rule for that case is an ADR.
+- **Report it upstream instead of writing an ADR.** Not either/or, and the ADR is what makes the
+  report possible: an upstream ask needs a stated acceptance condition — the closing condition below
+  — rather than a complaint that a design is uncomfortable.
+
+### Consequences
+
+- **The §14 amendment generalises, and names no service.** What lands in
+  [`ARCHITECTURE.md`](./ARCHITECTURE.md) §14 is clause **8**, in full:
+
+  > 8. **A credential UsArr stores may be readable by the service that issued it** (ADR-0060).
+  >    Encryption at rest, the AAD binding, redaction and never-to-the-browser are protections on
+  >    **UsArr's** side of the boundary; **none of them constrains what the issuing service does
+  >    with its own copy of the same secret.** **UsArr's protections are therefore necessary and not sufficient**, and
+  >    this model says which side of the boundary each protection sits on. Every adapter is asked
+  >    the same two questions before its credential path is designed — *how does this service store
+  >    the credential it issues us*, and *what can be read back over its API, and by whom* — and the
+  >    two are kept apart, because plaintext at rest and retrievable-over-the-API are different
+  >    exposures with different remedies. Where the answer is bad and cannot be fixed from here, the
+  >    only control left is **the privilege of the account the credential authenticates as**, which
+  >    is why that privilege is graded rather than assumed ([ADR-0058](#adr-0058)).
+
+  It names no service because the question is not BookOrbit's. **Every future adapter gets asked
+  it**, and a clause that named one service would read as settled the moment that service was
+  replaced — which, on this repo's record, is a matter of months.
+- ⚠️ **This ADR does not make the operator's BookOrbit safer, and does not pretend to.** Everything
+  measured here is upstream of UsArr and unreachable from it. What changes is that the residual risk
+  is **named**, is **attached to the control that bounds it**, and has a condition under which it
+  stops being true.
+- **A superuser is already the trust boundary, and this narrows what that sentence excuses.** Anyone
+  who can read the listing already administers the service UsArr replicates. The finding is not that
+  a stranger can read the token; it is that the boundary is **wider than the credential's own
+  scope** and that the widening **leaves no trace**, so *"they were already trusted"* stops being a
+  complete answer.
+- **The storage axis keeps its own consequence, which is not about the API at all.** Anything that
+  reads BookOrbit's database — a backup, a dump, a restore onto another host, an operator with
+  `psql` — yields **live** credentials with no cracking step. That is true of Kavita too, which is
+  what makes it the class norm, and it is why the axis is recorded rather than waved through.
+- **Nothing in the adapter changes.** No code, no migration, no column, no new HKDF label, no extra
+  request. The control this ADR names is `internal/bookorbit/scope.go`, which shipped with slice 0.
+
+### The Trace-logging hedge, which qualifies ONE axis
+
+⚠️ **"Not admin-retrievable" is true of Kavita's API surface and true by default. It is not
+absolute**, and the qualification is recorded here rather than discovered later by someone who
+concludes this ADR overstated its comparison.
+
+At tag `v0.9.0.2` / `6bcd568`, `AuthKeyService.UpdateLastAccessedAsync` opens with
+`logger.LogTrace("Updating last accessed Auth key:  {AuthKey}", authKey)` — and it is reached only
+from `AuthKeyAuthenticationHandler`, **after** the presented key has resolved to a real user, so
+what it logs is a **valid** key. `Trace` is one of the five levels `GET /api/settings/log-levels`
+offers, the level is written through the admin-gated settings update (`SettingsService` →
+`SwitchLogLevel`), and `GET /api/server/logs` — on a controller carrying
+`[Authorize(PolicyGroups.AdminPolicy)]` — zips the log files and returns them. **So a Kavita admin
+can reach live keys indirectly.**
+
+**What that costs, stated so the hedge is not mistaken for equivalence:** it is a **deliberate
+multi-step through a configuration change and then a wait** — lower the level, wait for someone
+else's key to actually be *used*, download the zip, read a log line — against **one authorized `GET`
+that returns every token, at any time, whether or not it has ever been used.** A capability that
+requires reconfiguring the server and waiting on a victim is a different object from a read.
+
+🚫 **Not exercised on any live instance.** This is a source reading at a pinned commit. Nobody on
+this project may turn a log level up on the owner's server to confirm it.
+
+⚠️ **And the axis label, because a later reader will otherwise use this paragraph to blur the two
+back together: the hedge qualifies RETRIEVABILITY ONLY.** It refines that axis from an absolute
+*"no route"* to *"no route, and admin-reachable only by deliberate reconfiguration"*. **It leaves
+plaintext-at-rest exactly where it was** — Kavita still stores the key in the clear with no hash
+column, BookOrbit still stores `raw_token` beside its hash, and nothing in this paragraph touches
+either. The hedge is **not** a finding that *"Kavita is just as bad after all"*, and it must not be
+cited as one.
+
+### The closing condition, and what reopens this
+
+**A permanent statement about a mutable upstream rots into a rumour**, and a year from now nobody
+would know whether this still holds. So it closes as well as reopens.
+
+✅ **CLOSES — this ADR becomes historical, and the §14 clause stays — when EITHER holds at a named
+BookOrbit commit, measured rather than assumed:**
+
+1. `magic_access_tokens` no longer carries `raw_token` — the column is dropped, and the migration
+   that drops it does not move the value somewhere else; **or**
+2. `GET /api/v1/auth/magic-links` no longer returns token plaintext to anybody — `findAll` stops
+   selecting `rawToken`, or the field leaves the response — while **creation may still show the
+   secret once, to its creator**, which is the pattern this ADR has no argument with.
+
+Either one discharges the **retrievability** finding; **the first discharges both axes.** Whoever
+verifies it records the commit and adds a dated note here, in the shape [ADR-0052](#adr-0052) and
+[ADR-0058](#adr-0058) use for their discharges — **a note, not an amendment**, because a condition
+met is a fact arriving rather than a claim falsified.
+
+📤 **Those two clauses are also the concrete ask any upstream report carries**, which is the second
+reason for writing them out: they are a change request with an acceptance test, not a complaint that
+a design is uncomfortable.
+
+⚠️ **REOPENS, and gets worse rather than better, if:** the listing loses its superuser gate or gains
+a non-superuser caller — the controller check is the only one, per Context §1; the plaintext appears
+on a second route or in an export; or UsArr's own account stops being a minimal shared account, at
+which point [ADR-0058](#adr-0058)'s verdict is the thing that says so, and this ADR is why that
+warning matters.
+
+### What is built
+
+**Nothing, by design.** One clause in [`ARCHITECTURE.md`](./ARCHITECTURE.md) §14, quoted in full
+above and landed in this same change, and this record. The control the decision names — the scope
+grading that keeps a retrievable credential worth as little as possible — is
+`internal/bookorbit/scope.go` and `internal/libsync/bookorbit.go`'s `gate()`, both already in the
+tree under [ADR-0058](#adr-0058). **No test is owed here and none is claimed:** the facts in Context
+§1 and §2 are readings of two upstream repositories at pinned commits, which UsArr's suite cannot
+assert against and must not pretend to.

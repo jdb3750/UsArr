@@ -2276,6 +2276,17 @@ The tailnet removes the "internet-exposed by design" leg and neither of the othe
 7. **The audit log is append-only by mechanism and tamper-*evident*, not tamper-proof.** No
    `UPDATE`/`DELETE` anywhere in the codebase, enforced by a lint rule and triggers that raise.
    Anyone with the volume can still edit the file, and the document says so.
+8. **A credential UsArr stores may be readable by the service that issued it** (ADR-0060).
+   Encryption at rest, the AAD binding, redaction and never-to-the-browser are protections on
+   **UsArr's** side of the boundary; **none of them constrains what the issuing service does with
+   its own copy of the same secret.** **UsArr's protections are therefore necessary and not
+   sufficient**, and this model says which side of the boundary each protection sits on. Every
+   adapter is asked the same two questions before its credential path is designed — *how does this
+   service store the credential it issues us*, and *what can be read back over its API, and by whom*
+   — and the two are kept apart, because plaintext at rest and retrievable-over-the-API are
+   different exposures with different remedies. Where the answer is bad and cannot be fixed from
+   here, the only control left is **the privilege of the account the credential authenticates as**,
+   which is why that privilege is graded rather than assumed (ADR-0058).
 
 ---
 
