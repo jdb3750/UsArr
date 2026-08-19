@@ -1,7 +1,12 @@
 # Reference — Security model
 
-**Status:** partly implemented. §1's envelope, AAD binding and `kek_id` column are built (the
-`usarr key rotate` command is not), and §2 and §5 are built. The rest is designed, not implemented.
+**Status:** partly implemented, and this line deliberately does not enumerate which parts — read
+that off the tree, per `CLAUDE.md`. `internal/crypto` and `internal/config` own §1, `cmd/usarr`
+owns its rotation command, `internal/ssrf` owns §2 and §5's parameter list, and
+`internal/httpapi`'s route table in `server.go` owns which of §3, §4 and §6's surfaces exist at
+all. **A guard named in this document is not evidence that anything calls it.** Several here are
+built ahead of the surface that would reach them; each says so where it is described, and a
+sentence that does not say so is claiming a live caller.
 **Scope:** §1 (credential encryption, including rotation), §2 (SSRF) and §5 (redaction) are **v0.1**.
 §4's authorization checks land with the surfaces they protect.
 **Parent:** [`../ARCHITECTURE.md`](../ARCHITECTURE.md) §14.
@@ -66,8 +71,12 @@ to a bare `host:port` (`crypto.NormalizeHostPort`, which exists for `ssrf.Option
 If the re-entry check says "unchanged" while the AAD says "changed", a legal edit produces a
 credential that can never be opened again.
 
-**A decryption failure with a valid KEK means tampering.** It is a loud, audit-logged failure, never
-a silent skip.
+**A decryption failure with a valid KEK means tampering.** It fails loudly and names the recovery,
+and it is never a silent skip: `cmd/usarr`'s `openCredential` returns an error naming both causes —
+an edited `base_url`, or a `keys/` directory that does not match the one that sealed the row —
+rather than proceeding without a credential. **It owes an audit row and does not write one today**,
+so a tampering attempt discovered on a background path leaves no durable trace. Whatever puts a
+credential open on an audited path owes that row.
 
 ### 1.3 KEK derivation
 
@@ -186,9 +195,14 @@ key-file write are **not one atomic unit**, so commit-then-crash-before-keyfile-
 reverse) is unrecoverable loss of every stored credential. Two-phase with both keys active removes
 the window entirely.
 
-**Never return stored secrets to any client.** Display `••••••1a2b`. Provide a server-side test
-button, subject to §1.6. `Field.privacy` from the \*Arr schema tells you exactly which upstream
-fields to redact.
+**Never return stored secrets to any client, in any form — masked included.** This paragraph used
+to prescribe a `••••••1a2b` display, and the code refused it: rendering even those four characters
+means decrypting a full-admin credential on a render path to show a fragment of it. The services
+API carries a `has_credential` boolean instead, there is no reveal endpoint, and no response field
+could carry one. Provide a server-side test button, subject to §1.6. `Field.privacy` from the \*Arr
+schema tells you exactly which upstream fields to redact — and the indexer replication path goes
+further than redaction, projecting through named allowlists so a private value never reaches the
+row at all.
 
 ### 1.6 Re-testing a mutated `base_url` must not use the stored credential
 
@@ -226,6 +240,13 @@ The earlier model had two classes — admin-configured integration URLs, and met
 | **`provider`** | A known metadata provider (TMDB, Fanart.tv, Cover Art Archive), constructed by UsArr from a template | **Public only.** Deny cloud-metadata (`169.254.169.254`, `100.100.100.100`), link-local (`169.254/16`, `fe80::/10`), loopback, `0.0.0.0`, and any address not publicly routable. |
 | **`derived`** | **Read out of an upstream response body** — `MediaCover.url`, `MediaCover.remoteUrl`, a Jellyfin/Komga/ABS cover field, a Prowlarr `ReleaseResource.posterUrl`, a Tier 1 manifest's `map.posterUrl` | **Allowlisted to the originating instance's own resolved host:port, or nothing.** If the URL is host-and-port-identical to the owning `service_instance.base_url`, treat it as a `configured` fetch to that one host. Otherwise apply the strict `provider` policy. Nothing in between. |
 
+`internal/ssrf` implements all three classes and their policies, and tests all three. **Only
+`configured` has a production caller today** — the per-instance egress client, built from the
+instance's validated host:port. The `provider` and `derived` policies are built ahead of the
+metadata and image pipelines that would select them, so nothing in the tree currently exercises
+either. **A fetcher for either owes its class at construction, taken from the row that produced the
+URL and never from the URL string.**
+
 **Why `derived` is the dangerous one:** nobody configured those URLs. A compromised, malicious or
 merely attacker-influenced backend returns `posterUrl: "http://169.254.169.254/latest/meta-data/"`
 and UsArr becomes a private-network scanner and cloud-metadata reader on behalf of anything that can
@@ -235,10 +256,13 @@ and NFO-supplied data. That is CVE-2021-29490's shape with the attacker moved on
 because no admin configured this URL.
 
 **Implementation, normative:** `image_asset` carries `origin_class` and
-`origin_service_instance_id` (schema.md §12), and **the fetcher selects policy from the row, not
-from the URL string.** The same applies to the metadata cache in `cache.db`. \*Arr `MediaCover.url`
-is **instance-relative** and must be resolved **only** by joining to the owning instance's base URL
-— never by trusting an absolute URL in that field.
+`origin_service_instance_id` (schema.md §12 is authoritative for the columns), and **the fetcher
+owes its policy selection to the row, not to the URL string.** **No writer for that table exists
+yet**, so no row has ever carried a class and `internal/store`'s format guard has nothing to
+guard; the first writer owes both columns on every row it inserts. The same rule binds any metadata
+cache in `cache.db`, which likewise has no writer today. \*Arr `MediaCover.url` is
+**instance-relative** and must be resolved **only** by joining to the owning instance's base URL —
+never by trusting an absolute URL in that field.
 
 ### 2.1 The tailnet range is not a denylist entry
 
@@ -250,15 +274,19 @@ it. The predictable outcomes were both bad — covers silently failing on the fl
 support-load bug that gets "fixed" by disabling the denylist wholesale), or the denylist bypassed
 for anything image-shaped, which reopens the whole class.
 
-**Resolve it with provenance, not CIDRs**, per the table above. An artwork fetch whose
-`origin_service_instance_id` is set is validated against **that instance's own resolved host:port
-only**, and is permitted there regardless of range. Artwork with no originating instance gets the
-strict public-only policy — which does include `100.64.0.0/10`, because a *TMDB* URL resolving to a
-tailnet peer is genuinely wrong.
+**Resolve it with provenance, not CIDRs**, per the table above — a requirement on the artwork
+pipeline, which does not exist yet, rather than a description of a fetch that runs. An artwork
+fetch whose `origin_service_instance_id` is set is validated against **that instance's own
+resolved host:port only**, and is permitted there regardless of range. Artwork with no originating
+instance gets the strict public-only policy — which does include `100.64.0.0/10`, because a *TMDB*
+URL resolving to a tailnet peer is genuinely wrong.
 
 ### 2.2 The rest of the egress policy
 
 1. **Only admins may configure service URLs.** Never expose URL configuration to a non-admin role.
+   There is one role in the tree today and it is the owner's, so no role gate exists to inspect;
+   the service routes are gated on authentication and sudo (§6). This binds whatever adds the
+   second role.
 2. **Resolve the hostname yourself, validate the resulting IP, then connect to that IP** — pin it.
    This closes the DNS-rebinding/TOCTOU window. Retrieve **both A and AAAA** records and validate
    the resolved addresses, not the domain string. **Validation re-runs on every dial**, not once at
@@ -281,11 +309,14 @@ tailnet peer is genuinely wrong.
 5. **Deny non-HTTP(S) schemes** — no `file:`, `gopher:`, `dict:`, `ftp:`.
 6. **Numeric caps, not "cap response size and time":** artwork ≤ **20 MB**, metadata JSON ≤
    **32 MB**, \*Arr list endpoints ≤ **200 MB** (§7.3's own payload estimates imply 30–80 MB), with
-   the layered timeouts from sync.md §4. Never proxy a raw upstream body back to a client verbatim.
+   the layered timeouts from sync.md §4. All three are declared in `internal/ssrf`; **only the list
+   cap has a caller today**, so the artwork and metadata figures bind the pipelines that will fetch
+   those bodies rather than describing traffic that flows. Never proxy a raw upstream body back to
+   a client verbatim.
 7. **Defence in depth at the network layer** — document a recommended egress policy and a dedicated
-   Docker network.
-8. **A TLS pin must be checked with `VerifyConnection`, not `VerifyPeerCertificate` alone.** The
-   SPKI pin in `service_instance.tls_spki_pin` is the *only* server authentication on a pinned
+   Docker network. Nothing to attach that to yet: there is no container build in the tree (§7).
+8. **A TLS pin must be checked with `VerifyConnection`, not `VerifyPeerCertificate` alone.** A
+   pin in `service_instance.tls_spki_pin` would be the *only* server authentication on a pinned
    instance, because the pinned path also sets `InsecureSkipVerify` to drop chain verification for
    a self-signed homelab certificate. `crypto/tls` does **not** re-verify certificates on a resumed
    session: it skips `verifyServerCertificate`, and with it `VerifyPeerCertificate`, calling only
@@ -294,12 +325,22 @@ tailnet peer is genuinely wrong.
    `VerifyPeerCertificate` is therefore **silently skipped on every resumed handshake** — the
    connection succeeds with no pin check at all, which is a fail-*open* hole in the one control
    standing between a full-admin \*Arr API key and whatever answered the socket. `internal/ssrf`
-   sets both hooks and shares one comparison between them. Resumption is enforced rather than
-   disabled, so the pinned path stays as fast as the unpinned one.
-   `TestSPKIPinIsEnforcedOnAResumedSession` is the regression guard, and it asserts the rejection
-   came from the resumed path so it cannot pass by quietly falling back to a full handshake.
-   Reported by gosec **G123**, which is only present in golangci-lint ≥ 2.9 — see §7's note on why
-   the gate must run the pinned linter.
+   sets both hooks and shares one constant-time comparison between them, and
+   `TestSPKIPinIsEnforcedOnAResumedSession` is the regression guard: it asserts the rejection came
+   from the resumed path, so it cannot pass by quietly falling back to a full handshake. Reported
+   by gosec **G123**, which is only present in golangci-lint ≥ 2.9 — see §7 on running the pinned
+   linter.
+
+   **Nothing writes `service_instance.tls_spki_pin`, so the pinned path is never taken in
+   production.** The create handler leaves the column NULL by design and `ServiceInstanceUpdate`
+   carries no pin field, both with the reasoning on them: a pin recorded silently would *downgrade*
+   an instance behind a publicly-trusted certificate, and with no way to clear one an ACME renewal
+   would lock the instance out permanently. The enforcement is built ahead of the TOFU enrolment
+   UI, and **that UI, when it lands, owes a way to clear and re-accept a pin as well as set one.**
+   Nor does the shipped transport set a `ClientSessionCache`, so it does not resume at all;
+   resumption here is neither enforced nor disabled but unavailable, and the resumed path is
+   guarded because **any** future transport that enables it must not silently lose the pin — not
+   because anything exercises it now.
 
 **Tier 1 manifests are inside this boundary, not outside it** — see providers.md §3.1, which
 specifies URL confinement at the template level.
@@ -308,9 +349,13 @@ specifies URL confinement at the template level.
 
 ## 3. Northbound credentials
 
-- **`client_credential` keys are server-generated**, ≥128 bits from `crypto/rand`, stored as
+- **`client_credential` keys must be server-generated**, ≥128 bits from `crypto/rand`, stored as
   **HMAC-SHA256 under a server-side key**, looked up by the unique `key_prefix`, compared with
-  `crypto/subtle.ConstantTimeCompare`.
+  `crypto/subtle.ConstantTimeCompare`. `internal/crypto` implements exactly that, and the table and
+  its unique prefix index exist from migration 0001 — **but nothing issues, stores, revokes or
+  verifies a credential, so no code path outside `internal/crypto` reaches any of it.** The
+  northbound surface that lands first owes the issue and revoke flows, their audit rows and their
+  sudo gate, and owes them on these helpers rather than a second implementation.
 - **Argon2id is wrong here, and the reason must be recorded so nobody "fixes" it back.** A
   `client_credential` is not a password; it is a server-generated high-entropy bearer token.
   Memory-hard KDFs exist to defend *low-entropy* secrets against offline cracking. Applying one to a
@@ -319,12 +364,17 @@ specifies URL confinement at the template level.
   OWASP's m = 19 MiB that is 1.1 GB of transient allocation and 60 sequential memory-hard runs on a
   Raspberry Pi. Worse, verification must run *before* the key is known to be valid, so any device on
   the tailnet can drive the process into OOM with `GET /rest/ping?apiKey=garbage` in a loop.
-- **Argon2id stays for `user.password_hash` only** — m = 19456 KiB, t = 2, p = 1, admin-tunable, full
-  PHC string stored. **There is no pepper**: it was referenced twice in prose and specified nowhere
+- **Argon2id stays for `user.password_hash` only** — m = 19456 KiB, t = 2, p = 1, full PHC string
+  stored, so raising the cost later does not invalidate existing hashes and `NeedsRehash` can
+  upgrade one on login. **The parameters are compile-time constants**; making them admin-tunable is
+  a configuration key that does not exist, and `CONFIGURATION.md` owns it if it ever does. **There
+  is no pepper**: it was referenced twice in prose and specified nowhere
   (no env var, no storage location, no rotation procedure), and a pepper silently absent on one
   deploy and present on another locks users out. Per-hash salts are the design.
-- `/rest/*` and `/opds/*` are in the **tighter rate-limit bucket**, keyed on `key_prefix` **and**
-  peer IP, with a cheap "does this prefix exist at all" pre-check before any crypto.
+- `/rest/*` and `/opds/*` belong in the **tighter rate-limit bucket**, keyed on `key_prefix`
+  **and** peer IP, with a cheap "does this prefix exist at all" pre-check before any crypto. Owed,
+  not built, on both halves: neither route exists, and **there is no rate limiter anywhere in the
+  tree** (§6).
 
 ---
 
@@ -334,39 +384,52 @@ specifies URL confinement at the template level.
 > permission model, with the backend's policy as a second layer. Never construct a UI that hides
 > items the API would still return.**
 
-This is the strongest statement in the security model, and it has structural preconditions that must
-hold from v0.1 or it cannot be honoured later without a redesign:
+This is the strongest statement in the security model, and it has structural preconditions that
+must hold **before the surface each one protects ships**, or they cannot be honoured later without
+a redesign. Three of the five hold in code today; two name surfaces that do not exist yet, and are
+requirements on whatever builds them.
 
 1. **Every cross-instance read path takes an access-scope parameter** (ARCHITECTURE §1.3 rule 2) —
-   the grid, search, the client prefix index, the availability rollup. In v0.1 there is one scope
-   and it is the owner's; that is the degenerate case, not the design.
-2. **The client prefix index is built per access scope** and ETagged by
-   `(user_id, access_scope_version)`. A whole-library titles-and-years payload shipped to a `kids`
-   role is the doc's own anti-pattern rendered literally.
+   the grid, search, the client prefix index, the availability rollup. Held: `store.Scope` is a
+   parameter on every scoped read and it fails closed on an empty instance set. In v0.1 there is
+   one scope and it is the owner's; that is the degenerate case, not the design.
+2. **A client prefix index, when one is built, is built per access scope** and ETagged by
+   `(user_id, access_scope_version)`. Nothing builds one today, and neither the index nor that
+   version counter exists anywhere in the tree. A whole-library titles-and-years payload shipped to
+   a `kids` role is the doc's own anti-pattern rendered literally.
 3. **`search_doc` carries the instance scope so FTS results are filtered in the join**, never
-   post-filtered. Post-filtering silently breaks keyset page sizes and leaks existence through
-   result counts and ranking positions.
-4. **`work.availability` and `have_count` are computed within the caller's scope.** A rollup
-   computed across instances the viewer is not entitled to is an oracle for restricted content — and
-   that badge is the flagship demo, so it would be a *prominent* oracle.
-5. **Every `usarr_id` resolution performs the check before any backend call**, returning the
-   protocol-native not-found (Subsonic 70), never 403. Authorization **must never depend on ID
-   secrecy**: base32 decodes in one line and \*Arr native ids are small sequential integers, so the
-   ID space is enumerable in a few thousand round trips (gateway.md §3).
+   post-filtered. Held: the library semi-join and the instance predicate are both inside the
+   retrieval legs, and the guard breaks each predicate in turn rather than asserting a proxy.
+   Post-filtering silently breaks keyset page sizes and leaks existence through result counts and
+   ranking positions.
+4. **`work.availability` and `have_count` are computed within the caller's scope.** Held, for the
+   one scope that flushes them; `internal/store`'s rollup states that single-answer-per-scope limit
+   and names the two ways out of it. A rollup computed across instances the viewer is not entitled
+   to is an oracle for restricted content — and that badge is the flagship demo, so it would be a
+   *prominent* oracle.
+5. **Every `usarr_id` resolution owes the check before any backend call**, returning the
+   protocol-native not-found (Subsonic 70), never 403. No northbound surface exists yet, so there
+   is no `usarr_id` in the tree to resolve. Authorization **must never depend on ID secrecy**:
+   base32 decodes in one line and \*Arr native ids are small sequential integers, so the ID space is
+   enumerable in a few thousand round trips (gateway.md §3).
 
-**`/img/*` is authenticated** and authorized against the owning item, served
-`Cache-Control: private, max-age=31536000, immutable`. A content-derived cache key justifies
-*immutability*, not *publicness* — those are different properties, and `public` on a
-per-user-authorized resource tells shared caches (a reverse proxy, a corporate middlebox, a service
+**An authenticated `/img/*` is owed by the image pipeline**, authorized against the owning item
+and served `Cache-Control: private, max-age=31536000, immutable`. Neither route exists today, and
+neither does the pipeline behind them. A content-derived cache key justifies *immutability*, not
+*publicness* — those are different properties, and `public` on a per-user-authorized resource
+tells shared caches (a reverse proxy, a corporate middlebox, a service
 worker shared across profiles) to store and re-serve it across users. Genuinely public provider
-artwork is served from a distinct `/img/public/*` path so the distinction is structural.
+artwork belongs on a distinct `/img/public/*` path so the distinction is structural.
 
-**`POST /api/v1/system/backup` and the UI download** are gated on `admin.system.backup`,
-audit-logged with actor and IP, rate-limited, and reachable **only** through the cookie-session path
-— never a `client_credential`, never a forwarded auth header. A Subsonic API key that reached an
-unprotected backup endpoint would download the entire vault: every wrapped DEK, every password hash,
-every session row and the full audit log. Backup files are written **mode 0600 in a 0700 directory,
-independent of `UMASK`**.
+**A backup endpoint and any UI download owe** a gate on `admin.system.backup`, an audit row with
+actor and IP, a rate limit, and reachability **only** through the cookie-session path — never a
+`client_credential`, never a forwarded auth header. None of that is built: there is no such route,
+no UI download, no rate limiter, and no permission-string vocabulary at all — `admin.system.backup`
+names a constant that does not exist. A Subsonic API key that reached an unprotected backup
+endpoint would download the entire vault: every wrapped DEK, every password hash, every session row
+and the full audit log. The automatic pre-migration backup that *does* exist is already written
+**mode 0600 in a 0700 directory, independent of `UMASK`**, and an operator-triggered one inherits
+that.
 
 ---
 
@@ -517,23 +580,41 @@ satisfied.
 
 - **Sessions:** an opaque server-side id in a `HttpOnly; Secure; SameSite=Lax` cookie — **not a JWT
   in localStorage**, per OWASP, because one XSS discloses every token. Both **idle and absolute**
-  timeouts (different failure modes). Regenerate the id on privilege change. Server-side state is
-  needed anyway for logout, an active-sessions list and admin revocation.
+  timeouts (different failure modes), both in the lookup predicate. Regenerate the id on privilege
+  change: **login mints a fresh session and opening the sudo window does not** — `GrantSudo`
+  updates the existing row. Anything that adds a second privilege level owes regeneration at the
+  transition. Server-side state is needed anyway for logout, an active-sessions list and admin
+  revocation.
 - **Sudo mode.** A **5-minute re-authentication window**, recorded in `session.sudo_until` and
   audit-logged, is required before: adding or changing a service credential, changing a `base_url`
-  (§1.6), downloading a backup, issuing or revoking a `client_credential`, and rotating the key.
-  Without it a single stolen cookie is a month-long window over the whole vault.
+  (§1.6), downloading a backup, and issuing or revoking a `client_credential`. The first two gates
+  are in force on the service routes; the other two name surfaces that do not exist yet and inherit
+  the requirement when they land. **Key rotation is a CLI command with no session**, so a
+  session-scoped window cannot gate it — its control is filesystem access to `keys/` plus the audit
+  rows each phase writes. Without sudo a single stolen cookie is a month-long window over the whole
+  vault.
 - **CSRF:** cookie sessions mean CSRF applies. `SameSite=Lax` blocks common cases but is **not
   sufficient alone** — use a synchronizer/double-submit token for all state-changing requests and
   require `Content-Type: application/json` (which blocks simple cross-origin form POSTs). Keep the
   cookie and bearer/API-key auth paths **strictly separate**, so a browser cannot accidentally
   authenticate an API endpoint with an ambient credential.
-- **Rate limiting:** strict per-IP *and* per-username limits on auth endpoints with exponential
-  backoff and temporary lockout; constant-time comparison; **identical error text and timing** for
-  unknown-user vs bad-password. A tighter bucket for expensive endpoints: search, scan trigger,
-  image resize, release fan-out, **and `/rest/*` and `/opds/*`**.
-- **Trusted headers are a footgun.** If UsArr trusts `Remote-User` unconditionally, anyone who can
-  reach the app port directly — bypassing the proxy — is instantly any user, including the owner.
+- **Rate limiting is owed and unbuilt.** No limiter exists anywhere in the tree, so
+  `POST /api/v1/auth/login` is unthrottled today — reachable by anything that can reach the app
+  port, against an Argon2id verify at m = 19 MiB, which makes it a memory-pressure vector as well
+  as a credential-stuffing one. What it owes when it lands: strict per-IP *and* per-username limits
+  on auth endpoints with exponential backoff and temporary lockout, and a tighter bucket for
+  expensive endpoints — search, scan trigger, image resize, release fan-out, **and `/rest/*` and
+  `/opds/*`**. The other half of this bullet **is** in force: constant-time comparison, and
+  **identical error text and timing** for unknown-user vs bad-password, with one error value on
+  every failing branch and a dummy PHC hash burning the equivalent Argon2id work on the
+  unknown-account path.
+- **Trusted headers are a footgun.** The `X-Forwarded-For` half is built: the header is stripped
+  from every inbound request and re-read only from a peer inside the configured trusted-proxy CIDR
+  allowlist, with a startup warning for an over-wide prefix. **`Remote-User`-style header
+  authentication does not exist**, so the rules below are what it owes if it is ever added, not a
+  description of running code. If UsArr trusted `Remote-User` unconditionally, anyone who could
+  reach the app port directly — bypassing the proxy — would instantly be any user, including the
+  owner.
   Navidrome learned this and now requires a CIDR allowlist. Non-negotiable rules: off by default; an
   explicit trusted-proxy CIDR allowlist; an explicit header-name configuration; **strip the
   configured headers from every inbound request** before processing and re-read only from the
@@ -541,11 +622,15 @@ satisfied.
   surfaces. The same allowlist governs `X-Forwarded-For`. **Never grant privileges based on "looks
   like a LAN IP"** — GHSA-qcmf-gmhm-rfv9 is exactly this bug in Jellyfin, where a spoofed source IP
   made an attacker look local and let them restart the server unauthenticated.
-- **Audit log:** covers login success/failure, session created/revoked, permission change, user
-  create/delete, service credential added/changed/removed (**value never logged**), `base_url`
-  changed, request submitted/approved/declined, admin settings change, client credential
-  issued/revoked, backup downloaded, and key rotation. Exposed in the admin UI as a **plain
-  paginated list** — the filtered audit UI is deferred (FUTURE.md).
+- **Audit log:** the actions written today are whatever `internal/httpapi` and `cmd/usarr` pass to
+  `AppendAudit` — read them there rather than here, because this list has to grow with every
+  surface, and the ones it named for surfaces that do not exist (permission change, user delete,
+  request submitted/approved/declined, admin settings change, client credential issued/revoked,
+  backup downloaded) were never written. The rule that does not change: **every state-changing
+  operation owes a row, and a credential value is never in one.** **The audit log has no read
+  surface** — no API route and no screen — so "who deleted this" is currently answerable only by
+  opening SQLite. A **plain paginated list** in the admin UI is what it owes first; the filtered
+  audit UI is deferred (FUTURE.md).
   **"Append-only" is a mechanism, not an aspiration:** no `UPDATE`/`DELETE` statements against
   `audit_log` **in production code**, enforced by `TestNoCodeMutatesTheAuditLog`
   (`internal/store/auditlint_test.go`, which walks every non-test `.go` file's string literals)
@@ -567,14 +652,22 @@ satisfied.
 
 ## 7. Deployment posture
 
+**There is no container build in this tree** — no Dockerfile, no compose file — and no tsnet
+integration, so the first two bullets and the image half of the third are requirements on that work
+when it lands, not descriptions of a shipped posture. The supply-chain bullet's tool pinning and
+gating vulnerability scan do run, in the `Makefile`; so does most of the response-header half of
+the internet-exposure bullet. Each says which below.
+
 - **Distroless, non-root from PID 1, no PUID/PGID chown.** `gcr.io/distroless/static` has no shell
   and no `chown`, so an LSIO-style entrypoint that chowns `/config` and drops privileges requires a
   shell base and starting as **root** — and the resolution a developer reaches for when those two
   requirements collide is "use alpine and start as root", which is the weaker choice made by
   accident. Starting as root means a container escape or a compromised entrypoint runs as root with
   the master key in its environment. UsArr documents `chown 65532:65532 ./config` instead.
-- **The health listener is health-only.** With tsnet enabled nothing listens on localhost, which
-  kills container healthchecks; the answer is a loopback listener exposing exactly
+- **The health listener is health-only.** `/api/health/live` and `/api/health/ready` exist, but on
+  the single main mux — there is no second listener, and no tsnet integration for one to answer a
+  problem that has therefore not arisen yet. With tsnet enabled nothing would listen on localhost,
+  which kills container healthchecks; the answer then is a loopback listener exposing exactly
   `/api/health/live` and `/api/health/ready` and **nothing else, ever**. Inside a container
   "loopback" is shared by every process in the network namespace — including any sidecar the user
   adds and anything with `network_mode: service:usarr` — so an unauthenticated *admin* surface there
@@ -582,17 +675,28 @@ satisfied.
 - **Supply chain:** base image pinned by digest, `--provenance=true --sbom=true`, cosign signing,
   gating vulnerability scanning in the pre-commit gate, and pinned tool versions. Enforcement lives
   in the `Makefile` and CI, outside this document.
-  **Pinning the version is not the same as running it.** `make tools` installs the pinned
-  `golangci-lint` into `$GOBIN`, but `make lint-go` invokes the bare name `golangci-lint`, so the
-  gate runs whatever `PATH` resolves first. On a machine carrying an older system-wide binary the
-  gate reports `check: OK` while never executing the checks the pin exists to run: v2.5.0 finds
-  **0** issues on the tree where the pinned v2.12.2 finds **11**, because G123 and G124 did not
-  exist yet in the older gosec. A security gate that silently degrades to a weaker gate is worse
-  than no gate, since it produces a green result nobody re-examines. The linter must be invoked by
-  its pinned absolute path, or its `--version` asserted against the pin before it runs.
-- **Internet exposure**, if a user chooses it: HTTPS enforced with HSTS and secure cookie flags;
-  reject plaintext HTTP for auth (with an explicit "behind a TLS-terminating proxy" mode); a forced
-  admin setup wizard on first run; login rate limiting on by default; a strict CSP (no
+  **Pinning a version is not the same as running it.** `make tools` installs into `$GOBIN`, which
+  is very often not on `$PATH` — it is not on `$PATH` in this repo's own agent container — so a
+  recipe that invokes a bare tool name runs whatever `$PATH` resolves first, and the pins decorate
+  a file nothing consults. When that was live here, `$PATH` resolved a system-wide golangci-lint
+  v2.5.0 against a pinned v2.12.2: **0** issues found where the pin finds **11**, because G123 and
+  G124 did not exist yet in the older gosec, and the gate reported `check: OK` throughout. A
+  security gate that silently degrades to a weaker gate is worse than no gate, since it produces a
+  green result nobody re-examines. **The standing requirement: every pinned tool is invoked by
+  absolute path *and*, where it can report its own version, asserted against the pin before it
+  runs — both, because path alone runs a stale binary left by an older pin, and assertion alone has
+  already executed the wrong binary in order to ask it what it is.** The `Makefile` is
+  authoritative for whether that holds today; do not read this paragraph as a live bug report.
+- **Internet exposure**, if a user chooses it. Partly in force already, on every response and not
+  only an exposed one: the strict CSP, `X-Content-Type-Options: nosniff`, `Referrer-Policy:
+  no-referrer` and `frame-ancestors 'none'` are set by `internal/httpapi`'s security-headers
+  middleware, the session cookie carries the secure flags (§6), the SSRF policy is on with no
+  switch to turn it off, and first-run owner creation is one-shot and closes once an owner exists.
+  Not built: HSTS, the plaintext-HTTP refusal and its "behind a TLS-terminating proxy" mode, login
+  rate limiting (§6), the trusted-proxy requirement as a *precondition* rather than a default, and
+  a published security policy. The full list, as owed: HTTPS enforced with HSTS and secure cookie
+  flags; reject plaintext HTTP for auth (with an explicit "behind a TLS-terminating proxy" mode); a
+  forced admin setup wizard on first run; login rate limiting on by default; a strict CSP (no
   `unsafe-inline`, no `unsafe-eval`), `X-Content-Type-Options: nosniff`, `Referrer-Policy:
   no-referrer`, `frame-ancestors 'none'`; the SSRF policy on by default; a trusted-proxy allowlist
   required before honouring any forwarded header; a published security policy and advisory process.
