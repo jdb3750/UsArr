@@ -617,10 +617,23 @@ carries the evidence. Not every §6 citation in the migrations is wrong: `00001_
 - **Sessions:** an opaque server-side id in a `HttpOnly; Secure; SameSite=Lax` cookie — **not a JWT
   in localStorage**, per OWASP, because one XSS discloses every token. Both **idle and absolute**
   timeouts (different failure modes), both in the lookup predicate. Regenerate the id on privilege
-  change: **login mints a fresh session and opening the sudo window does not** — `GrantSudo`
-  updates the existing row. Anything that adds a second privilege level owes regeneration at the
-  transition. Server-side state is needed anyway for logout, an active-sessions list and admin
-  revocation.
+  change, and **both of UsArr's privilege changes now do**: login mints a fresh session row, and
+  opening the sudo window renames the existing one via `store.RegenerateSessionForSudo`, which
+  rewrites `session.id` and sets `sudo_until` in **one** `UPDATE` so no instant exists with the new
+  id and no window, or the window under the old id. `store.GrantSudo` still exists and still
+  updates in place; it is correct only where the id is already fresh, which today means exactly one
+  caller — `startSession`, opening the window on a row it has just inserted. ⚠️ This bullet used to
+  read *"login mints a fresh session and opening the sudo window does not"*; that was true and is
+  no longer.
+  Two things the fix has to do together, because the server half alone is a logout: the new cookie
+  is re-issued in the **same** response, and the CSRF token is rotated beside it exactly as
+  `startSession` does. The absolute expiry is deliberately not extended — this is the same session
+  under a new name, so re-authenticating never buys time past `SessionAbsoluteTimeout`.
+  `internal/httpapi`'s `TestSudoRegeneratesTheSessionID` is the drill: it asserts the post-sudo
+  cookie differs, that the **pre**-sudo value no longer authenticates, that the caller is still
+  signed in under the new one, and that `created_at` is untouched.
+  Anything that adds a second privilege level owes regeneration at the transition. Server-side
+  state is needed anyway for logout, an active-sessions list and admin revocation.
 - **Sudo mode.** A **5-minute re-authentication window**, recorded in `session.sudo_until` and
   audit-logged, is required before: adding or changing a service credential, changing a `base_url`
   (§1.6), downloading a backup, and issuing or revoking a `client_credential`. The first two gates

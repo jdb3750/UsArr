@@ -249,7 +249,62 @@ func (s *Store) TouchSession(ctx context.Context, id string, now time.Time) erro
 	})
 }
 
+// RegenerateSessionForSudo rewrites a session's id AND opens the sudo window,
+// in one statement.
+//
+// reference/security.md §6 requires the session id to be regenerated on every
+// privilege change. Login already satisfies that by minting a whole new row.
+// Opening the sudo window is the OTHER privilege change UsArr has — it is the
+// moment a session becomes able to add a service, edit a base URL or re-enter an
+// \*Arr API key — and it used to be an UPDATE that left the id alone. Anyone
+// holding the pre-sudo cookie value (a fixated cookie, a value captured from a
+// proxy log or a shared machine) was carried across that transition with it.
+//
+// THE TWO WRITES ARE ONE STATEMENT ON PURPOSE. Split into "rotate the id" then
+// "grant sudo" they are two writes with a window between them in which the row
+// has a new id and no sudo, or — worse, in the other order — sudo under the old
+// id. One UPDATE under the store's BEGIN IMMEDIATE writer has neither state.
+//
+// The absolute expiry is deliberately NOT extended: this is the same session
+// with a new name, not a new session, and re-authenticating must not be a way to
+// live past SessionAbsoluteTimeout for ever. created_at is left alone for the
+// same reason.
+//
+// newID MUST differ from oldID, and that is checked rather than assumed. A
+// caller that forgot to mint a fresh token would otherwise get a silent no-op
+// that looks exactly like success — which is the bug this function exists to
+// fix, reintroduced one layer down.
+func (s *Store) RegenerateSessionForSudo(ctx context.Context, oldID, newID string, now time.Time) error {
+	if newID == "" || newID == oldID {
+		return fmt.Errorf("regenerate session: the new session id must be fresh")
+	}
+	return s.write(ctx, func(ctx context.Context, tx *sql.Tx) error {
+		res, err := tx.ExecContext(ctx,
+			`UPDATE session SET id = ?, sudo_until = ? WHERE id = ? AND revoked_at IS NULL`,
+			newID, FormatTime(now.Add(SudoWindow)), oldID)
+		if err != nil {
+			// A PRIMARY KEY collision on newID lands here and rolls the whole
+			// statement back. With 256 bits of crypto/rand behind the id that is
+			// not a real event, but failing closed costs nothing.
+			return fmt.Errorf("regenerate session: %w", err)
+		}
+		n, err := res.RowsAffected()
+		if err != nil {
+			return fmt.Errorf("regenerate session: rows affected: %w", err)
+		}
+		if n == 0 {
+			return fmt.Errorf("session: %w", ErrNotFound)
+		}
+		return nil
+	})
+}
+
 // GrantSudo opens the re-authentication window for sensitive operations.
+//
+// It does NOT regenerate the session id, so it is only correct where the id is
+// already fresh — which today means exactly one caller, startSession, opening
+// the window on a row it has just inserted. Every other privilege change must
+// go through RegenerateSessionForSudo; see §6 and that function's comment.
 func (s *Store) GrantSudo(ctx context.Context, id string, now time.Time) error {
 	return s.write(ctx, func(ctx context.Context, tx *sql.Tx) error {
 		res, err := tx.ExecContext(ctx,

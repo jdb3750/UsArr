@@ -544,14 +544,43 @@ func (s *Server) handleSudo(w http.ResponseWriter, r *http.Request) error {
 			"that password does not match").withAction("Try again")
 	}
 	now := s.now()
-	if err := s.store.GrantSudo(r.Context(), a.Session.ID, now); err != nil {
+
+	// THE SESSION ID IS REGENERATED HERE, because opening the sudo window is a
+	// privilege change and reference/security.md §6 requires regeneration at
+	// every one of them. Login satisfied that by minting a new row; this
+	// transition used to update the existing row in place, which carried any
+	// pre-sudo cookie value across the boundary into a session that can now edit
+	// services and re-enter \*Arr API keys.
+	//
+	// The new cookie MUST go out in this same response. Rewriting the row's id
+	// without re-issuing the cookie would leave the browser holding an id no row
+	// has any more — a logout, not a privilege grant.
+	value, err := newToken()
+	if err != nil {
+		return errStatus(http.StatusInternalServerError, CodeInternal,
+			"the sudo window could not be opened").wrapping(err)
+	}
+	if err := s.store.RegenerateSessionForSudo(r.Context(), a.Session.ID, sessionID(value), now); err != nil {
 		return errStatus(http.StatusInternalServerError, CodeInternal, "the sudo window could not be opened").wrapping(err)
+	}
+	s.setSessionCookie(w, r, value)
+
+	// The CSRF token is rotated alongside it, exactly as startSession does at
+	// the other privilege change. The SPA reads the non-HttpOnly cookie before
+	// its cached copy (web/src/lib/api.ts csrfToken), so the cookie alone would
+	// do — but the token is returned in the body as well, because a client that
+	// caches the bootstrap value and never re-reads the cookie would otherwise
+	// start 403-ing the moment sudo succeeded.
+	token, err := s.setCSRFCookie(w, r)
+	if err != nil {
+		return err
 	}
 	s.audit(r, "auth.sudo", "user", a.User.ID, "ok", "")
 
 	until := now.Add(store.SudoWindow)
 	writeJSON(w, http.StatusOK, sessionResponse{
 		Authenticated: true,
+		CSRFToken:     token,
 		UserID:        a.User.ID,
 		Username:      a.User.Username,
 		IsOwner:       a.User.IsOwner,
