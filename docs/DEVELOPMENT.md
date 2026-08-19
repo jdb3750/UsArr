@@ -1470,7 +1470,9 @@ paragraph describing a repo that no longer exists.
   the hour"*, because `docs/reference/security.md` was rewritten wholesale while that change sat in a
   rebase. It re-verified against the pushed tree and re-cited by heading and bullet instead — §5,
   *"Redaction is middleware, not a convention"*, under *"URLs stored in the database are in scope
-  too"*.
+  too"*, and the same sweep turned up two dead-citation families — `ARCHITECTURE.md §2073` and
+  `schema.md §6.1` — which are what line-number citation has actually cost this tree: `LS-321` is the
+  entry that owns them, re-verified and re-counted in `LS-374`, and it is the entry to read.
   * ⚠️ **A line number is correct, and preferred, where the file is never edited.** `LS-321` kept
     `internal/db/migrations/00005_library_sync.sql:221` and `internal/db/testdata/schema.sql:292` as
     line cites for exactly that reason — *"because neither file is edited"* — a merged migration, and
@@ -1576,7 +1578,13 @@ paragraph describing a repo that no longer exists.
   `GOLANGCI_LINT_CACHE` at a directory inside that worktree or do not run the gate there at all, and
   end the worktree with `git worktree remove` rather than deleting the directory, so nothing is left
   registered or half-referenced. **The symptom is `lint-go` reporting issues at paths that do not
-  exist**, on a tree where those same files lint clean.
+  exist**, on a tree where those same files lint clean. ⚠️ **The remedy creates its own snag: that
+  cache directory is untracked, so the removal above then refuses** —
+  `fatal: '<worktree>' contains modified or untracked files, use --force to delete it` (fired here on
+  2026-08-19, on two leftover worktrees of this session, one of them held back by the cache directory
+  alone). **Delete the cache directory first, then remove normally; do not reach for `--force`**,
+  which would take genuinely uncommitted work with it just as silently — losing that is the thing
+  these rules exist to prevent, and the untracked cache is not a reason to accept the risk.
 
   ⚠️ **One shared binary, two failure modes — and isolating the cache fixes only the first.** The
   contamination above is a cache-entry collision. The other is *contention*, and it reads as a broken

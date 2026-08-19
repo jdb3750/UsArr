@@ -2350,15 +2350,20 @@ document reviewable.
 nearly swallowed the rule.** The mockups draw two installs behind a switcher: a **full stack** with
 every catalogue source connected, six media types populated, which is the default because six
 populated types is what the layout must survive; and the **v0.1 install** beside it, drawn as
-Kavita and Prowlarr per [ADR-0041](../DECISIONS.md#adr-0041). ⚠️ **v0.1's catalogue source is
-BookOrbit as of [ADR-0052](../DECISIONS.md#adr-0052)**, and the strings below are quoted as the
-assets **render** them rather than corrected in place: re-drawing that install is a design-asset
-change ADR-0052 names and does not make, and a quotation that no longer matches the asset would
-make this section unreviewable against it. A reader who meets the default and is told
+BookOrbit and Prowlarr per [ADR-0052](../DECISIONS.md#adr-0052), which moved v0.1's catalogue source
+off the Kavita [ADR-0041](../DECISIONS.md#adr-0041) had named. **The strings below are quoted as the
+assets *render* them rather than corrected in place**, and that rule is what keeps this passage
+correct rather than what makes it stale: a quotation that no longer matches the asset would make
+this section unreviewable against it, so the quotation moves **when** the asset moves and never
+before. ✅ **The re-draw landed in `a1995f9`**, across the five screen pages, the generated
+`prototype.html` and `design/mockups/README.md`; between ADR-0052 and that commit this section quoted
+`v0.1: Kavita, Prowlarr` and said in the same breath why it did, which is the same rule running in
+the other direction. Do not "fix" a quotation here ahead of the asset it quotes.
+A reader who meets the default and is told
 only *"this data is invented"* has been told the numbers are made up and left to assume the
 **stack** is real for the milestone being discussed, which is `CLAUDE.md`'s "no invented status"
 failure reached by omission rather than by assertion. So: **the switcher's own option labels place each stack against a milestone**, not merely
-name it (`Full stack: a later milestone`, `v0.1: Kavita, Prowlarr` — colon-separated because
+name it (`Full stack: a later milestone`, `v0.1: BookOrbit, Prowlarr` — colon-separated because
 both are short strings and §13 bans U+2014 in a string under fifteen words, a rule that had never
 reached `<option>` text until `check.mjs` §1b's corpus was widened to the strings that never lay out
 as a block); **the permanent notice
@@ -2366,10 +2371,14 @@ states which install is drawn and changes with the selection**; and the switcher
 notice**, because it is not a product control and drawing it in the product chrome would fabricate a
 setting. "A later milestone" rather than a number is deliberate — ARCHITECTURE §16 sequences the
 catalogue sources one at a time after v0.1 and has not fixed which release each lands in, so a
-number here would invent exactly the status the rule forbids. `check.mjs` §8b enforces all four — and note what it enforces, because it is what makes the
+number here would invent exactly the status the rule forbids. `check.mjs` §8b enforces all four — and note what it enforces, because it is what made the
 stale name a scope error rather than a gate failure: §8b asserts that each label matches
-`/v0\.1|milestone/i`, not which service it names, so `v0.1: BookOrbit, Prowlarr` will pass it
-unchanged whenever the re-draw lands.
+`/v0\.1|milestone/i`, not which service it names. ✅ **This section predicted that
+`v0.1: BookOrbit, Prowlarr` would pass §8b unchanged whenever the re-draw landed, and `a1995f9`
+landed it — §8b stayed green and was not edited with it.** Recorded rather than deleted, because a
+prediction that was made and then held is the evidence that the assertion is the right shape: a
+§8b that had pinned the service name would have gone red on the re-draw and had to be re-written
+alongside it, which is a guard tracking the asset rather than governing it.
 
 ### 9.7 The minimum component set, and where per-type divergence is allowed
 
