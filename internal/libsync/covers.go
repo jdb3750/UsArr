@@ -84,12 +84,37 @@ func (i ImportedItem) coverRequest() coverRequest {
 //
 //   - ARCHITECTURE.md §4.4's min(NumCPU, 4) semaphore is about image
 //     TRANSCODING, not fetching, and it is PROSE — nothing implements it.
-//   - The only semaphore that exists in this repository is internal/crypto's
-//     Argon2id gate, whose own comment says §4.4 "is a design statement for a
-//     pipeline that is not built yet".
+//   - internal/releases/search.go ALREADY BOUNDS A FAN-OUT, at `sem :=
+//     make(chan struct{}, s.cfg.Concurrency)` with DefaultConcurrency = 6, and
+//     internal/crypto's Argon2id gate bounds concurrent KDF runs — still worth
+//     reading first, for its sizing note rather than for being unique, which says
+//     §4.4 "is a design statement for a pipeline that is not built yet". The
+//     fan-out is this bound's closest PRECEDENT rather than a counter-example to
+//     it: a deliberately-built cap over concurrent NETWORK LEGS, which is what a
+//     cover fetch looks like from outside. THE DIFFERENCE THAT MATTERS IS THE
+//     SUBJECT, not the instrument — one permit here spans fetch AND decode AND
+//     render, so this gate bounds transcodes and bounds connections only
+//     incidentally, where the fan-out bounds the network leg alone. Sized below,
+//     and unpacked under WHAT IT ACTUALLY CAPS.
 //   - internal/imagepipeline builds none either, and says so at Poster:
 //     "Whoever writes the loop owns the bound, and owes it a test that N+1 is
 //     refused."
+//
+// 🚩 THE SECOND BULLET USED TO READ "the only semaphore that exists in this
+// repository is internal/crypto's Argon2id gate", AND THAT WAS FALSE ON THE DAY
+// IT WAS WRITTEN — not merely overtaken. search.go's fan-out landed in dd15d95
+// on 2026-08-16, three days before this comment, and coverGate below in this
+// very file is a THIRD, added by the same commit as the claim: the file
+// contradicted itself. The preamble above states that all three bullets were
+// checked in the tree; this one was not. Corrected 2026-08-19, and ADR-0065
+// records the same falsification.
+//
+// ⚠️ THE CLAIM HAD SPREAD, WHICH IS THE PART WORTH KNOWING.
+// internal/imagepipeline/pipeline.go carried the same sentence — "the tree's
+// only one is the Argon2id gate" — and was corrected independently at 4e3e6bb,
+// citing the same search.go:503. Two packages asserted it separately, so a
+// reader meeting it a third time should treat it as a known-false line rather
+// than as a fresh measurement.
 //
 // So this file is that loop and this is that bound. It is a semaphore rather
 // than a rate limiter for the reason internal/crypto/password.go gives: a
