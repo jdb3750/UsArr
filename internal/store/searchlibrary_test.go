@@ -432,7 +432,7 @@ func TestSearchableLibrariesPlanIsASeek(t *testing.T) {
 		t.Fatalf("QueryPlan: %v", err)
 	}
 	joined := strings.Join(plan, " | ")
-	if !strings.Contains(joined, "SEARCH library USING INDEX ix_library_kind") {
+	if !planHas(joined, "SEARCH library USING INDEX ix_library_kind") {
 		t.Errorf("the searchable-library read does not seek ix_library_kind:\n  %s",
 			strings.Join(plan, "\n  "))
 	}

@@ -593,7 +593,7 @@ func listLibrariesPlanFaults(plan string) []string {
 	if !strings.Contains(plan, "SEARCH l USING INDEX") {
 		faults = append(faults, "the library leg is not an index seek")
 	}
-	if !strings.Contains(plan, "SEARCH m USING") || !strings.Contains(plan, "ux_libmem_identity") {
+	if !strings.Contains(plan, "SEARCH m USING") || !planHas(plan, "ux_libmem_identity") {
 		faults = append(faults,
 			"the item count is not a seek on ux_libmem_identity, so it walks library_member")
 	}
@@ -631,7 +631,7 @@ func TestListLibrariesPlanIsSeeks(t *testing.T) {
 	// so the assertion derives it too rather than hard-coding a name that a
 	// literal `sil` would go on matching by prefix while covering nothing.
 	wantSil := "SEARCH " + scopeLinkAlias("m.work_id") + " EXISTS USING INDEX ix_sil_work"
-	if !strings.Contains(scoped, wantSil) {
+	if !planHas(scoped, wantSil) {
 		t.Errorf("the count's scope EXISTS is not a seek on ix_sil_work.\n  got:  %s\n  want: %s",
 			scoped, wantSil)
 	}
@@ -640,14 +640,19 @@ func TestListLibrariesPlanIsSeeks(t *testing.T) {
 	// a literal `ls` would match `ls_l` by prefix and would pin nothing, and it
 	// would also collide with librarySourcesSQL's own outer `ls`, which is a
 	// different query entirely.
+	// Each arm is named with the columns it constrains, which is both more
+	// precise and immune to prefix rot: the needle ends in `)` rather than in an
+	// index name a rename could extend (planassert_test.go).
 	wantLs := "SEARCH " + librarySourceAlias("l.id") + " USING COVERING INDEX " +
-		"sqlite_autoindex_library_source_1"
-	if n := strings.Count(scoped, wantLs); n != 2 {
-		t.Errorf("the library visibility predicate seeks library_source on %d of its "+
-			"2 arms.\n  got:  %s\n  want: %s\n"+
-			"Both the orphan arm and the instance arm are correlated subqueries per "+
-			"library row; a scan in either walks library_source once per library.",
-			n, scoped, wantLs)
+		"sqlite_autoindex_library_source_1 "
+	for _, arm := range []string{"(library_id=?)", "(library_id=? AND service_instance_id=?)"} {
+		if !strings.Contains(scoped, wantLs+arm) {
+			t.Errorf("the library visibility predicate does not seek library_source for "+
+				"the %s arm.\n  got:  %s\n  want: %s\n"+
+				"Both the orphan arm and the instance arm are correlated subqueries per "+
+				"library row; a scan in either walks library_source once per library.",
+				arm, scoped, wantLs+arm)
+		}
 	}
 	if strings.Contains(scoped, "SCAN "+librarySourceAlias("l.id")) {
 		t.Errorf("the library visibility EXISTS degraded to a scan of library_source: %s", scoped)

@@ -675,7 +675,10 @@ func TestLibraryIDsBySlug(t *testing.T) {
 // index is the ordering index the shape under test must walk.
 func browseWorksPlanFaults(index, plan string) []string {
 	var faults []string
-	if !strings.Contains(plan, "USING INDEX "+index) {
+	// planHas, not strings.Contains: `ix_work_added` is a prefix of
+	// `ix_work_added_at`, and a substring match would survive that rename while
+	// pinning nothing (planassert_test.go).
+	if !planHas(plan, "USING INDEX "+index) {
 		faults = append(faults, "does not use "+index)
 	}
 	// A table scan, as distinct from the ordered INDEX scan a first page is.
@@ -723,7 +726,7 @@ func browseWorksPlanFaults(index, plan string) []string {
 // fires it deliberately runs the same predicate the passing test runs.
 func browseMembershipProbeFaults(plan string) []string {
 	var faults []string
-	if !strings.Contains(plan, "SEARCH lm EXISTS USING COVERING INDEX ix_libmem_work") {
+	if !planHas(plan, "SEARCH lm EXISTS USING COVERING INDEX ix_libmem_work") {
 		faults = append(faults, "the library scope is not a covering probe on ix_libmem_work")
 	}
 	if !strings.Contains(plan, "work_id=?") || !strings.Contains(plan, "library_id=?") {
@@ -906,8 +909,8 @@ func TestBrowseWorksScopedPlanKeepsTheIndex(t *testing.T) {
 		t.Errorf("the scoped plan is wrong:\n  plan: %s\n  %s", joined, strings.Join(faults, "\n  "))
 	}
 	// Derived, not literal — see scopeLinkAlias and recent_test.go's note.
-	if !strings.Contains(joined, "SEARCH "+scopeLinkAlias("w.id")) ||
-		!strings.Contains(joined, "ix_sil_work") {
+	if !planHas(joined, "SEARCH "+scopeLinkAlias("w.id")) ||
+		!planHas(joined, "ix_sil_work") {
 		t.Errorf("the scope EXISTS is not a seek on ix_sil_work: %s", joined)
 	}
 	if strings.Contains(joined, "SCAN sil") {
@@ -1059,7 +1062,7 @@ func TestBrowseWorksPlanGuardFires(t *testing.T) {
 		if strings.Contains(joined, "ix_edition_format") {
 			t.Fatalf("the plan still names a dropped index:\n  %s", joined)
 		}
-		if !strings.Contains(joined, "ea EXISTS USING INDEX ix_edition_work") {
+		if !planHas(joined, "ea EXISTS USING INDEX ix_edition_work") {
 			t.Errorf("without ix_edition_format the probe fell back to something other than "+
 				"the work_id seek the migration header names:\n  %s", joined)
 		}
