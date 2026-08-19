@@ -571,15 +571,28 @@ func TestAddingABookOrbitProducesACatalogue(t *testing.T) {
 		t.Fatalf("GET /api/v1/libraries returned %d rows, want the 3 the import created: %+v",
 			len(libs.Items), libs.Items)
 	}
-	// ⚠️ THE COMIC LIBRARY'S NAME IS "Fiction (2)", AND THAT IS THE SHIPPED
-	// DISAMBIGUATION RATHER THAN A NAME THIS SLICE CHOSE. bindOneContainer's step
-	// 3 walks `name (n)` until BOTH ux_library_name and ux_library_slug are free;
-	// the comic sibling cannot JOIN the book library of the same name because
-	// step 2 requires the kinds to agree, so it lands on the next free name. It
-	// is asserted rather than left implicit BECAUSE IT IS UNSATISFYING: neither
-	// ADR-0066 decision 5 nor ADR-0068 rules on what a sibling library is called,
-	// so nothing here invents a convention, and this assertion is where a reader
-	// who wants one will find the current answer.
+	// ⚠️ THE COMIC LIBRARY'S NAME IS "Fiction (Comics)" — THE CONTAINER'S NAME
+	// PLUS A KIND QUALIFIER, AND NEVER AN ORDINAL. It used to be "Fiction (2)",
+	// which is what bindOneContainer's generic disambiguation produces: the comic
+	// sibling cannot JOIN the book library of the same name because step 2
+	// requires the kinds to agree, so it took the next free name. `(2)` encodes
+	// CREATION ORDER, which is an implementation fact a reader cannot interpret —
+	// it says a second library exists and nothing about why. `(Comics)` says
+	// which of the two this is, and the qualifier's PRESENCE is the signal that a
+	// container was split.
+	//
+	// ⚠️ AND ONLY THE SIBLING IS QUALIFIED. "Fiction" keeps its name; it is NOT
+	// renamed to "Fiction (Books)" to make the pair symmetrical, because that
+	// rewrites a name the user has already seen and library.slug is durable by
+	// design, so the two would agree in the list and disagree in every permalink.
+	// Asserted below with the others.
+	//
+	// ⚠️ THE COLLISION CASE IS OPEN AND IS NOT DECIDED HERE. Library names are
+	// UNIQUE per user (ux_library_name, migration 00005), so a container genuinely
+	// named "Fiction (Comics)" upstream collides with this derived name. See
+	// store.kindQualifier: the candidate is simply not free and the pre-existing
+	// ordinal loop runs, which is the behaviour that was already there rather than
+	// a rule this slice invented.
 	// (byName below is built from these rows; the assertion is with the others.)
 	byName := map[string]string{}
 	for _, l := range libs.Items {
@@ -606,23 +619,38 @@ func TestAddingABookOrbitProducesACatalogue(t *testing.T) {
 		t.Errorf("Fiction's skip state on the wire = %q, want left_out — the comic it "+
 			"skipped is invisible to anyone without database access", byName["Fiction"])
 	}
-	if _, ok := byName["Fiction (2)"]; !ok {
-		t.Errorf("no 'Fiction (2)' library; the comic sibling takes the next free name under "+
-			"the existing disambiguation. Rows: %v", byName)
+	if _, ok := byName["Fiction (Comics)"]; !ok {
+		t.Errorf("no 'Fiction (Comics)' library; the comic sibling carries the container's name "+
+			"plus a KIND qualifier, never an ordinal. Rows: %v", byName)
 	}
-	// ⚠️ THE COMIC LIBRARY REPORTS THE SAME SKIP AS ITS BOOK SIBLING, AND THAT IS
-	// RECORDED HERE RATHER THAN FIXED. §17.8's read joins `library` →
-	// `library_source` → `sync_report` on the CONTAINER REF, and a skip is a fact
-	// about the container: one unclassifiable file was left out of BookOrbit
-	// library 1, and both UsArr libraries standing over library 1 say so. It is
-	// not wrong, but it is the first place ADR-0066 decision 5's two-libraries-
-	// one-container shape shows through to a screen, and NEITHER ADR RULES ON IT
-	// — deciding which of two sibling libraries owns a container's skip is a
-	// design question, not an implementation detail, so nothing here decides it.
-	if byName["Fiction (2)"] != "left_out" {
+	if _, ok := byName["Fiction (2)"]; ok {
+		t.Errorf("a library is named 'Fiction (2)': the ordinal encodes creation order and is "+
+			"exactly what the kind qualifier replaced. Rows: %v", byName)
+	}
+	if _, ok := byName["Fiction (Books)"]; ok {
+		t.Errorf("the ORIGINAL library was renamed to 'Fiction (Books)'. Only the sibling the "+
+			"split creates is qualified; renaming the one that was already there changes a name "+
+			"the user has seen and desynchronises it from its durable slug. Rows: %v", byName)
+	}
+	// ⚠️ THE COMIC LIBRARY REPORTS THE SAME SKIP AS ITS BOOK SIBLING, AND THE
+	// SKIP IS NOT SPLIT, APPORTIONED OR ASSIGNED TO EITHER OF THEM. §17.8's read
+	// joins `library` → `library_source` → `sync_report` on the CONTAINER REF,
+	// and a skip is a fact about the CONTAINER: one unclassifiable file was left
+	// out of BookOrbit library 1, and both UsArr libraries standing over library 1
+	// say so. Neither sibling owns it — attributing it to one would be a fiction
+	// about where it happened — and halving it would invent two events out of one.
+	//
+	// The Libraries screen has NO container-level slot (§17.8 is one row per
+	// library, with per-row State marks and notes beside the table), so the count
+	// necessarily appears on both rows. What carries the honesty is the WORDING:
+	// web/src/lib/libraries.ts's skipMarks says on each row that the same skip is
+	// reported by the sibling over the same container, and skippedNote counts the
+	// container once rather than summing the two rows into a total that never
+	// happened.
+	if byName["Fiction (Comics)"] != "left_out" {
 		t.Errorf("the comic library's skip state = %q; it stands over the same container as "+
 			"Fiction and the skip rows are filed under the CONTAINER, so it reads the same "+
-			"row", byName["Fiction (2)"])
+			"row", byName["Fiction (Comics)"])
 	}
 	if byName["Audio"] != "none" {
 		t.Errorf("Audio's skip state on the wire = %q, want `none`: it was observed by "+

@@ -3,6 +3,7 @@ package store
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"fmt"
 	"strings"
 	"testing"
@@ -1263,5 +1264,231 @@ func TestOnlyAConstraintViolationSkipsAContainer(t *testing.T) {
 		if got := isSkippableBindError(tc.err); got != tc.want {
 			t.Errorf("isSkippableBindError(%s) = %v, want %v", tc.name, got, tc.want)
 		}
+	}
+}
+
+/* ── the sibling library's name, and the kind-change report ─────────────────
+ *
+ * Two behaviours that meet in bindOneContainer and are asserted together
+ * because they are the same shape from opposite sides: a container bound at a
+ * kind it was not bound at before. When that is DELIBERATE (ADR-0066 decision
+ * 5's mixed container) the second library needs a NAME; when it is a CHANGE
+ * upstream, it needs a RECORD.
+ */
+
+// TestASiblingLibraryIsNamedForItsKindAndNeverForItsOrder pins the qualifier.
+func TestASiblingLibraryIsNamedForItsKindAndNeverForItsOrder(t *testing.T) {
+	s := newTestStore(t)
+	inst := fixtureInstance(t, s, "kavita")
+
+	// One container, bound twice at two kinds — the shape parentBinding produces
+	// on a mixed BookOrbit library, driven here through the public bind path so
+	// the assertion is about the name and not about the caller.
+	first, _, err := s.BindContainers(t.Context(), inst, SystemUserID, []CatalogueContainer{
+		{RemoteID: "1", Name: "Fiction", Kind: "book"},
+	})
+	if err != nil {
+		t.Fatalf("BindContainers (book): %v", err)
+	}
+	second, _, err := s.BindContainers(t.Context(), inst, SystemUserID, []CatalogueContainer{
+		{RemoteID: "1", Name: "Fiction", Kind: "comic"},
+	})
+	if err != nil {
+		t.Fatalf("BindContainers (comic): %v", err)
+	}
+
+	bookName, bookSlug := libraryNameSlug(t, s, first["1"].LibraryID)
+	comicName, comicSlug := libraryNameSlug(t, s, second["1"].LibraryID)
+
+	if comicName != "Fiction (Comics)" || comicSlug != "fiction-comics" {
+		t.Errorf("the sibling is (%q, %q), want (%q, %q). The qualifier names what the "+
+			"library HOLDS; an ordinal names when it was MADE, which no reader can interpret",
+			comicName, comicSlug, "Fiction (Comics)", "fiction-comics")
+	}
+	// ⚠️ THE ORIGINAL IS NOT RENAMED, and this half is a decision rather than an
+	// omission. `Fiction (Books)` beside `Fiction (Comics)` is prettier and it
+	// rewrites a name the user has already seen, while library.slug is DURABLE by
+	// design — so the pair would agree in the list and disagree in the permalink.
+	// The qualifier's PRESENCE is the signal that a split happened; symmetry is
+	// not needed to carry it.
+	if bookName != "Fiction" || bookSlug != "fiction" {
+		t.Errorf("the ORIGINAL library is (%q, %q), want (%q, %q) — only the sibling the split "+
+			"creates is qualified", bookName, bookSlug, "Fiction", "fiction")
+	}
+}
+
+// TestAKindCollisionQualifiesButANameCollisionStillTakesAnOrdinal is the
+// boundary between the two disambiguations, and it is the reason the ordinal
+// loop survives.
+func TestAKindCollisionQualifiesButANameCollisionStillTakesAnOrdinal(t *testing.T) {
+	s := newTestStore(t)
+	inst := fixtureInstance(t, s, "kavita")
+
+	binds, skipped, err := s.BindContainers(t.Context(), inst, SystemUserID, []CatalogueContainer{
+		comicContainer("1", "Sci-Fi"),
+		// Same KIND, different name, one slug. A qualifier here would read
+		// `Sci Fi (Comics)` beside a `Sci-Fi` that is also comics — a stated
+		// difference that does not exist — so this one still takes the ordinal.
+		comicContainer("2", "Sci Fi"),
+	})
+	if err != nil {
+		t.Fatalf("BindContainers: %v", err)
+	}
+	if len(skipped) != 0 {
+		t.Fatalf("nothing should be skipped: %+v", skipped)
+	}
+	if n, _ := libraryNameSlug(t, s, binds["2"].LibraryID); n != "Sci Fi (2)" {
+		t.Errorf("a same-kind slug collision produced %q, want \"Sci Fi (2)\" — the kind "+
+			"qualifier answers a KIND collision only", n)
+	}
+}
+
+// TestAQualifiedNameThatIsItselfTakenFallsBackRatherThanInventingARule is the
+// STOP CONDITION, pinned as behaviour rather than argued in prose.
+//
+// ⚠️ ux_library_name IS A REAL UNIQUE INDEX (migration 00005), so a container
+// genuinely named "Fiction (Comics)" upstream collides with the derived sibling
+// name. WHAT SHOULD HAPPEN THEN IS AN OPEN DESIGN QUESTION and is deliberately
+// not decided here. This test asserts only that the code does not invent one:
+// the candidate is not free, so the PRE-EXISTING ordinal loop runs, exactly as
+// it did before the qualifier existed, and the import still completes.
+func TestAQualifiedNameThatIsItselfTakenFallsBackRatherThanInventingARule(t *testing.T) {
+	s := newTestStore(t)
+	inst := fixtureInstance(t, s, "kavita")
+
+	if _, _, err := s.BindContainers(t.Context(), inst, SystemUserID, []CatalogueContainer{
+		{RemoteID: "1", Name: "Fiction", Kind: "book"},
+		{RemoteID: "9", Name: "Fiction (Comics)", Kind: "book"},
+	}); err != nil {
+		t.Fatalf("BindContainers (books): %v", err)
+	}
+	sib, skipped, err := s.BindContainers(t.Context(), inst, SystemUserID, []CatalogueContainer{
+		{RemoteID: "1", Name: "Fiction", Kind: "comic"},
+	})
+	if err != nil {
+		t.Fatalf("BindContainers (comic): %v", err)
+	}
+	if len(skipped) != 0 {
+		t.Fatalf("the fallback must still bind, not skip: %+v", skipped)
+	}
+	if n, _ := libraryNameSlug(t, s, sib["1"].LibraryID); n != "Fiction (2)" {
+		t.Errorf("the taken qualifier fell back to %q, want \"Fiction (2)\" — the ordinal loop "+
+			"is the behaviour that was already there, and nothing here rules on the collision", n)
+	}
+}
+
+// TestAContainerWhoseKindChangedIsRecorded is ADR-0066's kind-aware lookup made
+// OBSERVABLE.
+//
+// The lookup itself fixes a defect: the old query matched a container's binding
+// at ANY kind and took whichever row SQLite returned first, so a repeated import
+// had a nondeterministic bind. Scoping it to the kind makes a retyped container
+// land in a library of the right kind — and from the Libraries screen that looks
+// like one library emptying and another appearing, with nothing saying why. The
+// row is the why.
+func TestAContainerWhoseKindChangedIsRecorded(t *testing.T) {
+	s := newTestStore(t)
+	inst := fixtureInstance(t, s, "kavita")
+
+	first, _, err := s.BindContainers(t.Context(), inst, SystemUserID, []CatalogueContainer{
+		comicContainer("1", "Graphic Novels"),
+	})
+	if err != nil {
+		t.Fatalf("BindContainers (comic): %v", err)
+	}
+	if n := count(t, s, `SELECT COUNT(*) FROM sync_report WHERE kind = ?`,
+		SyncReportContainerKindChanged); n != 0 {
+		t.Fatalf("a FIRST import wrote %d kind-change rows; a container nobody bound before "+
+			"has not changed kind", n)
+	}
+
+	// The retype: same container, the adapter now decides `book`.
+	second, _, err := s.BindContainers(t.Context(), inst, SystemUserID, []CatalogueContainer{
+		{RemoteID: "1", Name: "Graphic Novels", Kind: "book"},
+	})
+	if err != nil {
+		t.Fatalf("BindContainers (book): %v", err)
+	}
+	if second["1"].LibraryID == first["1"].LibraryID {
+		t.Fatalf("the retyped container kept library %d; library.kind is exactly one value, so "+
+			"it must not hold items of a kind it does not declare", first["1"].LibraryID)
+	}
+
+	var remoteID, detail string
+	if err := s.db.Read().QueryRowContext(t.Context(), `
+		SELECT remote_id, detail FROM sync_report
+		 WHERE kind = ? AND remote_kind = 'library'`,
+		SyncReportContainerKindChanged).Scan(&remoteID, &detail); err != nil {
+		t.Fatalf("no kind-change row: %v — items appearing to move between libraries with no "+
+			"record is the one way this fix looks like a bug", err)
+	}
+	if remoteID != "1" {
+		t.Errorf("the row is filed under container %q, want \"1\"", remoteID)
+	}
+	var got struct {
+		Name string `json:"name"`
+		Was  []struct {
+			Kind      string `json:"kind"`
+			LibraryID int64  `json:"library_id"`
+		} `json:"was"`
+		Now struct {
+			Kind      string `json:"kind"`
+			LibraryID int64  `json:"library_id"`
+		} `json:"now"`
+	}
+	if err := json.Unmarshal([]byte(detail), &got); err != nil {
+		t.Fatalf("decode %q: %v", detail, err)
+	}
+	// BOTH SIDES, because the row is read from either end: from the library that
+	// emptied ("where did my items go") and from the one that appeared ("is this
+	// new data").
+	if got.Name != "Graphic Novels" {
+		t.Errorf("detail names the container %q, want \"Graphic Novels\"", got.Name)
+	}
+	if len(got.Was) != 1 || got.Was[0].Kind != "comic" || got.Was[0].LibraryID != first["1"].LibraryID {
+		t.Errorf("detail's `was` = %+v, want one entry (comic, library %d)",
+			got.Was, first["1"].LibraryID)
+	}
+	if got.Now.Kind != "book" || got.Now.LibraryID != second["1"].LibraryID {
+		t.Errorf("detail's `now` = %+v, want (book, library %d)", got.Now, second["1"].LibraryID)
+	}
+}
+
+// TestTheSiblingMintIsNotReportedAsAKindChange is the other half, and without it
+// the row above fires on every mixed BookOrbit library.
+//
+// ⚠️ THE SCHEMA CANNOT TELL THE TWO APART. "A container bound at a second kind"
+// describes both the ADR-0066 decision 5 sibling and a genuine retype; the
+// difference is entirely in WHO ASKED, which is why bindReason exists. A row
+// here would report a design as an incident, on the first comic of every mixed
+// library, forever.
+func TestTheSiblingMintIsNotReportedAsAKindChange(t *testing.T) {
+	s := newTestStore(t)
+	inst := fixtureInstance(t, s, "kavita")
+
+	binds, _, err := s.BindContainers(t.Context(), inst, SystemUserID, []CatalogueContainer{
+		{RemoteID: "1", Name: "Fiction", Kind: "book"},
+	})
+	if err != nil {
+		t.Fatalf("BindContainers: %v", err)
+	}
+	// The lazy mint, through the path that actually performs it: one comic issue
+	// whose parent series is a `comic` under a `book` container's binding.
+	if err := s.db.Write(t.Context(), func(ctx context.Context, tx *sql.Tx) error {
+		_, err := parentBinding(ctx, tx, inst, binds["1"], "1", CatalogueParent{
+			RemoteID: "s1", Kind: "comic", Title: "A Series",
+		})
+		return err
+	}); err != nil {
+		t.Fatalf("parentBinding: %v", err)
+	}
+	if n := count(t, s, `SELECT COUNT(*) FROM sync_report WHERE kind = ?`,
+		SyncReportContainerKindChanged); n != 0 {
+		t.Errorf("the sibling mint wrote %d kind-change rows; a mixed container holding two "+
+			"kinds is ADR-0066 decision 5's design, not a change", n)
+	}
+	if n := count(t, s,
+		`SELECT COUNT(*) FROM library WHERE kind = 'comic' AND name = 'Fiction (Comics)'`); n != 1 {
+		t.Errorf("the mint produced %d 'Fiction (Comics)' libraries, want 1", n)
 	}
 }

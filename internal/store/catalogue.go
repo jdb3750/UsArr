@@ -419,7 +419,7 @@ func (s *Store) BindContainers(
 			if _, err := tx.ExecContext(ctx, "SAVEPOINT "+sp); err != nil {
 				return fmt.Errorf("savepoint %s: %w", sp, err)
 			}
-			b, bindErr := bindOneContainer(ctx, tx, instanceID, userID, c)
+			b, bindErr := bindOneContainer(ctx, tx, instanceID, userID, c, bindFromContainerList)
 			if bindErr == nil {
 				if _, err := tx.ExecContext(ctx, "RELEASE SAVEPOINT "+sp); err != nil {
 					return fmt.Errorf("release savepoint %s: %w", sp, err)
@@ -482,8 +482,96 @@ func isSkippableBindError(err error) bool {
 	return errors.Is(err, sqlite3.CONSTRAINT)
 }
 
+// SyncReportContainerKindChanged is sync_report.kind for a container whose
+// ADAPTER-DECIDED kind is not the kind it was bound at last time, so this import
+// binds it to a DIFFERENT library than the last one did.
+//
+// ⚠️ IT EXISTS BECAUSE THE ALTERNATIVE IS ITEMS MOVING BETWEEN LIBRARIES WITH NO
+// RECORD. bindOneContainer's step 1 matches on (container, kind); a container
+// retyped upstream — a Kavita library switched from Manga to Book — therefore
+// misses its old library and gets one of the right kind instead. That is the
+// correct outcome (§6.4: the kind decision is UsArr's, made once at ingest, and
+// a library holding items of a kind it does not declare is the worse state), but
+// from the Libraries screen it looks like a library that emptied itself and a
+// second one that appeared. One row per occurrence is what makes it readable
+// afterwards.
+//
+// ⚠️ IT IS NOT WRITTEN FOR THE ADR-0066 DECISION 5 SIBLING MINT, and that
+// distinction is the whole reason bindReason exists. A `comic` library minted
+// beside a `book` one over the same container is a container bound at a second
+// kind, which is indistinguishable in the schema from a container whose kind
+// changed — but it is not a change, nothing moved, and a row for it would fire
+// on every mixed BookOrbit library on the first comic it reaches.
+//
+// It needs no migration: sync_report.kind carries no CHECK (migration 00005) and
+// `detail` is untyped JSON. Same seam container_declined and
+// container_bind_failed use.
+const SyncReportContainerKindChanged = "container_kind_changed"
+
+// bindReason is WHO is asking for a binding, and it exists for exactly one
+// decision: whether a container already bound at a different kind is a CHANGE
+// (worth a sync_report row) or an EXPECTED SECOND KIND inside one container
+// (ADR-0066 decision 5, worth nothing). The schema cannot tell those apart —
+// both are two library_source rows on one container ref — so the caller says.
+type bindReason int
+
+const (
+	// bindFromContainerList is BindContainers walking the adapter's container
+	// list. Exactly one kind per container per import, so a different existing
+	// kind means the adapter's DECISION moved.
+	bindFromContainerList bindReason = iota
+
+	// bindSiblingKind is parentBinding minting the second library a mixed
+	// container needs. A different existing kind is the precondition, not news.
+	bindSiblingKind
+)
+
+// kindQualifier is the parenthetical a SIBLING library carries so its name says
+// what it holds rather than when it was made.
+//
+// ⚠️ NEVER AN ORDINAL. `Fiction (2)` encodes creation order, which is an
+// implementation fact no reader can interpret: it says a second library exists
+// and not one word about why. `Fiction (Comics)` says which of the two this is,
+// and the qualifier's PRESENCE is itself the signal that a container was split.
+//
+// ⚠️ PARENTHESES RATHER THAN A SEPARATOR GLYPH. The name travels through a
+// terminal, a CSV and a URL, and `(` `)` survive all three unescaped; a middot
+// does not survive the first.
+//
+// ⚠️ ONLY THE NEW SIBLING IS QUALIFIED. The library that was already there keeps
+// its name — renaming it to `Fiction (Books)` for symmetry would rewrite a name
+// the user has already seen, and library.slug is durable by design, so the pair
+// would agree in the list and disagree in every permalink.
+//
+// An unknown kind returns "", and the caller then falls through to the ordinal
+// loop rather than inventing a word for it. library.kind is CHECK-constrained to
+// exactly these seven (migration 00005), so "" is unreachable today and is
+// handled anyway: the CHECK is the schema's list and this is a second copy of
+// it, which is the pair that drifts.
+func kindQualifier(kind string) string {
+	switch kind {
+	case "movie":
+		return "Movies"
+	case "series":
+		return "Series"
+	case "artist":
+		return "Artists"
+	case "album":
+		return "Albums"
+	case "book":
+		return "Books"
+	case "comic":
+		return "Comics"
+	case "game":
+		return "Games"
+	default:
+		return ""
+	}
+}
+
 func bindOneContainer(
 	ctx context.Context, tx *sql.Tx, instanceID, userID int64, c CatalogueContainer,
+	why bindReason,
 ) (CatalogueBinding, error) {
 	// Step 1: is this exact container already bound AT THIS KIND? If so nothing
 	// about the library changes — a rename upstream must not re-propose or
@@ -538,6 +626,14 @@ func bindOneContainer(
 		return CatalogueBinding{}, fmt.Errorf("look up existing source: %w", err)
 	}
 
+	// Step 1b: THIS CONTAINER IS NOT BOUND AT THIS KIND. Is it bound at another
+	// one? The answer is needed twice below and read once here, before anything
+	// is written, so both readings are of the state the LAST import left.
+	prior, err := containerBoundKinds(ctx, tx, instanceID, c.RemoteID)
+	if err != nil {
+		return CatalogueBinding{}, err
+	}
+
 	// Step 2: join a library of the same name AND the same kind, if one exists.
 	// The join key is §17.8's: case-insensitive, whitespace-trimmed, per user.
 	// It is evaluated in Go over this user's libraries rather than in SQL,
@@ -555,6 +651,9 @@ func bindOneContainer(
 	}
 	if got, ok := existing.joinable[libraryNameKey(name)]; ok && got.kind == c.Kind {
 		if err := insertLibrarySource(ctx, tx, got.id, instanceID, c); err != nil {
+			return CatalogueBinding{}, err
+		}
+		if err := noteKindChange(ctx, tx, instanceID, c, why, prior, got.id); err != nil {
 			return CatalogueBinding{}, err
 		}
 		return CatalogueBinding{
@@ -578,8 +677,38 @@ func bindOneContainer(
 	// still a row in ux_library_name and ux_library_slug, so an upstream
 	// library actually named "Unfiled" collided with it. Reserving a name
 	// against joining is not the same as pretending it is free.
+	// AND THE FIRST CANDIDATE IS A KIND QUALIFIER, NOT AN ORDINAL, WHENEVER THE
+	// NAME IS HELD BY A LIBRARY OF A DIFFERENT KIND. That is precisely the
+	// collision step 2 just refused to join across, and it is the shape ADR-0066
+	// decision 5 makes ordinary: one BookOrbit container becomes a `book` library
+	// and a `comic` library, and the second of them used to be called
+	// `Fiction (2)`. `Fiction (Comics)` says which one it is; `Fiction (2)` says
+	// only that it was made second. See kindQualifier for the rest of the reasons.
+	//
+	// ⚠️ THE ORDINAL LOOP BELOW IS NOT REPLACED, AND ITS SURVIVING JOB IS A
+	// DIFFERENT COLLISION. `Sci-Fi` and `Sci Fi` are two book libraries that
+	// reduce to one slug; a kind qualifier there would read `Sci Fi (Books)`
+	// beside a `Sci-Fi` that is also books, which states a difference that does
+	// not exist. The qualifier answers a KIND collision; the ordinal answers
+	// everything else.
+	//
+	// ⚠️ AND THE QUALIFIED NAME CAN ITSELF BE TAKEN — library names are UNIQUE
+	// per user (ux_library_name, migration 00005), so an upstream container
+	// genuinely named `Fiction (Comics)` collides with the derived one. Nothing
+	// here invents a rule for that: the candidate is simply not free, and the
+	// pre-existing ordinal loop runs from `base` exactly as it did before this
+	// change. What that case SHOULD do is an open design question and is recorded
+	// as one rather than settled by whichever branch happened to reach it.
 	base := name
 	slug := slugify(name)
+	if held, ok := existing.joinable[libraryNameKey(name)]; ok && held.kind != c.Kind {
+		if q := kindQualifier(c.Kind); q != "" {
+			cand := fmt.Sprintf("%s (%s)", base, q)
+			if candSlug := slugify(cand); !existing.names[libraryNameKey(cand)] && !existing.slugs[candSlug] {
+				name, slug = cand, candSlug
+			}
+		}
+	}
 	for n := 2; existing.names[libraryNameKey(name)] || existing.slugs[slug]; n++ {
 		name = fmt.Sprintf("%s (%d)", base, n)
 		slug = slugify(name)
@@ -598,9 +727,83 @@ func bindOneContainer(
 	if err := insertLibrarySource(ctx, tx, id, instanceID, c); err != nil {
 		return CatalogueBinding{}, err
 	}
+	if err := noteKindChange(ctx, tx, instanceID, c, why, prior, id); err != nil {
+		return CatalogueBinding{}, err
+	}
 	return CatalogueBinding{
 		LibraryID: id, Kind: c.Kind, Created: true, UserID: userID, ContainerName: c.Name,
 	}, nil
+}
+
+// containerBoundKinds is every (kind, library) this container is ALREADY bound
+// to, read before this bind writes anything.
+//
+// It is ordered by kind so the sync_report detail below is stable between runs:
+// a report whose field reorders is a report a reader cannot diff.
+func containerBoundKinds(
+	ctx context.Context, tx *sql.Tx, instanceID int64, remoteID string,
+) ([]libraryRow, error) {
+	rows, err := tx.QueryContext(ctx, `
+		SELECT l.kind, l.id
+		  FROM library_source ls
+		  JOIN library l ON l.id = ls.library_id
+		 WHERE ls.service_instance_id = ?
+		   AND ls.container_kind = 'remote_library'
+		   AND ls.container_ref = ?
+		 ORDER BY l.kind, l.id`, instanceID, remoteID)
+	if err != nil {
+		return nil, fmt.Errorf("look up bound kinds for container %q: %w", remoteID, err)
+	}
+	defer func() { _ = rows.Close() }()
+
+	var out []libraryRow
+	for rows.Next() {
+		var r libraryRow
+		if err := rows.Scan(&r.kind, &r.id); err != nil {
+			return nil, fmt.Errorf("look up bound kinds for container %q: scan: %w", remoteID, err)
+		}
+		out = append(out, r)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("look up bound kinds for container %q: %w", remoteID, err)
+	}
+	return out, nil
+}
+
+// noteKindChange writes the SyncReportContainerKindChanged row, or does nothing.
+//
+// It does nothing in the two ordinary cases: a container nobody has bound before
+// (prior is empty, which is every container of every first import) and the
+// ADR-0066 decision 5 sibling mint, which is a second kind by design.
+//
+// It writes exactly one row when BindContainers — the adapter's own container
+// list, one kind per container per import — asks for a kind this container was
+// not bound at, because that means the adapter DECIDED differently than it did
+// last time and this container's items land in a different library from now on.
+// The detail carries both sides: a reader who finds a library that emptied
+// itself needs to know where its items went, and a reader who finds a library
+// that appeared needs to know it is not new data.
+func noteKindChange(
+	ctx context.Context, tx *sql.Tx, instanceID int64, c CatalogueContainer,
+	why bindReason, prior []libraryRow, boundTo int64,
+) error {
+	if why != bindFromContainerList || len(prior) == 0 {
+		return nil
+	}
+	was := make([]map[string]any, 0, len(prior))
+	for _, r := range prior {
+		was = append(was, map[string]any{"kind": r.kind, "library_id": r.id})
+	}
+	detail, err := json.Marshal(map[string]any{
+		"name": c.Name,
+		"was":  was,
+		"now":  map[string]any{"kind": c.Kind, "library_id": boundTo},
+	})
+	if err != nil {
+		return fmt.Errorf("encode kind change for container %q: %w", c.RemoteID, err)
+	}
+	return recordSyncReport(ctx, tx, instanceID,
+		SyncReportContainerKindChanged, "library", c.RemoteID, string(detail))
 }
 
 type libraryRow struct {
@@ -1212,7 +1415,12 @@ func parentBinding(
 		RemoteID: containerRef,
 		Name:     b.ContainerName,
 		Kind:     p.Kind,
-	})
+		// bindSiblingKind, NOT bindFromContainerList. This call is the ONE place
+		// a container is deliberately bound at a second kind, so the kind-change
+		// report must not fire here — it would fire on every mixed library, on
+		// the first comic reached, and say a change happened where the design
+		// says two kinds coexist.
+	}, bindSiblingKind)
 }
 
 // searchDocText is the TEXT of one work's search document — the five FTS
