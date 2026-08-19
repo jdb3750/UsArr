@@ -12,7 +12,7 @@
 > **No dates and no estimates appear here, ever**, at the owner's standing instruction. Where a line
 > is inference rather than something read off §16, an ADR or the tree, it is marked 🔍.
 
-**Last re-derived against:** `origin/main` `19f5451` (2026-08-18).
+**Last re-derived against:** `origin/main` `047a060` (2026-08-19) — code identical to `9689e56`; what sits above it is this file's own history.
 
 ---
 
@@ -88,14 +88,89 @@ Ordered roughly by what the rest depends on, not by size.
       `internal/db/migrations`.
 
 - [ ] **The image pipeline, including the §4.4.1 cold-start plan.** `image_asset` is in the schema;
-      nothing in `internal/` or `cmd/` writes or serves it.
+      nothing in `internal/` or `cmd/` writes or serves it. ⚠️ **§16 puts this and the library grid
+      in ONE line item** (`ARCHITECTURE.md:2649-2651`) — this item and the grid item below are two
+      halves of one §16 line, not two independent lines.
       *Authority:* §4.4, §16 v0.1 entry.
-      *Done when:* `grep -rln image_asset --include=*.go internal/ cmd/` returns a non-test writer.
+      *Done when:* `grep -rn 'INSERT INTO image_asset' --include=*.go internal/` returns a hit
+      **outside `_test.go`**.
+      ⚠️ **The old check was falsely green** and read
+      `grep -rln image_asset --include=*.go internal/ cmd/`. It matches five files: three are
+      comment-only mentions (`internal/ssrf/policy.go:12`, `ssrf.go:68`, `redact.go:14`) and the
+      other two are tests. The new check returns exactly one hit today —
+      `internal/db/migrate_test.go:1483` — which the `_test.go` clause excludes.
 
-- [ ] **Library grid: "Load more", keyset pagination, `content-visibility` on grid rows with explicit
-      ARIA roles.** `GET /api/v1/library/recent` is the only catalogue read on the wire.
-      *Authority:* §4.5, §16 v0.1 entry.
-      *Done when:* a paged library read exists beyond `/library/recent`.
+- [ ] **The image pipeline's OUTPUT CODEC is undecided, and no encoder can be written until it is.**
+      §4.4 names **AVIF as its only output codec** (`ARCHITECTURE.md:326-327`, again :347 and :355)
+      and **never names a base or fallback format**; `image_asset` has **no format column**
+      (`internal/db/migrations/00005_library_sync.sql:219-236`). Serving upstream bytes unmodified
+      is **not permitted as written**: §4.4:326 mandates ingest-time downscale to the seven-width
+      allowlist, so an encoder is mandatory and only the codec is negotiable.
+      ⚠️ *"AVIF is not buildable under `CGO_ENABLED=0`"* is **FALSIFIED, 2026-08-19.**
+      `gen2brain/avif` v0.6.0 is **MIT**, contains **no `import "C"` anywhere**, and reaches
+      aom/dav1d through `wazero` + `purego` — verified against the extracted module in `GOMODCACHE`,
+      not from memory.
+      🔍 **A RECOMMENDATION, not a decision, and no ADR backs it:** name **stdlib JPEG** as the base
+      format now and defer AVIF, keeping the seam. Proposing that as an ADR belongs to the sync
+      thread, not to this file.
+      *Authority:* §4.4, §16 v0.1 entry.
+      *Done when:* an ADR names the base format, and the schema carries whatever column it needs.
+
+- [x] **FALSIFIED 2026-08-19 — ~~Library grid: "Load more", keyset pagination,
+      `content-visibility` on grid rows with explicit ARIA roles~~.** All three primitives ship.
+      Home's Block C walks keyset pages of 200 — `LOAD_MORE_PAGE_SIZE`
+      (`web/src/lib/list.ts:434`) against `RecentWorksMaxLimit` (`internal/store/recent.go:82-83`),
+      driven from `web/src/routes/+page.svelte:474` — with the stop rule tested: a short *or* empty
+      page that still carries a cursor does not stop the walk
+      (`web/src/lib/library.test.ts:453-466`). `web/src/lib/List.svelte` carries
+      `content-visibility` with `role="table"`, `aria-rowcount` and `aria-rowindex`.
+      ⚠️ The item read *"`GET /api/v1/library/recent` is the only catalogue read on the wire"* and
+      inferred a gap from the literal 100. **That 100 is `store.SearchMaxLimit`
+      (`internal/store/searchlibrary.go:109`) and binds only on `/api/v1/search`, where it is a
+      documented structural refusal rather than an omission:** `SearchLibrary` fuses at most 200
+      candidates (`retrievalLimit`, `internal/store/searchlibrary.go:99`) and re-ranks *the whole
+      set* in Go, so there is no keyset position a cursor could name — `reference/http-api.md` §6.5
+      publishes exactly that, and `web/src/lib/search.test.ts:74-82` asserts no second page exists.
+      **Lifting that cap would be a store redesign contradicting a published contract, and needs an
+      ADR first. It is not a missing feature.** What the falsification did surface is the next two
+      items.
+
+- [ ] **The PER-TYPE library grid, `/library/{type}` — and it is BACKEND-BLOCKED.** Not one
+      all-types screen: navigation is §17.2's **six-value media-type enum**, one sidebar entry per
+      type (`ARCHITECTURE.md:3037`, enum table :3046-3052), and item routes are already
+      `/library/{type}/{id}` (`web/src/lib/library.ts:269`). §16 puts it in v0.1 **in the same
+      sentence as the image pipeline** (:2649-2651), so it is that line's other half. The §4.5
+      primitives ship (see the falsified item above); **the screen does not** — `web/src/routes/`
+      holds `libraries/`, which is §17.8's row view, and no grid route.
+      **Nothing on the wire can back it.** §13 budgets `GET /api/v1/library?kind=…` and `?lib=…`
+      (:2101-2102), but **neither is a registered route**: `internal/httpapi/server.go:274`
+      registers `GET /api/v1/library/recent` and that is the only library read there. Its handler
+      parses **only `cursor` and `limit`** (`internal/httpapi/library.go:158,220`), over SQL
+      hard-ordered `ORDER BY w.added_at DESC, w.id DESC` (`internal/store/recent.go:264`) — no kind
+      facet, no library scope, no sort.
+      ⚠️ **The interim `/library` table is a SLICE of this line item and NEVER a tick.** A frontend
+      thread is building a single `/library` table over `/library/recent`, the one catalogue read
+      that exists; it is **not on `origin/main` at the baseline above**, so nothing here reports it
+      as shipped, and when it lands it discharges no part of this item. **Its missing type filter
+      and sort control are a DECISION, with a reason.** Over an endpoint with no kind facet and one
+      fixed order, either control could only act on the rows already loaded, and a control that
+      silently operates on the loaded window is precisely §17's dishonesty — the rule that already
+      keeps §17.8's screen free of controls no endpoint backs. **A later review files both absences
+      as intentional, not as a gap.**
+      *Authority:* §16 v0.1 entry, §17.2, §17, §13's budget table, §4.5.
+      *Done when:* `GET /api/v1/library` is a registered route carrying a kind facet, **and** a
+      `/library/{type}` route renders over it.
+
+- [ ] **A relevance score on the wire.** §17.4 rule 2 orders grouped results *"by the group's
+      best-scoring hit, descending"*, and §6.2 publishes no score — *"**`items` is ordered by
+      relevance and the ORDER IS THE CONTRACT.** No score is published"* — deliberately, because it
+      is normalised per query and publishing it would freeze §6.6's ranking. §17.4's grouped card
+      therefore cannot be built over the response as specified. 🔍 Inference: which way that
+      resolves — a published score, server-side grouping, or an amended §17.4 — is decided nowhere,
+      so it closes off an alternative and needs an ADR.
+      *Authority:* §17.4 rule 2, `reference/http-api.md` §6.2 and §6.6, §16 v0.1 entry.
+      *Done when:* the search response carries a field §6.2 documents for grouping, **or** an ADR
+      records the alternative.
 
 - [ ] **System tags `type:`, `format:`, `source:`, `quality:`, `indexer:` with the `downloadId`
       provenance join.**
