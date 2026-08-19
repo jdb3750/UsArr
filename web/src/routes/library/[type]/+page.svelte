@@ -71,6 +71,7 @@
 		browseHasMore,
 		browseRoute,
 		browseSortLabel,
+		browseSortNote,
 		browseSortsFor,
 		emptyBrowseFeed,
 		fetchBrowsePage,
@@ -141,6 +142,13 @@
 	const query = $derived(route.k === 'ok' ? route.query : undefined);
 	const typeLabel = $derived(query === undefined ? '' : mediaTypeLabel(query.mediaType));
 	const sorts = $derived(query === undefined ? [] : browseSortsFor(query.mediaType));
+	/**
+	 * The one line that says why A to Z is not on the control above, on the one
+	 * type it is missing from. UsArr's own words, never the server's 400 text:
+	 * `browseSortNote` decides from the kind count, so Music gets a sentence here
+	 * for the same reason it gets two options rather than three.
+	 */
+	const sortNote = $derived(query === undefined ? undefined : browseSortNote(query));
 
 	/**
 	 * THE WHOLE PAGING POSITION, IN ONE VALUE: the rows read so far, the cursor
@@ -438,6 +446,21 @@
 				<option value={sort}>{browseSortLabel(sort)}</option>
 			{/each}
 		</select>
+		{#if sortNote}
+			<!--
+				⚠️ STATED, NOT DROPPED SILENTLY. Music shipped with two options and no
+				reason while every other type here offered three, which reads as a screen
+				missing a control rather than an order the store cannot serve. The option
+				stays out of the select above — the refusal is knowable before a request
+				is sent, so offering it and answering with a banner would spend a round
+				trip — and this is the sentence that says so. It is `$lib/librarygrid`'s
+				so a test can read it, it is NOT the all-types screen's sentence (that one
+				claims to span every media type and this view spans one), and it is not
+				the server's 400 text, which names a wire parameter and `year` to a reader
+				who asked about neither.
+			-->
+			<p class="toolbar__note toolbar__label">{sortNote}</p>
+		{/if}
 
 		{#if query.libraries.length > 0}
 			<span class="toolbar__spacer"></span>

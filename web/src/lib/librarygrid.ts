@@ -214,18 +214,42 @@ export const BROWSE_AZ_UNAVAILABLE =
 	'This view spans every media type, and A to Z is not available across all of them.';
 
 /**
+ * WHY A TO Z IS MISSING FROM ONE MEDIA TYPE'S SORT CONTROL, IN UsArr's OWN
+ * WORDS. Music is the only type that reaches it today, and it was dropped
+ * SILENTLY there until this string existed — two options and no reason, on the
+ * one screen where the absence is most surprising, because the five per-type
+ * screens beside it all offer three.
+ *
+ * ⚠️ IT DOES NOT SAY "MUSIC", AND THAT IS THE POINT. `browseKinds` in
+ * `internal/store/browse.go` maps `music` onto `artist` AND `album`, and the
+ * store's refusal is `len(kinds) != 1` rather than a test on the type's name. A
+ * sentence naming artists and albums would be a second hard-coded exception to
+ * hold in step with that map, and would be a lie on the day a second two-kind
+ * type is added; the COUNT is the fact this note and `browseSortsFor` are both
+ * derived from.
+ *
+ * ⚠️ AND IT IS NOT THE ALL-TYPES SENTENCE. That one opens "this view spans
+ * every media type", which is false on a view that spans exactly one. Same
+ * refusal, two screens, two sentences — and the server's own 400 text is used
+ * for neither, for the reason `BROWSE_AZ_UNAVAILABLE` gives above.
+ */
+export const BROWSE_AZ_UNAVAILABLE_MULTI_KIND =
+	'This media type covers more than one kind of item, and A to Z is not available across them.';
+
+/**
  * The one-line reason to print beside the sort control, or `undefined` when
  * every order this module knows about is on the control.
  *
- * ⚠️ THE PER-TYPE SCREENS GET `undefined` EVEN WHERE THEY DROP THE OPTION.
- * Music is two kinds, so A to Z is off its control too, and it has always been
- * dropped silently there. Wording that case is a decision about that screen and
- * it is not made here; returning the all-types sentence for it would print
- * "this view spans every media type" on a view that spans exactly one.
+ * ⚠️ WHETHER A NOTE PRINTS AT ALL IS THE KIND COUNT'S ANSWER AND NEVER THE
+ * MEDIA TYPE'S NAME: the guard below is `browseSortsFor`, which is
+ * `browseKindCount(…) === 1` and so is the store's own `len(kinds) != 1`. WHICH
+ * of the two sentences prints is then a question about the screen rather than
+ * about the refusal — the all-types view is the one with no media type at all —
+ * so a second two-kind type gets a true sentence here without an edit.
  */
 export function browseSortNote(query: BrowseQuery): string | undefined {
 	if (browseSortsFor(query.mediaType).includes('sort_title')) return undefined;
-	return query.mediaType === undefined ? BROWSE_AZ_UNAVAILABLE : undefined;
+	return query.mediaType === undefined ? BROWSE_AZ_UNAVAILABLE : BROWSE_AZ_UNAVAILABLE_MULTI_KIND;
 }
 
 export function browseSortAvailable(

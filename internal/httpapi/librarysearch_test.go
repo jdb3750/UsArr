@@ -315,6 +315,70 @@ func sortedKeys(m map[string]json.RawMessage) []string {
 	return out
 }
 
+// TestSearchItemKeysAreRecentWorkKeysPlusScore pins the RELATIONSHIP between the
+// two rows, which neither allowlist test can see.
+//
+// searchHitResponse's doc comment claims "the rendering keys are
+// recentWorkResponse's keys, plus `score`", `$lib/search.ts` imports
+// `RecentItem` and `toRecentItem` on the strength of that sentence rather than
+// declaring a second item type, and http-api.md §6.2 states it on the wire. It
+// is a claim about TWO structs, and both allowlists above are single-sided: each
+// compares one response against a hand-copied list of its own. A key added to
+// recentWorkResponse and to its allowlist — and not to searchHitResponse — moves
+// the two shapes apart with both tests green, and the first thing to notice
+// would be a column missing from the Search screen's rows.
+//
+// ⚠️ IT READS THE STRUCT TAGS, NOT A RESPONSE BODY, and that is the point. Four
+// of these keys are `omitempty`; a wire-level version would compare whatever the
+// seeded fixture rows happened to populate, so a key could drop off one struct
+// and the comparison would still pass on a corpus that never emitted it.
+//
+// What it deliberately does NOT assert is emission: `media_type` is `omitempty`
+// here and unconditional on Home (searchHitResponse says why — a work whose kind
+// the enum has no row for is served as an absent key rather than an invented
+// type). That is a difference in when a key is sent, not in which keys exist,
+// and the shared client row already handles it — `toRecentItem` reads
+// `media_type` through `str()`, which yields an empty string when absent.
+func TestSearchItemKeysAreRecentWorkKeysPlusScore(t *testing.T) {
+	search := jsonTagKeys(t, reflect.TypeOf(searchHitResponse{}))
+	recent := jsonTagKeys(t, reflect.TypeOf(recentWorkResponse{}))
+
+	want := append(append([]string(nil), recent...), "score")
+	sort.Strings(want)
+
+	if !reflect.DeepEqual(search, want) {
+		t.Errorf("searchHitResponse keys = %v\n"+
+			"recentWorkResponse keys + score = %v\n"+
+			"The two rows are rendered by ONE client component (`$lib/search.ts` "+
+			"imports `RecentItem` from `$lib/library`), so they are not free to "+
+			"drift. Either put the key on both structs, or change the doc comment "+
+			"on searchHitResponse, http-api.md §6.2 and `$lib/search.ts` — which "+
+			"means giving the Search screen its own item type.", search, want)
+	}
+}
+
+// jsonTagKeys is the set of JSON key names a response struct declares, sorted.
+// The `omitempty` half of the tag is dropped: this is about which keys exist,
+// not about when they are sent.
+func jsonTagKeys(t *testing.T, typ reflect.Type) []string {
+	t.Helper()
+	out := make([]string, 0, typ.NumField())
+	for i := range typ.NumField() {
+		tag, ok := typ.Field(i).Tag.Lookup("json")
+		if !ok {
+			t.Fatalf("%s.%s carries no json tag, so it reaches the wire under its "+
+				"Go name and no allowlist covers it", typ.Name(), typ.Field(i).Name)
+		}
+		name, _, _ := strings.Cut(tag, ",")
+		if name == "-" {
+			continue
+		}
+		out = append(out, name)
+	}
+	sort.Strings(out)
+	return out
+}
+
 // TestSearchScoreCrossesTheWireOnTheRightRow is the boundary half of
 // `internal/store`'s TestSearchScore* family: the store computes the number, and
 // this is the only place that can go wrong afterwards.

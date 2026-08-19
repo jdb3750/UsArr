@@ -665,9 +665,12 @@ func (s *Store) searchCandidates(
 // computing it — never before, because a live-looking weight on a dead column
 // is exactly the "no invented status" failure in code rather than in prose.
 //
-// ⚠️ JARO-WINKLER IS NOT PRIMARY HERE, AND §4 SAYS IT SHOULD BE. Stated plainly
-// rather than diverged quietly. §4's table marks it "primary"; this weights
-// retrieval above it, 0.55 to 0.35, and the reason is that §4's table predates
+// ⚠️ JARO-WINKLER IS NOT PRIMARY HERE, AND §4 USED TO SAY IT SHOULD BE. The
+// divergence was stated plainly rather than left quiet, and §4 has since
+// absorbed it: that table no longer marks JW "primary", it names this const
+// block as authoritative for the weights, and it carries this paragraph's
+// reason in prose. This
+// weights retrieval above JW, 0.55 to 0.35, because §4's original table predates
 // the `people` column (LS-100 added it after §4 was written). Jaro-Winkler sees
 // norm_title and NOTHING ELSE. Making it primary would therefore bury every hit
 // retrieved through `people`, `alt_titles` or `original_title` — a search for
