@@ -1623,10 +1623,18 @@ none. The two share the row shape and the allowlist that builds it, and they pag
 ⚠️ **This paragraph used to open "There is no cover art: there is no image endpoint, so shipping
 `poster_asset_id` would be an id the client cannot turn into anything", AND BOTH HALVES ARE NOW
 FALSE.** `GET /img/{key}` is routed (§9), and this response carries **`poster_key`** — the same
-field §1.3's table documents, on the same row shape. What is still absent is the **bytes**: nothing
-writes `image_asset` yet, so the key is omitted on every row of every install and every `/img`
-request answers `not_cached`. There are **no facet counts** beside the chips; each is its
-own aggregate and its own read — ⚠️ **and that read now exists, as its own endpoint: §8.** The
+field §1.3's table documents, on the same row shape. ⚠️ **The sentence that followed has ALSO
+dated. It used to read *"What is still absent is the **bytes**: nothing writes `image_asset` yet,
+so the key is omitted on every row of every install and every `/img` request answers
+`not_cached`"*, and every clause of it is now false.** `7e5934d` (2026-08-19) built the writer —
+`internal/imagepipeline` renders a poster and `internal/store`'s `PutPosterAsset` INSERTs the
+`image_asset` row — and `c4a3277` wired it into an import: `internal/libsync`'s phase D
+(`covers.go`), once per imported book on a BookOrbit import. So `poster_key` is **present** on this
+response for works whose cover that pass got, and an absent key is an ordinary answer — a work from
+another adapter, a work imported before that pass existed, or a cover the credential got a 404 for,
+which is deliberately not recorded — rather than evidence the fetch half is unbuilt. §1.3 and §9.4
+carry the same correction for the field and for `/img` itself. There are **no facet counts**
+beside the chips; each is its own aggregate and its own read — ⚠️ **and that read now exists, as its own endpoint: §8.** The
 sentence above is unchanged and still true of *this* response; what changed is that "its own read"
 stopped being a description of something unbuilt. A client that wants the chip counts calls §8 and
 must read §8.4 first, because those counts are **not** narrowed by `?lib=`.
