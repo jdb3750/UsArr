@@ -745,6 +745,86 @@ describe('a refused sub-path', () => {
 	});
 });
 
+/**
+ * The credential was the one field on this form that was never normalised.
+ *
+ * `name`, `base_url` and `url_base` are all trimmed on the way out and asserted
+ * to be, above; `api_key` was sent exactly as it arrived on create and on the
+ * unsaved test, and on the two edit paths it was TRIMMED FOR THE GATING CHECK and
+ * then sent untrimmed — so the value that decided whether to send and the value
+ * that got sent were two different strings. A pasted credential picks up a
+ * trailing newline routinely, and once one is sealed server-side it is invisible
+ * from every screen, because the key is never returned to the browser.
+ */
+describe('the credential is trimmed on every path that sends it', () => {
+	const PADDED = `  \t${API_KEY}\n `;
+
+	it('trims it on create and on the unsaved test', async () => {
+		stubFetch((url) =>
+			url === '/api/v1/auth/session'
+				? jsonResponse(sessionBody)
+				: url === '/api/v1/services/test'
+					? jsonResponse({
+							ok: true,
+							reachable: true,
+							key_proven_valid: true,
+							message: 'connected'
+						})
+					: jsonResponse(serviceBody, 201)
+		);
+
+		const input = {
+			kind: 'prowlarr',
+			name: 'Prowlarr',
+			baseUrl: 'http://prowlarr:9696',
+			apiKey: PADDED
+		};
+		await createService(input);
+		await testNewService(input);
+
+		for (const url of ['/api/v1/services', '/api/v1/services/test']) {
+			const body = JSON.parse(calls.find((c) => c.url === url)!.init.body as string);
+			expect(body.api_key, url).toBe(API_KEY);
+		}
+	});
+
+	it('trims it on PATCH and on a saved instance test', async () => {
+		stubFetch((url) =>
+			url === '/api/v1/auth/session'
+				? jsonResponse(sessionBody)
+				: url.endsWith('/test')
+					? jsonResponse({
+							ok: true,
+							reachable: true,
+							key_proven_valid: true,
+							message: 'connected'
+						})
+					: jsonResponse(serviceBody)
+		);
+
+		await updateService(4, { apiKey: PADDED });
+		await testService(4, { apiKey: PADDED });
+
+		for (const url of ['/api/v1/services/4', '/api/v1/services/4/test']) {
+			const body = JSON.parse(calls.find((c) => c.url === url)!.init.body as string);
+			expect(body.api_key, url).toBe(API_KEY);
+		}
+	});
+
+	it('still treats a whitespace-only credential as no credential at all', async () => {
+		stubFetch((url) =>
+			url === '/api/v1/auth/session' ? jsonResponse(sessionBody) : jsonResponse(serviceBody)
+		);
+
+		await updateService(4, { name: 'Prowlarr', apiKey: '   ' });
+
+		const body = JSON.parse(calls.find((c) => c.url === '/api/v1/services/4')!.init.body as string);
+		// Not `api_key: ""`. On PATCH an api_key is present-means-set, and an
+		// empty one would ask the server to reseal nothing.
+		expect(Object.keys(body)).not.toContain('api_key');
+	});
+});
+
 describe('DELETE and PATCH take the same CSRF path POST does', () => {
 	it('sends DELETE with the JSON content type and the token', async () => {
 		stubFetch((url, init) => {

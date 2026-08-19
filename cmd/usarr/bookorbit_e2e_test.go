@@ -27,11 +27,19 @@ type boTestBody struct {
 
 // boMagicLink is the fixture magic-link token.
 //
-// Sequential hex, which .gitleaks.toml allowlists BY VALUE, and the same
-// discipline the Kavita fixture keeps: a realistic-looking token would trip the
-// generic-api-key rule, and the file's own instruction for that case is to make
-// the fixture obviously fake rather than to extend the allowlist.
-const boMagicLink = "0123456789abcdef0123456789abcdef"
+// Sequential hex, which .gitleaks.toml allowlists BY VALUE (`^(?:0123456789abcdef)+$`,
+// so the length below needs no new allowlist entry), and the same discipline the
+// Kavita fixture keeps: a realistic-looking token would trip the generic-api-key
+// rule, and the file's own instruction for that case is to make the fixture
+// obviously fake rather than to extend the allowlist.
+//
+// ⚠️ THE LENGTH IS NOW LOAD-BEARING, and it was 32 characters until ADR-0067.
+// httpapi.serviceCredential accepts a BookOrbit credential only as 64 lowercase
+// hex characters or as a magic link containing one, because that is what
+// `MagicLinkRepository.create` mints (`randomBytes(32).toString('hex')`). A
+// shorter fixture now fails at the API boundary before any of these tests reach
+// BookOrbit at all, which is the guard working, not a test to relax.
+const boMagicLink = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
 
 // boSetUp builds an app with a signed-in owner. Every test here needs it and
 // none of them is about it.
@@ -70,7 +78,11 @@ func TestAddingABookOrbitInstance(t *testing.T) {
 	// stopped at reachability would store a dead credential behind a green tick.
 	code, body := env.raw(t, "POST", "/api/v1/services", map[string]any{
 		"kind": "bookorbit", "name": "Bad Token", "base_url": bo.URL(),
-		"api_key": "0000000000000000000000000000dead",
+		// 64 hex characters, so it passes the shape check and is refused by
+		// BookOrbit instead — which is the point of this case: the SHAPE being
+		// right is not the token being right, and only the connection test can
+		// tell the difference.
+		"api_key": "000000000000000000000000000000000000000000000000000000000000dead",
 	})
 	if code != http.StatusBadGateway {
 		t.Fatalf("a BookOrbit with a bad magic-link token must be refused with 502, got %d: %s", code, body)
