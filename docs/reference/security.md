@@ -579,6 +579,16 @@ satisfied.
 
 ## 6. Sessions, CSRF, rate limiting, audit
 
+⚠️ **If you arrived here looking for the credential-stripped `source_url` rule, it is §5, not this
+section.** `internal/db/migrations/00005_library_sync.sql`'s `image_asset.source_url` comment
+(*"CREDENTIAL-STRIPPED. See security.md §6."*, `:221` as of `ef3f041`) cites the wrong section, and
+`internal/db/testdata/schema.sql` carries the identical string because SQLite stores an
+intra-statement comment verbatim in `sqlite_schema` and the round-trip snapshot is dumped from
+there. **Neither is corrected** — a merged migration is never edited, and that comment is a byte
+`TestMigrationRoundTrip` compares — so this pointer is the fix. `docs/REVIEW-LOG.md` **LS-321**
+carries the evidence. Not every §6 citation in the migrations is wrong: `00001_initial.sql`'s
+`audit_log` comment (*"who deleted this"*) means this section and means it correctly.
+
 - **Sessions:** an opaque server-side id in a `HttpOnly; Secure; SameSite=Lax` cookie — **not a JWT
   in localStorage**, per OWASP, because one XSS discloses every token. Both **idle and absolute**
   timeouts (different failure modes), both in the lookup predicate. Regenerate the id on privilege

@@ -19337,6 +19337,100 @@ and not the gate — is what a reader can re-run.
 run on their own threads and are not renumbered against it; a gap in either is fine and nobody
 closes one.
 
+## LS-321 — `00005`'s `source_url` comment cites `security.md §6` and the rule is §5; the migration is not edited and this entry is the pointer
+
+**The report was right, and the check was run rather than assumed.**
+`internal/db/migrations/00005_library_sync.sql:221` reads
+`source_url TEXT NOT NULL UNIQUE,      -- CREDENTIAL-STRIPPED. See security.md §6.`
+`docs/reference/security.md` **§6** is *"Sessions, CSRF, rate limiting, audit"* (`:516`). The
+credential-stripped `source_url` rule is in **§5**, *"Redaction is middleware, not a convention"*
+(`:373`), at `:411-419` — *"`image_asset.source_url` and the `http_cache` keys store the
+**credential-stripped** URL, and no row may be written whose `source_url` still carries a credential
+parameter"*, including the `cache_key = sha256(source_url)[:16]` consequence the migration's
+`cache_key` comment depends on. So the citation is off by one section, in the same class as the
+`schema.md:1346` miscite.
+
+**The other four `security.md` citations in the migrations were checked and all four hold.**
+`00001_initial.sql:102` (`§6`, *"who deleted this"* → Sessions/CSRF/audit), `:106` (`§5`, redaction),
+`:139` (`§1`, credential encryption at rest), `00005:224` (`§2`, the SSRF derived-URL class) and
+`00005:876` (`§5`). The defect is one line, not a pattern in that file.
+
+### Why the comment is not corrected in place
+
+**Something does verify merged-migration content, and it is not goose.** `internal/db/migrate.go`
+embeds `migrations/*.sql` and hands them to `goose.NewProvider`; goose v3.27.3 records
+`version_id`/`is_applied`/`tstamp` and computes no checksum — a grep for `checksum|sha256|md5` across
+the module finds one unrelated `crc32` comment in `lock/session_locker_options.go`. So goose would
+not notice.
+
+**`TestMigrationRoundTrip` would.** That comment sits *inside* the `CREATE TABLE image_asset`
+statement, SQLite stores intra-statement comment text verbatim in `sqlite_schema.sql`, and
+`dumpSchema` (`internal/db/migrate_test.go:1059`) reads `sql` straight out of `sqlite_schema` and
+compares the result to `internal/db/testdata/schema.sql` with `got != string(want)`. The string is
+therefore checked in at `internal/db/testdata/schema.sql:292`, byte-for-byte.
+
+🔥 **Fired rather than trusted.** Editing a migration is out of scope for this pass, so the guard was
+fired from the other side: `security.md §6.` → `§5.` on `testdata/schema.sql:292` alone, which
+produces the identical diff. `go test ./internal/db -run TestMigrationRoundTrip` went from `ok` to
+`--- FAIL`, printing the two `source_url` lines against each other. Restored, `git status` clean,
+green again. Go 1.25.13, tree `ef3f041`.
+
+**And the test's own doc comment names this exact case** — *"This catches … drift: **a migration
+edited after it shipped**"* (`migrate_test.go:25-27`). The rule has a mechanism here, not just a
+convention.
+
+**No document scopes the rule to DDL.** `CLAUDE.md` Conventions: *"A merged migration is never
+edited — write a new one."* `docs/DEVELOPMENT.md` §6: *"**Never edit a migration that has shipped.**
+Add a new one."* Both unqualified; no ADR narrows either. The one recorded exception is §2's *"On
+editing migration 0001"*, and it turns on **0001 not being merged yet** — *"The rule exists to stop
+history being rewritten under deployed databases; there are no deployed databases"* — which is the
+opposite of this case.
+
+**The house pattern already exists, twice.** `docs/reference/schema.md:684-685` leaves a superseded
+`00005` comment standing deliberately and corrects it in the doc instead — *"the comment is not
+edited here because it transcribes migration 0005's own SQL, and a merged migration is never
+edited"*. **LS-297** does the same for `00003`'s false `ALTER TABLE`/`CHECK` sentence: *"`00003` is
+not edited — a merged migration is never edited — and this entry is the pointer."* This entry is the
+same move for `00005:221`.
+
+**What was changed:** one ⚠️ note at the top of `security.md` §6 redirecting a reader who followed
+the citation, naming the migration and the snapshot as uncorrected-by-design, and saying explicitly
+that `00001`'s §6 citation is *not* part of the defect. Nothing in `internal/db/` is touched.
+
+### Two adjacent families found by the same sweep, reported and not fixed
+
+Both are outside this pass's scope (they are Go source, and one of them is a merged migration again),
+and neither is asserted beyond what a grep shows.
+
+- **`schema.md §6.1` does not exist.** `docs/reference/schema.md` has `## 6.` (*Provenance and
+  release candidates*, `:779`) and no `6.1` heading at any depth. Seventeen sites cite it:
+  `internal/db/migrations/00007_work_credit.sql:43` and `:174`, `internal/db/migrate_test.go:2732`
+  and `:2745`, `internal/store/credits.go:20`, `:156`, `:429`, `internal/store/catalogue.go:978`,
+  `internal/store/credits_test.go:194`, `:212`, `:246`, `:420`,
+  `internal/store/searchdoc_people_test.go:72`, `:104`, `:233`,
+  `internal/libsync/credits_test.go:519`, and `cmd/usarr/import_e2e_test.go:423`. 🔍 **Inference:**
+  the two rules they attribute to it — *"every `kind` has a subtype table or an explicit
+  justification"* and *"`person` is excluded from … the Tier 1 prefix index and the FTS corpus"* —
+  are both in **§1.1**, the second verbatim at `schema.md:342-343`. `00007:43` and `:174` are in a
+  merged migration and get the same treatment as this entry if anyone acts on it.
+- **`ARCHITECTURE.md §2073` does not exist** and reads as a line number that became a section number.
+  Six sites: `internal/httpapi/doc.go:20`, `search.go:19`, `librarysearch.go:131`, `server.go:311`,
+  `librarysearch_test.go:140`, `internal/store/searchlibrary.go:18`. 🔍 **Inference:** every one of
+  them describes a latency budget, and `ARCHITECTURE.md:2074` is `## 13. Performance budget`.
+  `ARCHITECTURE.md §14.5` (five sites in four files: `cmd/usarr/logredact.go:11`,
+  `internal/ssrf/redact.go:21`, `internal/httpapi/redact.go:12` and `:109`,
+  `internal/httpapi/redact_test.go:10`) is a different
+  shape — §14 has no numbered subsections, but it is a numbered list whose **item 5** is
+  *"Redaction is middleware, not convention"* (`ARCHITECTURE.md:2248`), which is what those comments
+  mean; `redact.go:109` writes it as *"§14.5 item 5"*, so the notation is at least self-consistent.
+
+### What a green gate is worth on this commit
+
+`make check` reads `docs/` through **gitleaks only**. A docs-only green attests *"no
+credential-shaped string was added"* and nothing whatever about whether the prose above is correct.
+The claims that carry weight here are the ones with a command behind them: the fired round-trip
+guard, and the greps quoted with file and line.
+
 # Cassette credential scrubber — `internal/vcrscrub`, and both directions of the drill
 
 Trigger: a live probe against the owner's Kavita established that the `/api/Image/*` routes **refuse
