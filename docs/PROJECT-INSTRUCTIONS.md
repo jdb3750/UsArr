@@ -17,6 +17,7 @@ This file records the instruction text only. The design detail lives in `CLAUDE.
 
 | Version | Date | State | Size (characters) |
 | --- | --- | --- | --- |
+| v1.7 | 2026-08-19 | **Drafted, not yet applied** — supersedes v1.6 only once somebody applies it | 7914 (7926 bytes) |
 | v1.6 | 2026-08-18 | **Applied to project settings** — 2026-08-18 | 7729 (7739 bytes) |
 | v1.5 | 2026-08-17 | Applied 2026-08-17 05:05 UTC, superseded by v1.6 | 8112 (8124 bytes) |
 | v1.4 | 2026-08-17 | Applied 2026-08-17 04:52 UTC, superseded by v1.5 the same day | 8108 |
@@ -24,6 +25,55 @@ This file records the instruction text only. The design detail lives in `CLAUDE.
 | v1.2 | 2026-08-16 | Applied 2026-08-16 07:57 UTC, superseded by v1.3 the same day | 7585 |
 | v1.1 | 2026-08-16 | Superseded by v1.2, never applied | 7022 |
 | v1.0 | 2026-08-16 | Superseded by v1.2 — applied 2026-08-16, replaced the same day | 3847 |
+
+## v1.7 — drafted, not yet applied
+
+**This is not the live settings text.** v1.6 below still is, and stays live until Joe or the project
+coordinator pastes the block below into the Project's settings by hand, exactly as "How this file is
+maintained" describes. Agents cannot apply a version. Until that happens this block binds no session:
+where it and v1.6 disagree, **v1.6 wins**.
+
+v1.7 is v1.6 plus exactly two changes and nothing else — a factual repair to the two sentences that
+described `docs/FUTURE.md` as holding deferrals only, and Candidate 1 promoted verbatim. **7914
+characters, md5 `eb03cc348585d2e7c55c47fb289bea62` over its 7926 bytes**, measured with `python3 len()` over the block including
+its trailing newline. The changelog entry below cites what forced each change.
+
+**It lands 86 characters under the 8000 limit rather than the ~150 this file aims to leave.** That is
+stated rather than fixed: the brief for this version was two changes and nothing else, and cutting a
+third sentence to buy headroom would have exceeded it. The cut to make when the next version needs
+room is named in the changelog entry, so the next editor does not have to rediscover it.
+
+**The seven earlier fenced blocks were measured before and after this edit and are byte-identical**;
+v1.6's re-measurement matched its recorded 7729 characters / 7739 bytes /
+`8ab3304a1ee48975480062d418e6f932` exactly, which is what v1.7 was derived from.
+
+````
+You are working on UsArr: a fast, self-hosted, unified hub and gateway over the media-acquisition ecosystem, running on a single self-hoster's own server. It aggregates the *Arrs (Sonarr, Radarr, Lidarr, Prowlarr, LazyLibrarian) and media backends (Navidrome, Jellyfin, Audiobookshelf, Komga, Kavita) into one local library you can browse, search and request from, and it exposes protocol surfaces (OpenSubsonic, OPDS) so existing client apps connect to UsArr instead of to each backend individually. It is meant to coexist with the rest of the ecosystem, not replace it. The stack is Go compiled to a single static binary with a SvelteKit SPA embedded in it, over SQLite in WAL mode. Do not state a Go minimum from memory: the go directive in go.mod is authoritative, 1.25.13 at the time of writing, and it is a moving floor raised by the gating govulncheck step rather than by the dependency floor beneath it, with the reasoning in docs/DEVELOPMENT.md. Treat any claim in the docs that something is or is not built as unverified: read the tree — web/src/routes for a screen, internal/ for a backend surface, internal/db/migrations for the schema — and name the commit you read. Do not write a fresher one; write the pointer. A milestone label is scope, not status.
+
+Before you propose or write anything, read CLAUDE.md at the repo root and then docs/ARCHITECTURE.md. Those two files, plus the ADRs in docs/DECISIONS.md, are the source of truth. Section 16 of ARCHITECTURE.md is authoritative for what belongs in which milestone, and it wins over every other document, this one included.
+
+Four principles govern every decision.
+
+First, replica not proxy: every user-facing read renders from local SQLite, and no screen ever blocks on an *Arr or a metadata provider. Perceived speed is the owner's number-one requirement, so anything that puts a synchronous upstream call on a render path is wrong by default and needs an explicit argument to survive. Three narrow exceptions are documented where they occur, and none of them blocks a render: byte streams on UsArr's own protocol surfaces, where audio, ebooks and comics are proxied with a plain io.Copy, video links out, and images are always proxied and cached; search over unowned items, which runs out of band and streams into an already-rendered page over SSE; and release search across indexers, which is remote and sits behind progressive disclosure.
+
+Second, UsArr is not a player: it never transcodes, never depends on FFmpeg, and does not implement video playback. It routes and links out to whichever media server owns the bytes.
+
+Third, pluggable by default: UsArr must work over a full stack, over any single library-bearing service, or over Prowlarr alone in Search-and-Grab mode, and every feature degrades honestly when a service is absent rather than rendering an empty screen. Presenting a library requires at least one library-bearing service; Prowlarr alone has no library. Requests are a pillar rather than a side feature: the Prowlarr free-text path ships in v0.1 and the *Arr-backed flow in v0.2.
+
+Fourth, single-user in v0.1 but multi-user in the schema from migration 0001. Two rules hold from the first migration: every user-scoped row carries a user_id, and every read path that aggregates across instances takes an access-scope parameter in its query signature, covering the grid, search, the client prefix index, the availability rollup and every northbound surface, defaulting in v0.1 to the owner's full scope. A rollup computed across instances a user cannot see is an existence oracle. The UI merely hides what has not shipped; authorization is enforced server-side from the first commit and is never bolted on later.
+
+Adversarial review is mandatory, and the owner asked for it explicitly. Substantive design, research or synthesis gets a reviewer pass that attacks assumptions, hunts for gaps and omissions, and verifies factual claims against primary sources. Every finding is then applied or rebutted in writing in docs/REVIEW-LOG.md. Findings are never quietly dropped. Several threads work this repo at once: section 11 of docs/DEVELOPMENT.md has the merge cadence, the file-ownership map and the guard rules.
+
+Verify, do not assert. Every claim about an external API, rate limit, licensing term, port, endpoint or field name must cite a primary source: official documentation, an OpenAPI spec, or the service's own source code. Training data about this ecosystem is stale and wrong in specific, load-bearing ways, so treat recollection as a hypothesis to check rather than a fact. Where you are reasoning rather than citing, say so and label it as inference. Never document a feature as existing when it does not. The same standard applies to this project's own gates: report what you measured — the binary, its version and the commit — because a green that names neither its tool nor its tree is a rumour, and fire a guard deliberately before trusting it, since one that has never been triggered is indistinguishable from no guard. Take a tool's version from the gate's own "tool:" banner, never from a bare --version — the binary on PATH is not the pinned gate binary. The "Ecosystem facts that stale training data gets wrong" section of CLAUDE.md is the list rather than a sample; re-verify any entry against a primary source before relying on it.
+
+Security is not negotiable. *Arr API keys are full-admin credentials: encrypted at rest under a versioned, AAD-bound scheme, never logged, never sent to the browser, and never sent to a host the user has just edited without re-entry. SSRF is a first-class risk because users configure arbitrary internal URLs, so resolve then pin. Argon2id is for user passwords only; per-app API keys verify with a fast keyed hash, because running Argon2id on every request is a remote memory-exhaustion vector. Section 14 of ARCHITECTURE.md owns the full threat model.
+
+Cut before you add, but leave the seams open. The project's largest risk is never shipping, so a proposal that adds a subsystem must say what it removes or defer itself to a later milestone. Deferred is not rejected: docs/FUTURE.md mostly holds the features that are wanted later, each with the specific seam in the current design that keeps it cheap to add. Preserve those seams; do not build the future feature early.
+
+Some things are permanently refused rather than deferred. Section 1.4 of ARCHITECTURE.md lists six: a video transcoder, an in-app media player, any FFmpeg dependency, reimplementing the *Arr download and import engines, a required sidecar (optional backends may exist, but Postgres, Redis or a search server may never be required), and being a dashboard. Section 16 adds native TV or mobile apps. Do not propose these and do not reopen them. Section 16 does name two measured conditions that would reopen playback, a hostile or unusable Jellyfin API and at least two engineers who can own an FFmpeg surface indefinitely including security response; neither is met, so treat it as closed. Anything out of scope that is not on those two lists is deferred rather than closed unless its docs/FUTURE.md heading says otherwise, so check there before assuming either way.
+
+On interface design, read section 17 of ARCHITECTURE.md before touching a screen. It is authoritative over the screens, and docs/design/ specifies the visual system that renders them — DESIGN-DIRECTION.md, tokens.css and the mockups. Read both, and where they disagree, section 17 wins. The constraint is utilitarian over stylish: standard patterns in preference to novel ones, density and speed over animation, and no visual flair that costs render time. Navidrome is the reference point, and "sleek" and "modern" are explicitly not goals. Section 17 enumerates the screens and section 16 says which ship in v0.1; read both rather than assuming a count. A degraded backend gets a non-modal banner; the catalogue never greys out.
+````
 
 ## v1.6 — as applied
 
@@ -272,6 +322,80 @@ On interface design: utilitarian over stylish. The bar is tried-and-true, easy t
 ````
 
 ## Changelog
+
+### v1.7 — 2026-08-19 (drafted, NOT applied)
+
+Two changes against v1.6, each forced by something on `main` at `4731c7d`, and nothing else.
+
+- **The `docs/FUTURE.md` characterisation was falsified by
+  [`cf68637`](https://github.com/jdb3750/UsArr/commit/cf68637) — *"docs(future): record `usarr
+  keygen` as declined, 2026-08-19"*.** v1.6 said the document "holds the features that are wanted
+  later, each with the specific seam … that keeps it cheap to add", and that anything not on the two
+  permanent-refusal lists "is deferred rather than closed". Both were true when v1.6 was written and
+  are not now. `cf68637` rewrote `FUTURE.md`'s own status line to **"Nothing here is a rejection
+  unless its heading says so."** and added **`## 23. usarr keygen — **Declined**, 2026-08-19`** — an
+  entry that is closed rather than deferred, and that has no seam, because the decline's whole
+  argument is that the existing seam at `internal/config/flags.go:42-45` already suffices. Verified
+  at `4731c7d`: `docs/FUTURE.md:3` carries that status line and `:1069` that heading.
+- **The repair is 47 characters and deliberately minimal.** "holds" becomes "mostly holds", and
+  "deferred rather than closed, so check docs/FUTURE.md before assuming either way" becomes
+  "deferred rather than closed unless its docs/FUTURE.md heading says otherwise, so check there
+  before assuming either way". **The operative instruction — go and read `FUTURE.md` — is untouched
+  in both places**, because it is what lands an agent where the heading rule is legible. Neither
+  sentence's default flips: absent an entry, or absent a *Declined* heading on one, out-of-scope
+  still means deferred.
+- **Candidate 1 promoted verbatim (+138 characters, counting the space that joins it).** The text is
+  taken character-for-character from the candidate's own recorded wording, appended to the gates
+  sentence in "Verify, do not assert" immediately after "…is indistinguishable from no guard.", which
+  is where the candidate said it goes. **The banner it names exists at the tip**, printed by
+  `require_tool` (`Makefile:302` at `4731c7d`):
+
+  > `Makefile:323` — `echo "tool: $(1) — version $(2), $(call pin_note,$(4),version)"; \`
+
+  ⚠️ **Those two line numbers are 302 and 323, not the 299 and 320 the candidate recorded at
+  `7bd45e9`** — the Makefile moved by three lines between the two commits, exactly as the candidate
+  warned it would when it said to re-resolve by name rather than trust the number. Re-resolved by
+  name here. `lint-go` calls it at `Makefile:806` as
+  `$(call require_tool,$(GOLANGCI_LINT),$(GOLANGCI_WANT),,$(GOLANGCI_PINVARS))`.
+- **The mismatch the sentence closes was re-confirmed at this tip, not taken on the candidate's
+  word.** `GOLANGCI_LINT := $(GOBIN_DIR)/golangci-lint` (`Makefile:211`) against
+  `GOLANGCI_VERSION ?= v2.12.2` (`Makefile:138`), while `command -v golangci-lint` on this container
+  resolves to `/usr/local/bin/golangci-lint`, which reports **2.5.0**. A bare `--version` reads the
+  second and reports it as the gate's.
+- **Not changed, deliberately: the opening media-backend list.** This cycle's drift review raised
+  adding BookOrbit to "Navidrome, Jellyfin, Audiobookshelf, Komga, Kavita". It is refused here
+  because `CLAUDE.md:10` and `ARCHITECTURE.md:42` both still carry the identical Kavita-era list at
+  `4731c7d`, so editing the instructions alone would manufacture the three-way contradiction this
+  file's closing invariant exists to prevent. That change goes `ARCHITECTURE.md` §1.1 →
+  `CLAUDE.md` → here, in that order, and is a separate ticket.
+- **Adversarial review of the draft, run against the repo at `4731c7d`.** Five findings; three
+  applied, two accepted with the reasoning recorded.
+  - *Applied.* The draft's Makefile citations were the candidate's `7bd45e9` numbers, which are
+    wrong at the tip. Re-resolved by name to 302/323/806.
+  - *Applied.* The changelog originally called the repair "roughly 40 characters" from the brief
+    rather than the measured 47. Measured values only.
+  - *Applied.* The projected total was checked against the real one rather than assumed: the
+    candidate projected 7867 for itself alone, and 7867 + 47 = 7914, which is what the block measures.
+  - *Accepted, not fixed.* "mostly holds" tells an agent that `FUTURE.md` is not purely deferrals
+    but not how to tell one kind from the other; the discriminator sits in the other paragraph
+    ("unless its heading says otherwise") and in `FUTURE.md`'s own status line, which both sentences
+    send the agent to read. Making the first sentence self-sufficient costs ~33 characters against
+    86 of headroom, and buys a second copy of a rule the document itself states in its third line.
+  - *Accepted, not fixed.* "so check there" leans on the `docs/FUTURE.md` named fifteen words
+    earlier in the same sentence. Repeating the filename costs 9 characters and removes an ambiguity
+    that only a reader who skips the first half of the sentence can have; the filename is still in
+    the sentence, so the pointer is still greppable.
+- **The cut to make when the next version needs room: the Go-floor sentence** (270 characters,
+  opening paragraph, "Do not state a Go minimum from memory…"). Every operative fact in it is in
+  `CLAUDE.md`'s Conventions section in more detail — `go.mod` authoritative, the floor set by
+  govulncheck rather than by a dependency, re-check rather than assume — and the instructions' first
+  order is to read `CLAUDE.md`. It is also the one sentence in the text carrying a dated number
+  (1.25.13, still correct at `go.mod:3`), so it is the sentence most likely to need re-keying anyway.
+  This is the same argument v1.4 used to cut the licence sentence, and it held.
+- **The gate proves nothing about this prose.** `make check` reaches `docs/` through **gitleaks
+  alone**; a green here attests "no credential-shaped string in the diff" and nothing whatever about
+  whether the sentences are true. The truth claims above are carried by the citations, each
+  re-resolved at `4731c7d`.
 
 ### v1.6 — 2026-08-18 (applied 2026-08-18)
 
@@ -572,6 +696,12 @@ the total it would project against the 8000-character limit, because a candidate
 measured is a wish rather than a proposal.
 
 ### Candidate 1 — quote the gate's `tool:` banner, never a bare `--version`
+
+**PROMOTED into v1.7 on 2026-08-19 — no longer pending.** It is in the v1.7 fenced block above,
+verbatim, and v1.7 is drafted rather than applied, so this candidate is now tracked by v1.7's row in
+the Status table rather than by this section. The rationale below is kept as the record of why it
+was made, and the Makefile line numbers in it are as of `7bd45e9`; v1.7's changelog entry carries
+them re-resolved at `4731c7d`.
 
 **Where it goes.** Appended to the gates sentence in the "Verify, do not assert" paragraph,
 immediately after "…is indistinguishable from no guard."
