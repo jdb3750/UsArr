@@ -13,8 +13,9 @@ Two reasons, both hard constraints:
 Drift detection is **not the PR gate**: it needs network. Upstream `develop` moves; UsArr should
 hear about a renamed field from a bot, not from a user's bug report. **`make spec-drift` is the
 runnable half of that, and it exists now** — opt-in on `USARR_SPEC_DRIFT=1`, behind the `upstream`
-build tag, never part of `make check`. It currently covers the Prowlarr row (see below); the Kavita
-rows are still checked by hand with the recipes in this file.
+build tag, never part of `make check`. It covers the Prowlarr row and the BookOrbit
+`packages/types` tree (see both sections below); the Kavita rows are still checked by hand with the
+recipes in this file.
 
 ## Files
 
@@ -214,6 +215,82 @@ Equal means the vendored bytes are still the branch tip. Unequal means upstream 
 contract tests in `internal/servarr` are asserting against a stale spec — re-vendor, re-run
 `make test`, and record the new commit, date and hash rather than editing the old row in place.
 Neither command needs a GitHub token; the REST API does, and is not required for this.
+
+## BookOrbit — vendored TypeScript, not an OpenAPI document
+
+`bookorbit-types/` is a **verbatim copy of BookOrbit's `packages/types` directory**, and
+`bookorbit-types.manifest` is one `<git-blob>  <path>` row per file in it.
+
+| What | Value |
+| --- | --- |
+| Upstream | `https://github.com/bookorbit/bookorbit` |
+| Path | `packages/types` |
+| Ref | `main` |
+| Commit | `73b7877d2fede2221b0ca360af9bfced7c3797f3` |
+| Retrieved | 2026-08-19 |
+| **Git tree** | **`4cb990a36b8325845abb79eb4b7a4445e6df679b`** |
+| Files | 68 |
+
+**It is TypeScript because there is nothing else to vendor.** BookOrbit commits no OpenAPI
+document: `server/src/swagger.ts` builds one at **runtime**, and `main.ts` mounts it only when
+`SWAGGER_ENABLED` is true, which `parseBooleanFlag` defaults to **false**. So neither
+[ADR-0046](../../docs/DECISIONS.md#adr-0046)'s floor/ceiling split nor a "fetch it from the running
+instance" recipe has anything to bite on. `packages/types` is the only machine-readable statement of
+the wire vocabulary upstream publishes, and every wire shape in `internal/bookorbit` is
+hand-transcribed from it.
+
+**Why this directory and not `docs/reference/`.** `docs/ROADMAP.md` raised this obligation under a
+`docs/reference/` heading and then explicitly labelled that heading an inference to settle rather
+than inherit. It is settled here: this file's opening line — *"vendored verbatim, never fetched at
+build or test time"* — plus the provenance table above is exactly what a vendored artefact needs,
+and `docs/reference/` holds hand-written Markdown and no vendored artefact at all.
+
+**The identity is a git TREE name, not a SHA-256.** `git rev-parse 73b7877d:packages/types` prints
+the value in the table. That buys two things a hash of our own devising would not: upstream can be
+compared **without downloading anything** (a blobless fetch resolves a path to its tree name out of
+the tree objects), and the value is **upstream's own name** for the directory, so nobody has to
+trust that we hashed the right bytes in the right order.
+
+⚠️ **Nothing may be added inside `bookorbit-types/`.** One extra file changes the tree and destroys
+that identity. The manifest lives beside the directory, not in it, for this reason.
+
+### Two guards, and one of them is not automatic
+
+| Guard | Where | Needs network | Answers |
+| --- | --- | --- | --- |
+| `TestVendoredBookOrbitTypesAreTheUpstreamTree` | `internal/bookorbit`, in **`make check`** | no | have the vendored bytes moved under us? |
+| `TestVendoredBookOrbitTypesManifestIsCurrent` | `internal/bookorbit`, in **`make check`** | no | is the per-file diagnosis still accurate? |
+| `TestDependedOnTypeFilesCarryThePinnedDeclarationDigest` | `internal/bookorbit`, in **`make check`** | no | have the five transcribed files' **declarations** moved? |
+| `TestSpecDriftBookOrbitTypesStillMatchUpstream` | `internal/bookorbit`, **`make spec-drift`** only | **yes** | was the vendoring faithful, and has **upstream** moved since? |
+
+The split is [ADR-0047](../../docs/DECISIONS.md#adr-0047)'s, extended from one file to a directory,
+and for its reason: `make check` makes exactly two network calls and `make check-offline` is `check`
+minus them, so a third would make an upstream outage fail an unrelated commit.
+
+**Two hashes, because they answer different questions.** The tree hash moves for *any* byte —
+correct offline, where the bytes are frozen. The **declaration digest** (SHA-256 over the file with
+comments stripped and whitespace outside string literals collapsed) moves only when a type, field,
+enum member or literal union changes, so an upstream comment rewrite does not read the same as an
+upstream rename. `make spec-drift` prints both, and grades each changed file by whether
+`internal/bookorbit` transcribes it.
+
+### ⚠️ What this does NOT cover
+
+1. **It pins the file we vendored, not the server the owner runs.** `packages/types` is what
+   BookOrbit's frontend compiles against on one commit. The owner's instance may be older, newer, or
+   a fork. A real instance remains the only evidence about a real instance.
+2. **It sees types, not behaviour.** A handler that stops populating a field, a route that gains a
+   `@RequirePermission`, a query that silently narrows — none touch `packages/types`, and every one
+   breaks the adapter.
+3. **It sees what upstream declares, not whether we read it right.** A green says the vocabulary has
+   not moved. `TestMediaKindVocabularyMatchesTheSource` and `TestPermissionVocabularyMatchesTheSource`
+   are what check the transcription itself, and they stay necessary.
+4. **The server's own DTOs are not in `packages/types`.** Where a controller returns a NestJS class,
+   no file here describes it — the controller, service and repository citations in
+   `internal/bookorbit` are **unpinned by anything**. That is the largest uncovered surface.
+5. **Nothing runs the network half on a schedule.** There is no CI; `make spec-drift` is a thing a
+   person types. The vendored copy and the offline pin stand on their own, but "we will hear when
+   upstream moves" is only as true as somebody's habit of running that target.
 
 ## Not yet vendored
 

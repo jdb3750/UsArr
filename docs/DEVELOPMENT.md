@@ -254,7 +254,7 @@ closes `FI-12` in `docs/REVIEW-LOG.md` as coded rather than as documented.
 | `make build` | `web-build`, then a static `CGO_ENABLED=0` binary at `./usarr` with the SPA embedded. |
 | `make test` | `go test ./... -race -shuffle=on` plus `pnpm test`. No network, no Docker. |
 | `make test-integration` | Behind the `integration` build tag. Needs a live stack; **never in CI**. |
-| `make spec-drift` | Behind the `upstream` build tag. Are the vendored OpenAPI specs still what upstream serves? **Needs network; never in `check`.** §7.2. |
+| `make spec-drift` | Behind the `upstream` build tag. Are the vendored upstream artefacts — Prowlarr's OpenAPI spec, BookOrbit's `packages/types` — still what upstream serves? **Needs network; never in `check`.** §7.2. |
 | `make bench` | Wall-clock performance harness. A **release** gate on named hardware, never a merge gate. |
 | `make bench-rss` | Memory harness: idle and peak process RSS over a 500k-row database, sweeping `cache_size`. §5. |
 | `make lint` | `golangci-lint run`, `svelte-check`, `eslint`. |
@@ -730,6 +730,17 @@ Three uses, all offline:
    The offline half lives in the gate and answers a different question: `TestVendoredSpecIsThePinnedBlob`
    hashes `api/specs/prowlarr.json` to the git blob name it is pinned to, so a re-vendor, a hand-edit
    or a bad merge fails deterministically with no network at all.
+
+   **BookOrbit takes the same two-half shape one level up the git object graph**, because it commits
+   no OpenAPI document at all — `server/src/swagger.ts` builds one at runtime under a
+   default-false `SWAGGER_ENABLED`. Its `packages/types` directory is vendored verbatim to
+   `api/specs/bookorbit-types/` and pinned by its **git tree** name;
+   `TestSpecDriftBookOrbitTypesStillMatchUpstream` is the network half and
+   `TestVendoredBookOrbitTypesAreTheUpstreamTree` the offline one. A third offline test pins a
+   **declaration digest** — the file with comments stripped and whitespace outside string literals
+   collapsed — for the five files `internal/bookorbit` transcribes, so an upstream comment rewrite
+   does not read the same as an upstream rename. `api/specs/SOURCES.md` carries the provenance and,
+   more importantly, the list of what none of it covers.
 
 ⚠️ **The spec is not always right** (see `/api/v3/episode` in §5). Where a controller enforces
 something the schema does not express, the contract test encodes the controller's behaviour and a
