@@ -431,11 +431,14 @@ Items marked 🛑 **STOPPED** are the different case: those are stopped by the d
       own tests; no byte from a running BookOrbit has been through it."* It draws the comparison
       itself, and this file endorses it: **that is the same register as `deploy/Dockerfile`'s
       written-not-built.**
-      ⚠️ **A STALE COMMENT IN THE TREE, RECORDED SO THE NEXT READER IS NOT MISLED BY IT — and it
-      is not this file's to fix.** `internal/httpapi/images.go`'s package header still says *"What no
-      code does is CALL it during an import"*. `c4a3277` is what made that false; the header was
-      written at `7e5934d`, when it was true, and was not revisited. **Its neighbouring sentence —
-      that the pipeline has never run against a cover from a running service — is still correct.**
+      ✅ **THE STALE COMMENT THIS ITEM RECORDED IS NOW FIXED.** `internal/httpapi/images.go`'s
+      package header said *"What no code does is CALL it during an import"* — written at `7e5934d`,
+      when it was true, made false by `c4a3277`, and not revisited until 2026-08-19. The header now
+      names `c4a3277` as the falsifier and leaves the original claim legible. Four further copies
+      were corrected in the same commit: `internal/httpapi/server.go`, `internal/imagecache`,
+      `internal/httpapi/library_test.go`, and `reference/http-api.md` §1 and §9.4. **Its
+      neighbouring sentence — that the pipeline has never run against a cover from a running
+      service — is still correct, and is kept as a separate claim rather than folded in.**
       ⚠️ **§16 puts this and the library grid in ONE line item** — the sentence in **§16's v0.1
       entry** reading *"Library grid with "Load more" + `content-visibility` on grid rows carrying
       explicit ARIA roles (§4.5), keyset pagination, image pipeline **including the §4.4.1

@@ -152,7 +152,7 @@ integer"`, of a value that plainly is one. `recentWorksLimit` parses at 64 bits 
 | `items[].have_count` | yes | Denormalised rollups. The numerator and the gap behind §17.2's `have / total · N missing` grammar. ⚠️ **`0` is also the column default, so a `0` here is not evidence on its own** — §1.4.1. |
 | `items[].want_count` | yes | |
 | `items[].availability` | **no** | The polymorphic blob — see §1.4. **Absent means *not counted*, never *none held*** — §1.4.1. |
-| `items[].poster_key` | **no** | `image_asset.cache_key` for the work's poster: the key `GET /img/{key}` takes — §9. Absent when the work has no poster asset, which ⚠️ **is still every row of every install today** — but no longer because the fetch half is unbuilt: `internal/imagepipeline` renders and records a poster, and **nothing calls it during an import yet**. Absent rather than `""`: a renderer that treated `""` as a key would request `/img/` on every row. |
+| `items[].poster_key` | **no** | `image_asset.cache_key` for the work's poster: the key `GET /img/{key}` takes — §9. Absent when the work has no poster asset. ⚠️ **This used to read "is still every row of every install today ... and nothing calls it during an import yet" — falsified 2026-08-19 by `c4a3277`**, which landed the cover pass: `internal/libsync`'s phase D (`covers.go`) fetches a cover per imported book on a BookOrbit import, so `poster_key` is present for works that pass got. Absence is now an ordinary answer — another adapter, a work imported before the pass existed, or a cover the credential got a 404 for — not evidence the fetch half is unbuilt. Absent rather than `""`: a renderer that treated `""` as a key would request `/img/` on every row. |
 | `limit` | yes | **Authoritative** (§1.2). |
 | `next_cursor` | **no** | Absent when this page is the last one; its absence is the "Load more" button's off switch. Absent rather than empty, because `""` reads as a cursor whose value is unknown. |
 
@@ -2022,9 +2022,13 @@ placeholder for a cover that has not been fetched yet, and a broken-link state f
 nothing. It discloses nothing extra — the caller got the key from a response it was entitled to
 read, so *this asset exists* is not news to it.
 
-⚠️ **Today `not_cached` is the answer for every request.** Nothing in the tree writes `image_asset`
-and nothing renders an image: the fetch half of §4.4's pipeline needs catalogue rows carrying cover
-URLs and no adapter produces them. That is an honest empty cache, not a fault.
+⚠️ **This paragraph used to read "Today `not_cached` is the answer for every request. Nothing in
+the tree writes `image_asset` and nothing renders an image: the fetch half of §4.4's pipeline needs
+catalogue rows carrying cover URLs and no adapter produces them." Both halves are false.**
+`7e5934d` built the writer and the renderer (`internal/imagepipeline`, `store.PutPosterAsset`), and
+`c4a3277` (2026-08-19) wired the fetch into an import — `internal/libsync`'s phase D (`covers.go`),
+once per imported book on a BookOrbit import. `not_cached` is therefore an ordinary answer rather
+than the universal one, and an empty cache is still honest, not a fault.
 
 ### 9.5 There is no `/img/public/*`, and its absence is deliberate
 
