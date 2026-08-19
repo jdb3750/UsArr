@@ -38,7 +38,7 @@ func requireBuilt(t *testing.T) fs.FS {
 	return FS()
 }
 
-// TestEmbeddedFSCarriesAppDir is the regression test for ADR-0024 §6's first
+// TestEmbeddedFSCarriesAppDir is the regression test for ADR-0025 §6's first
 // trap. Go's embed excludes names beginning with '_' unless the pattern carries
 // the `all:` prefix, and SvelteKit's appDir is `_app`. Dropping `all:` still
 // embeds index.html, so nothing errors — the app is simply gone and the browser
@@ -74,9 +74,15 @@ func TestEmbeddedFSCarriesAppDir(t *testing.T) {
 	}
 }
 
-// TestFallbackAssetPathsAreRootAbsolute is the empirical answer to ADR-0024
+// TestFallbackAssetPathsAreRootAbsolute is the empirical answer to ADR-0025
 // §6's fourth trap, which recorded `paths.relative: false` as an untested
-// inference. The property that actually has to hold is this one: the fallback
+// inference. The inference is wrong, and this test is why we know: SvelteKit
+// special-cases the prerender fallback and skips the relative-path rewrite for
+// it (@sveltejs/kit 2.70.2, src/runtime/server/page/render.js:121-122), so the
+// fallback document emits root-absolute `/_app/…` with the setting either way.
+// svelte.config.js pins `paths.relative` to false as belt-and-braces — explicit
+// beats relying on a special case — not because it is what makes deep routes
+// work. The property that actually has to hold is this one: the fallback
 // document's asset URLs must not be relative, because the same document is
 // served at every depth. Whatever svelte.config.js says, this is what breaks
 // deep routes if it regresses.
@@ -90,7 +96,9 @@ func TestFallbackAssetPathsAreRootAbsolute(t *testing.T) {
 	for _, bad := range []string{`"./_app/`, `"../_app/`, `"_app/`} {
 		if strings.Contains(index, bad) {
 			t.Errorf("index.html contains a relative asset reference %q; served at /search it would "+
-				"resolve to /search/_app/... and 404. Set kit.paths.relative = false.", bad)
+				"resolve to /search/_app/... and 404. kit.paths.relative does not govern this — "+
+				"SvelteKit skips the relative rewrite for the fallback document — so check "+
+				"kit.paths.base and whether the toolchain still special-cases that fallback.", bad)
 		}
 	}
 }

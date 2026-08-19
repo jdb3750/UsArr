@@ -1882,7 +1882,7 @@ was current. That is what these three pointers close, at this site and at `SD-02
 | **DL-01** | **The release-candidate TTL sweep has no production caller — the only shipped write path grows the database without bound.** `internal/releases/service.go:123` defines `EvictExpired`, commented *"Run it from the maintenance worker"*. **There is no maintenance worker.** Load-bearing rather than cosmetic: `docs/reference/schema.md:677-686` argues the missing `UNIQUE (service_instance_id, guid)` is safe precisely because *"the bound on that duplication is the TTL — 25 minutes for Prowlarr-sourced rows, swept via `ix_rel_expiry` — so the table's size is governed by search volume within a 25-minute window, not by uptime."* With no sweeper the table's size **is** governed by uptime, and each row carries `raw_release_json` (`internal/db/migrations/00001_initial.sql:209`) into the file and into every `VACUUM INTO` backup | **Open — recorded here rather than applied.** Directly invalidates the stated bound of Round 2's DB-03 decision, which is why it outranks its own blast radius. **Fix shape:** wire `EvictExpired` to a ticker in `cmd/usarr/main.go` next to `RunProber`. **No schema change needed** — the index is already correct and the sweep is already efficient: `ExpireReleaseCandidates releases.go:158 → SEARCH release_candidate USING COVERING INDEX ix_rel_expiry (expires_at<?)` |
 | **DL-02** | **`release_candidate` and `provenance` carry no `user_id`** — the one principle-4 retrofit migration 0001 exists to prevent. `ARCHITECTURE.md:87-91` enumerates the user-scoped tables and does **not** include `release_candidate`. A `release_candidate` row **is** user-generated content: it is the materialised result of one user's free-text query, and `title` is the answer to "what did that person search for". The only scope available is instance-based (`internal/store/store.go:96`, `instancePredicate("service_instance_id")`), so on the expected homelab topology — two users, one shared Prowlarr — user B enumerating candidate ids reads user A's search results and can grab them. `internal/releases/grab.go:46` claims *"Out-of-scope is reported as not-found so a caller cannot probe for other users' rows"*; with no `user_id` column the scope predicate cannot express "other users' rows" at all, so the comment overstates what the check buys. `provenance` is worse in one respect — immutable, permanent, no instance column, and its only reader takes no scope at all: `GetProvenanceByDownloadID` (`internal/store/releases.go:261`), which has no non-test caller today but is the seam, and already lacks the parameter `internal/store/store.go:15-19` says every such read must carry | **Open — recorded here rather than applied.** The reviewer asks for one of two outcomes and is explicit that *"right now it is neither"*: **(a)** a genuine omission, fixed by a table rebuild in migration 0002 while the tables are still empty in the wild, or **(b)** a decision **written down** in `schema.md` §6 the way the `(service_instance_id, guid)` uniqueness decision was in Round 2. **Fix shape:** pick one — and if (a), note that migration 0001 is frozen, so this is now a rebuild, which is exactly the cost principle 4 exists to avoid paying 🔻 **Falsified 2026-08-19 — the headline claim is no longer true of the tree; the finding's own supporting observation is, and it has INVERTED.** **(1) Both columns exist.** The falsifier is the CONTENT commit **`10b2c76`**, *"feat: carry user_id on provenance and release_candidate"*, 2026-08-16 17:26:13 UTC — single parent `087fbdb` (`git rev-list --parents -n1 10b2c76`), an ancestor of `origin/main`. `internal/db/migrations/00002_user_scope_provenance_release_candidate.sql:69-70` adds `user_id INTEGER NOT NULL DEFAULT 0` to `provenance` (deliberately no `REFERENCES` — *"historical id"*) and `:72-74` adds it to `release_candidate` with `REFERENCES user(id) ON DELETE CASCADE`; applying every migration to a scratch database and reading `sqlite_schema` confirms both columns on the live tables. The scope machinery followed: `Scope.userPredicate` (`internal/store/store.go:98-118`) renders `user_id IN (?, ?)` — the canonical `IN (0, :uid)` shape the finding said the predicate *"cannot express"* — and `GetProvenanceByDownloadID` now takes `scope Scope` (`internal/store/releases.go:355`, was `:261`), under a comment at `:350-354` naming the same existence oracle the finding named. **The reviewer asked for (a) or (b) and said *"right now it is neither"*; (a) landed** — without the rebuild the finding predicted, because `ALTER TABLE … ADD COLUMN` sufficed while the tables were still empty in the wild. ⏱️ **35 minutes, not the 69 this annotation was asked to record.** DL-02 entered this file at `e8b4e39`, 2026-08-16 16:50:48 UTC; `10b2c76` is 17:26:13 UTC. The 69-minute figure did not verify and is not recorded as fact. **(2) The supporting observation STILL HOLDS — and now points the other way.** `docs/ARCHITECTURE.md:89-95` still enumerates the user-scoped tables and still omits `release_candidate`; it omits `provenance` too. When the finding was taken, the list was right and the schema was wrong. Today the schema is right and **the list is stale**, so the same sentence understates instead of overstating. That half is a live documentation defect and is **not** discharged here. **(3) One cite was WRONG WHEN WRITTEN, not drifted.** The finding cites `internal/store/store.go:15-19` for the rule *"every such read must carry"*. At `e8b4e39` and at `origin/main` alike, `:15-19` is a blank line and the head of the `import` block; the rule is the package doc at **`:7-13`**, byte-identical in both trees. Nothing moved — the cite never pointed at the rule. DL-06 carries the same bad cite. **Scope: this annotation records what the tree says. It does NOT change DL-02's Open/High status** — clause 2 is live — **and the Counts tables above are not amended.** |
 | **DL-03** | **The read pool is not read-only — the single-writer discipline is convention, and bypassing it produces an unrescuable `database is locked`.** `internal/db/sqlite.go:127` builds the reader DSN with no `mode=ro`; `internal/db/sqlite.go:147` only *says* so in a comment (`// Read returns the read pool. Never start a write transaction on it.`). `ReadTx` is safe (the driver honours `TxOptions.ReadOnly`); bare `Read().ExecContext` and `Read().BeginTx(ctx, nil)` are not. The harm is the exact failure mode `ARCHITECTURE.md:1321` names — a deferred transaction upgrading to a write, which `busy_timeout` does not cover | **Open — recorded here rather than applied.** **Fix shape:** add `mode=ro` (or `_txlock=deferred` + `mode=ro`) to the reader DSN so the invariant is enforced by SQLite rather than by a comment. **Nothing in the current code writes through the read pool, so this is free today and expensive after the first accidental caller** |
-| **DS-02** | **`docs/DEVELOPMENT.md` §3 "Getting running" marks two working `make` targets as `(not yet)`** — `docs/DEVELOPMENT.md:146-147` (and `:23`). `Makefile` `.PHONY: tools` (five pinned `go install` lines) and `.PHONY: dev` (`$(GO) run $(MAIN_PKG) --env-file .env`) both exist and both work — the fresh-install pass confirmed by running them. The doc's own §1 preamble (`:6`) defines `(not yet)` as *"commands referencing files that do not exist yet"*, so this is the one marker a new contributor is told to trust, on the two commands in the quickstart, and it sends them to install the toolchain and start the backend by hand. Same class, same doc: `:557` marks `.golangci.yml` as *"starting point **(not yet)**"* — the file exists at the repo root and its linter list matches the doc's YAML block byte for byte (`errcheck govet staticcheck ineffassign unused bodyclose noctx errorlint gosec sqlclosecheck rowserrcheck`, `formatters: gofumpt goimports`), plus a `_test.go`/gosec exclusion block the doc does not show | **Open — recorded here rather than applied. Found independently by the doc/spec pass and the fresh-install pass (item 7c).** **Fix shape:** drop the three `(not yet)` markers at `:23`, `:146-147` and `:557`. Minor rider in the same edit: `:167` reads `make dev # Terminal 1 — Go backend, hot reload`; the recipe is a plain `go run` and there is **no hot reload** 🔻 **Amended 2026-08-19 — DS-02 stands Open at High with 3 of its 4 clauses SILENTLY DISCHARGED, and the one still broken is the one nobody re-raised.** All four re-checked at `origin/main`, clause by clause. **(1) `make tools` `(not yet)` — FIXED, by `ed5a072`**, *"docs: record the Prowlarr freeleech constraint, and unstale the make tools note"*, 2026-08-16 20:57:40 UTC: the diff deletes *"Installed by `make tools` **(not yet)**"* and `docs/DEVELOPMENT.md:48` now records that the marker *"was stale"*. **Nothing in this file records that commit.** **(2) `.golangci.yml` `(not yet)` at `:557` — FIXED, by `15fc76f`**, *"fix: run the pinned dev tools, not whatever PATH resolves"*, 2026-08-16 16:51:53 UTC: the diff deletes *"`.golangci.yml` starting point **(not yet)**"*. **Nothing in this file records that commit either.** **(3) `make dev` `(not yet)` — FIXED, by `8756d02`**, 2026-08-17 05:10:57 UTC. This one *is* recorded — but under a **different id**, `SD-02p` (`:4894`, closed at `:5025`), reached from the fresh-install inventory, and **`SD-02p` never references DS-02**. Two entries, one defect, no link between them in either direction. **(4) The `make dev … hot reload` rider — STILL BROKEN, and it is the clause nobody re-raised.** `docs/DEVELOPMENT.md:203` reads `make dev            # Terminal 1 — Go backend, hot reload -> http://localhost:8484`. `Makefile:370-372` is the whole recipe: `dev:`, then `@test -f .env \|\| echo …`, then `$(GO) run $(MAIN_PKG) --env-file .env`. **There is no reloader in the tree** — `grep -rni 'air\|reflex\|entr\|watchexec\|hot reload' Makefile` returns prose only, no tool. `make web-dev` on the very next line *does* carry HMR, which makes the false half harder to spot, not easier. 🚩 **The general point, and it is the DL-07 correction's point arriving from the other direction:** three clauses were repaired in the tree inside 13 hours and **not one repair came back to the finding**, so what survives is the entry whose remaining defect is the *smallest* of the four — a High row now carrying a rider. The only closure that happened, happened against a different id. **Scope: this annotation records what the tree says. It does NOT close DS-02** — clause 4 is live — and it does not restate its severity; **the Counts tables above are not amended.** |
+| **DS-02** | **`docs/DEVELOPMENT.md` §3 "Getting running" marks two working `make` targets as `(not yet)`** — `docs/DEVELOPMENT.md:146-147` (and `:23`). `Makefile` `.PHONY: tools` (five pinned `go install` lines) and `.PHONY: dev` (`$(GO) run $(MAIN_PKG) --env-file .env`) both exist and both work — the fresh-install pass confirmed by running them. The doc's own §1 preamble (`:6`) defines `(not yet)` as *"commands referencing files that do not exist yet"*, so this is the one marker a new contributor is told to trust, on the two commands in the quickstart, and it sends them to install the toolchain and start the backend by hand. Same class, same doc: `:557` marks `.golangci.yml` as *"starting point **(not yet)**"* — the file exists at the repo root and its linter list matches the doc's YAML block byte for byte (`errcheck govet staticcheck ineffassign unused bodyclose noctx errorlint gosec sqlclosecheck rowserrcheck`, `formatters: gofumpt goimports`), plus a `_test.go`/gosec exclusion block the doc does not show | **Open — recorded here rather than applied. Found independently by the doc/spec pass and the fresh-install pass (item 7c).** **Fix shape:** drop the three `(not yet)` markers at `:23`, `:146-147` and `:557`. Minor rider in the same edit: `:167` reads `make dev # Terminal 1 — Go backend, hot reload`; the recipe is a plain `go run` and there is **no hot reload** 🔻 **Amended 2026-08-19 — DS-02 stands Open at High with 3 of its 4 clauses SILENTLY DISCHARGED, and the one still broken is the one nobody re-raised.** All four re-checked at `origin/main`, clause by clause. **(1) `make tools` `(not yet)` — FIXED, by `ed5a072`**, *"docs: record the Prowlarr freeleech constraint, and unstale the make tools note"*, 2026-08-16 20:57:40 UTC: the diff deletes *"Installed by `make tools` **(not yet)**"* and `docs/DEVELOPMENT.md:48` now records that the marker *"was stale"*. **Nothing in this file records that commit.** **(2) `.golangci.yml` `(not yet)` at `:557` — FIXED, by `15fc76f`**, *"fix: run the pinned dev tools, not whatever PATH resolves"*, 2026-08-16 16:51:53 UTC: the diff deletes *"`.golangci.yml` starting point **(not yet)**"*. **Nothing in this file records that commit either.** **(3) `make dev` `(not yet)` — FIXED, by `8756d02`**, 2026-08-17 05:10:57 UTC. This one *is* recorded — but under a **different id**, `SD-02p` (`:4894`, closed at `:5025`), reached from the fresh-install inventory, and **`SD-02p` never references DS-02**. Two entries, one defect, no link between them in either direction. **(4) The `make dev … hot reload` rider — STILL BROKEN, and it is the clause nobody re-raised.** `docs/DEVELOPMENT.md:203` reads `make dev            # Terminal 1 — Go backend, hot reload -> http://localhost:8484`. `Makefile:370-372` is the whole recipe: `dev:`, then `@test -f .env \|\| echo …`, then `$(GO) run $(MAIN_PKG) --env-file .env`. **There is no reloader in the tree** — `grep -rni 'air\|reflex\|entr\|watchexec\|hot reload' Makefile` returns prose only, no tool. `make web-dev` on the very next line *does* carry HMR, which makes the false half harder to spot, not easier. 🚩 **The general point, and it is the DL-07 correction's point arriving from the other direction:** three clauses were repaired in the tree inside 13 hours and **not one repair came back to the finding**, so what survives is the entry whose remaining defect is the *smallest* of the four — a High row now carrying a rider. The only closure that happened, happened against a different id. **Scope: this annotation records what the tree says. It does NOT close DS-02** — clause 4 is live — and it does not restate its severity; **the Counts tables above are not amended.** 🔻 **CLOSED 2026-08-19 — clause 4 is fixed, and DS-02's disposition flips from *Open* to **applied**. `LS-383` is the entry; read it for the measurement.** `docs/DEVELOPMENT.md:203` no longer claims hot reload: the line now reads `make dev            # Terminal 1 — Go backend -> http://localhost:8484`, and a paragraph beneath the block draws the line the false half blurred — *"The HMR is Terminal 2's alone"*. ✅ **The annotation above is re-measured, not taken on report, and all four of its clause verdicts hold** at `83449b1`: `ed5a072`, `15fc76f` and `8756d02` are each an ancestor of `origin/main` and each one's diff of `docs/DEVELOPMENT.md` deletes the `(not yet)` marker it is credited with; no `(not yet)` remains on `make tools`, `make dev` or `.golangci.yml`. ⚠️ **`:204` and the §4 targets table were deliberately NOT touched.** Both are true — `make web-dev` really does run `vite dev` on `:5173` proxying `/api` to `:8484`, and the frontend really does hot-reload — so a flat *"there is no hot reload in this repo"* would have replaced a false half with a false whole. **Scope: only this row's disposition moves.** Its finding, its text and its severity are unchanged, `SD-02p` is not amended, and **the Counts tables above are not amended** — which leaves DS-02 still counted under High at `:1757`, deliberately, per this file's standing rule. |
 | **DS-03** | **`docs/CONFIGURATION.md` §2.1 documents log rotation that does not exist, and §5 names three more artefacts that are never created.** `:126` — *"Log rotation is fixed at 10 MB × 5 files in `$USARR_DATA_DIR/logs/`"* — and `:423`, inside the §5 tree the header at `:11` declares authoritative: `usarr.log # 0600, + rotated usarr.log.1 … (10 MB × 5)`. `cmd/usarr/main.go:165-198` (`newLogger`) writes to `os.Stdout` only, via `slog.NewTextHandler`/`NewJSONHandler`. **No rotation library is in `go.mod`** — no lumberjack, nothing. `cmd/usarr/app.go:192` creates `logs/` and `config.go:217` exposes `LogsDir()`, but `grep -rn "LogsDir()"` shows `ensureDirs` is its only non-test caller. The fresh-install pass confirmed on a real install, after a full first run **and a service add**: no `cache.db`, no `cache/images/`, no `tmp/`; `logs/` created 0700 and empty; all output on stdout | **Open — recorded here rather than applied. Found independently by the doc/spec pass and the fresh-install pass (item 7d).** Stated as present-tense fact, not marked `(proposed)`, in the section declared authoritative — a user configuring log shipping or disk quotas follows it and gets nothing. **Fix shape:** either mark the four claims `(not yet)` or build them; `CLAUDE.md`'s "no invented status" rule points at the marker, not the feature. Note `cache.db` and `cache/images/` belong to the not-yet image pipeline, and `:424`'s `tmp/ # in-progress work; cleared at startup` describes a directory that is never created and nothing clears 🔻 **Falsified 2026-08-19 — the DOCUMENTATION was corrected, which is exactly what DS-03 asked for; the underlying facts are unchanged.** The falsifier is the CONTENT commit **`9115913`**, *"docs: correct six features documented as existing that do not"*, 2026-08-16 17:48:51 UTC, an ancestor of `origin/main` — **58 minutes** after Round 6 was logged (`e8b4e39`, 16:50:48 UTC). All four clauses discharge. The rotation claim is now marked, at `docs/CONFIGURATION.md:126-131`: *"⚠️ **Logging goes to stdout, and only to stdout.** … **file logging is not implemented.** `$USARR_DATA_DIR/logs/` is created at startup and stays empty — nothing writes into it"*, with 10 MB × 5 named as *"the intended end state"* that *"no milestone has shipped"*. The §5 tree marks the other three: `cache.db` **`[planned]`** (`:577`, `-wal`/`-shm` at `:578-579`), `cache/images/` **`[planned]`** (`:581`), `usarr.log` **`[planned]`** (`:584`), `tmp/` **`[planned]`** (`:585`); `logs/` at `:583` now says *"EMPTY: logging is stdout-only"*. **Every fact the finding measured still holds, and none of them was the defect:** `go.mod` still carries no rotation library — no lumberjack, nothing — and `newLogger` is still stdout-only, now at `cmd/usarr/main.go:262-291` (was `:165-198`), writing through `slog.NewTextHandler(os.Stdout, …)` at `:288` or `slog.NewJSONHandler(os.Stdout, …)` at `:290`. `CLAUDE.md`'s *"no invented status"* rule pointed at the marker rather than the feature, and the marker is what moved. ⚠️ **One residual, recorded and deliberately NOT fixed — it is outside this file:** `internal/config/config.go:263` still reads `// LogsDir holds the rotating log files (fixed at 10 MB × 5).`, the same claim DS-03 named, surviving in a godoc after both documents were corrected. **Scope: this annotation records what the tree says. It does not change DS-03's Open/High status and the Counts tables above are not amended.** |
 | **DS-04** | **ADR-0025 is Accepted, the frontend now exists, and it implements none of it.** `docs/DECISIONS.md:1593-1600` — ADR-0025, **Status: Accepted** — decides Tailwind v4 via `@tailwindcss/vite` with `@theme { --*: initial; }`, Bits UI, Tabler icons, self-hosted IBM Plex, and its Context states *"as of this ADR there is no styling decision anywhere in the repository and **no frontend code to constrain one**."* There is now 1,755 lines of frontend. `web/package.json` contains **no** `tailwindcss`, `@tailwindcss/vite`, `bits-ui`, `@tabler/icons-svelte` or any font package; `web/src/app.css` is 426 lines of hand-rolled CSS; `web/static/` holds one file, `favicon.svg` — no IBM Plex is self-hosted, and `app.css:115` falls back through `'IBM Plex Sans', system-ui, …` to whatever the OS has | **Open — recorded here rather than applied.** The reviewer is explicit that `app.css:1-17` is **candid** about being scaffolding that copies values out of `docs/design/tokens.css`, and that this is a reasonable engineering call — the finding is that ADR-0025's Context is now factually false and nothing in `DECISIONS.md` records that the accepted stack is unimplemented, so the ADR reads as describing the repo. **Fix shape:** an amendment block on ADR-0025 in the house style, saying the stack is accepted and not yet implemented. **Bonus, exact:** `web/src/app.css:4` cites the wrong ADR — *"ADR-0024 chooses Tailwind v4…"*; ADR-0024 (`DECISIONS.md:1540`) is the AGPL-3.0 licence decision, the styling ADR is **0025** |
 | **FI-02** | **`make check` / `make check-offline` fails on a fresh clone: `fmt-check` has no `web-deps` prerequisite.** It is documented as *the* pre-commit gate, and it is the first thing a fresh clone hits — half a second in, before any Go code is examined. `lint-web` and `test-web` both declare `web-deps`; `fmt` and `fmt-check` do not, and `fmt-check` runs **first** in `check-offline`. The undocumented recovery is `make web-deps`, which is mentioned in neither `DEVELOPMENT.md` §3 nor §4 | **Open — recorded here rather than applied.** **Still true on this branch**, checked: `fmt-check` (`Makefile:264-269` here, `:259-263` at `d38bc8e`) has no prerequisite line. **Fix shape:** add `web-deps` as a prerequisite of `fmt` and `fmt-check`, exactly as `lint-web` and `test-web` already declare it — a one-word change on two lines, and the gate's own honesty notice is what makes it worth doing rather than documenting |
@@ -23179,3 +23179,288 @@ for the two arms and the contrast between them;
 `packages/types` is vendored and the server source is not; and
 `git grep -n 'loginWithToken' -- cmd/ web/src/ internal/` for the four claim sites plus `doc.go`'s
 citation. ⚠️ **Any commit sha reported for this entry is a content sha, never a merge.**
+
+---
+
+## LS-383 — DS-02's last live clause promised a hot reload the repo has never had; three of its four clauses had been discharged into a row that never pointed back
+
+**`LS-383`, allocated by the coordinator, and re-checked rather than taken on report.** Re-run at this
+lane's own tip (`83449b1`): `git grep -n 'LS-383' origin/main` returns nothing, `git grep -n 'LS-383'
+HEAD` returns nothing, `grep -rn 'LS-383' .` over the working tree returns nothing, and
+`git log --all --grep='LS-383'` returns no commit. **`LS-383` was free and is taken; no id was bumped.**
+No ADR or migration number is allocated by this lane.
+
+ℹ️ **This entry does not cite its own commit sha, deliberately** — it lives in the commit it would be
+citing. The change is identified by its shape: **`docs/DEVELOPMENT.md`, one line replaced and one
+paragraph added, plus this file.**
+
+### ⚠️ The id, settled by content rather than reconciled
+
+This lane was briefed on a row it might find as **`DS-02`** or as **`SD-02`**. Both ids exist in this
+file and they are **different things**, so the ambiguity was real rather than a typo, and it is worth
+recording how it resolves so nobody reconciles it silently later:
+
+* **`DS-02`** (`:1885` at this tip) is the row — *"`docs/DEVELOPMENT.md` §3 'Getting running' marks
+  two working `make` targets as `(not yet)`"*, standing **Open at High**. This is the finding.
+* **`SD-02`** (`:4812`) is a different entry entirely — *"twenty-one sites restate an implementation
+  status they do not own"* — whose lettered rows run `SD-02a` … `SD-02r`. It is live and untouched here.
+* **`SD-02p`** is one of those lettered rows, and it is where clause 3 of DS-02 was discharged.
+
+📌 **The two ids share a subject by coincidence of subject-matter, not by design**, which is exactly
+the condition under which a memory-only note gets one of them wrong. **The row was found by content,
+and it is `DS-02`.**
+
+### The count: three of four, measured
+
+The coordinator's figure was to be checked rather than written. ✅ **It is right, and it was already
+written down** — DS-02 carries a `🔻 Amended 2026-08-19` annotation stating the three-of-four shape
+before this lane arrived. So the measurement below is a re-measurement of an existing verdict, not a
+first one, and it is reported that way:
+
+| Clause | Verdict | Re-measured at `83449b1` |
+|---|---|---|
+| **1** — `make tools` marked `(not yet)` | **Discharged** by `ed5a072` | `git merge-base --is-ancestor ed5a072 origin/main` → yes; the commit's `docs/DEVELOPMENT.md` diff deletes `-Installed by \`make tools\` **(not yet)**` and adds *"An earlier revision of this line marked the target **(not yet)**, which was stale."* |
+| **2** — `.golangci.yml` marked `(not yet)` | **Discharged** by `15fc76f` | ancestor: yes; the diff deletes `-\`.golangci.yml\` starting point **(not yet)**` |
+| **3** — `make dev` marked `(not yet)` | **Discharged** by `8756d02` | ancestor: yes; the diff deletes `-make dev                   # backend on :8484                  (not yet)` |
+| **4** — `make dev … hot reload` | **SURVIVED, and is what this entry fixes** | `docs/DEVELOPMENT.md:203` still read *"Terminal 1 — Go backend, hot reload"* |
+
+No `(not yet)` marker remains anywhere in `docs/DEVELOPMENT.md` on `make tools`, `make dev` or
+`.golangci.yml`. Six occurrences of the string survive, and every one was read rather than counted:
+the §1 preamble that defines the marker (`:6`); the `ed5a072` note recording one as stale (`:48`); the
+`deploy/compose/dev-stack.yml` and `make seed` markers (`:769`, `:790`), **both still correct** — neither
+path exists — together with the line between them that re-derives them (`:774`); and one unrelated
+sentence about Prowlarr state (`:1388`). *(Line numbers as this entry leaves the file; they were four
+lower before the paragraph this entry adds.)*
+
+### 🚩 Why the row was still Open: the discharge was recorded somewhere that does not point back
+
+Clause 3 **was** written down. It is `SD-02p`, closed at this tip's `:5047` — *"✅ **Closed by
+`8756d02`.** `docs/DEVELOPMENT.md:168` now reads `make dev # backend on :8484` with the marker gone"* —
+reached from the fresh-install inventory. ⚠️ **`SD-02p` never references `DS-02`**, in its finding, its
+verdict or its closure row; measured by reading the whole `SD-02` region and grepping it for `DS-02`,
+which returns nothing. Clauses 1 and 2 are worse off still: **nothing in this file records `ed5a072` or
+`15fc76f` at all.**
+
+📌 **So the row did not stay Open because anyone judged it open.** Three of its four clauses were
+repaired in the tree within thirteen hours, each repair landed with no return path to the finding, and
+what was left standing was the row whose remaining defect was the *smallest* of the four. **An entry
+closes when someone walks back to it, and a fix has no automatic route back.** The one directional link
+that now exists — DS-02's `🔻 Amended` annotation naming `SD-02p` — was written from DS-02's side on
+2026-08-19; `SD-02p` still has no link out, and is **not amended here**, because amending it would
+duplicate the pointer rather than complete it.
+
+ℹ️ **That annotation's own two line cites have already rotted, and are deliberately left alone.** It
+names `SD-02p` at *"`:4894`, closed at `:5025`"*. Those were exact at `cf3957f`, the tip it was written
+at — verified by `git show cf3957f:docs/REVIEW-LOG.md | grep -n 'SD-02p'`, which answers `4894` and
+`5025` — and both are **`+22`** at `origin/main`, `:4916` and `:5047`, from an append above them. Per
+`DEVELOPMENT.md` §11, *"a citation inside a dated record is history, not staleness"*: the annotation
+describes the tree it was taken on and keeps describing it. 🚩 **It is also the §11 line-number bullet
+demonstrating itself inside the very entry that complains about lost links** — the numbers still
+resolve, just to the wrong rows, and nothing announces it.
+
+### Clause 4, and where the line is actually drawn
+
+`docs/DEVELOPMENT.md:203` promised a hot reload that has never existed. ✅ **Re-verified rather than
+taken on report:** `Makefile:370-372` is the entire `dev` recipe — `dev:`, a `@test -f .env || echo …`
+note, and `$(GO) run $(MAIN_PKG) --env-file .env` — with no prerequisite and no watcher. A search for
+`air|wgo|reflex|entr|watchexec|CompileDaemon|nodemon|fsnotify` across the `Makefile`, `go.mod` and
+`go.sum` returns **no tool**: the hits are substrings inside English words (`p-air-`, `-entr-y point`)
+and one comment using *"reflexively"*. **There is no Go reloader in this repo.**
+
+⚠️ **The fix is narrow on purpose, and a wider one would have been wrong.** The reader who follows the
+documented steps *does* get hot reloading — of the frontend. `:204` is accurate in every particular
+(`Makefile:380` — `web-dev: web-deps`, then `$(call pnpm_if_web,dev)`; `web/package.json`'s `"dev":
+"vite dev"`; `web/vite.config.ts:10-16` — `port: 5173`, `strictPort: true`, `proxy` `'/api'` →
+`http://localhost:8484`), and §4's targets table and the `Makefile`'s own `##` help text on both
+targets were already correct. So a flat
+*"there is no hot reload in this repo"* would have swapped a false half for a false whole.
+
+| | Text |
+|---|---|
+| **Before, `:203`** | `make dev            # Terminal 1 — Go backend, hot reload -> http://localhost:8484` |
+| **After, `:203`** | `make dev            # Terminal 1 — Go backend -> http://localhost:8484` |
+| **Added beneath the block** | **The HMR is Terminal 2's alone.** `make dev` is a plain `go run` with no watcher behind it — there is no Go reloader anywhere in this repo — so a change under `internal/` or `cmd/` needs a Ctrl-C and a re-run of Terminal 1. Svelte changes need neither. |
+
+📌 **Deleting the false clause was not enough, and that is the reusable part.** The two lines sit
+adjacent, one says *"hot reload"* and the other says *"HMR"*, and a reader who has just watched their
+Svelte edit appear instantly will supply the wrong half back from experience. Removing the words leaves
+the inference; **stating which terminal owns the reload is what removes it.**
+
+### Scope, and what is NOT done here
+
+⏭️ **`SD-02o`, `SD-02p` and `SD-02q` are untouched.** `SD-02o` — the §1 preamble that *licenses* the
+`(not yet)` markers — is still Open and is still the root of that half of the inventory; this entry
+neither closes it nor inherits it. **The Counts tables are not amended**, so DS-02 remains counted under
+High at `:1757` despite its disposition flipping, per this file's standing rule that counts move only in
+their own pass.
+
+### What a green gate is worth on this entry
+
+⚠️ **Nothing this entry changed is reachable by any arm of `make check` except `gitleaks`.**
+`docs/DEVELOPMENT.md` and `docs/REVIEW-LOG.md` are both outside `web/`, and `fmt-check`'s prettier half
+runs `--dir web`, so neither file is formatter-gated; no lint, compile or test arm opens a `.md` file.
+**A green gate here means "no credential-shaped string was added to the prose" and nothing whatever
+about whether any sentence above is true.** In particular, nothing in the gate can tell that
+`docs/DEVELOPMENT.md:203` ever described the `Makefile` correctly — which is the entire class of defect
+DS-02 was raised about, and the reason it survived three days of green.
+
+🔍 **The verification is therefore manual, and is listed so it can be repeated at any tip:**
+`grep -n 'hot reload' docs/DEVELOPMENT.md Makefile` for the emptiness claim;
+`sed -n '199,212p' docs/DEVELOPMENT.md` for the corrected block and the added paragraph;
+`grep -n -A5 '^dev:' Makefile` for the three-line recipe with no watcher;
+`grep -rniE 'air|wgo|reflex|entr|watchexec|CompileDaemon|nodemon|fsnotify' Makefile go.mod go.sum` for
+the no-reloader result, reading every hit rather than counting them;
+`grep -n 'not yet' docs/DEVELOPMENT.md` for the six surviving occurrences;
+`for c in ed5a072 15fc76f 8756d02; do git merge-base --is-ancestor $c origin/main; git show $c -- docs/DEVELOPMENT.md | grep -E '^[-+].*not yet'; done`
+for the three discharges;
+`git show cf3957f:docs/REVIEW-LOG.md | grep -n 'SD-02p'` for the `+22` cite rot; and the `SD-02`
+region read for the absent back-reference. ⚠️ **Any commit sha reported for this entry is a content
+sha, never a merge.**
+
+---
+
+## LS-384 — three `internal/web` sites carried the same `ADR-0024 §6` mis-citation LS-380 closed under `web/`; LS-380's closure check was TRUE, and narrower than the claim it stood under
+
+**`LS-384`, allocated by the coordinator, and re-checked rather than taken on report.** Re-run at this
+lane's own tip (`83449b1`): `git grep -n 'LS-384' origin/main` returns nothing, `grep -rn 'LS-384' .`
+over the working tree returns nothing, and `git log --all --grep='LS-384'` returns no commit.
+**`LS-384` was free and is taken; no id was bumped.** Nothing here touches the `SD-`, `DS-`, `RK-` or
+`FI-` series, and no ADR or migration number is allocated by this lane.
+
+ℹ️ **This entry does not cite its own commit sha, deliberately** — the entry lives in the commit it
+would be citing, so any sha written here is either a guess or invalidated by the amend that inserts
+it. The change is identified by its shape instead — **two Go files, comment and failure-message text
+only, with no assertion, no test name and no executable line touched** — and the sha is reported to
+the coordinator, where it can be true.
+
+⚠️ **`LS-380` is CITED, not amended.** Its text, its scope and
+its verification list stand exactly as written. Nothing below is a correction to it, because nothing
+in it is false; the finding is about what a true check does not reach.
+
+### The defect, in one line
+
+Three Go-side sites cited **ADR-0024 §6**. [ADR-0024](./DECISIONS.md#adr-0024) is the AGPL-3.0 licence
+decision and has no numbered sections at all, so `ADR-0024 §6` resolves nowhere; the SPA build-config
+material they mean is decision point **6. Serving, per ADR-0003's embedding story** of
+[ADR-0025](./DECISIONS.md#adr-0025). This is the same defect, in the same class, as LS-380 — three
+days older than LS-380's fix and three directories away from its grep.
+
+### 🔍 The finding is the shape of the check, not a wrong check
+
+LS-380 closed its four sites and recorded the closure this way: *"`grep -rn "ADR-0024" web/` returns
+nothing afterwards; a second lane confirmed that independently, and it was **re-run here at `cf3957f`**
+rather than carried over on report."* Its manual-verification list names the same command again, as
+the check for *"the two emptiness claims"*.
+
+✅ **That check is TRUE.** Re-run at `83449b1` before this lane touched anything, `grep -rn 'ADR-0024'
+web/` returns nothing — it was true when LS-380 wrote it, it was true at `cf3957f`, and it is true now.
+It was also **run twice, by two lanes, independently**, which is more care than most closure claims get.
+
+🚩 **And it reaches three of the six trees the defect was in.** `web/` is the SvelteKit source
+directory. `internal/web/` is a Go package whose name merely begins with the same five letters, and no
+glob rooted at `web/` reaches it. The three sites below sat inside the emptiness the check reported,
+and were invisible to it:
+
+| Site | Before | After |
+|---|---|---|
+| `internal/web/web.go:6` | `// embedding package's own directory. See docs/DEVELOPMENT.md §2 and ADR-0024 §6.` | `… and ADR-0025 §6.` |
+| `internal/web/web_test.go:41` | `// TestEmbeddedFSCarriesAppDir is the regression test for ADR-0024 §6's first` | `… for ADR-0025 §6's first` |
+| `internal/web/web_test.go:77` | `// TestFallbackAssetPathsAreRootAbsolute is the empirical answer to ADR-0024` | `… to ADR-0025` |
+
+📌 **The general rule this entry exists for. A closure check is a claim about a scope, and the scope is
+part of the claim.** `grep … web/` answers *"is it gone from `web/`"*; it was read as answering *"is it
+gone"*. Nothing warns you, because the check passes — a narrow check and a complete one are the same
+green. The tell is available and cheap: **an emptiness claim should be run at the widest scope the
+defect could occupy, and narrowed only on purpose.** `git grep -n 'ADR-0024'` with no path argument, at
+`cf3957f`, would have returned all three of these.
+
+### The three sites entered in the SAME commit as LS-380's five, and LS-380's own history table counts five of eight
+
+This is the part that settles it as scope rather than as later drift. LS-380's commit table records
+`a279517` (2026-08-16 06:35), *"feat: land the v0.1 core packages and embedded web shell"*, as *"the
+web shell lands carrying `ADR-0024 §6` three times in `svelte.config.js`, once in `+layout.ts`, and a
+fifth bare `ADR-0024` in `app.css`"*. Measured rather than taken on report —
+`git grep -n 'ADR-0024' a279517`, excluding `docs/`, `README.md` and `CLAUDE.md`, which mean the
+licence and are correct — that commit landed **eight** code-side sites, not five:
+
+| Site at `a279517` | Form |
+|---|---|
+| `web/svelte.config.js:9`, `:22`, `:38` | `ADR-0024 §6` ×2 and a bare `ADR-0024` |
+| `web/src/routes/+layout.ts:2` | `ADR-0003 / ADR-0024 §6` |
+| `web/src/app.css:4` | bare `ADR-0024` — later deleted by `b6a6d37`, per LS-380 |
+| **`internal/web/web.go:6`** | **`ADR-0024 §6`** |
+| **`internal/web/web_test.go:26`** | **`ADR-0024 §6`** *(line `:41` today)* |
+| **`internal/web/web_test.go:62`** | **`ADR-0024`** *(line `:77` today)* |
+
+⚠️ **The row's count is a claim about a commit, and a commit has no directory.** *"The web shell
+lands …"* is the right subject — `internal/web` **is** the web shell, it is the package that serves
+the thing `web/` builds — and the enumeration beneath it was drawn from the `web/` grep rather than
+from the commit. So the under-coverage was not only in the closure check at the end; it was already
+in the evidence table in the middle, where a count of five stood for a commit that carried eight.
+`git log -S 'ADR-0024' -- internal/web/web.go internal/web/web_test.go` returns exactly one commit,
+`a279517`, and nothing since: these three have never been touched on this axis, by any sweep, until now.
+
+### The inference the citations taught is corrected in the same pass, because repointing made it readable
+
+`web_test.go:77`'s comment and the failure message beneath it both encoded the inference that ADR-0025
+§6's fourth trap records and that `web/svelte.config.js` already corrects at length: that
+`paths.relative: false` is what makes deep-route assets work. **It is not**, and the comment sat
+directly above the test that disproves it.
+
+✅ **Verified in this tree, not carried over from `svelte.config.js`'s account of it:**
+`web/node_modules/@sveltejs/kit/package.json` reports `2.70.2`, and
+`src/runtime/server/page/render.js:120-122` reads `// if appropriate, use relative paths for greater
+portability` / `if (paths.relative) {` / `if (!state.prerendering?.fallback) {` — the relative-path
+rewrite is skipped for the fallback document. `internal/web/spa/index.html`, built with `relative:
+false` in force, emits `"/_app/immutable/entry/start.…js"` and four more root-absolute references, and
+`go test ./internal/web/ -run TestFallbackAssetPathsAreRootAbsolute` passes. The setting is
+belt-and-braces — explicit beats relying on a special case — not load-bearing.
+
+⏭️ **ADR-0025 §6's fourth trap is still uncorrected, and is still not corrected here**, for the reason
+LS-380 gave: it is a change to an accepted ADR in a file this lane does not hold. **Routed, not assumed
+done** — this is the third entry to route it.
+
+### The asserted property is byte-identical, and the test name is unchanged
+
+🚩 **A comment fix that moves an assertion is not a comment fix.** The `for _, bad := range []string{…}`
+list, the `strings.Contains` calls and the `t.Fatalf` on the positive check are untouched — verified by
+filtering the diff for those lines, which returns nothing. `TestFallbackAssetPathsAreRootAbsolute` and
+`TestEmbeddedFSCarriesAppDir` **keep their names**, because ADR-0025 §6's rider and `svelte.config.js`
+both cite the first of them by name and a rename would break two citations to fix none.
+
+Only the human-readable half moved. The failure message read *"… and 404. Set kit.paths.relative =
+false."* — an instruction that is both already satisfied and, per the paragraph above, not the remedy —
+and now reads *"… and 404. kit.paths.relative does not govern this — SvelteKit skips the relative
+rewrite for the fallback document — so check kit.paths.base and whether the toolchain still
+special-cases that fallback."* 📌 **This is LS-380's own rule applied to itself**: a citation sitting
+inside an *instruction* inherits responsibility for whether the instruction is still wanted. It was not.
+
+✅ **The guard was fired deliberately rather than trusted.** With the `bad` list temporarily set to
+`` `"/_app/` `` — a string `index.html` certainly contains — the test fails at `web_test.go:98` and
+prints the new message in full; the file was then restored from a byte-identical backup (`diff -q`
+clean) and passes again. A failure message that has never been rendered is a guess about what the next
+reader will see.
+
+### What a green gate is worth on this entry
+
+⚠️ **`make check` compiled and ran the two Go files this entry changed, and attests nothing about the
+prose above.** The Go arms are real here in a way they are not for a docs-only entry —
+`golangci-lint`, `build-tagged` and `go test -race -shuffle=on` all read `internal/web`, and the two
+tests named above execute — so the gate does establish that **the comment edits did not disturb the
+package or its assertions**. That is the whole of it. This section of `docs/REVIEW-LOG.md` reaches the
+gate through `gitleaks` alone: `fmt-check`'s prettier half runs `--dir web`, so no Markdown outside
+`web/` is formatter-gated. Nothing in the gate opens `docs/DECISIONS.md` to check that ADR-0025 has a
+§6 or that ADR-0024 does not.
+
+🔍 **The verification is therefore manual, and is listed so it can be repeated at any tip:**
+`git grep -n 'ADR-0024' internal/` for the three sites and, afterwards, for the empty result;
+`git grep -n 'ADR-0025' internal/` for the corrected ones;
+`grep -rn 'ADR-0024' web/` for the true-and-narrow check this entry is about;
+`git grep -n 'ADR-0024' a279517` for the eight-site count, remembering that the `docs/`, `README.md`
+and `CLAUDE.md` hits there are the licence and are correct;
+`git log -S 'ADR-0024' -- internal/web/web.go internal/web/web_test.go` for the single-commit history;
+`grep -n 'prerendering?.fallback' web/node_modules/@sveltejs/kit/src/runtime/server/page/render.js`
+and that package's `version` for the SvelteKit special case;
+`go test ./internal/web/ -run 'TestFallbackAssetPathsAreRootAbsolute|TestEmbeddedFSCarriesAppDir' -v`
+for the two passes; and **ADR-0024 and ADR-0025 §6 read in `docs/DECISIONS.md`** rather than taken on
+report. ⚠️ **Any commit sha reported for this entry is a content sha, never a merge.**

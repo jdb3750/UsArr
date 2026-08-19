@@ -3,7 +3,7 @@
 // The frontend is built by `make web-build` (SvelteKit + adapter-static, output
 // in web/build) and mirrored into this package's spa/ directory by
 // web/scripts/sync-embed.mjs, because //go:embed cannot reach outside the
-// embedding package's own directory. See docs/DEVELOPMENT.md §2 and ADR-0024 §6.
+// embedding package's own directory. See docs/DEVELOPMENT.md §2 and ADR-0025 §6.
 //
 // A binary built without running the frontend build still compiles — spa/ is
 // tracked in git with nothing but a .gitkeep — and reports that honestly rather
