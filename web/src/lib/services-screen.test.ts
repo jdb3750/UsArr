@@ -31,6 +31,28 @@ import {
 	type ServiceRow
 } from './services';
 import type { ImportProgress, ServiceHealth } from './api';
+import { NOTHING } from './list';
+// The Services template AS TEXT. Vite's `?raw` is the only way to ask what a
+// component contains here: vitest runs in `node` with no Svelte plugin, so the
+// screen cannot be compiled, imported or rendered in this suite.
+import SERVICES_SOURCE from '../routes/services/+page.svelte?raw';
+
+/**
+ * The `items` arm of the screen's cell snippet, sliced to the next arm.
+ *
+ * ⚠️ A MISSING MARKER THROWS RATHER THAN RETURNING ''. The failure mode of a
+ * text guard is matching nothing at all: an empty corpus passes every assertion
+ * over it, so a renamed column id would turn this into no check while staying
+ * green.
+ */
+function itemsBranch(source: string): string {
+	const start = source.indexOf("{:else if column.id === 'items'}");
+	if (start === -1) throw new Error('the Items branch of the Services cell snippet was not found');
+	const rest = source.slice(start + 1);
+	const end = rest.indexOf('{:else if column.id ===');
+	if (end === -1) throw new Error('the Items branch has no following branch to end at');
+	return rest.slice(0, end);
+}
 
 /**
  * The Services screen's vocabulary, pinned.
@@ -72,6 +94,10 @@ function health(over: Partial<ServiceHealth> = {}): ServiceHealth {
 		// interface and every construction in this file stops compiling.
 		lastFullSyncAt: null,
 		workCount: 0,
+		// Required as well, and the default is the SILENT value: every existing
+		// assertion in this file is therefore an assertion that a clean walk adds
+		// no second line to any cell.
+		fileReadFailures: 0,
 		...over
 	};
 }
@@ -341,6 +367,146 @@ describe('the four states of last_full_sync_at x work_count', () => {
 		const r = catalogue({ lastFullSyncAt: null, workCount: 12 });
 		expect(itemsCell(r).text).toBe('12');
 		expect(itemsCell(r).muted).toBe(false);
+	});
+});
+
+/*
+ * `file_read_failures`, WHICH IS A NOTE AND NOT A FAULT.
+ *
+ * docs/reference/http-api.md §3.4: the number is how many DISTINCT items of this
+ * instance the file walk could not read from the service, counted since the last
+ * COMPLETED full sync started. A non-zero value leaves the instance healthy —
+ * the import completed, the works imported and they are in the count beside the
+ * note — and what is incomplete is those items' FILE facts, which is the reason
+ * the availability column elsewhere reads "not counted yet" for exactly them.
+ *
+ * ⚠️ EVERY ASSERTION HERE IS ON A NON-ZERO VALUE OR ON THE SILENCE AT ZERO, in
+ * both directions, because a test written on the default `0` passes on all three
+ * ways this field is lost: dropped from the mapper, pinned to a constant, or
+ * never rendered. The wire-to-cell half is in `services.test.ts`; this half is
+ * the wording, the silence and the template that draws it.
+ */
+describe('file_read_failures on the Items cell', () => {
+	const catalogue = (over: Partial<ServiceHealth>) =>
+		row({ kind: 'kavita', role: 'library', ...over });
+
+	it('says how many items could not be read, beside a count that still stands', () => {
+		const r = catalogue({
+			lastFullSyncAt: '2026-08-16T14:02:00Z',
+			workCount: 412,
+			fileReadFailures: 3
+		});
+		expect(itemsCell(r)).toEqual({
+			text: '412',
+			sub: 'File list not read for 3 items',
+			muted: false
+		});
+	});
+
+	/* Zero renders NOTHING, and the assertion is the whole object: a second line
+	   on every healthy row is the failure this half catches. */
+	it('renders no note at all at zero', () => {
+		const r = catalogue({
+			lastFullSyncAt: '2026-08-16T14:02:00Z',
+			workCount: 412,
+			fileReadFailures: 0
+		});
+		expect(itemsCell(r)).toEqual({ text: '412', sub: '', muted: false });
+	});
+
+	it('counts one item in the singular', () => {
+		const r = catalogue({
+			lastFullSyncAt: '2026-08-16T14:02:00Z',
+			workCount: 9,
+			fileReadFailures: 1
+		});
+		expect(itemsCell(r).sub).toBe('File list not read for 1 item');
+	});
+
+	/* The never-synced row still shows the note: with a null timestamp the window
+	   is everything the instance holds (§3.4), and `—` beside it is the count,
+	   not the note. */
+	it('keeps the nothing-word and still says what could not be read', () => {
+		const r = catalogue({ lastFullSyncAt: null, workCount: 0, fileReadFailures: 2 });
+		expect(itemsCell(r)).toEqual({
+			text: '—',
+			sub: 'File list not read for 2 items',
+			muted: true
+		});
+	});
+
+	/* An indexer has no catalogue and no file walk; `Not applicable` is the whole
+	   cell even if a count somehow rides along, exactly as it is for the pair. */
+	it('says nothing on an indexer whatever the number says', () => {
+		const r = row({ fileReadFailures: 5 });
+		expect(itemsCell(r)).toEqual({ text: 'Not applicable', sub: '', muted: true });
+	});
+
+	/*
+	 * ⚠️ IT MUST NOT TURN THE ROW RED. The State cell is written from the probe
+	 * and the breaker, and this number is neither — asserted as an equality
+	 * against the same row without it, so a future implementation that folded the
+	 * count into the state fails here rather than shipping a red row on a healthy
+	 * service.
+	 */
+	it('does not change the row state', () => {
+		const clean = catalogue({ lastFullSyncAt: '2026-08-16T14:02:00Z', workCount: 412 });
+		const failed = catalogue({
+			lastFullSyncAt: '2026-08-16T14:02:00Z',
+			workCount: 412,
+			fileReadFailures: 3
+		});
+		expect(stateLabel(failed, NOW)).toEqual(stateLabel(clean, NOW));
+		expect(stateLabel(failed, NOW).tone).toBe('ok');
+		// And it is not an upstream problem either: `Problem` is the service's own
+		// words and this note is UsArr's.
+		expect(problemCell(failed)).toEqual(problemCell(clean));
+	});
+
+	/*
+	 * The note is not one of §9.1's three nothing-words and must never become a
+	 * fourth: those are `—`, `Not configured` and `Not applicable`, and a sentence
+	 * is none of them.
+	 */
+	it('is a sentence, not a fourth nothing-word', () => {
+		const r = catalogue({
+			lastFullSyncAt: '2026-08-16T14:02:00Z',
+			workCount: 412,
+			fileReadFailures: 3
+		});
+		expect(Object.values(NOTHING)).not.toContain(itemsCell(r).sub);
+	});
+
+	/*
+	 * THE TEMPLATE HALF, and it is the only half that can catch "never rendered".
+	 * `vitest.config.ts` is `environment: 'node'` with no Svelte plugin, so the
+	 * screen cannot be compiled here at all; the repo's answer to that is already
+	 * in the tree — `home.test.ts` and `havecell.test.ts` read a template through
+	 * Vite's `?raw` and assert over its text — and this follows it.
+	 *
+	 * Two failures are caught, and they are opposite:
+	 *
+	 *   · the branch never draws `items.sub`      → the note is computed and lost;
+	 *   · it draws it OUTSIDE `{#if items.sub}`   → an empty muted line on every
+	 *                                               healthy row, which is the
+	 *                                               zero case rendering something.
+	 */
+	it('draws the note in the Items branch, and only when there is one', () => {
+		const branch = itemsBranch(SERVICES_SOURCE);
+		expect(branch).toContain('{items.sub}');
+		// Every occurrence guarded: strip the guarded regions and nothing may be
+		// left. An unguarded `{items.sub}` survives the strip and fails here.
+		const unguarded = branch.replace(/\{#if items\.sub\}[\s\S]*?\{\/if\}/g, '');
+		expect(unguarded).not.toContain('items.sub');
+	});
+
+	/*
+	 * ⚠️ AND THE WORDING LIVES IN ONE PLACE. A template that spelled the sentence
+	 * itself would drift from `itemsCell` silently, and the guard above would
+	 * still pass.
+	 */
+	it('leaves the wording to itemsCell rather than spelling it in the markup', () => {
+		expect(SERVICES_SOURCE).not.toContain('File list not read');
 	});
 });
 

@@ -415,6 +415,12 @@ export function syncCell(row: ServiceRow, now: Date): Cell {
  *   time  +  0   →  `0`                counted, and the upstream really is empty
  *   any   + >0   →  the count
  *
+ * ⚠️ AND ONE NOTE UNDER ANY OF THEM. When `file_read_failures` is non-zero the
+ * cell grows a muted second line saying so; when it is zero there is no second
+ * line at all. It is a note about the items' FILE facts, never a state word and
+ * never a reason to doubt the count above it — `fileReadNote()` below carries
+ * the reasoning.
+ *
  * ⚠️ `—` AND `0` ARE DIFFERENT ANSWERS HERE, which is the whole reason the
  * server sends the timestamp alongside the count. `0` is a MEASUREMENT — an
  * import completed and found nothing — and rendering the never-synced case as
@@ -426,10 +432,51 @@ export function itemsCell(row: ServiceRow): Cell {
 	if (isIndexer(row.health)) return nothing(NOTHING.inapplicable);
 
 	const { lastFullSyncAt, workCount } = row.health;
+	// The note rides on the SAME cell as the count because it is about these
+	// items and about nothing else on the row. It is a `sub` line, which is the
+	// muted second line `syncCell` already uses, and never a tone or a state
+	// word: http-api.md §3.4 is categorical that a non-zero value leaves the
+	// instance healthy.
+	const sub = fileReadNote(row.health);
 	// A partial import's committed rows are real and are shown, so the count
 	// wins over the missing timestamp whenever there is one to show.
-	if (workCount <= 0 && lastFullSyncAt === null) return nothing(NOTHING.empty);
-	return { text: workCount.toLocaleString('en-GB'), sub: '', muted: false };
+	if (workCount <= 0 && lastFullSyncAt === null) return { text: NOTHING.empty, sub, muted: true };
+	return { text: workCount.toLocaleString('en-GB'), sub, muted: false };
+}
+
+/**
+ * The `file_read_failures` note, or '' — and '' is the WHOLE rendering of zero.
+ *
+ * ⚠️ IT IS A NOTE AND NOT A FAULT. The import completed, the works imported and
+ * they are counted in the number above this line; what could not be read is
+ * those items' FILE facts (http-api.md §3.4), which is why the availability
+ * column elsewhere says "not counted yet" for exactly them. So no tone class, no
+ * icon, no `State` word — the muted second line and nothing more. Copy that said
+ * the items themselves could not be read would claim they are missing from the
+ * library, which is the one thing this number does NOT mean.
+ *
+ * ⚠️ WHAT COULD NOT BE READ WAS READ FROM THE SERVICE, NOT FROM A DISK. UsArr
+ * never touches storage: the walk asks Kavita for each series' volumes
+ * (internal/libsync's `StreamFiles`) and a failure is that request going
+ * unanswered. `File list` is the thing asked for, so the copy names it rather
+ * than naming files on a filesystem UsArr cannot see.
+ *
+ * ⚠️ ZERO RENDERS NOTHING, DELIBERATELY. `0` on the wire is the positive
+ * statement "the last walk read everything it asked for", and a row saying so in
+ * words would put a sentence about file reads on every healthy row on the
+ * screen. The absence IS the good news; a screen that only speaks when something
+ * is worth saying is §17.3's rule for the attention block and the same rule
+ * here.
+ *
+ * The number's window is not this file's to restate — `ServiceHealth.fileReadFailures`
+ * in ./api carries it, and it is NOT the window the importer's per-run counter
+ * of the same name uses.
+ */
+function fileReadNote(health: ServiceHealth): string {
+	const failures = health.fileReadFailures;
+	if (failures <= 0) return '';
+	const items = failures === 1 ? 'item' : 'items';
+	return `File list not read for ${failures.toLocaleString('en-GB')} ${items}`;
 }
 
 export function isIndexer(health: ServiceHealth): boolean {

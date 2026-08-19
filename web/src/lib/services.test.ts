@@ -15,6 +15,7 @@ import {
 	updateService,
 	urlBaseProblem
 } from './api';
+import { itemsCell, type ServiceRow } from './services';
 
 /**
  * The services client, asserted against what internal/httpapi/services.go
@@ -177,6 +178,101 @@ describe('reading the configured services', () => {
 		expect(health.services[0].action).toBe('Test connection');
 		expect(health.services[0].warnings[0].message).toBe('Indexers unavailable');
 		expect(health.services[0].blockedIndexers[0].indexerId).toBe(2);
+	});
+
+	/*
+	 * `file_read_failures`, FROM THE WIRE TO THE CELL, in one test.
+	 *
+	 * ⚠️ A TEST THAT PASSES ON A CONSTANT `0` PASSES ON THE BUG, which is why the
+	 * payload carries a number no default could produce and why the assertion is
+	 * on the rendered sentence rather than on the mapped field alone. Dropping
+	 * `file_read_failures` from `toServiceHealth`, or pinning it to `0`, leaves
+	 * every other assertion in this file green: an undeclared JSON key is
+	 * silently ignored by the parser, and the cell would simply say nothing.
+	 *
+	 * It goes through `itemsCell` on purpose. The mapper and the rendering are
+	 * two places the field can be lost, and only a test that spans both fails
+	 * when either one does.
+	 */
+	it('carries file_read_failures from the wire into the Items cell', async () => {
+		stubFetch(() =>
+			jsonResponse({
+				services: [
+					{
+						id: 7,
+						name: 'Kavita',
+						kind: 'kavita',
+						role: 'library',
+						base_url: 'http://kavita:5000',
+						enabled: true,
+						state: 'healthy',
+						breaker_state: 'closed',
+						consecutive_failures: 0,
+						warnings: [],
+						blocked_indexers: [],
+						stale: false,
+						last_full_sync_at: '2026-08-16T14:02:00Z',
+						work_count: 412,
+						file_read_failures: 3
+					}
+				],
+				any_unhealthy: false,
+				setup_required: false
+			})
+		);
+
+		const health = await fetchServicesHealth();
+		const row: ServiceRow = { health: health.services[0] };
+
+		expect(health.services[0].fileReadFailures).toBe(3);
+		const cell = itemsCell(row);
+		// The count is untouched by the note: these works imported, and §3.4 is
+		// explicit that what is incomplete is their FILE facts.
+		expect(cell.text).toBe('412');
+		expect(cell.sub).toBe('File list not read for 3 items');
+		expect(cell.muted).toBe(false);
+	});
+
+	/*
+	 * THE OTHER DIRECTION, AND IT IS HALF THE RULE. `0` is the wire's positive
+	 * statement that the last walk read everything it asked for, and the screen
+	 * says NOTHING for it. A rendering that always drew the line would be green
+	 * on the test above and wrong on every healthy row on the screen.
+	 */
+	it('renders nothing at all when file_read_failures is 0', async () => {
+		stubFetch(() =>
+			jsonResponse({
+				services: [
+					{
+						id: 7,
+						name: 'Kavita',
+						kind: 'kavita',
+						role: 'library',
+						base_url: 'http://kavita:5000',
+						enabled: true,
+						state: 'healthy',
+						breaker_state: 'closed',
+						consecutive_failures: 0,
+						warnings: [],
+						blocked_indexers: [],
+						stale: false,
+						last_full_sync_at: '2026-08-16T14:02:00Z',
+						work_count: 412,
+						file_read_failures: 0
+					}
+				],
+				any_unhealthy: false,
+				setup_required: false
+			})
+		);
+
+		const health = await fetchServicesHealth();
+		expect(health.services[0].fileReadFailures).toBe(0);
+		expect(itemsCell({ health: health.services[0] })).toEqual({
+			text: '412',
+			sub: '',
+			muted: false
+		});
 	});
 
 	it('says setup is required rather than rendering an empty table', async () => {
