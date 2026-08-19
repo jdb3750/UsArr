@@ -506,7 +506,7 @@ upstream dependency.** On BookOrbit the unfiltered side of the comparison comes 
 so a shared viewer account with an empty permission set reaches it. *Nobody promised UsArr that.*
 **Named degradation condition: if BookOrbit adds a permission guard to that route, every probe
 answers 403.** In that world every verdict becomes `unverified` — and a two-state design would have
-reported every library as `complete` on the day it stopped being able to tell. See ADR-XXXX.
+reported every library as `complete` on the day it stopped being able to tell. See ADR-0061.
 
 ⚠️ **Absent is not `complete`.** The key is absent for every library whose source runs no
 completeness check — today that is every Kavita library — and for every library that has never been

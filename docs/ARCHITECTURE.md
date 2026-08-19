@@ -4453,7 +4453,7 @@ identically otherwise).
 
 **A NINTH STATE, added 2026-08-19 and NOT one of the eight above: *some items are hidden from
 UsArr's credential*.** A catalogue source may compare **what the credential was shown** against
-**what the container says it holds** and record the difference at import (ADR-XXXX,
+**what the container says it holds** and record the difference at import (ADR-0061,
 [`reference/http-api.md`](./reference/http-api.md) §2.6). The row then says *"Some books are hidden —
 this library holds 412 books; the service account can see 389"*, amber, with the age of the
 measurement, and one sentence above the table names the fix — which is **off this screen**: the
