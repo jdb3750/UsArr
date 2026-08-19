@@ -11,11 +11,34 @@ import (
 // TestEveryBookOrbitPermissionIsClassified is the enum-completeness guard, on
 // internal/libsync's TestEveryKavitaPersonRoleIsAccountedFor pattern.
 //
-// It is the ONLY mechanism in this package that notices BookOrbit growing a
-// permission. There is no vendored spec to pin — BookOrbit builds its OpenAPI
-// document at RUNTIME (server/src/swagger.ts, and main.ts only mounts it when
-// SWAGGER_ENABLED is true, which defaults to false), so ADR-0046's and
-// ADR-0047's shape does not transfer and this is the substitute.
+// It is the only mechanism IN THE GATE that notices BookOrbit growing a
+// permission. TestSpecDriftBookOrbitTypesStillMatchUpstream notices too — it
+// compares vendored src/permissions.ts against upstream — but it sits behind
+// `//go:build upstream` in `make spec-drift`, so it runs only when a person
+// types that target with network access and USARR_SPEC_DRIFT=1 set. A gate arm
+// runs on every commit whether or not anyone is thinking about it; an opt-in
+// network check runs when somebody remembers.
+//
+// BookOrbit commits no OpenAPI document — server/src/swagger.ts builds one at
+// RUNTIME and main.ts mounts it only when SWAGGER_ENABLED is true, which
+// defaults to false. ADR-0046's floor/ceiling split and ADR-0047's
+// blob-identity pin both assume a committed document; the second shape
+// transfers to source files, the first does not. That is vendoredtypes_test.go's
+// wording, and this comment now agrees with it rather than contradicting it.
+//
+// CORRECTED 2026-08-19, and the correction is recorded rather than swapped in
+// silently. This header used to say NEITHER shape transferred and that this
+// test was the substitute for both. True when it was written at c324cbf;
+// falsified by 72207f8, which vendored packages/types under
+// api/specs/bookorbit-types/ pinned by git's own tree name, with a
+// comment-blind declaration digest over the five transcribed files, offline
+// guards in `make check` and the upstream comparison in `make spec-drift` —
+// ADR-0047's shape, one level up the git object graph. src/permissions.ts, the
+// file this test's vocabulary is transcribed from, is one of the five. The
+// ADR-0046 half of the old sentence was right and stands: two pins are two
+// points only where upstream regenerates a committed document per release, and
+// BookOrbit has neither a release-tag line nor a checked-in document to split.
+// See api/specs/SOURCES.md and REVIEW-LOG's LS-378.
 //
 // A 24th permission upstream reaches this package as an unrecognised string,
 // classifyScope grades it ELEVATED, and this test is where someone finds out.
