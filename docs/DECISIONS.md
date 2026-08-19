@@ -7237,6 +7237,27 @@ file has twelve sections),
 two carry `v0.1: Kavita, Prowlarr` as a rendered string in the mockups, which is a design-asset change
 rather than a prose one and is the largest of them.
 
+> ✅ **DISCHARGED 2026-08-19 by `a1995f9`** — the sentence directly above **stands as written** and is
+> not struck: it was true the day it was written, nothing it claims has been falsified, and only its
+> **status** moved, from owed to done. The re-draw landed `v0.1: BookOrbit, Prowlarr` across the five
+> screen pages, the generated `prototype.html` and `design/mockups/README.md`; `DESIGN-DIRECTION.md` §9.6, whose quotation
+> deliberately tracked the asset rather than leading it, followed. Recorded because this paragraph's
+> own reason for existing — `CLAUDE.md`'s *"no invented status"* cutting both ways — makes a list
+> still saying *owed* after the work landed the same fault as one saying *done* before it did. The
+> rest of the list is untouched and stays owed.
+>
+> **Only this mark is owed, and the preamble is why.** *"How an ADR is amended when the world moves
+> under it"* owes three marks always and a fourth where needed, but all four are shaped for a claim
+> that **stopped holding**: marks 1 and 2 flag the index row and the `Status:` line *"so a reader
+> arriving at the anchor is warned before the first section"*, and mark 3 names *"which claims below
+> no longer hold and which survive"*. **No claim of this ADR stopped holding**, so those three would
+> announce an amendment a reader would then hunt for and not find — and each is written to carry
+> *"amended … by ADR-NNNN"*, while *"the decision lives in the superseding ADR"* and **no ADR
+> supersedes anything here**; a commit discharging listed follow-up work is not one. What is owed is
+> mark 4, *"a dated inline flag wherever a reader could otherwise take it as live, since anchors and
+> search land people mid-document"* — a reader landing on that sentence would take a design-asset
+> change as still outstanding. That is this blockquote, and it is the whole amendment.
+
 **What would reverse this.** The owner changing his mind about his own stack, which is his to change;
 or the §2 probe failing so badly that BookOrbit cannot support even reconciliation-only honestly —
 which §7.1a says is a **surfaced** state rather than a blocking one, so this bar is high.
