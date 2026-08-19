@@ -1042,20 +1042,22 @@ export function syncRefusal(
 					'This press started nothing and disturbed nothing. The import that was already running carries on.'
 			};
 		case 'not_a_catalogue_source':
-			// ⚠️ THIS TITLE COVERS TWO DIFFERENT SERVICES and must not claim the
-			// stronger of them. A Prowlarr has no catalogue at all; a BookOrbit has
-			// one and UsArr has no reader for it yet, and it reaches here — the row
-			// registers as `role: library` (internal/httpapi/services.go), so
-			// `canRunFullSync` renders the button and the press passes the role gate
-			// in internal/httpapi/imports.go, to be refused deeper on `entry.kavita
-			// == nil` (cmd/usarr/import.go). The server's own sentence sits directly beneath
-			// this line and says "UsArr has no catalogue reader for this service"; a
-			// headline saying the service has no catalogue contradicted it, and told
-			// a user their books do not exist.
+			// ⚠️ THE LIMITATION IS UsArr's, AND THE TITLE MUST NOT MOVE IT ONTO THE
+			// SERVICE. The server's own sentence renders directly beneath this line
+			// and reads "UsArr has no catalogue reader for this service"
+			// (internal/httpapi/imports.go); a headline saying the service has no
+			// catalogue contradicted the line under it.
 			//
-			// So the limitation is located where it belongs, in UsArr. No "yet": the
-			// same title is what a Prowlarr gets, and there will never be an indexer
-			// catalogue to read.
+			// The case that made the contradiction visible has since expired: a
+			// BookOrbit registers as `role: library`, so `canRunFullSync` renders the
+			// Sync button and the press passed the role gate and was refused deeper,
+			// until internal/libsync/bookorbit.go gave it an adapter. The RULE
+			// outlives it, and the Go comment now says the same thing: this sentence
+			// is shown to whichever kind has no adapter next, and a screen must not
+			// tell a user their books do not exist because UsArr cannot read them.
+			//
+			// No "yet": a Prowlarr reads this same title through the role gate, and
+			// there will never be an indexer catalogue to wait for.
 			return {
 				...base,
 				phase: 'refused',

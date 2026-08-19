@@ -890,13 +890,12 @@ describe('the three 409s are told apart on `error`, and only one is not a refusa
 	});
 
 	it('locates the missing catalogue reader in UsArr, never in the service', () => {
-		// A BookOrbit row reaches this code: it registers as `role: library`, so
-		// `canRunFullSync` renders the Sync button, the press passes the role gate
-		// in internal/httpapi/imports.go and is refused deeper on `entry.kavita ==
-		// nil`. The server's sentence renders directly beneath this title and says
+		// The server's sentence renders directly beneath this title and reads
 		// "UsArr has no catalogue reader for this service", so a headline claiming
-		// the service has no catalogue contradicted the line under it and told a
-		// user with a full BookOrbit that their books do not exist.
+		// the service has no catalogue contradicted the line under it. What made
+		// that visible was a BookOrbit, which registers as `role: library` and so
+		// renders the Sync button; it has an adapter now, and the rule does not
+		// depend on it — the code is shown to whichever kind has no adapter next.
 		const note = syncRefusal(
 			409,
 			'not_a_catalogue_source',
