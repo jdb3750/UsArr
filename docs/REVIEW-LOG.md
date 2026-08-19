@@ -20321,3 +20321,139 @@ not that the pointer resolves, not that the counts above are right, not that §2
 counts and the symbol-level citations are the evidence — cited by file and symbol rather than by
 line, per `DEVELOPMENT.md` §11, because `docs/` has several lanes pushing to it concurrently. They
 were counted at `794b1a4` and are re-countable by anyone.
+
+## SD-04 — §8.1 and §17.2 specified a sidebar rule the wire cannot serve, and drew a count column to match. **Applied.**
+
+**Another instance of `SD-01`, and a different failure from `SD-02`'s and `SD-03`'s.** `SD-02`'s rows
+restate a status they do not own; `SD-03`'s claim was false when measured. This one was **never
+buildable**: two documents specified behaviour that requires a number no endpoint publishes, and one
+of them drew a mock of that number. A restated fact decays; an unbuildable rule was wrong on the day
+it was written and stays wrong until either the rule or the wire moves.
+
+**Measured at `fccf5c7`, in a worktree off the fetched `origin/main`.** ⚠️ **Every site below is
+named by heading, blockquote or symbol rather than by line number**, on `LS-321`'s own precedent —
+`docs/reference/security.md` was rewritten mid-flight tonight and rotted a worker's line cites within
+the hour, and three of the sites here are lines this entry's own commits move.
+
+| Site | What it said | State |
+|---|---|---|
+| `design/DESIGN-DIRECTION.md` §8.1, the *"decision, in two halves"* blockquote | *"one sidebar entry per type **that has content**"* | ✅ **Applied.** Amended in place, quoting what it used to say |
+| §8.1, the paragraph introducing the sidebar mock | *"Type entries are **data-driven**, not markup … **a type the user does not have is not shown at all**, so a movies-only install renders two content nouns"* | ✅ **Applied.** Replaced by the shipped decision, its reason, and the one reopening condition |
+| §8.1, the ASCII sidebar mock | a **count column** (`Movies 1,204`) beside each type, annotated *"present media types only … counts respect the scope chip"* | ✅ **Applied.** Column deleted; the annotation now names why there is none |
+| §12, the *"More media types are here, not deferred"* bullet | *"§17.2's rule — a type the user does not have is not shown at all"* | ⚠️ **Re-verdicted on rescue, 2026-08-19 — it says ✅ Applied and that is false of `main`.** The second copy of the falsified rule is still standing in §12; only the §8.1 copies were replaced. ⏭️ **Open** — see the amendment below |
+| `ARCHITECTURE.md` §17.2, the two-axes table, `Media type` row | *"**navigation**: one sidebar entry per type *that has content*"* | ✅ **Applied.** §17 is the authoritative screen spec, so this is where the narrowed rule has to live |
+| §17.2, the closing *"hard rule everywhere"* paragraph | *"a type the user does not have is **not shown at all** — not in Block A, not in the sidebar, not as a search group"* | ✅ **Applied.** Narrowed to search groups, with both carve-outs and their two separate reasons |
+| §17.2, *"Where the two axes meet"* | *"§17.2's hard rule (below) removes a type …; §8.1 says the sidebar counts respect the scope chip"* | ✅ **Applied.** Both premises moved under this pass; the paragraph's conclusion (*the shape never moves*) is untouched and is now unconditional |
+| `DECISIONS.md` [ADR-0027](./DECISIONS.md#adr-0027), its Decision blockquote and its Consequences list | *"showing only types that have content"* and *"A type with zero items is not rendered anywhere — sidebar, home, or search group"* | ⚠️ **Re-verdicted on rescue, 2026-08-19 — it says ✅ Applied and that is false of `main`.** It was true of the branch this entry was written on, whose ADR commit carried the four marks; the commit that actually landed did not. ⏭️ **Open** — see the amendment below |
+| §17.2, Block A's bullet, *"The sidebar counts follow the same rule"* | the unit-labelling rule for a mixed-unit count column | ⏭️ **Open, deliberately.** It is a rule about how a count is *rendered*, correct whenever one exists, and it is not contradicted by there being none today. Recorded so the next reader knows it was looked at and left |
+
+**The wire fact, quoted rather than summarised.** `docs/reference/http-api.md` **§7.1**, the paragraph
+closing that section, under `GET /api/v1/library` — the only read behind the type entries: *"There is
+**no cover art** … There are **no facet counts** beside the chips; each is its own aggregate and its
+own read."* Nothing else publishes a per-type total: `/library/recent` is one unfiltered table (§1)
+and search publishes `media_type` per **item** (§6.2), which is why the rule still holds for search
+groups and only for them.
+
+**The shipped shell, read from the tree rather than from the doc.**
+`web/src/routes/+layout.svelte` — the `TYPE_NAV` constant is `MEDIA_TYPES.map(...)` with **no
+filter**, and both the file header and the doc comment directly above it already carry the whole
+argument, in the words *"ALL SIX TYPES ARE SHOWN, INCLUDING THE ONES THIS INSTALL HAS NOTHING IN"*
+and *"a DELIBERATE DEPARTURE FROM §17.2'S DATA-DRIVEN RULE RATHER THAN AN OVERSIGHT"*. The empty page
+is `browseEmptyState` in `web/src/lib/librarygrid.ts`, which words *"No {type} catalogued yet"* and
+*"No {type} in this scope"* and hands its other three cases to `recentEmptyState` so Home and the type
+grids cannot tell two stories about one install. **The premise was checked before anything was
+edited**: had the code hidden empty types after all, the documents would have been right and nothing
+should have moved.
+
+**Why this took an ADR and not just an amendment.** `CLAUDE.md`: *"Add one for any decision that
+closes off an alternative."* The alternative closed is the data-driven sidebar itself, and the two
+implementations that could have delivered it — six existence probes per navigation, and hiding on an
+unmeasured count. More practically, the rule survives in **three** places a future agent will read
+(ADR-0027's Decision, ADR-0027's Consequences, and §17.2's hard rule), so an amendment alone leaves
+three standing invitations to "restore" it. [`ADR-0053`](./DECISIONS.md#adr-0053) carries the
+decision, the rejected implementations and **the single reopening condition — a read that answers
+which of the six types have rows under the current scope, in one statement** — so the rule comes back
+*with* its data source rather than on its own. ⚠️ **Both halves of that sentence are corrected on
+rescue, 2026-08-19** — the number was `0052` when written, and the condition was narrowed to
+`GET /api/v1/library`, which is the one thing the ADR as merged declines to decide. See the
+amendment below. ADR-0027 is amended by the four marks its own file requires and is not rewritten.
+
+**`SD-03`'s `DESIGN-DIRECTION.md` row was closed by this pass** and its three facts were re-measured
+here rather than inherited: no DDL in any migration (two comment lines, in `00005_library_sync.sql`'s
+and `00006_kavita_subtypes.sql`'s deferred-table headers, the second pinning it to v0.3), the DDL in
+`docs/reference/schema.md` **§11 *Cross-media edges · v0.3***, and `work_relation` in the `deferred`
+slice of `TestDeferredTablesAreAbsent` (`internal/db/migrate_test.go`).
+
+🔥 **The guard was fired, not trusted**, because the corrected prose now cites it. A throwaway
+`00010_TEMP_guardprobe.sql` creating `work_relation` made it fail — *"work_relation exists, but no
+shipped migration should create it"* — and it returns `ok` with the probe deleted. Go 1.25.13.
+
+**What a green gate is worth here.** Nothing, as evidence about this entry. Every file this pass
+touches is `docs/`, and `make check` reads `docs/` through **gitleaks alone** — no prettier target
+covers `docs/*.md`, `fmt-check`'s prettier half runs inside `web/` — so a green attests *"no
+credential-shaped string was added"* and says nothing whatever about whether the prose is now true.
+What a reader can re-run is above: the §7.1 quote, the `+layout.svelte` symbols, and the fired guard.
+
+**`SD-04` is the next free top-level id after `SD-03`.** The `LS-`/`RK-` series run on their own
+threads; a gap in any of them is fine and nobody closes one.
+
+### ⚠️ Amendment, 2026-08-19 — this entry was rescued off an abandoned branch, and two of its verdicts did not survive the move
+
+**What happened, because the provenance is the point.** Everything above this heading was written on
+`docs/dd-8.1-sidebar-facets` and committed there as `a91d9eb`. That branch was abandoned with the
+entry never merged. Its two document commits were re-done from scratch on a replacement branch and
+landed as `7cc9481`→`3192d06` (`ARCHITECTURE.md` §17.2 and `DESIGN-DIRECTION.md` §8.1) and
+`d16d1e7`→`92eff15` (the ADR), but **the review-log record was not re-done and was not carried
+across** — the finding was decided in the tree with no entry saying why. This is that entry,
+cherry-picked rather than retyped, so it keeps `a91d9eb`'s author and its original text. The body
+above stands as written; every correction is here or flagged inline, per this file's own rule.
+
+**The ADR was renumbered under it.** The entry cited `ADR-0052` throughout, which was the number
+allocated when it was written. `0052` on `main` is *the catalogue-source swap to BookOrbit*; the
+sidebar decision landed as **`ADR-0053`**, *"All six media types are always in the sidebar; per-type
+hiding is closed until a facet read exists"*. The one reference is corrected above. ℹ️ **The entry body carries no
+other `0052`** — the only remaining mentions anywhere here are in this amendment, describing the
+renumbering — so nothing legitimate to BookOrbit was touched.
+
+🚩 **Two rows verdicted ✅ Applied are not applied on `main`, and both are re-verdicted rather than
+deleted.** The rows were honest about the branch they were written on; the replacement work is
+narrower than the work it replaced, and neither gap is visible from the ADR.
+
+| Row | Why it went false | Measured |
+|---|---|---|
+| `DECISIONS.md` ADR-0027, its Decision blockquote and Consequences list | The abandoned `d16d1e7` amended ADR-0027 in four places — the index row, the `Status:` line, the Decision blockquote and the Consequences bullet. The landed `92eff15` has **two** hunks, and neither is one of them: an index row for `0053` and the `ADR-0053` body. So ADR-0053 amends ADR-0027 **from its own side only** | ADR-0027's index row still reads *"**Accepted** — settles §17.2's open question"* with no `⚠️ amended` flag; its Decision blockquote still says *"showing only types that have content"*; its Consequences still say *"A type with zero items is not rendered anywhere — sidebar, home, or search group"*, unflagged. **Three of the three marks `DECISIONS.md`'s *How an ADR is amended* section calls always owed are absent, and so is the fourth** |
+| `DESIGN-DIRECTION.md` §12, the *"More media types are here, not deferred"* bullet | `3192d06`'s four `DESIGN-DIRECTION.md` hunks all sit in §8.1's range. §12 is ~1,340 lines further down and was not reached | The bullet still reads *"§17.2's rule — a type the user does not have is not shown at all"*, which is the sentence `ADR-0053` narrowed |
+
+**Neither is fixed here, and the reason is scope rather than judgement.** `docs/DECISIONS.md` and
+`docs/design/` are held by other threads tonight; `docs/REVIEW-LOG.md` is this pass's only write
+target. Both are **routed, not dropped** — recorded with the exact sentence, the exact document and
+the exact absent marks, so the thread that owns each can act without re-deriving anything.
+
+**Every other citation in the entry was re-checked at `794b1a4` and holds**, by heading and symbol
+rather than by line, which is what the entry already asked for. `reference/http-api.md` **§7**
+is `GET /api/v1/library` and **§7.1**'s closing paragraph carries *"no cover art"* and *"no facet
+counts … each is its own aggregate and its own read"* verbatim; **§1** is
+`GET /api/v1/library/recent` and **§6.2** publishes `media_type` per item. `TYPE_NAV` in
+`web/src/routes/+layout.svelte` is still `MEDIA_TYPES.map(...)` with no predicate, and the two
+shouted comments quoted above are still in that file's header. `browseEmptyState` in
+`web/src/lib/librarygrid.ts` still words *"No {type} catalogued yet"* and *"No {type} in this scope"*
+and still delegates its other three cases to `recentEmptyState`. `schema.md` **§11 *Cross-media
+edges · v0.3*** is still the DDL of record, `work_relation` is still in the `deferred` slice of
+`TestDeferredTablesAreAbsent`, and the two migration comment lines are still
+`00005_library_sync.sql` and `00006_kavita_subtypes.sql`, the second pinning v0.3.
+
+**The ✅ rows for §8.1 and §17.2 were confirmed, not assumed.** §17.2's axis table now reads *"all
+six, always"* and says in the cell what it used to say; §8.1's blockquote reads *"all six of them,
+always (ADR-0053)"*; the ASCII mock has lost its count column and its annotation now reads *"ALL
+SIX, always … fixed order, no counts"*. Those are the rows this entry claimed and they are true.
+
+ℹ️ **`fccf5c7` is left standing as the entry's measurement tip.** It is reachable from `origin/main`
+and it is what the original author actually measured; re-dating it would turn a dated record into a
+claim nobody ran. This amendment's own measurements are at `794b1a4`.
+
+**What a green gate is worth on the rescue, restated because it is now two commits.** `make check`
+reads `docs/` through **gitleaks alone**, so green attests *"no credential-shaped string"* across
+both and nothing about whether any of the prose is true. What is re-runnable is the hunk arithmetic:
+`git show d16d1e7 --unified=0 -- docs/DECISIONS.md` returns six hunk headers including `@@ -81`,
+`@@ -2088`, `@@ -2118` and `@@ -2153`; `git show 92eff15 --unified=0 -- docs/DECISIONS.md` returns
+two, `@@ -106,0 +107` and `@@ -7216,0 +7218,95`. That difference is the whole finding.
