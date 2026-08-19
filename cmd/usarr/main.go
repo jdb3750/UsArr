@@ -114,6 +114,20 @@ func run() error {
 		rotateCtx, stopRotate := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 		defer stopRotate()
 		return runKeyRotate(rotateCtx, cfg, newLogger(cfg), buildInfo(), os.Stdout)
+	case errors.Is(err, config.ErrBackupRequested):
+		// Another maintenance program, and it returns here for the same reason
+		// the rotation does. It takes no logger: it opens the database directly
+		// rather than through buildApp — a backup must not run migrations
+		// against the thing it is protecting — and everything it has to say is
+		// a report for the operator on stdout, not a log line.
+		//
+		// Signals are trapped so a Ctrl-C during a long VACUUM INTO ends the
+		// copy rather than being killed mid-write; vacuumInto removes the
+		// partial file it was creating, so an interrupt leaves no artefact that
+		// looks like a backup and is not one.
+		backupCtx, stopBackup := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+		defer stopBackup()
+		return runBackup(backupCtx, cfg, os.Stdout)
 	case err != nil:
 		return err
 	}

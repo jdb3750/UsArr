@@ -8356,3 +8356,131 @@ the operator's own service and it does not work: the guard's two refusals are by
 `web/src/lib/completeness.test.ts`. The one that matters most is the guard-later drill —
 `TestAGuardedStatsRouteRecordsUnverifiedRatherThanComplete` — which serves a 403 from the fake
 BookOrbit's stats route and asserts the recorded verdict is `unverified` with `Total = -1`.
+
+---
+
+## ADR-0062 — `usarr backup` captures the database **and** the KEK salt, and leaves the master key out — loudly
+
+**Status:** Accepted — 2026-08-19
+
+### Context
+
+#### 1 · The question is not "does a backup include secrets", it is "which failure do we choose"
+
+Both answers are bad in a specific, nameable way, and picking one without saying so is how this
+project already lost credentials once.
+
+**Key material in the archive** makes a single file that holds the ciphertext and the key that opens
+it. That file is a complete compromise on its own: whoever gets the backup gets every stored \*Arr
+API key, and every \*Arr API key is a full-admin credential (`ARCHITECTURE.md` §14). Backups are the
+copy that leaves the host — to a NAS, to object storage, to a cloud sync folder — so it is also the
+copy least likely to be protected the way `/config` is.
+
+**Key material out of the archive** makes a backup that restores a library and cannot open a single
+credential. Worse, it fails *quietly*: the database opens, the screens render, and only a connection
+test says anything is wrong.
+
+#### 2 · The layout already chose, and the choice is load-bearing
+
+`internal/config/config.go`'s `KeysDir` states it outright — `keys/` "is excluded from every backup,
+so that 'back up this volume' and 'never store the key with the ciphertext' are not the same
+instruction" — and `CONFIGURATION.md` §6.1 says the same thing at the operator's end: *"`tar -czf
+backup.tgz /config` is not a backup. It is a compromise."* A new command that reversed that would
+not be a fresh decision; it would be a second, contradictory answer living beside the first, and the
+weaker one would win by being the convenient one.
+
+#### 3 · But the 2026-08-16 failure was not the exclusion — it was the silence about what the exclusion then required
+
+`kek.salt` lived inside `keys/`. The documented procedure excluded `keys/`. Both halves were
+individually defensible; nothing anywhere said that a restore therefore needed a second file, so the
+gap surfaced only when it was already unrecoverable — a byte-identical master key that decrypted
+nothing, because `KEK = HKDF-SHA256(secret.key, salt=kek.salt, info="usarr/kek/v1")` and a different
+salt is a different KEK. The salt has since moved to `$USARR_CONFIG_DIR/kek.salt`, beside the
+database.
+
+**That fix repairs the volume-level archive and does nothing for a snapshot.** `VACUUM INTO` copies
+one SQLite file. The salt sits next to that file and is not in it. So a lone
+`backups/usarr-*.db` reproduces the 2026-08-16 defect exactly, one level down, with the same
+symptom and the same recoverability.
+
+### Decision
+
+**`usarr backup` writes a pair, and prints what it is not writing.**
+
+1. **In: the database.** `VACUUM INTO`, mode `0600` in a `0700` directory, shared code with the
+   automatic pre-migration backup (`vacuumInto` in `cmd/usarr/backup.go`).
+2. **In: `kek.salt`,** copied byte for byte beside the snapshot as `usarr-<stamp>.kek.salt`, from
+   `$USARR_CONFIG_DIR/kek.salt` or, on an install that predates the move, from the legacy
+   `keys/kek.salt`. The salt is **not secret** — its value protects nothing, it only has to be
+   per-install and stable — so it costs nothing to the compromise argument, and it is the input
+   nobody thinks to keep.
+3. **Out: the master key,** whichever channel supplies it. Reason: §1's first cost is the one that
+   is *unbounded*. A missing key costs the operator a re-entry of each \*Arr API key — tedious,
+   bounded, and repairable by hand. A leaked key costs every credential the backup ever held, with
+   no repair short of rotating each one at each service.
+4. **Said out loud, every run, in the command's own output** — not only in this ADR and not only in
+   `CONFIGURATION.md` §6. The person who needs the sentence is reading a terminal.
+
+### The restore path for the half it excludes
+
+This section is the point of the ADR. Recording the choice without recording its consequence is
+precisely what happened on 2026-08-16.
+
+`usarr backup` prints the sequence for **this install's** key channel, because the channel changes
+what the operator does and naming the wrong one makes the instruction unfollowable:
+
+| Channel, as resolved by `internal/config` | What the backup says to do now | What the restore then is |
+|---|---|---|
+| `keys/secret.key` (the default) | `cat $USARR_CONFIG_DIR/keys/secret.key`, store that value in a password manager or secrets store, **once**, and not in `backups/` | Write it back to `keys/secret.key`, mode `0600`, inside a `0700` `keys/`, before starting UsArr |
+| `USARR_SECRET_KEY` | The value in your compose file / systemd unit / secrets store **is** the key; UsArr stores nothing on this host to recover it from | Set the same variable to the same value before starting |
+| `--secret-key-file` / `USARR_SECRET_KEY_FILE` | Back up that file to somewhere that is neither this archive nor this host | Put it back at the path the flag or variable points at, mode `0600` |
+
+Restoring the pair is then: stop UsArr, move the damaged database aside, copy the `.db` to
+`$USARR_CONFIG_DIR/usarr.db` and the `.kek.salt` to `$USARR_CONFIG_DIR/kek.salt`, install the key as
+above, start. The first two restore the library, the users and the audit log; the third is what makes
+the stored credentials readable. `CONFIGURATION.md` §6.3 is the long form.
+
+**If a rotation is unfinished** — `keys/secret.key.new` exists — the report says so and says to keep
+**both** key files, because rows in that snapshot may be sealed under either.
+
+### Consequences
+
+- The one artefact this command can produce that would be worse than nothing — a `.db` that looks
+  like a backup and cannot be restored — is now impossible without the operator having read a
+  paragraph saying so.
+- `backups/` gains a second file type. It still contains **no key**: a salt is not one, and the
+  compromise property of `backups/` is unchanged.
+- The command still does not cover `providers/*.yaml` or `$USARR_DATA_DIR`, and says so.
+- It writes nothing into the install it is reading. In particular it does **not** call
+  `Config.ResolveKEKSalt`, which would copy a legacy salt forward — a backup that mutates the thing
+  it is protecting is a backup with a failure mode of its own.
+- Retention is **not** part of this. `CONFIGURATION.md` §6.1's "retains N files" belongs to the
+  scheduled job, which does not exist; adding a pruner alongside an operator-invoked command would
+  mean a command that deletes backups nobody asked it to delete.
+
+### Alternatives rejected
+
+**Include `keys/` behind a `--with-key` flag.** The flag would be typed by exactly the people who
+should not type it, and its output would be indistinguishable from an ordinary backup afterwards.
+Nothing in the file says which kind it is.
+
+**Encrypt the snapshot under a passphrase and include the key.** A second secret to lose, in a
+project whose stated failure mode is losing exactly one. It also puts a crypto surface in a command
+whose value is that it is boring.
+
+**Print nothing and rely on `CONFIGURATION.md` §6.** That is the 2026-08-16 shape: correct
+documentation, no sentence where the person actually is.
+
+### What is built
+
+`cmd/usarr/backupcmd.go` (`runBackup`, `copyKEKSalt`, `reportBackup`, `masterKeyLocation`,
+`masterKeyRestoreSteps`); `vacuumInto` extracted in `cmd/usarr/backup.go` and shared with the
+pre-migration path; `backup` registered in the one parser's `subcommands` table
+(`internal/config/flags.go`) and dispatched from `cmd/usarr/main.go` on `config.ErrBackupRequested`.
+
+**Guards:** `cmd/usarr/backupcmd_test.go`. The two that carry the decision are
+`TestBackupWritesTheDatabaseAndTheSalt` — which fails with "1 db and 0 salt files" the moment the
+salt copy is dropped — and `TestBackupOutputNamesWhatItDoesNotCover`, which fails if the exclusion
+paragraph stops naming the master key, its location on this install, or what to do about it.
+`TestBackupNeverPrintsKeyMaterial` watches the process's real stdout and stderr as well as the
+report writer, because the first version of it passed a deliberate `fmt.Printf` of the salt bytes.

@@ -132,9 +132,11 @@ HTTP `Range` handling and **no transcoding, ever**.
 
 ## Quickstart
 
-> ⚠️ **There is no working container path.** No image is published, and `deploy/Dockerfile` is not in
-> the tree either, so `make docker` cannot build one. The Compose file below is shown so the intended
-> shape is reviewable — it is not something you can run.
+> ⚠️ **There is no proven container path yet.** `deploy/Dockerfile` is now in the tree, but no image
+> is published and it has not been built — the environment that added it has no Docker daemon, so
+> `make docker` was never run against it. The Compose file below is shown so the intended shape is
+> reviewable; treat the container path as unverified until a `make docker` on a host with a daemon
+> proves it.
 >
 > **The path that works today is building from source**: `make build` produces a single static binary
 > with the SPA embedded, which you install onto `PATH` and run under systemd.

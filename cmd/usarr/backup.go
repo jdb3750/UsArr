@@ -74,9 +74,29 @@ func backupBeforeMigrate(ctx context.Context, cfg *config.Config) (string, error
 		time.Now().UTC().Format("2006-01-02T15-04-05Z"), applied)
 	target := filepath.Join(cfg.BackupsDir(), name)
 
+	if err := vacuumInto(ctx, dbPath, target); err != nil {
+		return "", err
+	}
+	return target, nil
+}
+
+// vacuumInto writes one consistent snapshot of dbPath to target at mode 0600.
+//
+// It is shared by the automatic pre-migration backup and by `usarr backup`
+// deliberately: two copies of "the correct way to copy a live WAL database"
+// would be two places for it to drift, and the wrong one is silently torn
+// rather than loudly broken.
+func vacuumInto(ctx context.Context, dbPath, target string) error {
+	// Whether the target already existed decides what the failure path is
+	// allowed to delete. SQLite refuses to VACUUM INTO an existing file, so a
+	// pre-existing target is somebody else's backup and must survive the error
+	// it causes.
+	_, statErr := os.Stat(target)
+	preexisting := statErr == nil
+
 	conn, err := driver.Open(bareDSN(dbPath))
 	if err != nil {
-		return "", fmt.Errorf("open %s for backup: %w", dbPath, err)
+		return fmt.Errorf("open %s for backup: %w", dbPath, err)
 	}
 	defer func() { _ = conn.Close() }()
 
@@ -85,15 +105,25 @@ func backupBeforeMigrate(ctx context.Context, cfg *config.Config) (string, error
 	// configuration, not from a request, but escaping it costs one line.
 	literal := "'" + strings.ReplaceAll(target, "'", "''") + "'"
 	// #nosec G202 -- VACUUM INTO takes a literal, not a bind parameter. The path
-	// is built from USARR_CONFIG_DIR and a timestamp this function formats; no
+	// is built from USARR_CONFIG_DIR and a timestamp the caller formats; no
 	// request input reaches it, and the single quotes are doubled above.
 	if _, err := conn.ExecContext(ctx, "VACUUM INTO "+literal); err != nil {
-		return "", fmt.Errorf("VACUUM INTO %s: %w", target, err)
+		// Remove a partial snapshot, but ONLY one this call created. A file
+		// left behind by a failed or interrupted vacuum is the one artefact
+		// that must never survive: it looks exactly like a backup in a
+		// directory listing and is not one, which is the whole failure mode
+		// this command exists to prevent. Whether the driver leaves one behind
+		// on every failure is version-dependent — inference, not a documented
+		// guarantee — so the cleanup is unconditional rather than a claim.
+		if !preexisting {
+			_ = os.Remove(target)
+		}
+		return fmt.Errorf("VACUUM INTO %s: %w", target, err)
 	}
 	if err := os.Chmod(target, config.FileMode); err != nil {
-		return "", fmt.Errorf("chmod %s: %w", target, err)
+		return fmt.Errorf("chmod %s: %w", target, err)
 	}
-	return target, nil
+	return nil
 }
 
 // appliedSchemaVersion reads goose's own version table without migrating.

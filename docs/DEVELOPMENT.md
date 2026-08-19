@@ -265,7 +265,7 @@ closes `FI-12` in `docs/REVIEW-LOG.md` as coded rather than as documented.
 | `make migrate`, `migrate-new name=…` | Migration authoring against the dev DB. |
 | `make deploy` | Wrapper for `deploy/update.sh`: ff-only pull, `make build`, install, restart, then verify the **running** process is that commit. §12.1. |
 | `make deploy-status` | Wrapper for `deploy/status.sh`: read-only "am I current?" across checkout, installed binary and running process. §12.1.1. |
-| `make docker` | ⚠️ **Cannot succeed today: it builds `-f deploy/Dockerfile`, and that file is not in the tree.** Intended shape: digest-pinned base enforced, `--provenance` + `--sbom`. Also needs a daemon — §8. To deploy, build and install the binary instead: §12. |
+| `make docker` | ⚠️ **`deploy/Dockerfile` is now in the tree, but the image is unbuilt and unverified: `make docker` needs a Docker daemon (§8) and the agent container has none, so it has never run.** Intended shape: digest-pinned base enforced, `--provenance` + `--sbom`. To deploy, build and install the binary instead: §12. |
 | `make design` | `docs/design/check.mjs` — DESIGN-DIRECTION §13 made runnable: bans, token drift, contrast, overflow, row heights, roving tabindex, the webfont. Needs a browser; **not** part of `check`. |
 | `make build-tagged` | `go build -tags=bench ./...`. **Gating.** The packages `go list ./...` cannot see — `internal/db/spike` is behind `//go:build bench`, so a type error in it passed the entire gate until this step existed. |
 | `make check-offline` | `fmt-check` + `lint` + `build-tagged` + `modverify` + `secrets` + `test`. Fully hermetic. |
@@ -1758,8 +1758,10 @@ who to talk to, not who is permitted to type.
 
 ## 12. Deploying to a server — build, install, restart
 
-**This is the only install path that works today.** No image is published; no `deploy/Dockerfile` is
-in the tree; no systemd unit file ships in this repo. What UsArr produces is a single static binary,
+**This is the only install path that works today.** No image is published, and while `deploy/Dockerfile`
+is now in the tree it has not been built or published — the environment that added it has no Docker
+daemon (§8), so the container path stays unverified; no systemd unit file ships in this repo. What
+UsArr produces is a single static binary,
 so deploying it is exactly three moves: build it, copy it onto `PATH`, restart the service that runs
 it. `deploy/update.sh` does all three and then proves they took effect; `deploy/status.sh` answers
 "am I running the latest `main`?" without changing anything.
@@ -1972,10 +1974,11 @@ when you look for it.
   operate on a checkout that is already there, next to a service that is already defined. Neither
   clones the repo, writes a unit file, creates a user or provisions a config directory; there is
   still no path from a bare host to a running UsArr that is not done by hand.
-* **`make docker` cannot succeed on any checkout, because the file it builds from is absent.** The
-  recipe passes `-f deploy/Dockerfile`, and that path does not exist in the repo. The `Makefile`'s
-  own header says so; §4's target table now says so too. The daemon requirement (§8) is the second
-  obstacle, not the first.
+* **`make docker` has not been made to succeed on any checkout, though the file it builds from now
+  exists.** `deploy/Dockerfile` is in the tree, so the absent-file obstacle is gone; the daemon
+  requirement (§8) remains, and the agent container has none — so the image is unbuilt and
+  unpublished, and the container path is unverified. The `Makefile`'s own header and §4's target
+  table describe that state.
 
 **A recommendation, deliberately left unwritten.** A checked-in `deploy/usarr.service` — with the
 `User=`, `WorkingDirectory=`, `Environment=USARR_CONFIG_DIR=…` and `Restart=on-failure` settings the
