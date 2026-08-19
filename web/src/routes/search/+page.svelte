@@ -406,8 +406,14 @@
 
 		<!--
 			ONE FLAT LIST, ORDERED BY RELEVANCE, AND THE ORDER IS THE CONTRACT (§6.2).
-			No sort control: §6.2 publishes no score, and rule 2's sort is scoped to
-			groups this wire has none of.
+			No sort control, and the reason has moved: §6.2 now DOES publish a
+			per-hit `score` (§6.2.1, ADR-0054), so the reason is no longer that
+			there is no number — it is that §17.4 rule 2's sort orders GROUPS, and
+			this screen renders one flat list with no groups in it. ⚠️ A sort
+			control over `score` would be the wrong control twice over: §6.2.1's
+			first forbidden use is a client re-sorting rows by it, because the
+			server's order already carries a media-type diversity guarantee that
+			sorting by score undoes.
 
 			`total` is the rendered count and that is the whole result set: §6.5 says
 			a caller asks for up to the cap and that is every row the endpoint has,
