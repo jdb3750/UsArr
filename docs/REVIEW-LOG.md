@@ -17340,6 +17340,10 @@ know about `files`**, and the line numbers they cite for the publish sites (`imp
 `:443`) have been stale since well before this change. The `files` phase landed without them; fixing
 that is a documentation pass on §5, not a rider on a two-word bug.
 
+✅ **Discharged by LS-270**, which did that pass. §5.2 now says five phases and names the four
+functions that publish them, §5.3 names both sites that set a `total`, and no `importer.go` citation
+in §5 is a line number any more — the rot that made this paragraph necessary is what LS-270 removed.
+
 ---
 
 ## LS-260 — four facts gate the cover-art work, and every one of them lives inside the owner's Kavita
@@ -17483,3 +17487,179 @@ fixture no gate step reads is a file that rots.
 arithmetic, redaction, auth-mode selection and failure handling — and **nothing at all** about what
 Kavita's real `ImageController` does with an `x-api-key` header. That is the entire question, and it
 is why the script exists.
+
+## LS-270 — `http-api.md` §5 described four import phases; the tree has published five since the `files` pass landed
+
+**Recorded by LS-250 as out of scope, verified here before a word moved, and the tree said more than
+the report did.** The report was that §5.2 and §5.3 still say *"exactly four phases"* and cite stale
+`importer.go:<n>` line numbers. Both hold. Two further defects fell out of reading the publish sites
+rather than the prose:
+
+| §5 said | The tree says |
+|---|---|
+| four phases: `containers` · `items` · `credits` · `done` | **five**. `files` is published from `streamAndApplyFiles`'s `flush`, between `credits` and `done` |
+| publish sites at `:213`, `:370`, `:443`, `:290` | those lines are `Report` fields, a `sync_report` write and a comment — the real sites are 275, 457, 547, 630, 369, and will have moved again by the time this is read |
+| **"Only `credits` ever sends a `total`"** | **false.** `streamAndApplyFiles`'s publish sets `Total: len(reqs)` on exactly the terms the credits one does |
+| §5.4's `applied` table has no `files` row | it needed one; the SPA's `progressCounts` has had a `files` arm for longer than the table was wrong |
+| §5.5.1: `total` absent *"only the `credits` publish site ever sets it"* | same defect, restated in the `stopped` contract |
+
+**The fifth phase is `files`, and `stopped` is a sixth phase VALUE that is not one of the five.** It
+is published from `cmd/usarr`, never from `libsync`, so no healthy run carries it — §5.2 said
+"fifth" of `stopped` on the four-phase count and that ordinal is now wrong twice over.
+
+**One correction §5.2 gained that it did not have before: five is a ceiling, not a shape.** Three of
+the five are conditional — `items` publishes nothing when no batch commits, and `credits` and `files`
+are skipped whole for a Source that does not implement the optional interface — so a wholly healthy
+run can be `containers` then `done` and nothing between. The old text said "three frames is a
+complete healthy run as readily as four", which understated it by one floor.
+
+### Line numbers are gone from §5's `importer.go` citations, on purpose
+
+**Every one of them was wrong, and they were wrong in a way a reader cannot see.** `importer.go:213`
+resolves to a plausible-looking line, so the citation reads as checked. Two staleness events did it:
+the `files` phase moved all five sites, and LS-250's per-hand-over counters moved them again. A
+function name — `streamAndApplyCredits`'s `flush` — survives any edit above it and is one `grep -n`
+from the line; a line number is falsified silently by an insertion anywhere earlier in the file.
+§5's header now carries the rule and the reason. ⚠️ **The `:<n>` citations on that page for OTHER
+files (`events.go`, `errors.go`, `services.ts`) were left**, and the header says so rather than
+implying they were vetted — they are a separate pass, and the same rot applies to them.
+
+### One collateral correction: §5.5.2's premise had become history
+
+§5.5.2 argues the frame must not be called `failed` because `failed` *"is already a member of
+`SyncPhase`"* with the opposite meaning, and closes by recommending `not_started`. **The SPA has
+since taken that recommendation** — `web/src/lib/services.ts`'s `SyncPhase` is
+`'idle' | 'starting' | 'started' | 'running' | 'refused' | 'not_started' | 'stopped' | 'finished'`,
+with no `failed`. Left in place, the subsection asserted a present-tense fact about a file that no
+longer contains it. The argument is **kept**, moved to the past tense and headed by a ⚠️ that says
+the collision is history and the conclusion still binds: the reasoning is what stops the collision
+being recreated, and `not_started`'s own doc comment cites §5.5.2 by number.
+
+⚠️ **A green `make check` attests almost nothing about this half of the commit.** No gate reads
+prose. `gofumpt`, `golangci-lint` and `go test` cannot tell whether §5.2 says four or five, and there
+is no link checker or prose test in the gate at all. What the gate attests here is only that the
+markdown edit broke no build — the correctness of every sentence above rests on the publish sites
+having been read, which is why this entry names them by function and by count rather than by verdict.
+
+⚠️ **One defect found and deliberately NOT fixed, so it is not lost.** `Progress.Total`'s own doc
+comment in `internal/libsync/importer.go` reads *"Total is the upstream's own total when it reported
+one"*. It is not: both sites that set it use `len(reqs)`, UsArr's own count of the items that reached
+a committed batch. §5.3 now says the true thing; the code comment still does not. Fixing a comment in
+`importer.go` is a production-file edit outside a documentation pass and belongs to whoever next
+touches that type.
+
+---
+
+## LS-271 — the read counter's assign-at-end was asserted nowhere, and deleting it was a no-op across the whole suite
+
+**Reported second-hand, verified, and it held exactly as reported.** LS-250 left each streaming pass
+with two writes to its read counter: `rep.ItemsRead++` per hand-over, so mid-stream frames climb, and
+`rep.ItemsRead = read` after the stream closes, so the phase settles on the adapter's own count. The
+second write exists for a real case — an adapter can read MORE than it hands over — and **nothing in
+the suite could see it**:
+
+- `fakeSource.StreamItems` returns `n`, its own hand-over count.
+- `everyPhaseSource`'s `StreamCredits` / `StreamFiles` do the same.
+- `TestProgressFramesCarryTheReadCountAsItClimbs` asserts the final frame equals `items`, which is
+  that same number under either behaviour.
+- `TestFullImportDeclinesTheImageLibraryAndSaysWhy` runs the one adapter that genuinely over-reports
+  — and asserted `ItemsApplied`, `LibrariesCreated`, `WorksCreated` and a `sync_report` row, **never
+  a read count** and never a frame.
+
+So deleting all three assign-at-ends left the entire suite green. That is not a weak guard; it is no
+guard.
+
+**The case is not hypothetical, and the cassette already contained it.**
+`KavitaSource.StreamItems` returns `page.Count` — what `StreamSeries` handed *it* — and drops a
+series whose library was declined before `fn` is ever called.
+`kavita_series_all_v2_identified.yaml` holds **six** series, one of them in the Image library that
+§17.8 declines, so that import reads six and hands over five. The existing test was standing on top
+of the uncovered behaviour without asserting it.
+
+### Two tests, because the two halves prove different things
+
+1. **`TestTheAdapterCountOfAReadWinsOverTheHandOverCount`** — `overReportingSource` hands over 250
+   and returns 250+K, with a **different K per phase** (7 items, 3 credits, 11 files) so a pass that
+   published another pass's counter is wrong by an amount no other pass can produce. It asserts the
+   Report's three read counts, that `ItemsApplied` is untouched at 250, and that each phase's **last**
+   frame and the `done` frame carry the adapter's number.
+2. **`TestFullImportDeclinesTheImageLibraryAndSaysWhy` gained one assertion** — `rep.ItemsRead == 6`
+   against the real cassette, with the reason recorded at the assertion site. That is the half a fake
+   cannot prove: it pins that the *Kavita adapter* really does over-report, so the behaviour the fake
+   models is the behaviour that exists. **No existing assertion had to be reversed** — this is an
+   addition to a test that asserted nothing on this axis, not a reversal, and that was checked across
+   `credits_test.go`, `cmd/usarr/import_e2e_test.go` and `internal/httpapi/fixture_shape_test.go`,
+   all of which read counts from adapters where read and hand-over coincide.
+
+### How the flakiness trap LS-250 documented was avoided
+
+LS-250's warning is that frame counts flush on `min(BatchRows, BatchWindow)` and are therefore
+wall-clock dependent. This test wants a specific frame — a phase's **last** one — which is a sharper
+demand than "some mid-stream frame exists", so two things are load-bearing rather than one:
+
+1. **`newImporter` pins `Now` to a constant**, so `now().Sub(batchStarted)` is always zero and the
+   window can never fire. Only the row bound flushes.
+2. **250 hand-overs at `BatchRows = 100` leaves a tail of 50.** This is the trap in its exact form:
+   the overwrite happens *between* the stream closing and the tail flush, so a phase whose hand-over
+   count divides evenly by `BatchRows` ends with an empty batch, `flush` returns early, **no tail
+   frame is published at all**, and the phase's last frame would legitimately carry the running
+   count. The assertion would fail on correct code. A non-dividing tail is what makes "the last
+   frame" a thing that exists.
+
+Nothing else is asserted about frame ordering or count. The three properties hold under every legal
+interleaving: no frame exceeds the adapter's count; no frame published *before* the stream closed
+exceeds the hand-over count (which is what stops the headline assertion being satisfied by
+double-counting or by counting the extra early); and the phase's last frame equals the adapter's.
+
+### The guard was fired — twice, because the two breaks are not the same break
+
+**Break 1 — delete all three assign-at-ends** (the isolating break: it restores the "running count
+only" behaviour, which is what a well-meant simplification would produce).
+
+```
+--- FAIL: TestFullImportDeclinesTheImageLibraryAndSaysWhy (0.08s)
+    importer_test.go:347: ItemsRead = 5, want 6: the cassette holds six series and one is in the declined Image library, so the read saw six and handed over five
+--- FAIL: TestTheAdapterCountOfAReadWinsOverTheHandOverCount (0.61s)
+    importer_test.go:861: Report.ItemsRead = 250, want 257: the adapter read 257 items and handed over 250, and the field means HOW FAR THE READ GOT, not how many arrived
+    importer_test.go:866: Report.CreditItemsRead = 250, want 253
+    importer_test.go:869: Report.FileItemsRead = 250, want 261
+    importer_test.go:896: the final items frame reports items_read = 250, want 257: the pass dropped the adapter's own count and published the hand-over count instead, which under-reports every item the adapter read and declined to hand over
+    importer_test.go:896: the final credits frame reports items_read = 250, want 253: the pass dropped the adapter's own count and published the hand-over count instead, which under-reports every item the adapter read and declined to hand over
+    importer_test.go:896: the final files frame reports items_read = 250, want 261: the pass dropped the adapter's own count and published the hand-over count instead, which under-reports every item the adapter read and declined to hand over
+    importer_test.go:922: last frame = {InstanceID:1 Phase:done ItemsRead:250 Applied:250 Total:0}, want the done frame with items_read = 257
+```
+
+⚠️ **`TestProgressFramesCarryTheReadCountAsItClimbs` did NOT fail under break 1, and that is CORRECT
+rather than a hole.** Its subject is the *running* counter, which break 1 leaves intact; its final-
+frame assertion cannot separate the two behaviours because its fakes return their own hand-over
+count. That indifference is precisely the gap LS-271 closes, and it is why break 1 was chosen as the
+isolating one: it is the change that the pre-existing suite could not see.
+
+**Break 2 — `=` → `+=` on all three**, the mutation named in the brief. It fires the new test, the
+cassette assertion, *and* LS-250's guard, because doubling the count is a different lie from dropping
+the overwrite:
+
+```
+--- FAIL: TestFullImportDeclinesTheImageLibraryAndSaysWhy (0.08s)
+    importer_test.go:347: ItemsRead = 11, want 6: the cassette holds six series and one is in the declined Image library, so the read saw six and handed over five
+--- FAIL: TestProgressFramesCarryTheReadCountAsItClimbs (0.71s)
+    importer_test.go:688: read counts = 500 items / 500 credits / 500 files, want 250 each
+--- FAIL: TestTheAdapterCountOfAReadWinsOverTheHandOverCount (0.66s)
+    importer_test.go:861: Report.ItemsRead = 507, want 257: the adapter read 257 items and handed over 250, and the field means HOW FAR THE READ GOT, not how many arrived
+    importer_test.go:866: Report.CreditItemsRead = 503, want 253
+    importer_test.go:869: Report.FileItemsRead = 511, want 261
+    importer_test.go:896: the final items frame reports items_read = 507, want 257: the pass dropped the adapter's own count and published the hand-over count instead, which under-reports every item the adapter read and declined to hand over
+    importer_test.go:913: items frame 2 reports items_read = 507, above the adapter's own 257
+    importer_test.go:896: the final credits frame reports items_read = 503, want 253: the pass dropped the adapter's own count and published the hand-over count instead, which under-reports every item the adapter read and declined to hand over
+    importer_test.go:913: credits frame 2 reports items_read = 503, above the adapter's own 253
+    importer_test.go:896: the final files frame reports items_read = 511, want 261: the pass dropped the adapter's own count and published the hand-over count instead, which under-reports every item the adapter read and declined to hand over
+    importer_test.go:913: files frame 2 reports items_read = 511, above the adapter's own 261
+    importer_test.go:922: last frame = {InstanceID:1 Phase:done ItemsRead:507 Applied:250 Total:0}, want the done frame with items_read = 257
+```
+
+**Neither break was itself a no-op**, which was checked rather than assumed: break 1 changed
+`Report.ItemsRead` from 257 to 250 and the cassette's from 6 to 5, break 2 changed them to 507 and
+11, and both were confirmed against a `git diff --stat` showing `importer.go` modified before the
+run and absent from the diff after the restore.
+
+---

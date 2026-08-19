@@ -622,7 +622,17 @@ contract, and §5.1 below is the measurement it falsified.
 
 The recorded frames a client can hold this against are in
 `web/src/lib/__fixtures__/sse-frames.json`, regenerated off a live stream by `cmd/usarr`'s
-`TestSSEFramesMatchTheClientContract`; the type is `internal/libsync/importer.go:99` (`Progress`).
+`TestSSEFramesMatchTheClientContract`; the type is `internal/libsync`'s `Progress`.
+
+⚠️ **No citation to `importer.go` in §5 is a line number any more, and that is a repair rather than
+a style.** Every one of them used to be `importer.go:<n>`, and every one was wrong by the time anyone
+read it: the `files` phase moved all five publish sites at once, and §5.2 and §5.3 went stale in the
+same commit that made their line numbers wrong (`REVIEW-LOG.md` LS-250, LS-270). A function name
+survives an edit above it; a line number is falsified silently by an insertion anywhere earlier in
+the file, and a citation nobody can trust is worse than none because it reads as though it were
+checked. Cite the symbol and let `grep -n` find it. ⚠️ **The `:<n>` citations still on this page for
+OTHER files are not endorsed by that** — they are simply out of the change that fixed these, and the
+same rot applies to them.
 
 ### 5.1 Silence means UNKNOWN — never finished, and never failed
 
@@ -650,30 +660,52 @@ rather than a verdict of record, and §4.3's table remains the only way to answe
 poll `last_full_sync_at`, which is written on success alone. The defect this closes is
 [`REVIEW-LOG.md` LS-152](../REVIEW-LOG.md); the producer is LS-180.
 
-### 5.2 There are exactly four phases on a healthy run, and they are not a progress scale
+### 5.2 There are five phases on a healthy run, and they are not a progress scale
 
-`containers` · `items` · `credits` · `done` — published at `internal/libsync/importer.go:213`,
-`:370`, `:443` and `:290` respectively. They are ordered, but `credits` is **skipped entirely** for
-a source that reports no credits or is not a `CreditSource` (`:415-418`), so three frames is a
-complete healthy run as readily as four.
+⚠️ **This subsection used to say "exactly four phases" and list `containers` · `items` · `credits` ·
+`done`.** The `files` phase shipped with `streamAndApplyFiles` and this page was not updated with it;
+the SPA has had a `files` arm in `progressCounts` for longer than the paragraph above it was wrong.
+The correction is `REVIEW-LOG.md` LS-270; the four line numbers this paragraph used to carry were
+already stale before that, which is why none are cited now.
+
+`containers` · `items` · `credits` · `files` · `done`, published from four functions in
+`internal/libsync/importer.go`:
+
+| `phase` | Published by | How often |
+| --- | --- | --- |
+| `containers` | `FullImport` | Exactly once, after the container list is read and before anything is bound. |
+| `items` | `streamAndApply`'s `flush` | Once per **committed** batch — and **none at all** when nothing was read, because `flush` returns early on an empty batch. |
+| `credits` | `streamAndApplyCredits`'s `flush` | Once per committed credit batch. **Skipped entirely** when the Source is not a `CreditSource`, or when no item committed. |
+| `files` | `streamAndApplyFiles`'s `flush` | Once per committed file batch. **Skipped entirely** when the Source is not a `FileSource`, or when no item committed. |
+| `done` | `FullImport` | Exactly once, and on success only — after `StampFullSync`. |
+
+🚩 **Five is a ceiling, not a shape.** Three of the five are conditional, so a wholly healthy run over
+a source that implements neither optional interface publishes `containers` and `done` and nothing
+between them. A client that blocks waiting for a phase it was never going to be sent waits for ever;
+the phases are ordered, and that is the only sequencing promise on offer.
 
 A phase is carried as the string the server sent. A client that has not heard of a phase should say
 less about the frame, not drop it — which `progressCounts`
 (`web/src/lib/services.ts`) already does, rendering an unrecognised phase's counts under a `default`
-arm that declines to name it. **§5.5's fifth phase, `stopped`, is emitted today**, but from
-`cmd/usarr` rather than from any of the sites above — which is why a healthy run still shows only
-these four, and why a client must handle both a `stopped` that arrives and one that never does
+arm that declines to name it. **§5.5's `stopped` is a sixth phase value and is emitted today**, but
+from `cmd/usarr` rather than from any of the sites above — which is why a healthy run still shows
+only these five, and why a client must handle both a `stopped` that arrives and one that never does
 (§5.1's three silences).
 
-### 5.3 Only `credits` ever sends a `total`
+### 5.3 Only the two per-item passes send a `total` — `credits` and `files`
 
-`total` is `omitempty` and the credits publish is the **only** site that sets it
-(`internal/libsync/importer.go:446`). `containers`, `items` and `done` send no total at all, because
-Kavita reports its own in a `Pagination` header that is middleware and is absent from its OpenAPI
-document.
+⚠️ **This subsection used to read "Only `credits` ever sends a `total`" and cite one line number for
+it.** The `files` publish sets one too, on the same terms (LS-270).
+
+`total` is `omitempty`, and the only two sites that set it are the `credits` and `files` publishes
+inside `streamAndApplyCredits` and `streamAndApplyFiles`. Both set it to the length of the request
+list the pass was handed — **the items that reached a committed batch**, which is UsArr's own count
+of the work that pass has to do, not a figure the upstream reported. `containers`, `items` and `done`
+send no total at all, because Kavita reports its own item total in a `Pagination` header that is
+middleware and is absent from its OpenAPI document.
 
 🚩 **Absent means unknown. It does not mean zero, and it is not a denominator to fall back on.**
-Two of the four phases can never fill a progress bar, which is why the Services screen renders a
+Three of the five phases can never fill a progress bar, which is why the Services screen renders a
 sentence with real counts rather than a bar.
 
 ### 5.4 `applied` counts a different thing in each phase — and is not `total`'s numerator
@@ -683,6 +715,7 @@ sentence with real counts rather than a bar.
 | `containers` | nothing yet — always `0` | nothing yet — always `0` | absent |
 | `items` | catalogue items read from the source | catalogue items in a **committed** batch | absent |
 | `credits` | credit sets read | **credit rows written** | credit *requests*, i.e. **items** |
+| `files` | file sets read | **file rows written** | file *requests*, i.e. **items** |
 | `done` | catalogue items read, final | catalogue items applied, final | absent |
 
 **`items_read` is a RUNNING count in every streaming phase, not a figure settled when the phase
@@ -694,10 +727,21 @@ rendered as a stalled one (`REVIEW-LOG.md` LS-250). A client may rely on the val
 non-decreasing within a run; it may **not** rely on how many frames a phase sends, which is
 `min(BatchRows, BatchWindow)` and therefore wall-clock dependent.
 
-⚠️ **In the `credits` phase, `applied` and `total` are in different units**, so `applied / total` is
-not a fraction of anything. One item can carry several credits: the recorded frame above is a real
-run of two series where one had three credited people and the other had none, giving `applied: 3`
-against `total: 2`. The ratio that is meaningful there is `items_read / total`.
+⚠️ **A phase's LAST frame is the adapter's own count, and it can exceed the running one.** Each
+streaming pass overwrites its counter with the value the adapter returned before it flushes the
+tail, because the two legitimately differ: `KavitaSource.StreamItems` returns what `StreamSeries`
+handed *it*, which includes series in a **declined** library that are dropped before they ever reach
+the importer's callback. So a final `items` frame reading `items_read: 6, applied: 5` over a
+five-series import is not an off-by-one — it is one series in a library §17.8 declined, and the
+Report says the same thing. `items_read` therefore means *how far the READ got*, which is **not** an
+upper bound on what was applied for any reason other than batching.
+`TestTheAdapterCountOfAReadWinsOverTheHandOverCount` pins it.
+
+⚠️ **In the `credits` and `files` phases, `applied` and `total` are in different units**, so
+`applied / total` is not a fraction of anything. One item can carry several credits, and several
+files: the recorded frame above is a real run of two series where one had three credited people and
+the other had none, giving `applied: 3` against `total: 2`. The ratio that is meaningful there is
+`items_read / total`.
 
 ### 5.5 `stopped` — the terminal failure frame
 
@@ -705,7 +749,9 @@ against `total: 2`. The ratio that is meaningful there is `items_read / total`.
 had authoritative names to compile against rather than invented ones; the producer has since landed
 and is held to every clause below by `cmd/usarr/import_stopped_test.go`. `grep -rn '"stopped"'
 cmd/ internal/` reaches it at `cmd/usarr/import.go`'s `importPhaseStopped`. §5.1's paragraph and
-§5.2's phase count are what it falsified, and both say so in place.
+§5.2's phase count are what it falsified, and both say so in place. §5.2 has since been falsified
+again, by the `files` phase rather than by this frame: a healthy run publishes **five**, and
+`stopped` is a sixth phase *value* that no healthy run ever carries.
 
 #### 5.5.1 The frame — one new `phase` value and NO new field
 
@@ -723,17 +769,24 @@ The frame gains **no field at all**. The only change is a fifth legal value of `
 | `phase` | **present**, always the literal `"stopped"` | string | The discriminator, and the whole of the new information. |
 | `items_read` | **present** | integer | Catalogue items read before the stop. Not a final count of anything — it is how far it got. |
 | `applied` | **present** | integer | Catalogue items in **committed** batches, i.e. rows that **stand**. §5.5.4 is why this is the load-bearing field. |
-| `total` | **absent** | — | `omitempty`, and only the `credits` publish site ever sets it (§5.3). A `stopped` frame is a different site, so absent — which means unknown, as it always does. |
+| `total` | **absent** | — | `omitempty`, and only the `credits` and `files` publish sites ever set it (§5.3). A `stopped` frame is a different site, so absent — which means unknown, as it always does. |
 
 **There is no `reason` field, deliberately, and §5.5.5 owns that decision.** No upstream message, no
 status code, no error object, and no field for one to arrive in later without this section changing
 first.
 
-#### 5.5.2 The name is `stopped` because `failed` is TAKEN, in this product, with the OPPOSITE meaning
+#### 5.5.2 The name is `stopped` because `failed` WAS TAKEN, in this product, with the OPPOSITE meaning
 
-⚠️ **Do not rename this to `failed`, now or later.** `failed` is already a member of `SyncPhase` in
-`web/src/lib/services.ts:752-753`, and `syncRefusal`'s `default:` arm returns it for the `500`
-"could not be started" fault with the consequence copy `NO_IMPORT_STARTED` (`:835`) — verbatim:
+⚠️ **The collision below is HISTORY, and the argument still binds.** The SPA has since taken this
+subsection's own recommendation: `SyncPhase` in `web/src/lib/services.ts` now spells the refusal
+`not_started`, and no member named `failed` remains. The reasoning is kept as written because the
+conclusion it reaches — **do not rename this frame to `failed`, now or later** — is what stops the
+collision being recreated, and because `not_started`'s own doc comment cites this section by number.
+Read the two paragraphs below in the past tense.
+
+**As it stood when the name was chosen:** `failed` was a member of `SyncPhase` in
+`web/src/lib/services.ts`, and `syncRefusal`'s `default:` arm returned it for the `500`
+"could not be started" fault with the consequence copy `NO_IMPORT_STARTED` — verbatim:
 
 > **`'No import started for this press, so the catalogue is untouched.'`**
 
@@ -743,7 +796,7 @@ the catalogue is emphatically *touched*. One word, one product surface, two oppo
 single fact a user most needs.
 
 🚩 **And the two vocabularies genuinely meet in one field, so this is a structural collision rather
-than a naming preference.** `syncNoteWithProgress` (`web/src/lib/services.ts:982-1020`) folds a
+than a naming preference.** `syncNoteWithProgress` (`web/src/lib/services.ts`) folds a
 stream frame into `SyncNote.phase` — it assigns `phase: 'finished'` on seeing `phase: "done"` — and
 `syncButtonLabel` and `syncButtonBlocked` then switch on that same field. A wire `failed` folded into
 that field would sit beside a refusal `failed` meaning the opposite, and every switch over it would
@@ -765,12 +818,14 @@ it claim more than the frame knows?
 
 **One argument for `stopped` that does NOT hold, recorded so it is not repeated as support.** It has
 been said that shipped copy already reads *"the import stopped"*, so wire and prose would agree. They
-do not: `grep -n "stopped" web/src/lib/services.ts` finds the word only in doc comments, about a
-*stalled* readout (`:967-968`). No user-facing string in `services.ts` says it. The name is chosen on
+did not: at the time, `grep -n "stopped" web/src/lib/services.ts` found the word only in doc
+comments, about a *stalled* readout. No user-facing string in `services.ts` said it. The name is chosen on
 the two tests above, which stand on their own; the copy is the frontend's to write.
 
 **Recommendation for the SPA's own `failed`, which is the frontend thread's call and not this
-document's.** Renaming `SyncPhase.failed` is **no longer urgent** — this frame avoids it, so nothing
+document's.** ✅ **Taken** — `SyncPhase.not_started` shipped, so everything from here to the end of
+this subsection is the reasoning that produced it rather than a thing still owed. Renaming
+`SyncPhase.failed` was **no longer urgent** — this frame avoids it, so nothing
 is ambiguous today. It becomes worth doing at one specific moment: when the SPA folds `stopped` into
 `SyncNote.phase`, that single union will hold both vocabularies, and a reader will have `failed`
 (nothing started) beside `stopped` (started, then stopped) with no cue that the first is the stronger
@@ -781,7 +836,7 @@ change.
 #### 5.5.3 `stopped` is terminal exactly as `done` is — for **one run**, and the stream has no run id
 
 **Confirmed, with one correction a consumer must build for.** `done` publishes once, at the end of
-`FullImport` (`internal/libsync/importer.go:290`), and nothing follows it for that run; `stopped`
+`internal/libsync`'s `FullImport`, and nothing follows it for that run; `stopped`
 gets the same rule. A later **silence**, a socket drop, a reconnect, or a `stream.missed` frame
 therefore **cannot** downgrade a `stopped` a client has already seen — silence is `UNKNOWN` (§5.1),
 and unknown never overwrites a fact.
@@ -803,8 +858,8 @@ holds.
 
 #### 5.5.4 It must not read as success, and the batches that committed still stand
 
-**Confirmed against the tree.** `StampFullSync` is reached only after `rep.Completed = true`
-(`internal/libsync/importer.go:261-271`), so **`last_full_sync_at` does not move on any failure** —
+**Confirmed against the tree.** `FullImport` reaches `StampFullSync` only after it has set
+`rep.Completed = true`, so **`last_full_sync_at` does not move on any failure** —
 it is written on success alone, which is what makes §3's timestamp the positive evidence and this
 frame merely the fast notice.
 
