@@ -6778,6 +6778,25 @@ its name · **Needs no migration**, and the schema check that established that i
 ⚠️ **Reverses a standing recommendation**, [`ROADMAP.md`](./ROADMAP.md) §3's *"do NOT switch UsArr's
 first adapter off Kavita"*, on evidence that was re-measured after that recommendation was written
 
+### Why this is **Accepted** and not **Proposed**, asked because it removes an evidentiary basis
+
+**The question was put in adversarial review and is answered here rather than left implicit:**
+[ADR-0041](#adr-0041)'s strongest sentence was that Kavita's delta had been *"verified against a live
+instance"*, and this ADR removes it. **Should it stay Proposed until a probe runs?**
+
+**No, and the reason is that the two things are not on the same axis.** What is **decided** is
+*which stack v0.1 is built against*, and that is the owner's call about his own server — it does not
+become more or less true when a probe runs, and no agent may hold it Proposed pending evidence the
+owner did not ask for. What is **evidence** is *which sync channels that stack can support*, and this
+ADR does not decide it: [ADR-0041](#adr-0041) clause 4 does not carry over, and open question 1 below
+now settles the series half **from source** and leaves a narrowed probe owed.
+
+⚠️ **The honest cost is stated rather than absorbed: v0.1's channel list is weaker than ADR-0041's,
+and §16.1 says so in the same change.** A `Proposed` status would misrepresent that as indecision
+about the source. **What would justify reverting to Proposed** is the owner disputing that he is
+moving off Kavita — not a probe result, which is already scoped to change the channel list and not
+the source.
+
 ### Context
 
 #### 1. The decision is the owner's, and it is a decision rather than a delegation
@@ -6803,16 +6822,32 @@ agent did is the re-measurement in §2, and that is evidence, not the choice.
 
 [`ROADMAP.md`](./ROADMAP.md) §3 records a **2026-08-17 evaluation at BookOrbit HEAD `4a420a04`**. Its
 three *"against"* findings are what produced the standing *"do NOT switch"* recommendation. **All
-three were re-measured against BookOrbit `main` on 2026-08-19, from its own source and its own
-README, and the table below is that run.** ⚠️ **`4a420a04` was not checked out for this pass**, so
-each row states what is true of `main` now; where a row differs from the 2026-08-17 finding, that is
-recorded as *the claim is false today* and not as *the evaluation was careless*.
+three were re-measured against BookOrbit `main` on 2026-08-19, from its own source, and the table
+below is that run.**
+
+🚩 **The first draft of this ADR could not check out `4a420a04` and therefore recorded each
+falsification as *"the claim is false today"* rather than *"the evaluation was wrong"*, choosing the
+charitable reading. `4a420a04` has since been checked out, and the charitable reading does not
+survive it.** The commit is real (`4a420a04a271948219f1f2853a05cb73e3c64e9e`, 2026-08-17 00:45 -0600),
+and against it:
+
+- `git diff --stat 4a420a04 HEAD -- server/src/modules/auth/magic-link.service.ts` → **empty**. The
+  magic-link path is **byte-identical** at the evaluated commit and at `main`.
+- `git diff --stat 4a420a04 HEAD -- server/src/modules/metadata-fetch/providers/comicvine/` →
+  **empty**. All seven ComicVine files existed, unchanged.
+
+**So both falsified findings were already false at the commit the evaluation examined.** The evidence
+did not move; **the evaluation was wrong when it was written.** ✅ That *strengthens* the case for the
+swap — the standing *"do NOT switch"* recommendation was never well-founded rather than merely
+outlived. ⚠️ **And it carries a caution the charitable reading hid:** the third finding, the
+watermark, comes from that same evaluation, so it earned no presumption of accuracy either. It is
+re-measured from source in the table below rather than inherited.
 
 | 2026-08-17 finding ([`ROADMAP.md`](./ROADMAP.md) §3) | 2026-08-19 verdict | Primary source |
 |---|---|---|
 | *"**no inbound API key** — headless auth needs the account password, which is worse than UsArr's Kavita credential model"* | 🚩 **FALSIFIED.** Headless auth exists and takes no password. `server/src/modules/auth/magic-link.service.ts` implements a first-class magic-link module: a raw token is issued, only its **SHA-256 hash** is stored, and `loginWithToken()` checks existence, `isActive`, not-revoked and not-expired, then calls `issueTokensForUser()`. **No password is validated anywhere in that flow.** | `bookorbit/bookorbit@main`, `server/src/modules/auth/magic-link.service.ts` |
 | *"**no manga or comic external ids**"* | 🚩 **HALF FALSIFIED, and the surviving half is the narrower one.** **Comics are covered:** ComicVine ships as a metadata provider — `server/src/modules/metadata-fetch/providers/comicvine/` holds `.client.ts`, `.mapper.ts`, `.provider.ts` and `.types.ts`, and the README names *"ComicVine for comics"* among fourteen providers. **Manga and anime are not:** a repository-wide code search for `mangabaka`, `anilist` and `myanimelist` returns **zero hits**. | `bookorbit/bookorbit@main` README and `server/src/modules/metadata-fetch/providers/` |
-| *"an `updatedAt` watermark that **misses tag, genre and author edits**"* | ⚠️ **NOT re-verified either way, and it is the one finding this ADR does not resolve.** The field is present and **is an allowed sort key** — `packages/types/src/query.ts` admits `"updatedAt"` in its sort union alongside `pagination: { page, size }`, and `books.ts` sets it with Drizzle's `$onUpdateFn(() => new Date())` — so an ordered page walk is *expressible*. What is **not** settled is whether the timestamp actually moves on a tag, genre or author edit: `$onUpdateFn` is **application-level, not a DB trigger**, and authors, tags and genres are **not columns on the book row**, so an edit confined to a join table plausibly never touches it. That is the same failure mode Kavita has and it is not measured here. | `bookorbit/bookorbit@main`, `packages/types/src/query.ts`, `server/src/db/schema/books.ts` |
+| *"an `updatedAt` watermark that **misses tag, genre and author edits**"* | 🚩 **CONFIRMED, and it is worse than the finding says — measured from source on 2026-08-19, not deferred to a probe.** The sort key is real but it is **book-scoped**: the type carrying it is named `BookQuery` (`packages/types/src/query.ts:380`), served by `POST /books/query`, and `SORT_FIELD_MAP` binds `updatedAt` to **`books.updatedAt`** (`book-sort-builder.service.ts:35`). Tracing the tag path end to end — `POST /books/bulk-update-tags` → `BookService.bulkUpdateTags` (`book.service.ts:2362`) → `MetadataService.replaceTags` → `replaceTagsInExecutor` (`metadata.service.ts:513`) — the executor does `delete(bookTags)` + `insert(bookTags)` **and nothing else**; the follow-up `triggerPostMetadataUpdateEffects` schedules a file write/rename and recomputes the metadata score, and **none of those writes `books.updatedAt`**. `replaceGenresInExecutor` (`:480`) and `replaceAuthorsInExecutor` (`:369`) have the same shape. There is **no SQL trigger anywhere in the repo** (`grep -rli "create trigger" server/ --include=*.sql` → no match), so nothing compensates. **A tag, genre or author edit therefore does not move `books.updated_at`.** ✅ The one thing that *does* hold: core metadata edits are covered by an **explicit** touch — `updateMetadataFields` and `bulkUpdateMetadataFields` end with `update(books).set({updatedAt})` (`book.repository.ts:1960, 2012`). | `bookorbit/bookorbit@main`, `packages/types/src/query.ts:380`, `book-sort-builder.service.ts:35`, `metadata.service.ts:369,480,513`, `book.repository.ts:1960,2012` |
 
 🚩 **One claim reached this ADR in relay and is REFUSED, because the primary source contradicts it.**
 The drafting brief stated that BookOrbit has *"no watermark — no reliable 'changed since' signal — so
@@ -6902,19 +6937,46 @@ Two consequences, and the second is the one a later implementer will trip over:
 **Two open questions and one correction. Each open question names what would close it; the
 correction names what falsified the draft that preceded it.**
 
-🚩 **1. Whether channel 3b applies to BookOrbit.** [ADR-0041](#adr-0041) clause 4 fixed v0.1's channels
-at **1, 3b and 4** for Kavita, on a probe run in advance ([ADR-0035](#adr-0035) §2). **BookOrbit has
-had no equivalent run, so clause 4 is reopened rather than re-answered.** What is known: the sort key
-and paging exist (§2 above), so the walk is expressible. What is unknown is §7.1a's **ordering
-guarantee** — *"a monotonic last-modified field it maintains itself"* — since `$onUpdateFn` is
-application-level and authors, tags and genres live off the book row. **Closes by running
-[ADR-0035](#adr-0035) §2's pass condition against the owner's live BookOrbit**, clause by clause, and
-writing the result into §7.1a's per-source table the way Kavita's row was written.
-ℹ️ **The failure branch is already specified and costs no new design**: §7.1a says an instance without
+🚩 **1. Whether channel 3b applies to BookOrbit — and the series half of that is now CLOSED, in the
+negative, from source.** [ADR-0041](#adr-0041) clause 4 fixed v0.1's channels at **1, 3b and 4** for
+Kavita, on a probe run in advance ([ADR-0035](#adr-0035) §2). **BookOrbit has had no equivalent run,
+so clause 4 does not carry over.** But *"pending a probe"* overstates what is still open, so the two
+halves are separated.
+
+🚩 **The series half is not an open question. There is no series-level ordered read in BookOrbit at
+all**, measured 2026-08-19 against the clone at `73b7877d` and re-checked at the evaluation's own
+commit `4a420a04`, identical at both:
+
+| Measured | Result | Where |
+|---|---|---|
+| Every route the series controller exposes | **Exactly two**, both `GET`: `/series` and `/series/:seriesId/books`. No `POST …/query` counterpart to `POST /books/query`. | `server/src/modules/series/series.controller.ts:13,18` |
+| The sort keys `GET /series` admits | `SERIES_LIST_SORTS = ['name', 'bookCount', 'lastAddedAt', 'readProgress']` — **no `updatedAt`**, and `@IsIn(SERIES_LIST_SORTS)` **rejects** one with a 400 rather than ignoring it. | `dto/list-series.dto.ts:4,34` |
+| Whether a series watermark is even readable | **No.** `book_series.updated_at` **exists** as a column with `$onUpdateFn`, but the series repository never selects it — the projection is `id, name, bookCount, readCount, lastAddedAt`. And `lastAddedAt` is `max(books.added_at)`, an **added**-time aggregate that cannot observe an edit. | `db/schema/series.ts:16`; `series.repository.ts:84,100,120` |
+| Whether `collapseSeries` supplies one indirectly | **No.** The collapsed query picks one representative per series by `series_index ASC NULLS LAST, added_at ASC, id ASC` and orders on **that row's** `updated_at` — not a `MAX()` over the group. Editing volume 7 moves nothing. | `book.repository.ts:142-145,976` |
+
+**Why that is decisive rather than a detail: UsArr's unit of work for comics and manga is the
+series, not the book.** `work.kind`'s `'comic'` **is the series** (`00006_kavita_subtypes.sql`;
+`00005_library_sync.sql:242` — *"'comic' is the SERIES, 'comic_issue' the issue or chapter"*), and the
+shipped adapter walks `POST /api/Series/all-v2` for exactly that reason
+(`internal/libsync/kavita.go:210`). So the ordered read BookOrbit **does** offer — `POST /books/query`,
+whose type is named `BookQuery` (`packages/types/src/query.ts:380`) — is at the wrong grain for
+`work_comic`, and a rename or an `expectedBookCount` change on a BookOrbit series moves **no** book's
+`updated_at` and is invisible to it.
+
+✅ **The book half survives, and is the honest residue.** For `work_book`, `POST /books/query` with
+`sort: [{field:"updatedAt"}]` and `pagination: {page,size}` is a real ordered walk with a deterministic
+tiebreaker (`books.id ASC`, `book-sort-builder.service.ts:52`) — the same POST-with-sort-body shape as
+Kavita's `all-v2`. **What §2's table then removes is its soundness for edits**: a tag, genre or author
+change does not move `books.updated_at`, traced through the write paths there.
+
+**What a live probe is still worth**, therefore, is narrower than *"does 3b apply"*: it would confirm
+the traced write paths against a running instance and check the paths not traced. **It cannot restore
+a series-ordered read, because none exists to find.**
+ℹ️ **The failure branch is already specified and costs no new design**: §7.1a says a source without
 the ordering guarantee *"falls back to **reconciliation only**"*, with the Services row (§17.3) reading
-`no change feed — full compare at 09:12` in place of a delta time. **That is what "full resync" would
-mean here, and it is a documented degradation rather than a new one** — but it is a *branch*, not this
-ADR's decision.
+`no change feed — full compare at 09:12` in place of a delta time. **On the measurement above that is
+the expected outcome for the comics and manga half, not a contingency** — and it is a documented
+degradation rather than a new one.
 
 ✅ **2. Identity needs no new design and no migration — which is the opposite of what this ADR's
 first draft said, and the correction is the more useful record.**
@@ -6982,14 +7044,30 @@ scoped to an account that is not the owner's personal one**, which is better tha
 still a §14 credential: encrypted at rest under the versioned AAD-bound scheme, never logged, never
 sent to the browser. **What a shared account can see, and whether that is the right scope for a
 catalogue read, is not decided here.**
+⚠️ **Deferring it is acceptable only because this ADR ships no adapter and no credential store
+reaches production on it — but it is a §14 question, so it is given a named gate rather than an
+open end.** *"Not decided here"* must not become *"not decided anywhere"*: **the BookOrbit adapter
+may not read a catalogue under a shared-account credential until the scope that account grants has
+been enumerated against §14** — specifically whether it confers write or admin reach beyond the
+catalogue read UsArr needs, since §14 treats an over-scoped stored credential the same way it treats
+an \*Arr API key. **Closes in the adapter thread, before the first credential is stored**, not in a
+later pass.
 
 ### Alternatives considered
 
 - **(a) Keep Kavita as v0.1's source and treat BookOrbit as a later adapter.** ⚠️ **The strongest
   alternative, and it was the repository's own standing recommendation** ([`ROADMAP.md`](./ROADMAP.md)
   §3). It has real weight: Kavita's delta is the **only** one this project has verified against a live
-  instance, the adapter is built, and [ADR-0046](#adr-0046)'s two-spec contract guard is running. **It
-  loses on the same sentence ADR-0041 turned on: *on real data*.** The owner is sunsetting Kavita, so
+  instance, the adapter is built, and [ADR-0046](#adr-0046)'s two-spec contract guard is running. ⚠️
+  **Stated at its strongest, because an ADR owes that to what it rejects, and the asymmetry is
+  larger than the draft admitted:** against Kavita's *built, probed and contract-guarded* adapter,
+  **BookOrbit's is zero lines** — no adapter, no vendored spec, no contract guard, no fixture — and
+  the measurements in open question 1 below make the gap worse, not better, since **BookOrbit offers
+  no series-ordered read at all** where Kavita's `all-v2` is the very thing ADR-0035 §2a probed
+  successfully. A variant of this alternative is sharper still and deserves naming: **ship v0.1 on
+  the proven adapter and swap after the replica thesis is proven** — which would cost the owner
+  nothing but keeping one container running for one milestone. **It loses on the same sentence
+  ADR-0041 turned on: *on real data*.** The owner is sunsetting Kavita, so
   the instance that produced ADR-0035 §2a's run is going away. A v0.1 whose success criterion is
   "proves the replica thesis on the owner's real library" cannot be met against a server he no longer
   runs — which is, precisely, the argument that removed Sonarr and Radarr. ℹ️ And two thirds of the
@@ -7026,6 +7104,28 @@ catalogue read, is not decided here.**
   record** and is not touched; `DEVELOPMENT.md` §11 is explicit that a citation inside a dated record
   is history rather than staleness.
 
+- 🚩 **[ADR-0050](#adr-0050)'s second reopening trigger loses its stated ground and is RE-DERIVED
+  here rather than silently inherited. ADR-0050 is not reopened; this is an acknowledgement.** That
+  ADR (stdlib JPEG base, AVIF deferred) relocated its risk from *output* to *input* on a ground it
+  names explicitly: *"v0.1's catalogue source is Kavita (§16.1, ADR-0041), and Kavita's Admin settings
+  → Media → **Save Media As** selects the format it writes covers … PNG (the default), WebP, or
+  AVIF"*, concluding *"the shipped adapter serves a stdlib-decodable format **by default and by
+  default only** — one admin toggle produces covers this binary cannot decode."* **Decision clause 1
+  voids that ground.** Re-derived against BookOrbit on 2026-08-19, **the trigger does not merely
+  survive — it fires harder, and the mitigating half of ADR-0050's sentence is gone.** BookOrbit
+  stores a book's full-size cover under the extension its **own magic-byte sniffer** returns —
+  `imageExt()` recognises `png`, `jpg`, `gif`, **`webp`** and **`bmp`**
+  (`server/src/modules/metadata/lib/cover.ts:17-36`), and `cover.service.ts:258` writes the cover as
+  `${COVER_CUSTOM_FILE_PREFIX}${ext}` — so the served format is **whatever was embedded in the user's
+  EPUB or CBZ, preserved verbatim**. `image/gif` and `image/png` are stdlib; **WebP and BMP are not**
+  (`x/image/webp` is decode-only, `x/image/bmp` is a dependency either way). ⚠️ **So where Kavita's
+  risk was an admin checkbox that defaults to safe, BookOrbit's is not a setting at all** — a single
+  CBZ carrying a WebP cover produces a cover this binary cannot decode, with no toggle that prevents
+  it. ✅ **Thumbnails are unaffected**: `generateThumbnail()` always re-encodes to JPEG q90
+  (`cover.ts:38-40`). **The decision ADR-0050 made still stands** — the output codec is still JPEG and
+  still free — and what it already owes is unchanged and now more clearly owed: *"a decode-failure
+  path that says which format it could not read."* **No codec is re-decided here.**
+
 **What does not change:**
 
 - **The schema.** Six-type from migration 0001, three subtype tables from `00006_kavita_subtypes.sql`.
@@ -7047,8 +7147,18 @@ catalogue read, is not decided here.**
 **Documents that now assert a stale fact, listed rather than swept.** ⚠️ **This ADR fixes §16 only.**
 The rest are named here so the next pass does not have to re-derive them, and because `CLAUDE.md`'s
 *"no invented status"* cuts both ways — pretending they are already fixed would be the same fault:
-`README.md` (its status tables are generated from §16 and will regenerate), [`ROADMAP.md`](./ROADMAP.md)
-§1, §3 and §4, [`FUTURE.md`](./FUTURE.md), [`DEVELOPMENT.md`](./DEVELOPMENT.md) §105's tree comment,
+🚩 **`README.md`, and its entry is corrected here because the draft's was wrong in a way that
+would have caused it to be skipped.** The draft read *"its status tables are generated from §16 and
+will regenerate"*. **Nothing regenerates them.** There is no `README` make target, no `scripts/`
+directory, and no file in the tree references `README.md` programmatically
+(`grep -rln "README.md" --include=*.go --include=*.mjs --include=*.js --include=Makefile .` → no
+match). `CLAUDE.md`'s *"generated from"* describes **provenance, not a mechanism**. The tables are
+hand-written, they name Kavita as v0.1's source in **at least eight places** (`README.md:7, 8, 22, 69,
+70, 72, 80, 92`), and after this change the repo's **front door** contradicts its own scope authority
+until someone edits it by hand, [`ROADMAP.md`](./ROADMAP.md)
+§1, §3 and §4, [`FUTURE.md`](./FUTURE.md), [`DEVELOPMENT.md`](./DEVELOPMENT.md) **§2**'s tree comment
+(at line 105 — the draft cited *"§105"*, which reads as a section number and there is no §105; the
+file has twelve sections),
 [`design/DESIGN-DIRECTION.md`](./design/DESIGN-DIRECTION.md) and `design/mockups/README.md` — the last
 two carry `v0.1: Kavita, Prowlarr` as a rendered string in the mockups, which is a design-asset change
 rather than a prose one and is the largest of them.

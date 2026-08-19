@@ -2609,8 +2609,8 @@ Kavita — which is what proves the replica thesis on real data, because it is t
 runs and the only one whose delta has been verified against a live instance (ADR-0035 §2a)"*.** The
 owner is **sunsetting Kavita entirely**; BookOrbit takes its media types, which are unchanged — books,
 comics and manga. 🚩 **The struck half is the verification clause, and its loss is real:** BookOrbit
-has had **no equivalent of ADR-0035 §2a's live probe**, so the channel sentence below is an open
-question rather than an inherited answer. ⚠️ **"Sunset" does not mean deleted** — `internal/kavita`,
+has had **no equivalent of ADR-0035 §2a's live probe**, so the channel sentence below is **re-derived
+from a source read** rather than inherited — and it comes out **narrower**, not merely unproven. ⚠️ **"Sunset" does not mean deleted** — `internal/kavita`,
 `internal/libsync/kavita.go`, both vendored specs and [ADR-0046](./DECISIONS.md#adr-0046)'s contract
 guard stay in the tree and stay green; **investment stops, existence does not**, and ADR-0052 clause 3
 deliberately assigns further Kavita work **no milestone at all** rather than inventing one.
@@ -2625,16 +2625,32 @@ were v0.1's *kept* sinks. [ADR-0041](./DECISIONS.md#adr-0041) removed those two 
 [ADR-0042](./DECISIONS.md#adr-0042) re-sequenced the write path that addressed them, so the honest
 statement is **zero command sinks and no command path to one** — Lidarr, LazyLibrarian, Mylar3 and
 Kapowarr are still out, and Sonarr and Radarr are out with them.
-Sync channels **1 and 4**, with **3b open**: full import; and **channel 3b (§7.1a) — the ordered page
-walk with a client-side stop — pending a probe of BookOrbit**. ⚠️ **This read *"Sync channels 1, 3b
-and 4 … channel 3b … for Kavita … built here rather than only specified (ADR-0041)"*, and
-[ADR-0052](./DECISIONS.md#adr-0052) reopens the 3b half rather than re-answering it.** ADR-0041
-clause 4 earned that list from [ADR-0035](./DECISIONS.md#adr-0035) §2a's run against a live **Kavita**;
-BookOrbit has had no such run. What is known is that the walk is *expressible* — BookOrbit admits
-`updatedAt` as a sort key with page/size paging — and what is unknown is §7.1a's **ordering
-guarantee**, whether that timestamp moves on a tag, genre or author edit. **If the probe fails, §7.1a's
-documented fallback applies unchanged**: reconciliation only, surfaced as `no change feed — full
-compare at 09:12`. **Channel 3 (`/history/since`) is not applicable to BookOrbit** (§7.1a) any more
+Sync channels **1 and 4**, with **3b reduced to the books half at best**: full import; and
+**channel 3b (§7.1a) — the ordered page walk with a client-side stop — available for `work_book` only,
+and unavailable for `work_comic`**. ⚠️ **This read *"Sync channels 1, 3b and 4 … channel 3b … for
+Kavita … built here rather than only specified (ADR-0041)"*, and
+[ADR-0052](./DECISIONS.md#adr-0052) does not re-answer it for BookOrbit.** ADR-0041 clause 4 earned
+that list from [ADR-0035](./DECISIONS.md#adr-0035) §2a's run against a live **Kavita**; BookOrbit has
+had no such run. 🚩 **What a source read on 2026-08-19 established, and what it does not:**
+
+- 🚩 **No series-level ordered read exists in BookOrbit.** Its series controller exposes exactly two
+  routes, `GET /series` and `GET /series/:seriesId/books`, and the sort keys the first admits are
+  `name`, `bookCount`, `lastAddedAt`, `readProgress` — **no `updatedAt`**, rejected with a 400 rather
+  than ignored. `book_series.updated_at` exists as a column but no endpoint projects it, and
+  `lastAddedAt` is `max(books.added_at)`, which cannot observe an edit. **Since `work.kind`'s
+  `'comic'` IS the series** — which is why the Kavita adapter walks `POST /api/Series/all-v2` — the
+  ordered read BookOrbit does offer, `POST /books/query`, is at the wrong grain for `work_comic`.
+- ✅ **A book-level ordered walk is real** — `POST /books/query`, `sort: updatedAt`, `page`/`size`
+  paging, deterministic `books.id` tiebreaker — so 3b remains expressible for `work_book`.
+- 🚩 **Its soundness is limited even there:** tag, genre and author edits do **not** move
+  `books.updated_at` (no SQL trigger exists, and the write paths touch only the join tables), so the
+  walk misses them. Core metadata edits **are** covered by an explicit touch.
+
+**§7.1a's documented fallback therefore applies unchanged and is the expected state for comics and
+manga rather than a contingency**: reconciliation only, surfaced as `no change feed — full compare at
+09:12`. ⚠️ **A live probe is still owed** — to confirm the traced write paths on a running instance and
+cover the paths not traced — **but it cannot produce a series-ordered read, because none exists.**
+[ADR-0052](./DECISIONS.md#adr-0052) open question 1 carries the measurements and their file:line. **Channel 3 (`/history/since`) is not applicable to BookOrbit** (§7.1a) any more
 than it was to Kavita, and lands with the first \*Arr adapter, **which is v0.2**
 ([ADR-0045](./DECISIONS.md#adr-0045)). **Reconciliation with 7-day
 tombstones and both sweep guards** for everything — and it carries more weight here than it would for
