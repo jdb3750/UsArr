@@ -539,7 +539,7 @@ silently change which resource a redirect resolves to. The tracker-specific name
 - **URLs stored in the database are in scope too**: `image_asset.source_url` and the `http_cache`
   keys store the **credential-stripped** URL, and no row may be written whose `source_url` still
   carries a credential parameter — the ingest path that writes these rows owes that assertion.
-  ✅ **Discharged 2026-08-19.** ⚠️ This paragraph used to read *"it is still owed and is owed by
+  ✅ **Discharged 2026-08-19 in `7e5934d`.** ⚠️ This paragraph used to read *"it is still owed and is owed by
   nothing that exists … no production code writes `image_asset` at all"*, which was true and is not
   any more. `internal/store`'s `PutPosterAsset` is the writer, and `checkImageSourceURL` is the
   assertion: it **refuses** a row whose `source_url` carries a credential parameter or userinfo —
