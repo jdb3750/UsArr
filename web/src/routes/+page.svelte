@@ -97,10 +97,18 @@
 	 * and neither exists: §17.7's degraded banner is a sentence about how old
 	 * the cached data is, and there is no cached data for it to be about. The
 	 * unreachable-instance FACT is real and is reported, in Block B, where it
-	 * has a source. `scope-empty` needs a library scope; there is no `library`
-	 * table and no scope chip, and Navidrome's own discipline — which §17.2
-	 * adopts — renders no chip at all below two libraries, so the state is
-	 * unreachable rather than unimplemented. `filtered-empty` needs a filter.
+	 * has a source. `scope-empty` is unreachable — ⚠️ but NOT because there is
+	 * no `library` table, which is what this said until migration 00005 created
+	 * one and `?lib=` landed on `GET /api/v1/library` (`http-api.md` §7.3). The
+	 * scope exists; Block C's endpoint is what has none. §17.2 closes that block
+	 * at one table, one order and no filters, so `/library/recent` refuses the
+	 * chip by design rather than by backlog, and refuses it SILENTLY: an
+	 * unrecognised parameter is ignored, not rejected, so `?lib=` on this URL is
+	 * 200 over the whole catalogue (`http-api.md` §1.1, and the header of
+	 * `internal/httpapi/library.go`). No URL can empty a scope Home never reads.
+	 * DESIGN-DIRECTION §10 lists the state as REQUIRED on Home, so it is one the
+	 * design asks for and this wire cannot serve. `filtered-empty` needs a
+	 * filter.
 	 *
 	 * BLOCK B COMES FIRST, and §17.2 supplies the argument for it: "Block B is
 	 * hidden when empty, so it costs nothing when nothing is wrong — which is
