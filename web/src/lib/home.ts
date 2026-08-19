@@ -77,13 +77,34 @@
  * read `internal/db/migrations` rather than this comment for whether it has
  * since landed. So the rows would still be INVENTED, which is what
  * DESIGN-DIRECTION §9.6 closes off by name, and a shortage of catalogue is no
- * longer any part of it. The sidebar draws none either (`routes/+layout.svelte`,
- * whose `NAV_GROUPS` is the six fixed entries and no media types); Home matches
- * it. ⚠️ THAT IS ONE TASK RATHER THAN TWO, and it is worth saying because the
- * two rows live in different files: both are blocked on the same missing read,
- * so whoever builds the rollup unblocks Block A and the sidebar together. And
- * neither is built from this side first — inventing the counts while the read
- * is written is the thing §9.6 forbids, not a shortcut to it.
+ * longer any part of it.
+ *
+ * 🕰️ THIS PARAGRAPH ONCE CONTINUED, TRULY OF THE TREE IT WAS WRITTEN AGAINST:
+ * *"The sidebar draws none either (`routes/+layout.svelte`, whose `NAV_GROUPS`
+ * is the six fixed entries and no media types); Home matches it. THAT IS ONE
+ * TASK RATHER THAN TWO … both are blocked on the same missing read, so whoever
+ * builds the rollup unblocks Block A and the sidebar together."*
+ *
+ * ⚠️ IT IS KEPT AS HISTORY AND IT NO LONGER DESCRIBES THIS TREE, and those are
+ * two different things. `NAV_GROUPS` now carries `TYPE_NAV`: all six media
+ * types, drawn UNCONDITIONALLY, over `/library/[type]`. Read the layout, not
+ * this quote, for what the sidebar does.
+ *
+ * It is kept because ADR-0053 CITES IT — as the record that shipping no type
+ * entries at all was a live option someone held and argued for, rather than one
+ * nobody thought of. A rejected alternative with no trace of ever having been
+ * believed is indistinguishable from an oversight, and deleting the sentence
+ * would leave that ADR pointing at nothing. The ADR carries the reasoning and
+ * the rejection; do not restate either here. `routes/+layout.svelte` carries the
+ * shipped rule at `TYPE_NAV`, and `docs/reference/http-api.md` §7.1 is where the
+ * missing facet count is written down.
+ *
+ * What the quote got WRONG, and why the sidebar could ship without the rollup:
+ * the two rows are not the same KIND of thing. A sidebar row is a PLACE, and a
+ * link needs no number to be honest; Block A's row IS a number and has none to
+ * render. So Block A is still blocked on the read and the sidebar never was.
+ * Block A is still not built from this side first either: inventing the counts
+ * while the read is written is the thing §9.6 forbids, not a shortcut to it.
  *
  * WHAT MODE THE SCREEN IS IN IS DERIVED FROM THE API AND NEVER FROM A
  * CONSTANT. §8.5 defines Search-and-Grab mode as "activated when no configured
