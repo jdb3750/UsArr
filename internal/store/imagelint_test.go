@@ -190,9 +190,17 @@ func TestImageWritesValidateTheFormatVocabulary(t *testing.T) {
 // scanImageAssetWrites is the guard's whole judgement, extracted from the tree
 // walk so it can be run against a source file that does NOT exist on disk.
 //
-// That extraction is the point. While nothing writes image_asset the walk above
-// can only ever take its vacuous branch, so the branch that MATTERS — "a writer
-// landed and nothing validates" — would otherwise ship never having executed.
+// That extraction is the point, and the reason it is the point has changed.
+// ⚠️ THIS USED TO READ "While nothing writes image_asset the walk above can only
+// ever take its vacuous branch" — true when written, falsified 2026-08-19 by
+// 7e5934d, which landed internal/store/imagewrite.go. The header above carries
+// the same correction and the drill that confirmed it.
+//
+// The extraction still earns its place, on a reason that does not depend on the
+// tree being empty: the branch that MATTERS is "a writer landed and nothing
+// validates", and NO state of a green tree produces that — a tree in which it
+// fires is a tree where `make check` is already red. So without a synthetic
+// source that branch would ship never having executed.
 // TestImageLintGuardFires runs it.
 func scanImageAssetWrites(
 	fset *token.FileSet, rel string, file *ast.File, writes *[]string, validatorReferenced *bool,
