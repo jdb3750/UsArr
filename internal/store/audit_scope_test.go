@@ -221,7 +221,7 @@ func TestAuditReadUsesTheActorActionIndex(t *testing.T) {
 	}
 	joined := strings.Join(plan, " | ")
 
-	if !strings.Contains(joined, "ix_audit_actor_action") {
+	if !planHas(joined, "ix_audit_actor_action") {
 		t.Fatalf("the not-sent read does not use ix_audit_actor_action:\n  %s\n"+
 			"Migration 0002 added that index for this read and nothing else uses it.", joined)
 	}

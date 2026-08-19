@@ -103,8 +103,9 @@ this paragraph states. The scoped fusion query joins against the caller's access
 … JOIN search_doc_library sdl ON sdl.doc_rowid = sd.rowid AND sdl.library_id IN (:scope…)
 ```
 
-a covered index seek per scoped library. **`make check` asserts `SEARCH sdl USING PRIMARY KEY` and
-the absence of `SCAN search_doc_library`** — `internal/db`'s `TestScopedSearchIsASeekNotAScan` and
+a covered index seek per scoped library. **`make check` asserts a `SEARCH` on the junction — under
+the alias each test derives rather than a literal `sdl`, see schema.md §7 invariant 6 — and the
+absence of `SCAN search_doc_library`** — `internal/db`'s `TestScopedSearchIsASeekNotAScan` and
 `internal/store`'s `TestSearchLibraryPlanIsSeeks` — so it cannot silently regress. Post-filtering FTS hits silently
 breaks keyset page sizes and leaks existence through result counts and ranking positions.
 

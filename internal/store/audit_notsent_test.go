@@ -123,7 +123,9 @@ func notSentPlanFaults(plan string) []string {
 	if strings.Contains(plan, "SCAN audit_log") {
 		faults = append(faults, "degraded to a scan of a table that grows forever by design")
 	}
-	if !strings.Contains(plan, "USING INDEX ix_audit_actor_action") {
+	// planHas, not strings.Contains: a rename to ix_audit_actor_action_v2 would
+	// satisfy a substring match and pin nothing (planassert_test.go).
+	if !planHas(plan, "USING INDEX ix_audit_actor_action") {
 		faults = append(faults, "does not use ix_audit_actor_action")
 	}
 	// A covering plan is a DIFFERENT query from the one that ships. This read

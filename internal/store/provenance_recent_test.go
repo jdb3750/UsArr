@@ -214,7 +214,7 @@ func servingIndexFaults(plan string) []string {
 	if strings.Contains(plan, "SCAN provenance") {
 		faults = append(faults, "degraded to a table scan")
 	}
-	if !strings.Contains(plan, "USING INDEX ix_prov_user_grabbed") {
+	if !planHas(plan, "USING INDEX ix_prov_user_grabbed") {
 		faults = append(faults, "does not use ix_prov_user_grabbed")
 	}
 	// A covering plan is a DIFFERENT query from the one that ships. Accepting it
