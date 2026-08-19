@@ -117,6 +117,7 @@ because no ADR ever decided it. Annotating leaves that failure mode nowhere to h
 | [0065](#adr-0065) | The BookOrbit cover fetch runs **inside the import, between committed batches** — not on a render path, and not inside `applyOneItem`'s transaction | **Accepted** — 2026-08-19; **the SHAPE is a restatement of ARCHITECTURE §4.4.1 rule 4 rather than a novelty** — *"the grid paints from `work` rows as import phase A commits; images fill in behind, and the grid is never blocked on the image queue"* — so covers are fetched **during the import** and there is **no per-work on-demand entry point**, a render path being disqualified by principle 1 and [ADR-0004](#adr-0004) because a synchronous upstream call on a render is exactly what they refuse; ⚠️ **the LEVEL named in the first ruling was WRONG, and the correction is MEASURED** — `applyOneItem` runs inside `ApplyCatalogueBatch`'s single `BEGIN IMMEDIATE` transaction, which spans a whole batch at `min(2000 rows, 100 ms)` on a writer pool hard-capped to **one connection** (`write.SetMaxOpenConns(1)`, *"Exactly one. This is the entire single-writer discipline."*), so a fetch there would hold the process's only writer across a network round trip **per book** and serialise the entire import behind upstream latency — which `internal/db/sqlite.go`'s `Write` doc already forbids in writing: *"fn must not call Write, and must not hold the transaction across a network call: the whole process shares one writer connection"*; **so the pass sits in `internal/libsync`, between committed batches**, keyed by **remote id** with the work re-resolved inside the store's own transaction, because `ImportedItem` carries **no work id by design** and `PosterAsset`'s header names the hazard — an id read before a network round trip is an id read arbitrarily long ago, and `work.id` being `INTEGER PRIMARY KEY` turns a reused id into **the wrong book's cover**, silent and visible only as art that does not match its title; **two in-tree precedents, both built before this question was asked** — credits were moved OUT of the stream callback (`FullImport` phase 3: issuing per-item GETs from inside it *"would hold the streaming connection open across all of them"*) and `PutPosterAsset` opens *"The bytes are already on disk when this runs"*, a sentence a fetch inside the transaction would falsify; **a cover-fetch failure NEVER fails the import**, a partial catalogue that says it is partial beating no catalogue, on `FileReadFailures`' existing *"NOT an import failure"* shape; ⚠️ **concurrency is bounded and the bound is BUILT rather than INHERITED** — §4.4's `min(NumCPU, 4)` is **prose** and is about **transcoding**, so this decision's own first constraint was wrong and is carried verbatim rather than quietly fixed: *"§4.4's semaphore is scoped to transcoding… fetch concurrency needs its own bound, stated in its own terms, not borrowed from a limit that exists for a different resource"*; 🔍 **and one supporting claim was CHECKED AND IS FALSE, so it is not leaned on** — `internal/imagepipeline/pipeline.go`'s *"the tree's only one is the Argon2id gate"* does not hold, `internal/releases/search.go` having bounded its indexer fan-out at `DefaultConcurrency = 6` since `dd15d95`, which is a bound over concurrent **network legs** and therefore the closest precedent rather than a counter-argument; **a 404 is "absent for this credential" and never terminal** — BookOrbit throws the same `NotFoundException` for a missing cover file, a missing book, and a book the credential's content filters hide, so a 404 is **not evidence about a file** and the next import retries rather than inheriting a permanent verdict, which deliberately NARROWS `cover.go`'s own *"caching absence on a 404 is sound"*; ⚠️ **what it does NOT decide is stated rather than implied** — whether whole libraries are hidden from the account remains **unanswerable read-only** ([ADR-0061](#adr-0061)), the permit count and the pass's exact slot in `FullImport` are implementation (though `PutPosterAsset` sets no `rollup_dirty` — verified — so a cover pass does not compete with the file walk for the last-before-flush slot), and within-import retry is left open; **the pipeline's *"NEVER AGAINST A REAL COVER"* caveat is untouched and stays exactly as loud**; **adds no migration, no column and no DDL, and edits no other ADR's reasoning** — two mechanical anchor/rule repairs elsewhere in this file ride along in the same change and touch no decision · ⚠️ **amended 2026-08-19** — decision 5's *"a fetch bound, stated in fetch terms"* is less precise than the bound that shipped: one permit is held across fetch, decode **and** render, so it caps concurrent transcodes and caps connections only incidentally, and **N permits is not N concurrent requests**; **the decision itself — bounded, built rather than inherited, own constant and own refusal test — is unchanged** |
 | [0066](#adr-0066) | A wholly skipped BookOrbit library is **bound with an honest zero**, never declined; and the whole-library sentence says **what happened**, not just how many | **Accepted** — 2026-08-19; **builds on [ADR-0063](#adr-0063)** — the zero-count skip row is what makes an all-skipped library representable, so this ADR is about **what the screen says**, not about the schema — and **amends no ADR's reasoning**, editing no other entry in this file; **it is the ADR `internal/libsync/bookorbit.go` asked for by name**: *"Splitting one container into two libraries is a deviation from §17.8 that needs an ADR, and it is comics' slice to ask for"*; **the case is not hypothetical** — comics are skipped inside the walk today (`StreamItems`: `case bookorbit.MediaKindComic: tally.Comics++; return nil`, on the unit-of-work gap its package doc names, BookOrbit's series having no library to bind a comic's series work to) while **no container is declined at all** (`Containers()`: *"NOTHING IS DECLINED HERE… BookOrbit says nothing, so there is no answer to decline on"*, its `libraries` table carrying no type/kind/mediaType column), and **the owner's own BookOrbit keeps comics and prose in SEPARATE libraries** — his words, 2026-08-19, *"libraries are split up"* — so on the install v0.1 is proven against a comics library **walks, reports and yields nothing**, which is a whole library on his screen rather than an edge case; **the decision**: such a container is **BOUND** with an item count of zero and a sentence, and **no adapter declines one for being wholly skipped** — ratifying what the code already does, precisely because the tempting change is the one that makes the row disappear; ⚠️ **and the whole-library case gets its OWN sentence, because the count is not the message** — *"42 items were read and not mapped"* is a report **on the remainder** and reads as *some of this arrived*, so when the 42 IS the library the identical sentence reads as *this is broken*; the specified pair is *"Nothing in this library is imported yet"* over *"All 412 items were read. UsArr does not import comics yet."*, with **three acceptance criteria rather than taste** — it asserts the read succeeded with the count as evidence, it names the **media type** and the reason, and **it must be impossible to mistake for a connection failure**; **the condition is DERIVED and no wire field is added** — `item_count == 0` ∧ `skipped.state == "left_out"` ∧ `skipped.items > 0`, both fields shipping today, with the **empty upstream library** staying distinct for free since it walks clean to `state: "none"` with `items` absent; 🔍 **`skipEffect`'s remainder clause is measured FALSE on this shape and recorded as false rather than left to be found on a screen** — *"every other book in the library was imported"*, when there is no other book (it travels to `sync_report` and not to the cell, on §9.1's split, which bounds the blast radius and not the wrongness); **the MIXED container is decided too, and it becomes TWO library records** — `library.kind` is *"Exactly one, required"* under a `CHECK` that **already permits `'comic'`**, and `library_source`'s uniqueness is per `(library_id, …, container_ref)`, so two libraries may name one container and **no migration is needed**; until comics import, a mixed container binds exactly as today, one `book` library with its comics counted, which is the partial case and renders the partial sentence; ⚠️ **that half is DESIGNED AND UNTESTED, stated plainly so untested does not read as unsupported** — the owner's split libraries mean **his data will never exercise it**, and the precedent for the distinction is this project's own **synthetic-cassette rule** (`internal/bookorbit/vcr_test.go`: *"A SYNTHETIC CASSETTE PROVES THIS CLIENT'S PARSING, NOT THE SERVER'S BEHAVIOUR"*), where a green is **spec evidence only** and the tests are kept and trusted for exactly what they cover; 🚫 **DECLINING THE LIBRARY IS THE ALTERNATIVE THIS ADR CLOSES**, and it loses on three counts — invisible reads as broken, since §17.8 renders `library` joined to `library_source` and a declined container has neither, leaving a green Services row, a library the owner can see upstream and **no row at all**, which is principle 3's *"empty screen that looks broken"* exactly; the decline lands in `container_declined`, which is **measured to have no reader** in `internal/store`, `internal/httpapi` or `web/`; and it makes the state **unstable across a release**, a library materialising out of nowhere with a full catalogue the day comics import, where binding now turns that day into a zero becoming a number on a row the user has already seen; 🚫 **also rejected**: rendering nothing (`none` is the **measured negative** meaning *nothing was left out*, so using it where **everything** was would make the column's one honest silence say the opposite of the truth), reusing the partial sentence, a `whole_library` wire field or a third `SkipState` member (**"and also"** — derivable from two shipping fields, and a second thing that can be absent or disagree, on ADR-0063's own ground for declining a fourth state), and giving the row `kind = 'comic'` today (it could only be inferred **from the tally**, i.e. from what the walk happened to read, and §6.4's cascade makes a wrong `work.kind` unmergeable); ⚠️ **one residual is recorded rather than closed** — the row's kind is `book` while its contents are comics, mitigated only by `kind` being *"EDITABLE (§6.5 rule 4)"*, and closed when comics get a unit of work; **adds no migration, no column, no DDL and no wire field**, owes the implementing slice exactly **two strings**, and **nothing here is built** — it rules behaviour the §17.8 screen and the comics slice implement |
 | [0067](#adr-0067) | A pasted BookOrbit **magic link is accepted and reduced to its token**; the refusal becomes the fallback | **Accepted** — 2026-08-19; **reverses a ruling taken the same morning and records both**, because the first one was correct reasoning on a premise that turned out to be false — `ab9e0f3` refused a pasted magic-link URL on the belief that BookOrbit's copy button *"yields a URL, while POST /api/v1/auth/magic-links/login wants the bare token"*, read as *an artefact its own API cannot consume*; **reading the consumer falsified it** — `client/src/router/index.ts` declares a public `/magic` route, `MagicLinkLoginView.vue` takes `route.query.token` and strips it from history, and `useAuth.loginWithMagicLink` POSTs `{"token": raw}`, so **URL in / bare token out is an adapter BookOrbit already implements**, and `MagicLinksSettings.vue` offers the operator nothing else (the table renders the label, the account, the expiry and the use count, never the raw value); **measured at `73b7877d2fede2221b0ca360af9bfced7c3797f3`, cited as a commit because the tag `v2.6.0` was NOT verified to point at it**; **found by a live failure on the owner's install**, not by review; **leaves [ADR-0060](#adr-0060) standing and unreworded**; the price is named rather than buried — the accept rule is a **whitelist**, so an upstream token-format change would have UsArr refuse a valid credential |
+| [0068](#adr-0068) | A BookOrbit comic is an **issue**, and issues are **minted under series works**; `seriesId` null synthesizes a one-shot series, extra memberships are **recorded, not resolved** | **Accepted** — 2026-08-19; **this is the "unit of work" [ADR-0066](#adr-0066) decision 5 was waiting for** — *"The kind stays `book` until comics have a unit of work"* — so it activates that decision's two-library split rather than reopening it; **[ADR-0030](#adr-0030)'s model is applied, not amended**: `comic` is the series, `comic_issue` the issue, verified at migration `00005_library_sync.sql:256` (*"'comic' is the SERIES, 'comic_issue' the issue or chapter"*) and `00006_kavita_subtypes.sql`'s header; **the parent binding is MEASURED, not inferred** — `BookCard.seriesId` is not an arbitrary `memberships[0]` and is not null under multi-membership, it is BookOrbit's own maintained **primary** (`series-membership.service.ts`, `displayOrder = 0`, round-tripped by `syncPrimaryMetadata` and `syncPrimaryFromMetadata`, at commit `73b7877d2fede2221b0ca360af9bfced7c3797f3`); **`seriesMemberships[]` beyond the primary is RECORDED and not acted on**, on [ADR-0063](#adr-0063)'s precedent, the fuzzy tier that would resolve it staying v0.3 via `work_relation`; **`is_oneshot` is WRITTEN rather than merely tolerated** — *"a column with a DEFAULT 0 and no writer is a deaf column"*; **both residue defaults emit a `sync_report` row**, so sizing comes from instrumentation rather than from estimates; **no migration, no column, no DDL and no new wire field** — `sync_report.kind` carries no `CHECK` by design and `library.kind` already permits `'comic'`; ⚠️ **the done-check FAILS if series count equals issue count**, because that is the per-row shape [ADR-0066](#adr-0066) already pre-emptively refused |
 
 ---
 
@@ -9696,3 +9697,257 @@ metadata carries the instance name and a reason, and `errorBody`'s `message` and
 through `redactText` — so the guard pins existing behaviour rather than fixing a breach. It was fired
 against a deliberately-broken build first: with the submitted value interpolated into the refusal
 message, it fails.
+
+---
+
+<a id="adr-0068"></a>
+## ADR-0068 — A BookOrbit comic is an **issue**, and issues are **minted under series works**
+
+**Status:** Accepted — 2026-08-19 · **This is the "unit of work" [ADR-0066](#adr-0066) decision 5 was
+waiting for.** That ADR closed with *"The kind stays `book` until comics have a unit of work; decision
+5 is what changes it, on evidence rather than on a guess"* — so this entry **activates** decision 5's
+two-library split rather than reopening it, and ADR-0066 stands unreworded ·
+**[ADR-0030](#adr-0030)'s model is APPLIED, NOT AMENDED** — `comic` is the series, `comic_issue` the
+issue beneath it · **Builds on [ADR-0063](#adr-0063)** for the record-what-you-declined rule ·
+**Ships no code**: this ADR governs a later slice, and **nothing here is built** ·
+**No migration, no column, no DDL and no new wire field** ·
+⚠️ **Measurements of BookOrbit cite a COMMIT, not a tag**: everything below was read from
+`bookorbit/bookorbit` at `73b7877d2fede2221b0ca360af9bfced7c3797f3`, the same commit
+[ADR-0067](#adr-0067) pinned.
+
+### Context
+
+#### 1 · A BookOrbit comic is one file, so it is an issue — not a series
+
+`MediaKindComic` is *"one of cbz, cbr, cb7, cbx"*
+([`internal/bookorbit/catalogue.go:434-435`](../internal/bookorbit/catalogue.go)), and
+`MediaKindOf` returns it from a single primary file's format token (`:534-543`). **One BookOrbit book
+is one comic file.** A `.cbz` is an issue or a chapter. It is not a series, and nothing upstream makes
+it one.
+
+#### 2 · The model it lands in is already settled, and was verified rather than assumed
+
+Three independent statements of the same rule, each read at this tip:
+
+- **[ADR-0030](#adr-0030)** — *"`comic` is the series — top-level, in the grid, in the search corpus,
+  `kind_byte` 9. `comic_issue` is the issue or chapter — a child, excluded from the corpus"*, with
+  `work_comic` split into a series table and `work_comic_issue`.
+- **Migration `00005_library_sync.sql:256`** — the `work.kind` `CHECK` comment, verbatim:
+  *"'comic' is the SERIES, 'comic_issue' the issue or chapter, excluded from the search corpus exactly
+  as episode/track are (ADR-0030)."* `parent_work_id` is at `:264`, `ix_work_parent` at `:312`.
+- **Migration `00006_kavita_subtypes.sql`** — its header creates *"work_book · work_comic ·
+  work_comic_issue"*, and the table at `:180-194` carries `number_text`, `number_sort`, `volume_label`,
+  `volume_sort`, `is_special`, `is_oneshot`, `special_version`, `page_count`.
+
+ARCHITECTURE §5.3/§6 carry the same split (`docs/ARCHITECTURE.md:733`, `:764-784`, `:867-876`), and
+§8.2's corpus exclusion at `:1570`. **This ADR adds nothing to that model. It decides how rows enter
+it.**
+
+#### 3 · The screen is already built and already reads zero
+
+`/library/comics` is live and wired end to end: the route exists
+([`web/src/routes/library/[type]/+page.svelte`](../web/src/routes/library/%5Btype%5D/+page.svelte)),
+`comics` is a member of `MEDIA_TYPES` ([`web/src/lib/library.ts:61`](../web/src/lib/library.ts)), and
+`browseKinds("comics")` returns `[]string{"comic"}`
+([`internal/store/browse.go:153`](../internal/store/browse.go)). **It renders zero rows for exactly
+one reason: nothing writes a comic work.**
+
+#### 4 · The series data costs zero extra HTTP
+
+`BookCard` already carries `seriesId`, `seriesName`, `seriesIndex` and `seriesMemberships[]`
+([`api/specs/bookorbit-types/src/book.ts:130-133`](../api/specs/bookorbit-types/src/book.ts), inside
+the `BookCard` declared at `:124`; `BookSeriesMembership` at `:115-122`). UsArr's Go `Book` — *"the
+allowlisted projection of one BookCard"*
+([`internal/bookorbit/catalogue.go:368`](../internal/bookorbit/catalogue.go)) — **decodes none of
+them**, and `bookCardDTO` is *"NARROWER THAN THE WIRE SHAPE ON PURPOSE"* (`:236-250`). The bytes are
+already on the wire in the walk that ships. **Widening the allowlist is the whole acquisition cost;
+there is no second request, and no new endpoint.** `GET /series` stays excluded on its existing
+measurement (`:30-34`) — *"there is no series watermark to walk, and every fact they carry rides the
+book stream already"* — which this decision now depends on rather than merely inherits.
+
+### Decision
+
+**1 · Every imported comic file becomes a `work.kind = 'comic_issue'` row, and every one of them is
+minted under a `work.kind = 'comic'` parent.** `parent_work_id` is never null on a `comic_issue` row
+this importer writes. The series work is the row the grid, the corpus and the facet count see; the
+issue is the child, exactly as `episode` sits under `series`.
+
+**2 · `seriesId` null → a SYNTHESIZED SINGLE-ISSUE SERIES, with `is_oneshot = 1` written.** A comic
+whose card reports no series is **never silently dropped**, and is **never promoted to a `comic` work
+in its own right**. It is ingested as an issue under a synthesized series work named for the book, and
+the issue row sets `work_comic_issue.is_oneshot = 1`.
+
+> **The flag is WRITTEN, not merely tolerated.** *"A column with a `DEFAULT 0` and no writer is a deaf
+> column, and this project has found several. If the one-shot case is real enough to have a flag, the
+> import writes the flag."* `special_version`'s enumerated values already include `one-shot`
+> (`00006_kavita_subtypes.sql:188`), so the vocabulary for this case was allocated before this ADR and
+> had no writer either.
+
+⚠️ **This was cross-checked against ADR-0030 before being relied on, because the one-shot reading
+began as a reading of the schema rather than a measurement of intent.** ADR-0030 **does not
+contradict it**: it allocates `is_oneshot` and `is_special` as columns of `work_comic_issue` and
+defines neither's writer, and its only adjacent ruling — that a TPB *"is its own `comic_issue` with
+`special_version='tpb'`"* — is the same shape as this one, an unusual issue modelled as an issue.
+**ADR-0030 in fact strengthens the parent rule**: it explicitly rejected *"putting series and issues in
+one kind and distinguishing on `parent_work_id IS NULL`"*, so a parentless issue is a shape that ADR
+already refused to make meaningful.
+
+**3 · Bind on the scalar `seriesId`. RECORD the additional memberships; do not resolve them.** A
+BookOrbit book may belong to several series. The parent binding uses the scalar `seriesId` and nothing
+else. Memberships beyond that one are **recorded** — the ADR-0063 precedent, *record what you declined
+to act on* — and are never used to mint a second parent, a second membership, or a `work_relation`
+edge.
+
+> ⚠️ **The premise here was a stop-condition, and it was MEASURED rather than inferred.** *"Bind on
+> BookOrbit's own primary"* was originally an inference from the wire shape alone. It was checked
+> against BookOrbit's own source, at the commit pinned in the Status line above, in
+> `server/src/common/services/series-membership.service.ts`:
+>
+> - `bookMetadata.seriesId` is a **real scalar column**, and the card takes it from that column —
+>   `seriesId: bookMetadata.seriesId` (`book.repository.ts:552`), surfaced as
+>   `seriesId: row.seriesId ?? null` (`utils/assemble-book-cards.ts:194`), on a path **independent of**
+>   the `seriesMemberships` join (`:197-203`).
+> - `displayOrder = 0` is a **designated primary slot**, not an accident of ordering.
+>   `syncPrimaryFromMetadata` rebuilds the list as `[primary, ...rest]` where
+>   `rest = current.filter(m => m.displayOrder !== 0)` (`:59-89`), and `backfillFromMetadata` seeds the
+>   scalar into `display_order = 0` (`:135-148`).
+> - The invariant is **maintained in both directions**: `replaceForBook` calls `syncPrimaryMetadata` on
+>   every membership write (`:55`), which sets `bookMetadata.seriesId = memberships[0].seriesId`
+>   (`:154-166`). BookOrbit's own test names it — *"replaces memberships with normalized unique series
+>   and **syncs primary scalar metadata**"* — with fixtures literally named `Primary` and `Rest`.
+>
+> **So both failure branches are FALSE.** `seriesId` is **not** an arbitrary `memberships[0]`: it is
+> the `displayOrder = 0` primary, a slot BookOrbit names *primary* in three method names and keeps
+> true on every write. And it is **not** null when there are several memberships — `syncPrimaryMetadata`
+> writes `primary?.seriesId ?? null`, which is null only when the membership list is **empty**.
+>
+> **The strengthening this buys:** binding on the scalar and binding on `memberships[displayOrder = 0]`
+> are, by construction, **the same binding**. UsArr does not need `seriesMemberships[]` to find the
+> parent at all — which is precisely why recording the remainder is a pure record and can never
+> silently become a resolution.
+
+**4 · Both residue defaults emit a `sync_report` row.** The synthesized-series case and the
+extra-membership case each write one, so the **first real import against the owner's library measures
+how often each occurs**. Sizing comes from instrumentation, not from estimates, and **not from asking
+the owner to run SQL**. This needs no migration: `sync_report.kind` deliberately carries **no `CHECK`**
+— *"this vocabulary is the newest and least settled in the schema"* (`00005_library_sync.sql:864-867`)
+— and `detail` is JSON that is redacted on the way in (`:875-878`).
+
+**5 · The library the series belongs to is [ADR-0066](#adr-0066) decision 5's answer, and this ADR is
+what makes it live.** A BookOrbit series is **not** library-scoped upstream, so the container question
+is answered on UsArr's side, not BookOrbit's: **a synthesized or bound `comic` series work belongs to
+the `comic` library minted over the `library_source` container ref the issue's book was walked from.**
+Decision 5 already ruled the mechanism — a mixed container *"becomes a `book` library and a `comic`
+library over the same `library_source` container ref"*, needing no migration because `'comic'` is
+already a permitted `library.kind` and `library_source`'s uniqueness is
+`(library_id, service_instance_id, container_kind, container_ref)`. Its own condition was *"once comics
+have a unit of work"*, and **this ADR is that unit of work**, so the sentence *"until comics import, a
+mixed container binds exactly as it does today"* stops applying at the slice that implements this.
+**No series work is ever minted into no library at all.**
+
+### Why
+
+**Because the parent is the only part of this that cannot be fixed later.** ARCHITECTURE §6.4's cascade
+means a wrong `work.kind` written at ingest can never be merged away — the rule ADR-0066 cited when it
+refused to guess a container kind. Everything else here is recoverable; the parent binding is not.
+That is why the binding rests on a measurement of BookOrbit's source and not on the shape of its JSON.
+
+**Because the alternative to a parent is a screen that lies.** `comic_issue` is excluded in three
+independent places, and this is the whole argument against orphan issues — verified in the tree:
+
+1. **`recentWorkKinds`** is `{"movie","series","artist","album","book","comic"}`
+   ([`internal/store/recent.go:71`](../internal/store/recent.go)), with `comic_issue` named in the
+   doc as excluded for ADR-0030's reason.
+2. **`browseKinds`** maps `MediaTypeComics` to `[]string{"comic"}`
+   ([`internal/store/browse.go:153`](../internal/store/browse.go)).
+3. **The FTS corpus refuses it outright.** `corpusExcludedKinds` contains `"comic_issue": true`
+   ([`internal/store/catalogue.go:1065-1067`](../internal/store/catalogue.go)) and `writeSearchDoc`
+   **returns an error** on it (`:1099-1104`) rather than merely skipping it.
+
+That third one is stronger than "excluded", and it changes the argument: an importer that wrote
+parentless issues through the top-level item path would not quietly render zero — it would **fail**.
+The guard's own doc says so and names this exact slice: *"NOTHING SHIPPED REACHES IT … today this is a
+guard against a future caller — the phase-B `comic_issue` walk is the obvious one — routing a child
+kind through the top-level item path"* (`:1060-1064`). **This ADR is that caller, and it is the reason
+the guard was written.**
+
+**Because the one-shot is a real shape and the schema already conceded it.** Two columns and one
+`special_version` value were allocated for it and none has a writer. Synthesizing a single-issue series
+is the shape that keeps a one-shot visible on `/library/comics` — where the user will look for it —
+without inventing a kind, a third level, or a nullable parent.
+
+### Alternatives rejected
+
+- **Orphan `comic_issue` works with no parent.** Refused: *"a deaf guard with a progress bar on it —
+  worse than today, because today the emptiness is honest."* The import would report success and every
+  screen would still read zero, for the three exclusions verified above; and on the corpus path it
+  would not even do that, because `writeSearchDoc` errors. **A `comic_issue` with no parent is not a
+  degraded comic; it is a row no shipped read can see.** ADR-0030 had already refused to give
+  `parent_work_id IS NULL` meaning on this kind.
+
+- **One `comic` work per comic file** — the one-line version. Refused: it mints a **series** work per
+  issue, and §6.4's cascade makes a wrong `work.kind` at ingest **permanently unmergeable**.
+  ⚠️ **[ADR-0066](#adr-0066) already rejected this pre-emptively**, in terms — *"The kind stays `book`
+  until comics have a unit of work; decision 5 is what changes it, on evidence rather than on a
+  guess"* — refusing even to infer a container's kind from a tally for the same cascade reason. Doing
+  it per row is that refusal at a finer grain. ARCHITECTURE §13's own sizing shows the shape it would
+  destroy: *"`comic` | 3,000 | ~90,000 `comic_issue` rows behind them"* (`docs/ARCHITECTURE.md:2120`)
+  — a thirty-to-one ratio flattened to one-to-one.
+
+- **Defer comics until the parent seam exists.** Refused **as stated**: the seam is `parent_work_id`
+  plus `ix_work_parent`, and it has existed since `00005_library_sync.sql:264` and `:312` — so
+  "until the seam exists" describes no future state. **No owner builds a seam that already exists for
+  a feature nobody is importing**, which makes this deferral a **scope cut** rather than a sequencing
+  choice. A scope cut is **the repo owner's call and would have to be put to him in those words**. It
+  was not chosen, and it is recorded here so that a later reader can see it was considered rather than
+  overlooked.
+
+- **Resolve `seriesMemberships[]` into `work_relation` edges now.** Refused: the fuzzy-match tier that
+  would adjudicate multi-series membership is **v0.3** (`docs/FUTURE.md`, and `work_relation`'s
+  confidence and evidence columns are its seam). **The seam ships; the feature does not.** Recording
+  the memberships is what keeps the later tier cheap without building toward it early.
+
+- **Promote a `seriesId`-null comic to a `comic` work in its own right.** Refused: it is the per-row
+  alternative wearing a smaller hat, and it makes the two residue cases produce two different kinds
+  from one file format — so the `/library/comics` count would silently mean two different things
+  depending on upstream metadata quality.
+
+### Consequences
+
+- **No migration, no column, no DDL, no new configuration key and no new wire field.** Every object
+  this needs exists: `work.kind`'s `comic_issue` member, `parent_work_id`, `ix_work_parent`,
+  `work_comic`, `work_comic_issue`, `library.kind`'s `'comic'`, and a `sync_report.kind` vocabulary
+  with no `CHECK` on it.
+- **`internal/bookorbit`'s allowlist widens by four fields, and that is the acquisition cost in full**
+  — `seriesId`, `seriesName`, `seriesIndex`, `seriesMemberships[]` into `bookCardDTO` and the `Book`
+  projection. **Zero extra HTTP.**
+- **`SkipTally.Comics` and `SkipNote.Comics` stop being the comics story.** They exist today because
+  comics are skipped ([`internal/libsync/bookorbit.go:120-121`](../internal/libsync/bookorbit.go),
+  [`internal/store/skips.go:121`](../internal/store/skips.go)); after this, the field stays and its
+  expected value becomes **0**, which is the fourth done-check below.
+- **`writeSearchDoc`'s guard gets its first real caller and must keep refusing.** The implementing
+  slice routes `comic_issue` rows around the top-level item path; it does not relax
+  `corpusExcludedKinds`.
+- **The owner's Libraries screen changes shape**, via ADR-0066 decision 5: a mixed container that binds
+  as one `book` library today will bind as a `book` library **and** a `comic` library. ⚠️ **The owner's
+  own libraries are split**, so — as ADR-0066 decision 6 already recorded — **his data will not
+  exercise the mixed-container split**, and this ADR inherits that limitation unchanged rather than
+  claiming coverage it does not have.
+
+#### The done-check
+
+After a live import against a real BookOrbit, all four must hold. **The middle clause does the work:**
+
+1. **`work.kind = 'comic_issue'` rows exist, and every one resolves to a parent series work.** Zero
+   rows with `parent_work_id IS NULL`.
+2. **`work.kind = 'comic'` rows exist and are STRICTLY AND SUBSTANTIALLY FEWER than the issue rows.**
+   ⚠️ **If the series count EQUALS the issue count, the per-row implementation shipped and this check
+   MUST FAIL.** A green on (1), (3) and (4) with parity on (2) is precisely the rejected alternative
+   passing itself off as the accepted one, and it is the only outcome here that is worse than not
+   shipping.
+3. **`/library/comics` renders SERIES, NOT ISSUES**, with a non-zero facet count.
+4. **The latest `items_skipped` row's `Comics` field reads 0.**
+
+Checks (1) and (4) prove the rows arrived. Check (3) proves they arrived in the layer the user reads.
+**Only check (2) can tell the accepted shape from the refused one**, which is why it is stated as a
+failure condition rather than as a number to look at.
