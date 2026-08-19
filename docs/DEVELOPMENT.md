@@ -200,9 +200,13 @@ that can hold the master key.
 ### Two-process dev loop (the normal one)
 
 ```bash
-make dev            # Terminal 1 — Go backend, hot reload -> http://localhost:8484
+make dev            # Terminal 1 — Go backend -> http://localhost:8484
 make web-dev        # Terminal 2 — Vite with HMR -> :5173, proxies /api -> :8484
 ```
+
+**The HMR is Terminal 2's alone.** `make dev` is a plain `go run` with no watcher behind it — there is
+no Go reloader anywhere in this repo — so a change under `internal/` or `cmd/` needs a Ctrl-C and a
+re-run of Terminal 1. Svelte changes need neither.
 
 In this mode `internal/web` serves nothing. The SPA is baked in only by `make build`, which runs
 `web-build` first and embeds `web/build`. **Consequence: `go build ./cmd/usarr` by hand produces a
