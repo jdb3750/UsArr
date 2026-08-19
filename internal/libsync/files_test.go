@@ -164,7 +164,7 @@ func TestStreamFilesDropsAPerSeriesFailure(t *testing.T) {
 	src := NewKavitaSource(c)
 
 	var got []store.FileSet
-	n, err := src.StreamFiles(t.Context(), []FileRequest{
+	n, failed, err := src.StreamFiles(t.Context(), []FileRequest{
 		{RemoteKind: "series", RemoteID: "1", RemoteSubtype: "1"},
 		{RemoteKind: "series", RemoteID: "2", RemoteSubtype: "1"},
 		{RemoteKind: "series", RemoteID: "3", RemoteSubtype: "1"},
@@ -188,6 +188,20 @@ func TestStreamFilesDropsAPerSeriesFailure(t *testing.T) {
 			t.Error("the failed series was delivered as an empty set, which would delete its files")
 		}
 	}
+
+	// ⚠️ AND IT IS REPORTED. This test previously stopped at the line above, so
+	// it asserted the drop and said nothing about the record — which is how the
+	// bare `continue` stayed green while the failure left no counter, no
+	// sync_report row and no log line at all.
+	if len(failed) != 1 {
+		t.Fatalf("the walk reported %d failures, want 1", len(failed))
+	}
+	if failed[0].RemoteID != "2" || failed[0].RemoteKind != "series" {
+		t.Errorf("reported failure %+v, want the series 2 request", failed[0])
+	}
+	if failed[0].Reason != "not_found" {
+		t.Errorf("reported reason %q, want %q", failed[0].Reason, "not_found")
+	}
 }
 
 // TestStreamFilesStopsOnAnOpenBreaker is the condition under which continuing
@@ -200,7 +214,7 @@ func TestStreamFilesStopsOnAnOpenBreaker(t *testing.T) {
 	src := NewKavitaSource(c)
 
 	var got int
-	n, err := src.StreamFiles(t.Context(), []FileRequest{
+	n, _, err := src.StreamFiles(t.Context(), []FileRequest{
 		{RemoteKind: "series", RemoteID: "1", RemoteSubtype: "1"},
 		{RemoteKind: "series", RemoteID: "2", RemoteSubtype: "1"},
 		{RemoteKind: "series", RemoteID: "3", RemoteSubtype: "1"},
@@ -225,7 +239,7 @@ func TestStreamFilesDeliversAnEmptySet(t *testing.T) {
 	src := NewKavitaSource(c)
 
 	var got []store.FileSet
-	n, err := src.StreamFiles(t.Context(), []FileRequest{
+	n, _, err := src.StreamFiles(t.Context(), []FileRequest{
 		{RemoteKind: "series", RemoteID: "1", RemoteSubtype: "1"},
 	}, func(s store.FileSet) error { got = append(got, s); return nil })
 	if err != nil {

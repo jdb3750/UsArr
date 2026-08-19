@@ -115,6 +115,18 @@ type Report struct {
 	// FullImport's phase 4.
 	FileItemsRead int
 
+	// FileReadFailures is how many items the file walk COULD NOT read. It is
+	// the other half of FileItemsRead and it is not derivable from it: the walk
+	// also skips items whose remote id this adapter never wrote, so
+	// `len(items) - FileItemsRead` counts two different things as one.
+	//
+	// ⚠️ IT IS NOT AN IMPORT FAILURE and does not stop last_full_sync_at being
+	// stamped. It is the fact that makes an uncounted work explicable: each one
+	// is also a `file_walk_failed` row in sync_report, and the pair is what lets
+	// a screen say "3 series could not be read" instead of leaving three works
+	// rendering http-api.md §1.4.1's "not counted yet" with no reason on offer.
+	FileReadFailures int
+
 	// Files is what the file walk wrote, on Credits's terms.
 	Files store.FileResult
 
@@ -400,6 +412,7 @@ func (im *Importer) FullImport(ctx context.Context, instanceID int64) (Report, e
 		"blobs_written", rep.Rollups.BlobsWritten,
 		"blobs_withheld", rep.Rollups.BlobsWithheld,
 		"totals_offered", rep.Rollups.TotalsOffered,
+		"file_read_failures", rep.FileReadFailures,
 		"declined_containers", len(rep.DeclinedContainers),
 		"skipped_containers", len(rep.SkippedContainers),
 		"identity_conflicts", len(rep.IdentityConflicts),
@@ -649,7 +662,7 @@ func (im *Importer) streamAndApplyFiles(
 		return nil
 	}
 
-	read, streamErr := src.StreamFiles(ctx, reqs, func(set store.FileSet) error {
+	read, failed, streamErr := src.StreamFiles(ctx, reqs, func(set store.FileSet) error {
 		// Counted per hand-over so the files frames climb; see the item pass.
 		rep.FileItemsRead++
 		batch = append(batch, set)
@@ -660,6 +673,13 @@ func (im *Importer) streamAndApplyFiles(
 	})
 	// The adapter's own count wins at the end, on the item pass's terms.
 	rep.FileItemsRead = read
+	rep.FileReadFailures = len(failed)
+	// RECORDED BEFORE streamErr IS HANDLED, and before the tail flush, because
+	// these are facts about items the walk already gave up on: a breaker that
+	// opened at series 90 does not make the six failures before it less true.
+	if err := im.recordFileWalkFailures(ctx, instanceID, failed); err != nil {
+		return err
+	}
 	if streamErr != nil {
 		return fmt.Errorf("full import of service_instance %d: walk files (delivered %d): %w",
 			instanceID, read, streamErr)
@@ -667,6 +687,57 @@ func (im *Importer) streamAndApplyFiles(
 	if err := flush(); err != nil {
 		return fmt.Errorf("full import of service_instance %d: final file batch (delivered %d): %w",
 			instanceID, read, err)
+	}
+	return nil
+}
+
+// recordFileWalkFailures writes the durable half of a dropped file walk: one
+// sync_report row per item the walk could not read.
+//
+// ⚠️ THE Report COUNTER IS NOT THE RECORD. An import triggered by a background
+// connect has no caller left to read the Report by the time anyone asks why a
+// series shows no count — the same argument FullImport makes for writing
+// `container_declined` rows rather than only returning DeclinedContainers.
+//
+// THE KIND IS `file_walk_failed`, on `container_bind_failed`'s pattern:
+// <the pass that failed>_failed, with remote_kind/remote_id naming the subject.
+// sync_report.kind has no CHECK on purpose (migration 00005), so the vocabulary
+// is held by convention and by the readers — store.SyncReportFileWalkFailed is
+// the one spelling, shared with the read.
+//
+// ⚠️ detail CARRIES NO UPSTREAM TEXT. schema.md's column comment says the column
+// is redacted on the way in; walkFailureReason makes that stronger by never
+// producing text to redact. `reason` is its closed vocabulary and `status` is an
+// integer, so there is nothing here for ssrf.RedactText to find and no path by
+// which a Kavita response body could reach the row.
+//
+// ONE WRITE TRANSACTION PER ROW, which is what RecordSyncReport offers and what
+// the `container_declined` loop above already does. It is bounded by the number
+// of items the walk failed on, and the ordinary case is zero. The seam if a
+// whole large library ever fails at once is a batched writer in internal/store,
+// not a cap here: a cap would make the count on the Services screen wrong, which
+// is the exact failure this commit exists to remove.
+func (im *Importer) recordFileWalkFailures(
+	ctx context.Context, instanceID int64, failed []FileWalkFailure,
+) error {
+	for _, f := range failed {
+		detail, err := json.Marshal(map[string]any{
+			"phase":  "files",
+			"reason": f.Reason,
+			"status": f.Status,
+			// Named rather than implied, because it is the surprising half: a
+			// failed read is not evidence of an empty library and must not be
+			// reconciled as one. See StreamFiles.
+			"effect": "the item keeps the file rows it already had; none were removed",
+		})
+		if err != nil {
+			return fmt.Errorf("full import of service_instance %d: encode file walk failure: %w",
+				instanceID, err)
+		}
+		if err := im.Store.RecordSyncReport(ctx, instanceID,
+			store.SyncReportFileWalkFailed, f.RemoteKind, f.RemoteID, string(detail)); err != nil {
+			return fmt.Errorf("full import of service_instance %d: %w", instanceID, err)
+		}
 	}
 	return nil
 }

@@ -81,7 +81,41 @@ type FileSource interface {
 	// StreamFiles hands fn one FileSet per item it could read, and returns HOW
 	// MANY IT HANDED OVER — on failure too, on StreamItems's partial-delivery
 	// terms: the calls to fn happened and their effects stand.
-	StreamFiles(ctx context.Context, reqs []FileRequest, fn func(store.FileSet) error) (int, error)
+	//
+	// The second return is the items it could NOT read, one entry each. It is
+	// separate from the error because these are not the pass's failure: the
+	// pass continues past them and returns nil. See FileWalkFailure.
+	StreamFiles(
+		ctx context.Context, reqs []FileRequest, fn func(store.FileSet) error,
+	) (int, []FileWalkFailure, error)
+}
+
+// FileWalkFailure is one item whose file walk failed and was dropped.
+//
+// ⚠️ IT EXISTS BECAUSE THE DROP USED TO BE SILENT, AND SILENCE HERE IS A
+// FALSEHOOD ON A SCREEN. A series whose walk failed keeps the file rows it had
+// (StreamFiles's doc comment says why, and that half does not change), so a
+// FIRST import leaves it with none — and no count, no blob, and http-api.md
+// §1.4.1's honest "not counted yet" on the item. That rendering is only honest
+// if somebody can find out WHY it is not counted. Before this type, "walked and
+// found nothing" and "could not be walked" were indistinguishable everywhere
+// downstream, which is the same defect class as rendering an absent blob as
+// "none held".
+//
+// ⚠️ Reason IS A CLOSED VOCABULARY AND CARRIES NO UPSTREAM TEXT. See
+// walkFailureReason: the reason a Kavita gave in a response body never reaches
+// this struct, so it can never reach sync_report.detail or a log line.
+type FileWalkFailure struct {
+	RemoteKind string
+	RemoteID   string
+
+	// Reason is one of the tokens walkFailureReason returns.
+	Reason string
+
+	// Status is the upstream HTTP status when there was one, and 0 when the
+	// failure happened before a status existed (a timeout, a transport error, a
+	// refused decode). A number is not free text.
+	Status int
 }
 
 // kavitaFilePathSurrogate mints media_file.path from a MangaFileDto.
@@ -189,39 +223,125 @@ func archiveFormatFromExtensions(extensions []string) sql.NullString {
 // rows it already had. That is the right side of the trade — the alternative,
 // treating a failed read as "no files", would delete every row for that series
 // through the store's reconciliation and drive its count to zero. A failed read
-// is not evidence of an empty library.
+// is not evidence of an empty library. NOTHING BELOW CHANGES THAT: a dropped
+// series is still not delivered to fn, and delivery is the only thing that can
+// remove a row.
+//
+// ⚠️ THE DROP IS RECORDED, and it did not used to be. This function returned
+// `(int, error)`, a failed series took a bare `continue`, and the fact left no
+// counter, no row and no log line — so downstream, a series nobody could read
+// and a series that really holds nothing rendered identically. The dropped
+// series now come back as []FileWalkFailure and are logged here; the importer
+// owns what it does with them.
 //
 // Two conditions stop the pass, exactly as they stop the credit pass: a
-// cancelled context, and an open circuit breaker.
+// cancelled context, and an open circuit breaker. Both return the failures
+// gathered so far, on the same partial-delivery terms as the count.
 func (s *KavitaSource) StreamFiles(
 	ctx context.Context, reqs []FileRequest, fn func(store.FileSet) error,
-) (int, error) {
+) (int, []FileWalkFailure, error) {
 	var n int
+	// Bounded by len(reqs), which is itself the importer's already-budgeted
+	// per-import slice (streamAndApply's comment). Four short fields per FAILED
+	// item, and the ordinary case is none of them.
+	var failed []FileWalkFailure
 	for _, r := range reqs {
 		if err := ctx.Err(); err != nil {
-			return n, fmt.Errorf("kavita: walk files: %w", err)
+			return n, failed, fmt.Errorf("kavita: walk files: %w", err)
 		}
 		id, err := strconv.ParseInt(r.RemoteID, 10, 32)
 		if err != nil {
 			// A remote id this adapter did not write; it cannot be a Kavita
-			// series id.
+			// series id. NOT a walk failure: nothing was attempted, and there is
+			// no upstream to blame.
 			continue
 		}
 		volumes, err := s.Client.SeriesVolumes(ctx, int32(id))
 		if err != nil {
 			if errors.Is(err, kavita.ErrBreakerOpen) {
-				return n, fmt.Errorf("kavita: walk files for series %s: %w", r.RemoteID, err)
+				return n, failed, fmt.Errorf("kavita: walk files for series %s: %w", r.RemoteID, err)
 			}
-			// Dropped. The series keeps the rows it has — see the doc comment.
+			// Dropped, and recorded. The series keeps the rows it has — see the
+			// doc comment — but it is no longer indistinguishable from one that
+			// walked clean and found nothing.
+			reason, status := walkFailureReason(err)
+			failed = append(failed, FileWalkFailure{
+				RemoteKind: r.RemoteKind, RemoteID: r.RemoteID,
+				Reason: reason, Status: status,
+			})
+			// WARN, not ERROR: the import continues and completes. It matches
+			// the importer's own "container skipped" line, which is the nearest
+			// neighbour — one recoverable per-row fault inside a pass that keeps
+			// going. ⚠️ NO UPSTREAM TEXT, not even redacted: `reason` is a closed
+			// vocabulary and `status` is an integer. ssrf.RedactText would be the
+			// tool if a message rode along, and it is not the tool that makes
+			// this safe — its own doc names the gap, "a bare secret that is not
+			// inside a URL passes through untouched", and an upstream body
+			// echoing a bare key is exactly R-08's Mylar3 shape.
+			s.log().Warn("kavita: a series' file walk failed and was dropped",
+				"remote_kind", r.RemoteKind, "remote_id", r.RemoteID,
+				"reason", reason, "status", status)
 			continue
 		}
 		set := fileSetFromVolumes(r, volumes)
 		n++
 		if err := fn(set); err != nil {
-			return n, err
+			return n, failed, err
 		}
 	}
-	return n, nil
+	return n, failed, nil
+}
+
+// walkFailureReason classifies one failed SeriesVolumes call into a token and a
+// status, and DELIBERATELY THROWS THE MESSAGE AWAY.
+//
+// ⚠️ THE RETURN VALUE IS THE REDACTION. kavita.APIError.Message is parsed out of
+// an upstream response body; internal/kavita's `clean` already puts it through
+// ssrf.RedactText, and that is still not enough to store: RedactText finds
+// credentials INSIDE URLs, and states in its own doc that "a bare secret that is
+// not inside a URL passes through untouched". sync_report.detail is durable and
+// the row is what an operator pastes into a bug report, so the answer is not a
+// better scrubber, it is to never carry the text — schema.md's column comment
+// asks for redaction, and a closed vocabulary is redaction taken to its limit.
+//
+// The tokens are the sentinels' own names, because the sentinel is the
+// classification internal/kavita already made and a second taxonomy here would
+// be able to disagree with it.
+func walkFailureReason(err error) (string, int) {
+	var status int
+	var apiErr *kavita.APIError
+	if errors.As(err, &apiErr) {
+		status = apiErr.Status
+	}
+	switch {
+	case errors.Is(err, kavita.ErrUnauthorized):
+		return "unauthorized", status
+	case errors.Is(err, kavita.ErrForbidden):
+		return "forbidden", status
+	case errors.Is(err, kavita.ErrNotFound):
+		return "not_found", status
+	case errors.Is(err, kavita.ErrValidation):
+		return "validation", status
+	case errors.Is(err, kavita.ErrServer):
+		return "server_error", status
+	case errors.Is(err, kavita.ErrTimeout):
+		return "timeout", status
+	case errors.Is(err, kavita.ErrDecode):
+		return "decode", status
+	case errors.Is(err, kavita.ErrResponseTooLarge):
+		return "response_too_large", status
+	case errors.Is(err, kavita.ErrWrongService):
+		return "wrong_service", status
+	case errors.Is(err, kavita.ErrInvalidRequest):
+		return "invalid_request", status
+	case errors.Is(err, kavita.ErrUnexpectedStatus):
+		return "unexpected_status", status
+	}
+	// A failure that matched no sentinel — a transport error the client did not
+	// wrap, or a sentinel added upstream after this switch was written. It is
+	// reported as unclassified rather than by quoting the error: an error string
+	// is exactly the free text this function exists not to store.
+	return "unknown", status
 }
 
 // fileSetFromVolumes projects one series' volume walk onto the schema.

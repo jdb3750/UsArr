@@ -630,7 +630,7 @@ func (e *everyPhaseSource) StreamCredits(
 
 func (e *everyPhaseSource) StreamFiles(
 	_ context.Context, reqs []FileRequest, fn func(store.FileSet) error,
-) (int, error) {
+) (int, []FileWalkFailure, error) {
 	n := 0
 	for _, r := range reqs {
 		n++
@@ -643,10 +643,10 @@ func (e *everyPhaseSource) StreamFiles(
 				DateAdded:    testNow,
 			}},
 		}); err != nil {
-			return n, err
+			return n, nil, err
 		}
 	}
-	return n, nil
+	return n, nil, nil
 }
 
 // TestProgressFramesCarryTheReadCountAsItClimbs is the anti-stall assertion.
@@ -782,7 +782,7 @@ func (o *overReportingSource) StreamCredits(
 
 func (o *overReportingSource) StreamFiles(
 	_ context.Context, reqs []FileRequest, fn func(store.FileSet) error,
-) (int, error) {
+) (int, []FileWalkFailure, error) {
 	n := 0
 	for _, r := range reqs {
 		n++
@@ -793,10 +793,10 @@ func (o *overReportingSource) StreamFiles(
 				SizeBytes: 1, DateAdded: testNow,
 			}},
 		}); err != nil {
-			return n + o.extraFiles, err
+			return n + o.extraFiles, nil, err
 		}
 	}
-	return n + o.extraFiles, nil
+	return n + o.extraFiles, nil, nil
 }
 
 // TestTheAdapterCountOfAReadWinsOverTheHandOverCount covers the OTHER half of

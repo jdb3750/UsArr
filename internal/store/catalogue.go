@@ -1427,6 +1427,15 @@ func (s *Store) Analyze(ctx context.Context) error {
 	return nil
 }
 
+// SyncReportFileWalkFailed is sync_report.kind for one item whose file walk
+// failed and was dropped.
+//
+// IT IS A CONSTANT BECAUSE IT HAS TWO SIDES. internal/libsync writes it and
+// FileWalkFailuresByInstance reads it back, in different packages; sync_report.kind
+// carries no CHECK (migration 00005 says why), so a typo on either side is not a
+// constraint violation, it is a count that silently reads zero.
+const SyncReportFileWalkFailed = "file_walk_failed"
+
 // RecordSyncReport appends one operational note about a sync.
 //
 // detail is JSON and REACHES THIS COLUMN FROM UPSTREAM TEXT in some call paths,
