@@ -76,7 +76,7 @@ because no ADR ever decided it. Annotating leaves that failure mode nowhere to h
 | [0022](#adr-0022) | v1 authentication is local-only; external identity deferred | **Accepted** (rev 2) |
 | [0023](#adr-0023) | UsArr coexists with the ecosystem rather than replacing it | **Accepted** (rev 2) |
 | [0024](#adr-0024) | AGPL-3.0 is the licence | **Accepted** — owner-confirmed 2026-08-16 |
-| [0025](#adr-0025) | Styling and typography: Tailwind v4 with the default theme deleted, Bits UI, Tabler, self-hosted IBM Plex | **Accepted** — ⚠️ **amended 2026-08-16**: **Tailwind is not used**; the styling layer is hand-written CSS in `web/src/app.css`. Bits UI, Tabler and IBM Plex are unaffected |
+| [0025](#adr-0025) | Styling and typography: Tailwind v4 with the default theme deleted, Bits UI, Tabler, self-hosted IBM Plex | **Accepted** — ⚠️ **amended 2026-08-16**: **Tailwind is not used**; the styling layer is hand-written CSS in `web/src/app.css`. Bits UI, Tabler and IBM Plex are unaffected; ⚠️ **amended 2026-08-19**: §6's `paths.relative` bullet — the setting stays pinned to `false`, but the reason given for it is corrected: SvelteKit skips the relative-path rewrite for the SPA fallback document, so it is **belt-and-braces, not load-bearing**. The decision itself, and all four traps' settings, are untouched |
 | [0026](#adr-0026) | A library is a user-owned binding to upstream containers, with a correction layer | **Accepted** — refines ADR-0004, extends ADR-0014; ⚠️ **amended 2026-08-17 by [ADR-0043](#adr-0043)** — the binding, the four verbs and the storage are untouched, but this ADR's consequence capping the correction **UI** at v0.3 rested on *"§6.4 already establishes that tier 1 resolves essentially 100% of the v0.1 identity problem"*, which [ADR-0041](#adr-0041) falsified for v0.1's actual source: **the minimal *"fix this match"* case moves earlier**, and the full four-verb surface stays at v0.3 |
 | [0027](#adr-0027) | Two axes: media type is navigation, a library is scope | **Accepted** — settles §17.2's open question; ⚠️ **amended 2026-08-19 by [ADR-0053](#adr-0053)** — the two axes, the scope chip, the pins and the row budget all stand, but the **data-driven sidebar** does not: *"showing only types that have content"* needs a read answering which types have rows, and `reference/http-api.md` §7.1 says no facet count is on the wire, so **all six entries always render**; the zero-items rule survives for **home and for search groups**, which ADR-0053 leaves untouched |
 | [0028](#adr-0028) | Home is three fixed blocks, not one strip per media type | **Accepted** — **amends** ARCHITECTURE §17.2 |
@@ -1835,6 +1835,35 @@ through `@theme inline`. No literal colour, size, radius or duration in any comp
   asset URLs would resolve against the wrong directory, so `paths.relative: false` is the expected
   setting. **This is inference from the documented semantics, not a cited statement — it must be
   tested empirically before the build config is frozen.**
+  **[Corrected 2026-08-19; the decision is untouched and `paths.relative: false` stays
+  pinned.]** The 🔍 marker's own condition — *"it must be tested empirically before the build config
+  is frozen"* — has been met, and the inference did not survive it. What is corrected is
+  *"`paths.relative` defaults to `true` and **likely breaks assets under a deep-route SPA
+  fallback**"*, and with it *"so `paths.relative: false` is the expected setting"*: it is not
+  what makes deep routes work. [`REVIEW-LOG.md`](./REVIEW-LOG.md)'s **B-01** built the SPA both ways
+  and diffed the output. SvelteKit already special-cases the fallback document and skips the
+  relative-path rewrite for it — `@sveltejs/kit` 2.70.2, `src/runtime/server/page/render.js`,
+  `if (paths.relative) { if (!state.prerendering?.fallback) {` — so
+  `index.html` emits root-absolute `/_app/…` with the setting either on or off, and `relative`
+  governs only genuinely prerendered pages, of which this SPA has none. **The setting is
+  belt-and-braces, not load-bearing.** It stays pinned to `false` because explicit beats relying on
+  a special case and it costs nothing, not because anything breaks without it; the property that
+  actually has to hold is guarded by `TestFallbackAssetPathsAreRootAbsolute`
+  (`internal/web/web_test.go`), which asserts the fallback's asset URLs are root-absolute whatever
+  `svelte.config.js` says. ⚠️ **Nothing is re-measured here** — B-01 is the measurement and this is
+  it being applied. **Why it is applied now.** B-01's disposition was *"Correction recorded here
+  rather than applied"*, because the styling ADR was on another branch when the finding was
+  written; §5's *Left for the owner* bullet was re-confirmed on 2026-08-19 as *"The bullet stands
+  as the round's record"*, which flips the other half of that line and explicitly does **not**
+  re-verdict this one; and **LS-380** ⏭️ recorded *"Correcting ADR-0025 §6 itself is deliberately
+  NOT done here … Routed, not assumed done."* This is that routing arriving, under LS-380's id
+  rather than a new one. What makes it due now is `web/svelte.config.js:38`, which carries a
+  **live instruction** — *"but it is NOT load-bearing. ADR-0025 §6 should be corrected."* Until the
+  content commit `ce17389` (2026-08-19) that sentence read `ADR-0024 §6`, an ADR with no numbered
+  sections at all, so it was unfollowable and inert; `ce17389` aimed it at a section that exists.
+  **Decision point 6 stands as decided.** The `all:` prefix, `precompress` and its handler,
+  `paths.base: ''` and the `paths.relative: false` value are all unchanged. Only the
+  reason given for the fourth trap is corrected.
 
 ### Consequences
 - **The generic look is unavailable rather than discouraged.** A contributor cannot reach for
@@ -7065,6 +7094,53 @@ re-measured from source in the table below rather than inherited.
 | *"**no inbound API key** — headless auth needs the account password, which is worse than UsArr's Kavita credential model"* | 🚩 **FALSIFIED.** Headless auth exists and takes no password. `server/src/modules/auth/magic-link.service.ts` implements a first-class magic-link module: a raw token is issued, only its **SHA-256 hash** is stored, and `loginWithToken()` checks existence, `isActive`, not-revoked and not-expired, then calls `issueTokensForUser()`. **No password is validated anywhere in that flow.** | `bookorbit/bookorbit@main`, `server/src/modules/auth/magic-link.service.ts` |
 | *"**no manga or comic external ids**"* | 🚩 **HALF FALSIFIED, and the surviving half is the narrower one.** **Comics are covered:** ComicVine ships as a metadata provider — `server/src/modules/metadata-fetch/providers/comicvine/` holds `.client.ts`, `.mapper.ts`, `.provider.ts` and `.types.ts`, and the README names *"ComicVine for comics"* among fourteen providers. **Manga and anime are not:** a repository-wide code search for `mangabaka`, `anilist` and `myanimelist` returns **zero hits**. | `bookorbit/bookorbit@main` README and `server/src/modules/metadata-fetch/providers/` |
 | *"an `updatedAt` watermark that **misses tag, genre and author edits**"* | 🚩 **CONFIRMED, and it is worse than the finding says — measured from source on 2026-08-19, not deferred to a probe.** The sort key is real but it is **book-scoped**: the type carrying it is named `BookQuery` (`packages/types/src/query.ts:380`), served by `POST /books/query`, and `SORT_FIELD_MAP` binds `updatedAt` to **`books.updatedAt`** (`book-sort-builder.service.ts:35`). Tracing the tag path end to end — `POST /books/bulk-update-tags` → `BookService.bulkUpdateTags` (`book.service.ts:2362`) → `MetadataService.replaceTags` → `replaceTagsInExecutor` (`metadata.service.ts:513`) — the executor does `delete(bookTags)` + `insert(bookTags)` **and nothing else**; the follow-up `triggerPostMetadataUpdateEffects` schedules a file write/rename and recomputes the metadata score, and **none of those writes `books.updatedAt`**. `replaceGenresInExecutor` (`:480`) and `replaceAuthorsInExecutor` (`:369`) have the same shape. There is **no SQL trigger anywhere in the repo** (`grep -rli "create trigger" server/ --include=*.sql` → no match), so nothing compensates. **A tag, genre or author edit therefore does not move `books.updated_at`.** ✅ The one thing that *does* hold: core metadata edits are covered by an **explicit** touch — `updateMetadataFields` and `bulkUpdateMetadataFields` end with `update(books).set({updatedAt})` (`book.repository.ts:1960, 2012`). | `bookorbit/bookorbit@main`, `packages/types/src/query.ts:380`, `book-sort-builder.service.ts:35`, `metadata.service.ts:369,480,513`, `book.repository.ts:1960,2012` |
+
+> ⚠️ **Citations pinned and one corrected, 2026-08-19 — the verdict above is untouched.** The row's
+> 🚩 **CONFIRMED**, its end-to-end trace and its ✅ counter-example all stand. What changes is where a
+> later reader is sent, and two of the additions make the verdict **harder** to argue with, not softer.
+>
+> **The source is pinned.** The Primary-source cell cites `bookorbit/bookorbit@main`, a moving ref that
+> names a different tree every time upstream merges. The read was taken at **`73b7877`**
+> (`73b7877d2fede2221b0ca360af9bfced7c3797f3`), `main`'s tip at the time. That commit is corroborated
+> inside this repository — [`api/specs/SOURCES.md`](../api/specs/SOURCES.md)'s BookOrbit provenance
+> table carries it, dated **2026-08-19**, with the 68-file `packages/types` tree `4cb990a3…` beside it
+> — so the **ref** is pinned here even though the line numbers below are not.
+>
+> **One correction.** `replaceAuthorsInExecutor` is at
+> `server/src/modules/metadata/metadata.service.ts:370`, not `:369`. The wrong number appears twice in
+> the row, once in the prose and once in the Primary-source cell, and both mean `:370`. Nothing else in
+> the trace moves: the executor's shape, `replaceGenresInExecutor`, `replaceTagsInExecutor` and the
+> absence of any SQL trigger are all as written.
+>
+> **Strengthener 1 — the three executors are outliers, not house style.** `replaceCommunityRatings`
+> (`book.repository.ts:1996`) is a delete-and-insert over a child table of exactly the same shape, and
+> it **does** bump the parent's `updatedAt`. That closes off the charitable reading the row leaves
+> open — that a delete-and-insert simply cannot carry a parent touch, making the gap a property of the
+> write shape and expensive upstream to fix. It is not: an identically shaped write in the same
+> codebase carries it. The missed touch is a **per-call-site omission**, and on balance that is worse
+> for UsArr rather than better. It can be closed upstream in three lines with no type, route or
+> `packages/types` file moving, so [ADR-0064](#adr-0064)'s drift check would not see it either way;
+> and by the same token it can spread to the next relation somebody adds.
+>
+> **Strengthener 2 — the guard that lets a tags-only edit reach the gap.** The ✅ half of the row is
+> narrower than it reads. The explicit `update(books).set({updatedAt})` touch sits behind
+> `book.service.ts:1743`'s **`if (scalarFieldCount > 0)`**, and the relation calls sit *after* that
+> guard, at `:1769`, `:1783` and `:1788`. So an edit changing no scalar field — a tags-only edit, the
+> exact case the finding names — does not merely miss a touch inside an executor, it **skips the only
+> touch on the path**. The honest boundary is therefore: core metadata edits are covered when at least
+> one scalar field changed, and not otherwise.
+>
+> **Provenance, stated plainly because it is unusual.** All four pins above were measured **first-hand
+> by the BookOrbit report-drafting lane on 2026-08-19**, in its own clone of `bookorbit/bookorbit` at
+> `73b7877`, `main`'s tip when it cloned. The measurement and its date are the citation; there is no
+> filed artefact to point at, and none is claimed. ⚠️ **No falsifier for them exists in this
+> repository, and none ever will.** BookOrbit's server source is not vendored — `api/specs/bookorbit-types/`
+> is `packages/types` and nothing else, 68 files — and `SOURCES.md` states the consequence in its own
+> words: *"the server's own DTOs are not in `packages/types` … the controller, service and repository
+> citations in `internal/bookorbit` are **unpinned by anything**. That is the largest uncovered
+> surface."* Neither `make check` nor `make spec-drift` has ever read `book.repository.ts`,
+> `book.service.ts` or `metadata.service.ts`, and neither ever will. A later reader wanting these four
+> numbers re-checked has exactly one route, and it is a fresh clone at `73b7877`.
 
 🚩 **One claim reached this ADR in relay and is REFUSED, because the primary source contradicts it.**
 The drafting brief stated that BookOrbit has *"no watermark — no reliable 'changed since' signal — so
