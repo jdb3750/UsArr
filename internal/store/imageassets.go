@@ -13,20 +13,22 @@ import (
 //
 // WHAT IS HERE AND WHAT IS NOT. This file resolves an asset by its route key and
 // answers whether the caller may see it. It does not fetch, downscale, encode or
-// write anything: nothing in this package writes `image_asset` and this file is
-// not the exception. The fetch half needs catalogue rows carrying cover URLs,
-// which no adapter produces yet; building a fetcher against nothing to fetch
-// would produce a pipeline tested only against fixtures.
+// write anything.
 //
-// TWO OBLIGATIONS TRAVEL WITH THAT WRITER RATHER THAN WITH THIS FILE, and are
-// restated here so they are found from the same place the reader is:
+// ⚠️ THIS HEADER USED TO SAY "nothing in this package writes `image_asset`" AND
+// THAT THE WRITER DID NOT EXIST. Both are false now: imagewrite.go is the
+// writer, and internal/imagepipeline is what calls it. The two obligations this
+// header used to hold in trust for a future writer are DISCHARGED THERE and are
+// pointed at rather than restated, because a restated obligation is the copy
+// that drifts:
 //
-//   - every `image_asset` writer must reference ValidImageFormat (images.go,
-//     migration 00008, ADR-0050) or TestImageWritesValidateTheFormatVocabulary
-//     fails the build;
-//   - no row may be written whose `source_url` still carries a credential
-//     parameter (security.md §5, the "URLs stored in the database" bullet), and
-//     `internal/ssrf`'s credentialParams is the list, never a second copy.
+//   - the ValidImageFormat call (images.go, migration 00008, ADR-0050) is in
+//     PosterAsset.validate;
+//   - the credential-stripped `source_url` assertion (security.md §5) is
+//     checkImageSourceURL, which consults `internal/ssrf`'s one deny-list.
+//
+// ⚠️ WHAT THE WRITER HAS NOT DONE is meet a real cover. It has been exercised
+// only against images its own tests fabricated.
 //
 // IT IS A LOCAL READ AND NOTHING ELSE (principle 1). One statement against the
 // local file. The bytes it authorizes are read from disk by the caller; nothing
@@ -128,8 +130,10 @@ func ValidImageCacheKey(s string) bool { return imageCacheKeyPattern.MatchString
 // own and therefore cannot widen anything — it can only turn an id the caller
 // already sees into a name for the same thing.
 //
-// A work with no artwork yields SQL NULL, which is every work on this tree:
-// nothing writes `image_asset`. The renderer treats absence as absence.
+// A work with no artwork yields SQL NULL. ⚠️ That used to be EVERY work, on the
+// grounds that nothing wrote `image_asset`; imagewrite.go writes it now, so the
+// NULL is once again what it says — this work has no poster yet — rather than a
+// property of the tree. The renderer treats absence as absence either way.
 const PosterKeyExpr = `(SELECT ia.cache_key FROM image_asset ia WHERE ia.id = w.poster_asset_id)`
 
 // imageAssetSQL renders the LookupImageAsset statement and its arguments.

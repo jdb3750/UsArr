@@ -81,14 +81,14 @@ func seedLibraryCorpus(t *testing.T, s *Server) {
 		`INSERT INTO edition (id, work_id, format) VALUES (1, 3, 'ebook')`,
 		`INSERT INTO edition (id, work_id, format) VALUES (2, 4, 'audiobook')`)
 
-	// ONE POSTER, ON BERSERK. Written here rather than by the import because
-	// NOTHING writes image_asset yet — the fetch half of the pipeline is not
-	// built — so without this every row's poster_key is legitimately absent and
-	// every assertion about it would pass VACUOUSLY, which is the empty-green
-	// the seed above already has a paragraph about.
+	// ONE POSTER, ON BERSERK. Written here rather than by the import because no
+	// import CALLS the fetch half — internal/imagepipeline exists and nothing
+	// invokes it — so without this every row's poster_key is legitimately absent
+	// and every assertion about it would pass VACUOUSLY, which is the
+	// empty-green the seed above already has a paragraph about.
 	//
 	// ⚠️ THIS INSERT IS TEST-ONLY. internal/store's format lint exempts
-	// `_test.go` and stays vacuous; the ValidImageFormat call and the
+	// `_test.go`, so this does not satisfy it; the ValidImageFormat call and the
 	// credential-stripped `source_url` assertion (security.md §5) attach to the
 	// first PRODUCTION writer, which is not this.
 	//

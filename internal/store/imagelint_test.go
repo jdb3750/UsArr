@@ -51,14 +51,19 @@ var imageAssetWriteSQL = regexp.MustCompile(
 // it.
 //
 // HOW IT BEHAVES, WHICH IS THE POINT.
-//   - While nothing writes image_asset — the state of the tree as 00008 lands —
-//     it passes because there is nothing to check. That is a vacuous pass and it
-//     is labelled as one in the log output. ⚠️ That label is weaker than it
-//     sounds: `t.Log` prints only under `-v` and `make check` does not pass it,
-//     so the label reaches whoever is already reading this file and nobody else.
-//     TestImageLintGuardFires is the part that does not rely on being read — it
-//     executes the failing branch against a synthetic source, so the branch
-//     ships having run.
+//   - While nothing writes image_asset it passes because there is nothing to
+//     check. That is a vacuous pass and it is labelled as one in the log output.
+//     ⚠️ That label is weaker than it sounds: `t.Log` prints only under `-v` and
+//     `make check` does not pass it, so the label reaches whoever is already
+//     reading this file and nobody else. TestImageLintGuardFires is the part
+//     that does not rely on being read — it executes the failing branch against
+//     a synthetic source, so the branch ships having run.
+//     ⚠️ THAT BRANCH IS NO LONGER THE ONE THIS TREE TAKES. internal/store/
+//     imagewrite.go writes image_asset and calls ValidImageFormat, so the walk
+//     below now runs its LOAD-BEARING branch on every `make check`. Verified by
+//     drill: deleting the ValidImageFormat call from PosterAsset.validate turns
+//     this test red with "production code writes image_asset but nothing
+//     references store.ValidImageFormat".
 //   - The moment production code contains an INSERT or UPDATE against
 //     image_asset, this test requires that some production code also references
 //     ValidImageFormat. A writer that lands without validating the vocabulary
@@ -213,11 +218,15 @@ func scanImageAssetWrites(
 }
 
 // TestImageLintGuardFires triggers the guard on purpose, because
-// TestImageWritesValidateTheFormatVocabulary passes VACUOUSLY on this tree —
-// nothing writes image_asset — and a guard whose failing branch has never
+// TestImageWritesValidateTheFormatVocabulary passed VACUOUSLY when it landed —
+// nothing wrote image_asset then — and a guard whose failing branch has never
 // executed is indistinguishable from no guard. CLAUDE.md asks for exactly this
 // and this repo has a recorded history (SW-11) of checks that were green on
 // nothing.
+//
+// ⚠️ It is kept now that a real writer exists, and is not redundant: it pins the
+// judgement against a source file that does NOT exist on disk, so the failing
+// branch stays exercised even if the tree's only writer is ever removed.
 //
 // ⚠️ Note also what the vacuous pass does NOT do: `t.Log` is invisible unless
 // the suite runs with `-v`, and `make check` does not. So the "VACUOUS PASS"

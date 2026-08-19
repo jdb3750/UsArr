@@ -11,12 +11,17 @@
 // One package is the whole cost of making that impossible.
 //
 // ⚠️ WHAT IS NOT HERE, so nothing reads more into the package name. There is no
-// fetch, no HTTP client, no decoder, no encoder, no downscale and no eviction —
-// the fetch half of the pipeline is not built, because it needs catalogue rows
-// carrying cover URLs and no adapter produces them yet. This package opens a
-// file that something else put there, and on today's tree nothing does, so every
-// lookup misses. That is an honest empty cache and not a broken one; the serving
-// path renders the distinction.
+// fetch, no HTTP client, no decoder, no encoder, no downscale and no eviction.
+// Those live in internal/imagepipeline, which is the WRITER this package's
+// argument above is about — it calls Put and Key rather than deriving either.
+//
+// ⚠️ THIS PARAGRAPH USED TO SAY "the fetch half of the pipeline is not built"
+// AND THAT NOTHING PUT FILES HERE. Both are false as of internal/imagepipeline:
+// something writes now. What is still true is the shape — this package owns the
+// layout and the allowlist and nothing else — and one thing that is NOT about
+// the tree at all: internal/imagepipeline has been exercised only against
+// fabricated images, never against a cover from a running service, so an empty
+// cache remains the state of every real install until an import wires it up.
 package imagecache
 
 import (
