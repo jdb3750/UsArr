@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -67,6 +68,59 @@ type fakeBookOrbit struct {
 
 	// version is what a successful app-info reports.
 	version string
+
+	// ── the catalogue half ──────────────────────────────────────────────────
+	//
+	// libraries is what GET /api/v1/libraries answers, in order. The shape is
+	// LibraryRepository.findAllForUser's — the NON-SUPERUSER projection, which
+	// is the one UsArr's shared viewer account actually receives, and it is
+	// narrower than the whole row a superuser gets.
+	libraries []map[string]any
+
+	// books is the book cards, keyed by library id. Each is one BookCard as
+	// book/utils/assemble-book-cards.ts emits it.
+	//
+	// ⚠️ THERE IS NO "serve a smaller page than was asked for" KNOB, and the
+	// omission is deliberate. A real BookOrbit serves exactly the requested size
+	// until the last page, and the walk's stop condition is a SHORT page — so a
+	// fake that shrank pages on its own would let a broken stop condition pass
+	// here and hang in production. The paging loop is crossed against
+	// internal/bookorbit's own fake instead, with a generated library larger
+	// than one page.
+	books map[int][]map[string]any
+}
+
+// boBook builds one BookCard. Field names and null-ability are
+// packages/types/src/book.ts's; the defaults are the ordinary case — one primary
+// epub, present, no identifiers matched.
+func boBook(id int, title string, extra map[string]any) map[string]any {
+	b := map[string]any{
+		"id": id, "status": "present", "coverAspectRatio": "book",
+		"title": title, "subtitle": nil,
+		"authors": []string{}, "narrators": []string{},
+		"seriesId": nil, "seriesName": nil, "seriesIndex": nil, "seriesMemberships": []any{},
+		"files": []map[string]any{
+			{"id": id*10 + 1, "format": "epub", "role": "primary", "sizeBytes": 1234567},
+		},
+		"publishedDate": nil, "publishedYear": nil, "language": nil,
+		"genres": []string{}, "tags": []string{},
+		"rating": nil, "readingProgress": nil, "readStatus": nil,
+		"addedAt": "2026-08-01T10:00:00.000Z", "updatedAt": "2026-08-17T07:00:30.118Z",
+		"metadataScore": nil, "hasCover": true,
+		"hasMetadataLocks": false, "lockedFields": []string{},
+		"publisher": nil, "pageCount": nil,
+		"isbn13": nil, "hardcoverId": nil, "hardcoverEditionId": nil,
+		"customMetadata": []any{},
+	}
+	for k, v := range extra {
+		b[k] = v
+	}
+	return b
+}
+
+// boFile is one BookFileRef, for a test that needs a format other than epub.
+func boFile(id int, format, role string) map[string]any {
+	return map[string]any{"id": id, "format": format, "role": role, "sizeBytes": 4096}
 }
 
 type boRequest struct {
@@ -145,6 +199,90 @@ func newFakeBookOrbit(t *testing.T, token string) *fakeBookOrbit {
 		boWriteJSON(w, http.StatusOK, map[string]any{
 			"version": f.version, "updateAvailable": false,
 			"latestVersion": f.version, "maxUploadSizeMb": 200,
+		})
+	}))
+
+	// LibraryController's @Get(): no @RequirePermission, scoped INSIDE the
+	// service to what the account was granted. The projection here is
+	// findAllForUser's, not findAll's.
+	mux.HandleFunc("GET /api/v1/libraries", f.record(func(w http.ResponseWriter, r *http.Request) {
+		if !f.bearerOK(r) {
+			boNestError(w, r, http.StatusUnauthorized, "Unauthorized")
+			return
+		}
+		out := f.libraries
+		if out == nil {
+			out = []map[string]any{}
+		}
+		boWriteJSON(w, http.StatusOK, out)
+	}))
+
+	// LibraryController's @Post(':id/books') with @RequireLibraryAccess('viewer').
+	// A POST that READS: it takes a body because the filter tree is too large
+	// for a query string, not because it mutates anything.
+	mux.HandleFunc("POST /api/v1/libraries/{id}/books", f.record(func(w http.ResponseWriter, r *http.Request) {
+		if !f.bearerOK(r) {
+			boNestError(w, r, http.StatusUnauthorized, "Unauthorized")
+			return
+		}
+		libID, err := strconv.Atoi(r.PathValue("id"))
+		if err != nil {
+			// ParseIntPipe's own answer.
+			boNestError(w, r, http.StatusBadRequest, "Validation failed (numeric string is expected)")
+			return
+		}
+		var q struct {
+			Sort []struct {
+				Field string `json:"field"`
+				Dir   string `json:"dir"`
+			} `json:"sort"`
+			Pagination struct {
+				Page int `json:"page"`
+				Size int `json:"size"`
+			} `json:"pagination"`
+			CollapseSeries *bool `json:"collapseSeries"`
+		}
+		blob, _ := io.ReadAll(r.Body)
+		if err := json.Unmarshal(blob, &q); err != nil {
+			boNestError(w, r, http.StatusBadRequest, "Unexpected token in JSON")
+			return
+		}
+		// BookQueryPipe's zod bounds, enforced rather than assumed: a client
+		// that asked for 500 must see the 400 a real BookOrbit answers.
+		if q.Pagination.Size < 1 || q.Pagination.Size > 200 {
+			boNestError(w, r, http.StatusBadRequest, "pagination.size must be between 1 and 200")
+			return
+		}
+		if q.Pagination.Page < 0 {
+			boNestError(w, r, http.StatusBadRequest, "pagination.page must be >= 0")
+			return
+		}
+		// ⚠️ COLLAPSING WOULD RETURN ONE ROW PER SERIES, NOT ONE PER BOOK. The
+		// fake refuses rather than silently serving the same list, so an adapter
+		// that ever started sending it fails here instead of importing a
+		// catalogue with the wrong cardinality and no symptom.
+		if q.CollapseSeries != nil && *q.CollapseSeries {
+			boNestError(w, r, http.StatusBadRequest,
+				"this fake does not model collapseSeries; a catalogue replica must not ask for it")
+			return
+		}
+
+		all := f.books[libID]
+		size := q.Pagination.Size
+		start := q.Pagination.Page * size
+		if start > len(all) {
+			start = len(all)
+		}
+		end := start + size
+		if end > len(all) {
+			end = len(all)
+		}
+		items := all[start:end]
+		if items == nil {
+			items = []map[string]any{}
+		}
+		boWriteJSON(w, http.StatusOK, map[string]any{
+			"items": items, "total": len(all), "page": q.Pagination.Page, "size": size,
 		})
 	}))
 

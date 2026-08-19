@@ -237,28 +237,36 @@ func TestAddingABookOrbitInstance(t *testing.T) {
 		t.Errorf("a correctly scoped shared account must raise no warning: %+v", row.Warnings)
 	}
 
-	// ── what this kind still CANNOT do, said out loud ───────────────────────
+	// ── the catalogue-source gate now PASSES for this kind ──────────────────
 	//
-	// Registering the kind is not the same as being able to read its catalogue,
-	// and the refusal has to name the reason rather than 500 or hang.
-	// internal/bookorbit is slice 0; internal/libsync has no BookOrbit source.
+	// ⚠️ THIS BLOCK USED TO ASSERT THE OPPOSITE, and the assertion was correct
+	// when it was written: "a catalogue sync from a BookOrbit must not claim to
+	// have started … error = not_a_catalogue_source", because internal/libsync
+	// had no BookOrbit source. It has one now, so the refusal it pinned would be
+	// a bug rather than a property.
+	//
+	// This env deliberately does not arm imports (armBootstrapImport is the
+	// switch, and only the import tests throw it), so the honest assertion here
+	// is the NARROW one: whatever answer comes back, it is no longer
+	// "not_a_catalogue_source". The import itself is proved in
+	// TestAddingABookOrbitProducesACatalogue, against a real database.
 	code, body = env.raw(t, "POST", fmt.Sprintf("/api/v1/services/%d/sync", created.ID), map[string]any{})
-	if code == http.StatusOK || code == http.StatusAccepted {
-		t.Fatalf("a catalogue sync from a BookOrbit must not claim to have started: %d %s", code, body)
-	}
 	if code == http.StatusNotFound {
 		t.Fatalf("the sync endpoint moved; this assertion is now testing nothing: %d %s", code, body)
 	}
-	var syncErr errorBodyShape
-	mustUnmarshal(t, body, &syncErr)
-	if syncErr.Error != "not_a_catalogue_source" {
-		t.Errorf("error = %q, want not_a_catalogue_source: %s", syncErr.Error, body)
-	}
-	// It must not tell the user their books do not exist. BookOrbit HAS a
-	// catalogue; this build has no reader for it.
-	if strings.Contains(syncErr.Message, "carries no catalogue") {
-		t.Errorf("the refusal claims the service has no catalogue, which is false of a BookOrbit: %q",
-			syncErr.Message)
+	if code != http.StatusOK && code != http.StatusAccepted {
+		var syncErr errorBodyShape
+		mustUnmarshal(t, body, &syncErr)
+		if syncErr.Error == "not_a_catalogue_source" {
+			t.Errorf("a BookOrbit was refused as not a catalogue source, which stopped being true "+
+				"when internal/libsync/bookorbit.go landed: %s", body)
+		}
+		// And whatever the refusal is, it must never tell a user their books do
+		// not exist.
+		if strings.Contains(syncErr.Message, "carries no catalogue") {
+			t.Errorf("the refusal claims the service has no catalogue, which is false of a BookOrbit: %q",
+				syncErr.Message)
+		}
 	}
 	t.Logf("sync from a BookOrbit: %d %s", code, strings.TrimSpace(body))
 }

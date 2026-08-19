@@ -120,13 +120,13 @@ type registryEntry struct {
 	// bookorbit is ADR-0052's catalogue-source client. Non-nil only for
 	// kind=bookorbit.
 	//
-	// ⚠️ NOTHING READS A CATALOGUE THROUGH IT, and unlike the kavita field that
-	// is not a "yet" about the wiring — internal/bookorbit is SLICE 0 and has no
-	// catalogue call to make. What this client is for here is the credential
-	// handshake (registry.Test) and the health probe, which is exactly what makes
-	// the kind storable: an added BookOrbit gets a real row on the Services
-	// screen and an honest "no import from this kind yet" from runImport, rather
-	// than a row nothing can open. Slice 1 is internal/libsync/bookorbit.go.
+	// ⚠️ THIS COMMENT USED TO READ "NOTHING READS A CATALOGUE THROUGH IT … there
+	// is no bookorbit equivalent to start", WHICH IS NOW FALSE. internal/bookorbit
+	// grew the two catalogue reads (catalogue.go) and internal/libsync/bookorbit.go
+	// is the adapter over them, so this client is on the import path exactly as
+	// the kavita field is. What it still does NOT read is anything past slice 1 —
+	// no per-book detail, no covers, no delta walk — and the adapter's own header
+	// is where that list lives rather than here, so it cannot go stale twice.
 	bookorbit *bookorbit.Client
 
 	instance store.ServiceInstance
@@ -255,13 +255,18 @@ func (g *registry) entry(ctx context.Context, instanceID int64) (*registryEntry,
 			return nil, err
 		}
 		e.bookorbit = client
-		// NO BOOTSTRAP IMPORT, and the omission is the deliberate half of this
-		// case. The kavita arm above starts a full catalogue import the moment a
-		// client stack exists; there is no bookorbit equivalent to start, because
-		// internal/libsync has no BookOrbit source yet (ADR-0052 slice 1). An arm
-		// that queued one anyway would launch a goroutine straight into
-		// runImport's "this is not a kavita" refusal, once per client rebuild,
-		// and publish a failed import over SSE for a service that is working.
+		// ⚠️ THIS ARM USED TO START NO IMPORT, and the comment that stood here
+		// said why: "there is no bookorbit equivalent to start, because
+		// internal/libsync has no BookOrbit source yet (ADR-0052 slice 1)".
+		// internal/libsync/bookorbit.go IS slice 1, so the reason has expired
+		// and the arm now does exactly what the kavita one does, for the same
+		// reason and under the same two gates — bootstrapImport's own
+		// last_full_sync_at check, and this in-process map against a second
+		// goroutine for an instance already importing.
+		if g.importCtx != nil && !g.bootstrapped[instanceID] {
+			g.bootstrapped[instanceID] = true
+			go g.bootstrapImport(g.importCtx, instanceID)
+		}
 	default:
 		// httpapi.serviceKinds refuses an unknown kind at the boundary, so this
 		// is a row that predates a kind being removed — or a hand-edited SQLite.

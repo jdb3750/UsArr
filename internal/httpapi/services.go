@@ -50,12 +50,11 @@ import (
 //
 // ⚠️ REGISTERING A KIND HERE IS NOT THE SAME AS BEING ABLE TO READ ITS
 // CATALOGUE. This map decides what may be STORED; `cmd/usarr`'s registry decides
-// what each stored kind can then do, and for bookorbit that is currently the
-// credential handshake and the health probe and nothing else — internal/bookorbit
-// is slice 0 and has no catalogue read to call. A bookorbit instance therefore
-// stores, probes and reports honestly, and refuses an import with the reason
-// (runImport in cmd/usarr/import.go). That is the state ADR-0052's slice 1
-// changes; it is not a hole here.
+// what each stored kind can then do. Both catalogue kinds can now be imported
+// from — `catalogueSource` in cmd/usarr/import.go is the one place that answers
+// which — and prowlarr still cannot, which is what ErrNotCatalogueSource is for.
+// Do not restate the per-adapter scope here: it moves, and it has already made
+// this paragraph wrong once.
 //
 // The browser's add-form picker (SERVICE_KINDS in web/src/lib/api.ts) must
 // carry the same set, in an order that keeps prowlarr first. That is not left

@@ -2,8 +2,10 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 
 	"github.com/jdb3750/UsArr/internal/httpapi"
 	"github.com/jdb3750/UsArr/internal/libsync"
@@ -99,18 +101,12 @@ func (g *registry) runImport(ctx context.Context, instanceID int64) (libsync.Rep
 	if err != nil {
 		return libsync.Report{}, err
 	}
-	if entry.kavita == nil {
-		return libsync.Report{}, fmt.Errorf(
-			"%q has kind %q; v0.1 imports a catalogue from kavita and from nothing else (ADR-0041)",
-			entry.instance.Name, entry.instance.Kind)
-	}
 
 	log := g.log.With("instance_id", instanceID, "instance", entry.instance.Name)
-	// The adapter gets its OWN logger because it is where a refused identity
-	// claim is reported, and the importer never sees one — the mapping has
-	// already dropped it by the time a CatalogueItem exists.
-	src := libsync.NewKavitaSource(entry.kavita)
-	src.Log = log
+	src, err := catalogueSource(entry, log)
+	if err != nil {
+		return libsync.Report{}, err
+	}
 
 	im := &libsync.Importer{
 		Store:  g.st,
@@ -121,7 +117,99 @@ func (g *registry) runImport(ctx context.Context, instanceID int64) (libsync.Rep
 		UserID:   store.SystemUserID,
 		Progress: g.importProgress(),
 	}
-	return im.FullImport(ctx, instanceID)
+	rep, importErr := im.FullImport(ctx, instanceID)
+
+	// RECORDED WHETHER OR NOT THE IMPORT SUCCEEDED, and before the error is
+	// returned. Every skip counted below is a book the walk already read and
+	// declined to map; an import that died on library three does not make the
+	// comics it skipped in libraries one and two less skipped. Same rule
+	// importer.go's recordFileWalkFailures states for a dropped file walk.
+	if bo, ok := src.(*libsync.BookOrbitSource); ok {
+		g.recordSkippedItems(ctx, instanceID, bo.Skipped(), log)
+	}
+	return rep, importErr
+}
+
+// catalogueSource picks the adapter for one instance's client stack.
+//
+// TWO CATALOGUE SOURCES NOW, and the switch is on which client the entry holds
+// rather than on entry.instance.Kind, because that is the field the compiler
+// checks: exactly one of the three client fields is non-nil, chosen by kind
+// when the stack was built, so a kind that grows a client without an adapter
+// falls into the refusal below rather than into a nil dereference.
+func catalogueSource(entry *registryEntry, log *slog.Logger) (libsync.Source, error) {
+	switch {
+	case entry.kavita != nil:
+		// The adapter gets its OWN logger because it is where a refused identity
+		// claim is reported, and the importer never sees one — the mapping has
+		// already dropped it by the time a CatalogueItem exists.
+		src := libsync.NewKavitaSource(entry.kavita)
+		src.Log = log
+		return src, nil
+	case entry.bookorbit != nil:
+		// Its logger carries two things the importer cannot see: the §14 scope
+		// verdict consulted before the first catalogue read (ADR-0052's gate,
+		// honoured in BookOrbitSource.gate), and the per-library count of books
+		// read but not mapped.
+		src := libsync.NewBookOrbitSource(entry.bookorbit)
+		src.Log = log
+		return src, nil
+	}
+	return nil, fmt.Errorf(
+		"%q has kind %q; v0.1 imports a catalogue from bookorbit and from kavita, and from nothing else (ADR-0052, ADR-0041)",
+		entry.instance.Name, entry.instance.Kind)
+}
+
+// syncReportItemsSkipped is sync_report.kind for items an adapter read and
+// deliberately did not map.
+//
+// It is a NEW member of a vocabulary sync_report.kind holds no CHECK over
+// (migration 00005), on the pattern the existing members set: the subject is
+// named by remote_kind/remote_id and the reason lives in `detail`. It is
+// distinct from `container_declined`, which is a whole container UsArr has no
+// kind for, and from `container_bind_failed`, which is a container that had a
+// kind and lost a uniqueness race. This one is about ITEMS INSIDE a container
+// that bound fine.
+const syncReportItemsSkipped = "items_skipped"
+
+// recordSkippedItems writes the durable half of "UsArr did not take all of your
+// books".
+//
+// ⚠️ A LOG LINE IS NOT A RECORD. The adapter already logged each container's
+// tally as it finished, and an import triggered by a background connect has no
+// caller left to read the Report by the time anyone opens the Libraries screen
+// and asks why a library of 900 shows 40. That is the same argument
+// importer.go makes for writing container_declined rows rather than only
+// returning them, and it is the whole reason the skip is counted at all: a
+// skipped item that vanishes silently is indistinguishable from one that never
+// existed.
+//
+// A FAILURE TO RECORD DOES NOT FAIL THE IMPORT. The rows are already committed
+// and correct; losing the note about what was skipped is worth a warning, not a
+// rollback of a catalogue.
+func (g *registry) recordSkippedItems(
+	ctx context.Context, instanceID int64, skips []libsync.ContainerSkips, log *slog.Logger,
+) {
+	for _, s := range skips {
+		detail, err := json.Marshal(map[string]any{
+			"name":            s.Name,
+			"skipped_comics":  s.Comics,
+			"skipped_unknown": s.Unknown,
+			"reason": "this slice of the BookOrbit adapter maps prose only: a comic-format book " +
+				"has no settled unit of work in UsArr, and a book whose primary file has no format " +
+				"is one BookOrbit itself classifies as 'unknown'",
+			"effect": "those books have no work row; every other book in this library was imported",
+		})
+		if err != nil {
+			log.Warn("cannot encode the skipped-item note", "library_id", s.RemoteID, "err", err)
+			continue
+		}
+		if err := g.st.RecordSyncReport(ctx, instanceID,
+			syncReportItemsSkipped, "library", s.RemoteID, string(detail)); err != nil {
+			log.Warn("cannot record how many books were skipped; the import itself stands",
+				"library_id", s.RemoteID, "err", err)
+		}
+	}
 }
 
 // importPhaseStopped is the terminal failure phase, specified by
@@ -305,9 +393,10 @@ func (g *registry) StartImport(instanceID int64) error {
 	// The kind check is repeated from FullImport rather than delegated to it,
 	// because delegating means the caller only learns "this is a Prowlarr"
 	// after a goroutine has already been launched and the HTTP response has
-	// already said "started".
-	if entry.kavita == nil {
-		return fmt.Errorf("%w: %q has kind %q (ADR-0041)",
+	// already said "started". It asks catalogueSource the same question
+	// runImport will, so the two cannot answer differently.
+	if _, err := catalogueSource(entry, g.log); err != nil {
+		return fmt.Errorf("%w: %q has kind %q (ADR-0052, ADR-0041)",
 			httpapi.ErrNotCatalogueSource, entry.instance.Name, entry.instance.Kind)
 	}
 	if g.importCtx == nil {
