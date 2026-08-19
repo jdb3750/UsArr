@@ -28,14 +28,19 @@ import (
 //
 // WHAT STANDS BEHIND THEM INSTEAD, and what does not:
 //
-//   - There is NO vendored OpenAPI document to pin, so neither ADR-0046's nor
-//     ADR-0047's contract shape transfers. BookOrbit builds its document at
-//     RUNTIME (server/src/swagger.ts) and main.ts mounts it only when
-//     SWAGGER_ENABLED is true, which parseBooleanFlag defaults to FALSE. There
-//     is no committed spec file in the repository.
-//   - The substitute is the enum-completeness guard in scope_test.go, on the
-//     pattern internal/libsync already uses, plus the behavioural tests against
-//     the local fake in client_test.go.
+//   - There is NO vendored OpenAPI document to pin. BookOrbit builds its
+//     document at RUNTIME (server/src/swagger.ts) and main.ts mounts it only
+//     when SWAGGER_ENABLED is true, which parseBooleanFlag defaults to FALSE.
+//     There is no committed spec file in the repository. ADR-0046's
+//     floor/ceiling split therefore does not transfer — it needs a committed
+//     document regenerated per release, and there is neither. ADR-0047's
+//     blob-identity pin DOES transfer, to source files instead of a spec:
+//     72207f8 vendored packages/types under api/specs/bookorbit-types/ and
+//     pinned it by git's own tree name. (This bullet used to say neither
+//     transferred; corrected 2026-08-19, see scope_test.go's header.)
+//   - The substitutes are that vendored pin plus the enum-completeness guard in
+//     scope_test.go, on the pattern internal/libsync already uses, plus the
+//     behavioural tests against the local fake in client_test.go.
 //   - Every behavioural fact this client is built on was read from BookOrbit's
 //     CONTROLLERS and SERVICES at the pinned commit, per DEVELOPMENT.md §5's rule
 //     that the controller wins over a schema.

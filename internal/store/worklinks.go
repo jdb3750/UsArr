@@ -71,15 +71,17 @@ type WorkServiceLink struct {
 // visible set (fail closed: no visible instances means no rows, never all
 // rows), and the IN seek otherwise.
 //
-// 🔍 A SECOND, DUMBER REASON THE WORK-LEVEL PREDICATE CANNOT BE USED HERE, also
-// measured: workVisibilityPredicate hard-codes `sil` as the alias of its inner
-// service_item_link. Rendered over a query whose OUTER table is already aliased
-// `sil`, the inner scope shadows the outer and the correlation collapses to
-// `sil.work_id = sil.work_id` — trivially true, so the EXISTS degenerates into
-// "does the caller see any live link anywhere" and every link on every work
-// comes back. It fails loudly against the arms in worklinks_test.go, but it
-// fails as a silent full leak rather than as a syntax error, which is worth
-// knowing before anyone reaches for that helper over this table.
+// ⚠️ A SECOND, DUMBER REASON USED TO STAND HERE AND NO LONGER DOES. This comment
+// recorded, measured, that workVisibilityPredicate HARD-CODED `sil` as the alias
+// of its inner service_item_link — so rendered over a query whose outer table is
+// already aliased `sil`, as this one's is, the inner scope shadowed the outer,
+// the correlation collapsed to `sil.work_id = sil.work_id`, and the EXISTS
+// filtered nothing. That is REVIEW-LOG.md LS-379, and it is FIXED: the predicate
+// derives its inner alias from the column it correlates to (scopeLinkAlias in
+// recent.go), so the collision is no longer representable. Swapping the
+// work-level predicate in here would now render valid, correlated SQL — and
+// would still be the leak the paragraph above describes, which was always the
+// real reason and is now the only one.
 //
 // `deleted_at IS NULL` is in the query AND in ix_sil_work's own partial
 // predicate, and that is not belt-and-braces — MEASURED, by deleting the WHERE
