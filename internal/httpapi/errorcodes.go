@@ -96,6 +96,18 @@ const (
 	CodeNoIndexers         ErrorCode = "no_indexers"
 	CodeNoLongerOffered    ErrorCode = "no_longer_offered"
 	CodeSearchFailed       ErrorCode = "search_failed"
+
+	// Images.
+	//
+	// CodeNotCached answers a request for an image the caller IS entitled to
+	// see and this server does not hold the bytes for. It is additive to
+	// not_found rather than a narrowing of it, and the split is what lets a
+	// client render §4.4.1's cold start honestly: a placeholder for a cover
+	// that has not been fetched yet, and a broken-link state for a key that
+	// names nothing. It discloses nothing extra — the caller got the key from a
+	// browse response it was entitled to read, so "this asset exists" is not
+	// news to it.
+	CodeNotCached ErrorCode = "not_cached"
 )
 
 // errorCodes is the authoritative set. A map rather than a slice because every
@@ -122,6 +134,7 @@ var errorCodes = map[ErrorCode]struct{}{
 	CodeNoIndexerService:          {},
 	CodeNoIndexers:                {},
 	CodeNoLongerOffered:           {},
+	CodeNotCached:                 {},
 	CodeNotCatalogueSource:        {},
 	CodeNotConfigured:             {},
 	CodeNotFound:                  {},

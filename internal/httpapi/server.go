@@ -74,6 +74,14 @@ type Config struct {
 
 	Build BuildInfo
 
+	// ImageCacheDir is Config.ImageCacheDir(): the directory GET /img/{key}
+	// serves rendered artwork out of. Empty is honest rather than fatal —
+	// principle 3 — and means this process has no image cache, so every /img
+	// request answers not_cached. That is the same answer an install with an
+	// empty cache directory gives, which is every install today: nothing in the
+	// tree writes an image yet.
+	ImageCacheDir string
+
 	// SPA is the embedded frontend handler (internal/web.Handler). Nil serves a
 	// 404 that says the binary was built without the frontend.
 	SPA http.Handler
@@ -328,6 +336,28 @@ func (s *Server) routes(mux *http.ServeMux) {
 	// Reads from SQLite only. It is the Requests screen's memory of the one
 	// irreversible action v0.1 takes (§17.5).
 	mux.Handle("GET /api/v1/grabs/recent", s.authenticated(s.wrap(s.handleRecentGrabs)))
+
+	// ── Artwork ─────────────────────────────────────────────────────────────
+	//
+	// ARCHITECTURE.md §4.1's `/img/{cache_key}?w={allowlisted}`, at the top
+	// level rather than under /api/v1 because §4.1 lists it as a peer of the
+	// JSON API and not a member of it — a browser puts this in an <img src>,
+	// not in a fetch().
+	//
+	// AUTHENTICATED like the rest of the API, and authorized against the owning
+	// item INSIDE the handler (security.md §4). The session gate here says who
+	// is asking; internal/store.LookupImageAsset says whether they are entitled
+	// to the work the artwork belongs to, and an /img with only the first would
+	// serve every cover in the install to every account.
+	//
+	// ⚠️ THERE IS DELIBERATELY NO /img/public/* REGISTRATION. §4 requires that
+	// genuinely public provider artwork live on a distinct path "so the
+	// distinction is structural, not conditional" — and the structural half is
+	// satisfied by this route having no way to express publicness at all, not by
+	// a second route existing. Nothing produces provider artwork yet, and an
+	// unauthenticated route with nothing behind it is a hole waiting for
+	// content. See images.go.
+	mux.Handle("GET /img/{key}", s.authenticated(s.wrap(s.handleImage)))
 
 	// ── The one SSE stream ──────────────────────────────────────────────────
 	mux.Handle("GET /api/events", s.authenticated(s.wrap(s.handleEvents)))

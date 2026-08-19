@@ -243,6 +243,7 @@ func buildApp(ctx context.Context, cfg *config.Config, log *slog.Logger, build h
 		AuditRowIDKey:  auditRowIDKey,
 		SchemaVersion:  schemaVersion,
 		URLBase:        cfg.URLBase,
+		ImageCacheDir:  cfg.ImageCacheDir(),
 		TrustedProxies: cfg.TrustedProxies,
 		Build:          build,
 		SPA:            spa,
