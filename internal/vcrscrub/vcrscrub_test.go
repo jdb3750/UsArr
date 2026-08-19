@@ -74,12 +74,12 @@ func fakeKavita(t *testing.T) *httptest.Server {
 		w.Header().Set("Content-Type", "image/jpeg")
 		// A response body that carries a credential BACK, which is the direction
 		// the old per-package regexes were not written for.
-		fmt.Fprintf(w, `{"refreshToken":%q,"next":"/api/Image/series-cover?seriesId=2&apiKey=%s"}`,
+		_, _ = fmt.Fprintf(w, `{"refreshToken":%q,"next":"/api/Image/series-cover?seriesId=2&apiKey=%s"}`,
 			fixtureAuthKey, fixtureAuthKey)
 	})
 	mux.HandleFunc("/api/Opds/", func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/atom+xml")
-		fmt.Fprint(w, `<feed/>`)
+		_, _ = fmt.Fprint(w, `<feed/>`)
 	})
 	s := httptest.NewServer(mux)
 	t.Cleanup(s.Close)
@@ -409,7 +409,7 @@ func TestBinaryDoesNotLinkTheRecorder(t *testing.T) {
 	if _, err := exec.LookPath("go"); err != nil {
 		t.Skipf("no go tool on PATH: %v", err)
 	}
-	out, err := exec.Command("go", "list", "-deps", "../../cmd/usarr").CombinedOutput() //nolint:gosec // fixed args
+	out, err := exec.CommandContext(t.Context(), "go", "list", "-deps", "../../cmd/usarr").CombinedOutput() //nolint:gosec // fixed args
 	if err != nil {
 		t.Fatalf("go list: %v\n%s", err, out)
 	}
