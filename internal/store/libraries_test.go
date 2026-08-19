@@ -1206,7 +1206,9 @@ func TestLibraryCompletenessPlanGuardFires(t *testing.T) {
 
 		plan := libraryCompletenessPlan(t, s, OwnerScope(0))
 		joined := strings.Join(plan, " | ")
-		if !strings.Contains(joined, "SCAN r2") {
+		// planHas: `r2` is a prefix of any longer alias a rewrite might pick, and
+		// this arm's whole premise is that the plan is the BARE scan.
+		if !planHas(joined, "SCAN r2") {
 			t.Fatalf("dropping both indexes did not produce the bare `SCAN r2` this arm "+
 				"is built on:\n  %s", strings.Join(plan, "\n  "))
 		}
