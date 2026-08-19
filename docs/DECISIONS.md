@@ -111,7 +111,9 @@ because no ADR ever decided it. Annotating leaves that failure mode nowhere to h
 | [0059](#adr-0059) | The per-media-type facet count is an **assignment**: every work lands in **exactly one** bucket | **Accepted** — 2026-08-19; **records the counting semantics that shipped with `GET /api/v1/library/facets`** (`2711926`), whose wire contract is [`reference/http-api.md`](./reference/http-api.md) §8 and whose reasoning is `internal/store/facets.go` — **the numbers and the predicates live there and this ADR does not copy them**; a count cannot put one work in two buckets and remain a count, so the column would stop summing to the library and the same work would be reported twice in a summary whose whole question is *"what do I have?"*; the assignment is **`mediaTypeOf`'s**, the one that already renders every Block C and grid row's Type cell, so **a book held as both an EPUB and an M4B counts under Ebooks** and the count therefore equals the list a user reaches by clicking it — that equality is the decision's whole argument, and `TestMediaTypeCountsAgreeWithTheBrowseRead` pins it from the consumer's side; ⚠️ **the consequence, stated rather than buried: a library whose only audiobooks are second editions of ebooks reports `audiobooks: 0`**, while ARCHITECTURE §17.2's row-5 predicate — an independent `EXISTS` over `edition.format` — says that type has content; **the two disagree by design**, and this ADR is where a reader is meant to meet that; **closes off §17.2's independent-`EXISTS` shape as the counting rule** — it is the right shape for a *presence* test and the wrong one for a *count*, and the two are not interchangeable; **adds no endpoint, no migration, no column and no UI change** — the read, the index (`ix_edition_format`, migration `00009`) and the tests were already in the tree when this was written; ⚠️ **it is a live input to [ADR-0053](#adr-0053)**, whose reopening condition these counts appear to satisfy and do not — see that ADR's 2026-08-19 refinement, which this ADR is cited by |
 | [0060](#adr-0060) | A stored credential can be **readable upstream**: BookOrbit's `raw_token` is bounded by **service-account privilege, not rotation** | **Accepted** — 2026-08-19; **records a measured property of the service v0.1 replicates from** ([ADR-0052](#adr-0052)) rather than a design UsArr chose — BookOrbit at `73b7877` stores the magic-link token in **plaintext beside its hash** (`magic_access_tokens.raw_token`, written by `MagicLinkRepository.create`, which is **not** what `loginWithToken` authenticates on) and **returns every token's plaintext to any superuser** through `findAll` behind `GET /api/v1/auth/magic-links`; **the two axes are deliberately NOT collapsed, which is this ADR's whole value** — *plaintext-at-rest is the class norm, which **Kavita confirms** (measured at tag `v0.9.0.2` / `6bcd568`, **not `main`**, which is frozen at v0.7.8 and has planted a wrong fact in these docs before: `AppUserAuthKey.Key` is plaintext with **no hash column at all**, plus the legacy `AppUser.ApiKey` the v0.8.9 migration copied verbatim); admin-retrievable-over-the-API is **not**, which **Kavita refutes** (no route returns another user's key — `MemberDto` carries no key field, every read resolves `UserId` from the caller's own claims, and rotate/delete each assert `authKey.AppUserId == UserId`)*; so the listing is **a step down the threat model names as such, not the ecosystem baseline**, and it is a fact about **the switch**, not a defect *of BookOrbit*; ⚠️ **because the credential is retrievable and rotation does not change that, the privilege of the account UsArr authenticates as is the ONLY control that bounds the consequence** — not one mitigation among several but the whole of UsArr's leverage, and it is already built ([ADR-0058](#adr-0058)'s grading); 🚫 **periodic re-minting is REJECTED, explicitly so nobody re-proposes it** — a re-minted token lands in the same plaintext column and the same listing, so rotation stays available for an **incident** and is **not advised on a schedule**; the difference the retrievability axis actually makes is **attribution** — minting emits `AuditAction.MagicLinkCreate`, reading emits nothing, and later use is counted against UsArr's own row; ⚠️ **the Trace-logging hedge qualifies RETRIEVABILITY ONLY and leaves plaintext-at-rest untouched** — a Kavita admin can reach live keys indirectly (`AuthKeyService.UpdateLastAccessedAsync` logs a **valid** key at Trace, the level is an admin-writable setting, `GET /api/server/logs` downloads the zip), so *"not admin-retrievable"* is true of the API surface and true by default, **not absolute** — a deliberate multi-step through a config change and a wait, **not a read**, and **not exercised on any live instance**; **amends ARCHITECTURE §14** with one clause that **generalises and names no service** — a credential UsArr stores may be readable by the service that issued it, so **UsArr's protections are necessary and not sufficient** and the model says which side of the boundary each protection sits on, a question **every future adapter** gets asked; ✅ **CLOSES** — rather than standing forever over a mutable upstream — when BookOrbit drops `raw_token` (both axes) or the listing stops returning plaintext (retrievability), which doubles as the concrete ask any upstream report carries; **ships no code, no migration, no column and no schema change** |
 | [0061](#adr-0061) | Catalogue completeness is **measured and three-valued**: "not checked" is a state, not a zero | **Accepted** — 2026-08-19; **records the completeness verdict that shipped with the BookOrbit adapter's content-filter check** (`internal/bookorbit/stats.go`, `internal/libsync/bookorbitcompleteness.go`), whose wire contract is [`reference/http-api.md`](./reference/http-api.md) §2.6 and whose render is ARCHITECTURE §17.8; **the defect it answers is measured, not guessed** — BookOrbit at `73b7877d` puts a user's `contentFilters` in the books `LEFT JOIN … ON` condition with **no `.where()` at all** (`library.repository.ts:30-51`), so a filter **shorts each library's `bookCount` without dropping a library row**, while `getStats` (`library.repository.ts:150-178`) takes neither user nor filter, making `totalBooks − bookCount` the exact number of present books the credential was not shown; ⚠️ **a boolean `complete` is REJECTED explicitly, and that rejection is this ADR's whole point** — *"no shortfall"* and *"not checked"* are different facts, so the verdict is three-valued (`complete` · `shortfall` · `unverified`) with **`unverified` a first-class member**, enforced one level down as `Total` = **−1** rather than `0`, because `0` is a legal total for an empty container; ⚠️ **the degradation condition is named rather than assumed** — the measurement rests on an **unguarded upstream route** nobody promised UsArr, so if BookOrbit adds a `@RequirePermission` to `GET /libraries/:id/stats` every probe answers 403 and **every verdict becomes `unverified`**, which is the original defect recreated inside its own fix, and is why it is drilled rather than argued — `TestAGuardedStatsRouteRecordsUnverifiedRatherThanComplete` serves the 403 and asserts `unverified` with `Total = -1`; **it never blocks or refuses a sync** — a partial replica that says it is partial beats no replica, and the items that did import are correct either way; **every container gets a row**, `sync_report.kind = 'content_completeness'`, deliberately the **opposite** of the neighbouring `items_skipped` rule, because an absent skip row means nothing was skipped while an absent completeness row means nothing was **asked**, and those two absences must not look alike; ⚠️ **the claim's SCOPE travels in the row** (`covers` / `does_not_cover`) because a second axis is **unanswerable from a read-only account** — `LibraryAccessGuard` throws a byte-identical `ForbiddenException('No library access')` for *"the library exists and this account has no access row"* and for *"there is no such library"* — so `complete` on every library UsArr can see is **not** a statement that UsArr can see every library; 🚫 **probing library ids to find the hidden ones is REJECTED** — it is enumeration against the operator's own service and it does not even work, the guard's two refusals being identical; **`complete` renders nothing** on §17.8, which keeps that screen's standing invariant that nothing on it renders a positive health claim, and is why `unverified` has to be loud; **adds no migration, no column and no DDL** — `sync_report` carries no `CHECK` over `kind` (migration `00005`) and `detail` is already JSON, so the verdict's three sides share one declaration in `internal/store/completeness.go` and a typo is a silently missing verdict rather than a constraint violation; **the Kavita adapter is untouched and serves no verdict**, which renders as an absent key and is the seam: an adapter that can make the comparison implements the same shape and the screen needs no change; ⚠️ **superseded in part 2026-08-19 by [ADR-0063](#adr-0063)** — the `content_completeness` rule this ADR decides stands **unchanged**, and what falls is the `items_skipped` semantics §5 contrasts itself against: that kind now follows the **same** row-per-walked-container rule, so *"an absent skip row means nothing was skipped"* is no longer true and the two absences no longer differ |
+| [0062](#adr-0062) | `usarr backup` captures the database **and** the KEK salt, and leaves the master key out — loudly | **Accepted** — 2026-08-19 |
 | [0063](#adr-0063) | A walked container records a **zero-count skip row**; "none skipped" stops being an absence | **Accepted** — 2026-08-19; **supersedes [ADR-0061](#adr-0061) §5's absent-row semantics for `items_skipped`**, leaving ADR-0061's text standing and unreworded with an inline flag on §5, on the pattern [ADR-0052](#adr-0052) used against [ADR-0041](#adr-0041) clause 1; **the problem is a coupling, not a bug** — `42246c0` built a reader that needed three states from a table that offered two (*items left out* · *walked, nothing left out* · *nothing walked it*), and could only separate the last two by joining against the **completeness** row, which measures a **different axis** and was quietly the only per-container record in the schema that an import had gone near a container, so `cmd/usarr` recorded in as many words that *"stop writing a row for the clean containers and every one of those collapses back into silence"*; ⚠️ **and the two adjacent readers had OPPOSITE absence conventions** one §17.8 column apart — absent completeness meant *nothing was asked*, absent skip meant *nothing was found* — which is a hazard on its own; **the same-screen compensating control was ruled INSUFFICIENT by the owner**, in his words *"cross-referencing is what people stop doing"*; **the decision**: every container an import **walked** gets a row, zero or not, and a container nothing walked gets none; ⚠️ **the three states survive and only the EVIDENCE moves** — `left_out` is a non-zero row, `none` is a zero row, absent is no row, and the wire contract, the `SkipState` vocabulary and the §17.8 render are all unchanged (`none` still renders nothing, keeping that screen's standing invariant that it paints no positive health claim); **the completeness derivation is RETIRED rather than left as a fallback**, taking `ListLibraries`'s ordering constraint with it, because a dead cleverness kept just-in-case is a second code path nobody exercises; ⚠️ **the change belongs in the ADAPTER and not in `cmd/usarr`, which is load-bearing** — the tally map is populated by `tallyFor` at the top of one container's iteration **inside** the walk and is never pre-seeded, so the row set is the set of containers the walk **reached**; ✅ **the before-the-walk imprecision therefore genuinely DIES** — completeness is measured in `Containers()` before the walk, so an aborted import writes verdicts for containers it never reached, and those used to read *"nothing was skipped"* when the truth was *"not observed"*; ⚠️ **and what is STILL OPEN is stated rather than implied** — the one container the walk died **inside** carries a row from what it had read, so a clean partial read is indistinguishable from a clean complete one (at most one per import), not closed because withholding it loses genuine observed skips and contradicts the invariant, and marking it means a fourth state the screen cannot render; 🚫 **synthesising the zero rows in `cmd/usarr` from the container list is REJECTED and was fired deliberately** — the only list available there is `Containers()`'s, and seeding from it produces a clean zero for a container named `Never Reached`, which **moves** the imprecision into the field just decoupled from it; **a zero row carries no `reason` and no `effect`** (they explain a skip, and on a zero they assert a cause for a non-event) but keeps `covers`/`does_not_cover`, because a skip count is not a completeness verdict at any count; **the `StreamItems` LOG keeps its zero gate** — nobody infers "walked clean" from an absent log line, so the record is the row; **adds no migration, no column and no DDL** — same `kind`, and `sync_report.kind` carries no `CHECK` (migration `00005`, verified in the DDL); **no SQL and no plan change** — `librarySkipsSQL` and `libraryCompletenessSQL` still share one `containerReportSQL`, and `TestTheSkipStatementIsTheCompletenessStatement` was re-examined and **kept**; **the Libraries screen does not change**, since `skipMarks` and `skippedNote` already keyed on `left_out` and the absent key; ⚠️ **one reader behaviour inverts in the safe direction** — a library whose only skip row is undecodable now reads absent rather than `none`; **four existing assertions are INVERTED rather than deleted**, because an inverted assertion records that the decision changed and a deleted one is silence |
+| [0064](#adr-0064) | BookOrbit's wire vocabulary is pinned by vendoring `packages/types` under `api/specs/`, guarded by an offline git-tree pin plus a network drift check | **Accepted** — 2026-08-19; **extends [ADR-0047](#adr-0047)'s two-half guard shape from one file to a directory** and leaves [ADR-0046](#adr-0046), [ADR-0047](#adr-0047) and [ADR-0052](#adr-0052) standing and unreworded — the change carrying it edits no ADR at all; **the problem is that [ADR-0052](#adr-0052) made BookOrbit the SOLE catalogue source** while every wire shape in `internal/bookorbit` is **hand-transcribed** from BookOrbit's TypeScript citing `73b7877d`, so an upstream rename or retyped field was not the degradation of one adapter among several but a single point of failure for the whole library, **invisible until an import broke against a real server**; ⚠️ **there is nothing else to vendor** — BookOrbit commits no OpenAPI document, `server/src/swagger.ts` builds one at **runtime** and `main.ts` mounts it only under a default-false `SWAGGER_ENABLED`, so [ADR-0046](#adr-0046)'s floor/ceiling split has nothing to bite on and no "fetch it from the running instance" recipe exists either; **the decision**: vendor `packages/types` **verbatim and whole** — all **68 files** at `73b7877d` — to `api/specs/bookorbit-types/`; **`api/specs/` rather than `docs/reference/`, DECIDED rather than inherited**, settling an inference `docs/ROADMAP.md` explicitly flagged as one to settle — `api/specs/SOURCES.md` opens *"vendored verbatim, never fetched at build or test time"* and carries a provenance table contract tests read, while `docs/reference/` holds hand-written Markdown and **not one vendored artefact**; **the identity is a git TREE name** (`4cb990a36b8325845abb79eb4b7a4445e6df679b`) and not a SHA-256 of our own devising, which buys two things a home-grown hash would not — upstream is **comparable with no download**, since a blobless fetch resolves a path to its tree name out of the tree objects alone, and the value is **upstream's own name**, so nobody must trust that we hashed the right bytes in the right order; ⚠️ **nothing may be added inside the vendored directory** — one extra file changes the tree and destroys that identity, which is why the manifest lives **beside** it and never in it; **two authorities and one diagnosis**: the tree name moves for **any** byte (right offline, where the bytes are frozen), a comment-blind **declaration digest** moves only when a type, field, enum member or literal union changes (so an upstream comment rewrite does not read the same as a rename — **an alarm that is usually noise is an alarm nobody reads**), and the per-file manifest is *"a diagnosis and never an authority"*, read only to turn *"the tree hash differs"* into *"these files differ"*; ⚠️ **the digest is a LEXER THAT REFUSES RATHER THAN GUESSES, which is why five files are digested and not sixty-eight** — `stripTypeScript` cannot tell a regex literal from a division, and `src/pattern-resolver.ts:71` declares a character class **containing a double quote** that would trap the scanner in a string state it never leaves, so it **asserts it finished in code state** and errors otherwise rather than pinning a file to nonsense; **the guard is split across the network line** on [ADR-0047](#adr-0047)'s reason — three offline checks in **`make check`**, the upstream comparison behind the `upstream` tag in **`make spec-drift`** only, because `make check` makes exactly two network calls and a third would let a GitHub outage redden an unrelated commit; ⚠️ **the network half asks TWO questions and they are not the same news** — the tree at the **pinned commit** not matching is **our** bug and invalidates every transcription, while the tree at **`main`** having moved is **upstream news**, graded per file by whether `internal/bookorbit` transcribes it; ✅ **`SPEC_DRIFT_FLOOR` was raised 1 → 2 in the same change, and that is what makes the drift check non-vacuous** — `go test -run` matching nothing exits 0, so a floor is the only thing standing between a green and a green over zero checks; 🚫 **rejected**: vendoring only the five transcribed files (silently un-covers the next slice, and a guard that quietly shrank is indistinguishable from one that held), a plain SHA-256 over a concatenation (not upstream-comparable, and demands trust), the tree hash as the **only** signal (cries wolf on comment churn and on a Prettier rewrap), [ADR-0046](#adr-0046)'s floor/ceiling (no committed document and no release-tag line to split), and vendoring the NestJS server; ⚠️ **the honest limit is stated rather than implied** — it pins **the file we vendored, not the server the owner runs**; it sees **types, not behaviour**; it does **not** check whether our transcription reads them correctly (`TestMediaKindVocabularyMatchesTheSource` and `TestPermissionVocabularyMatchesTheSource` stay necessary); the server's own **NestJS DTOs are unpinned by anything**, the largest uncovered surface; and **nothing runs the network half on a schedule** — there is no CI and `make spec-drift` is a thing a person types, so this ADR claims no cadence |
 
 ---
 
@@ -8369,6 +8371,7 @@ BookOrbit's stats route and asserts the recorded verdict is `unverified` with `T
 
 ---
 
+<a id="adr-0062"></a>
 ## ADR-0062 — `usarr backup` captures the database **and** the KEK salt, and leaves the master key out — loudly
 
 **Status:** Accepted — 2026-08-19
@@ -8682,3 +8685,165 @@ that used to mean `none` — must now read nil; `TestAnUnreadableSkipRowFallsBac
 becomes `TestAnUnreadableSkipRowIsDroppedAndPublishesNothing`; and both `Skipped()` assertions in
 `internal/libsync/bookorbit_test.go` now want a tally for every walked container. Each was fired
 red before being trusted, against the code line and not a comment.
+
+---
+
+<a id="adr-0064"></a>
+## ADR-0064 — BookOrbit's wire vocabulary is pinned by vendoring `packages/types` under `api/specs/`, guarded by an offline git-tree pin plus a network drift check
+
+**Status:** Accepted — 2026-08-19. **Extends [ADR-0047](#adr-0047)'s two-half guard shape from one
+file to a directory.** [ADR-0046](#adr-0046), [ADR-0047](#adr-0047) and [ADR-0052](#adr-0052) are
+left standing and unreworded — the change carrying this decision edits no ADR at all.
+
+### Context
+
+#### 1 · A hand-transcription against a sole source was the whole library's single point of failure
+
+[ADR-0052](#adr-0052) made BookOrbit v0.1's **sole** catalogue source. Every wire shape in
+`internal/bookorbit` — `catalogue.go`, `scope.go`, `stats.go`, `resources.go` — is
+**hand-transcribed** from BookOrbit's TypeScript, citing commit
+`73b7877d2fede2221b0ca360af9bfced7c3797f3`. With one source rather than several, an upstream rename,
+a retyped field or a dropped key is not the degradation of one adapter among many; it is a failure of
+the **entire library**, and until this landed it was invisible until an import broke against a real
+server.
+
+#### 2 · There is no OpenAPI document to vendor, so ADR-0046's shape has nothing to bite on
+
+BookOrbit commits no spec: `server/src/swagger.ts` builds one at **runtime**, and `main.ts` mounts it
+only when `SWAGGER_ENABLED` is true, which `parseBooleanFlag` defaults to **false**. So there is
+nothing checked in to vendor and nothing to fetch from a running instance either.
+[ADR-0046](#adr-0046)'s floor/ceiling split assumes a committed document at two refs and does **not**
+transfer; [ADR-0047](#adr-0047)'s blob-identity pin assumes a committed document at one ref and
+**does** transfer, one level up the object graph. `packages/types` is the only machine-readable
+statement of the wire vocabulary upstream publishes — not a second-best, the only candidate.
+
+⚠️ §2 is a reading of an upstream repository at a pinned commit, which UsArr's own suite cannot
+assert against and must not pretend to. `api/specs/SOURCES.md` carries the same caveat.
+
+### Decision
+
+1. **Vendor `packages/types` verbatim and whole** — all **68 files**, at `73b7877d`, to
+   `api/specs/bookorbit-types/`.
+
+2. **`api/specs/`, not `docs/reference/` — decided rather than inherited.** `docs/ROADMAP.md` raised
+   this obligation under a `docs/reference/` heading and then explicitly labelled that heading an
+   inference to settle. The tree settles it: `api/specs/SOURCES.md` opens *"These files are vendored
+   verbatim, never fetched at build or test time"* and carries a provenance table contract tests
+   read, while `docs/reference/` holds hand-written Markdown and **not one vendored artefact**.
+   Filing it there would make that directory two things at once and leave `SOURCES.md` — the register
+   that exists precisely to answer *which bytes belong there* — not knowing about the most
+   consequential vendored artefact in the tree.
+
+3. **The identity is a git TREE name**, `4cb990a36b8325845abb79eb4b7a4445e6df679b`
+   (`git rev-parse 73b7877d:packages/types`), not a SHA-256 over a concatenation of our own devising.
+   Two things follow that a home-grown hash would not buy: upstream is **comparable with no
+   download**, because a blobless fetch resolves a path to its tree name out of the tree objects
+   alone; and the value is **upstream's own name** for the directory, so nobody has to trust that we
+   hashed the right bytes in the right order. `gitTreeName` reimplements git's naming rather than
+   shelling out, so the gate does not require a git checkout to be present, and it **refuses**
+   executables and non-regular files rather than guessing a mode.
+
+4. ⚠️ **Nothing may be added inside `api/specs/bookorbit-types/`.** One extra file changes the tree
+   and destroys that identity. `api/specs/bookorbit-types.manifest` therefore lives **beside** the
+   directory, never in it.
+
+5. **Two authorities and one diagnosis**, because they answer different questions. The **tree name**
+   moves for *any* byte — offline that is exactly right, since those bytes are frozen and must not
+   move for any reason at all. The **declaration digest** (SHA-256 over the file with comments
+   stripped and whitespace outside string literals collapsed) moves only when a type, field, enum
+   member or literal union changes, so an upstream comment rewrite does not read the same as an
+   upstream rename; without it every reworded doc comment arrives as a full-volume alarm, and **an
+   alarm that is usually noise is an alarm nobody reads** — the same failure as no alarm, reached by
+   a longer road. The **manifest** — one `<git-blob>  <path>` row per file — is neither:
+   `TestVendoredBookOrbitTypesAreTheUpstreamTree` reads it only to turn *"the tree hash differs"*
+   into *"these files differ"*, and it is in its own words *"a diagnosis and never an authority"*, so
+   editing it to match a tampered file changes no verdict.
+
+6. **The digest is a lexer that refuses rather than guesses — which is why five files are digested
+   and not sixty-eight.** `stripTypeScript` is a lexer over six states, not a parser, and cannot tell
+   a regex literal from a division. `api/specs/bookorbit-types/src/pattern-resolver.ts:71` declares
+   `INVALID_SEGMENT_CHARS_REGEX` as a character class that **contains a double quote**, which would
+   send the scanner into a string state it never leaves and pin that file to nonsense. So the lexer
+   **asserts it finished in code state** and errors otherwise, and `dependedOnDeclarations` covers
+   exactly the five files `internal/bookorbit` transcribes: `src/book.ts`, `src/query.ts`,
+   `src/permissions.ts`, `src/library.ts`, `src/app-info.ts`. The limit is **measured, not cautious**
+   — a file that would silently corrupt its own digest fails loudly instead of being pinned to a lie.
+
+7. **The guard is split across the network line**, on [ADR-0047](#adr-0047)'s reason: `make check`
+   makes exactly two network calls and `make check-offline` is defined as `check` minus them, so a
+   third would let a GitHub outage redden an unrelated commit.
+
+   | Guard | Where | Network | Answers |
+   | --- | --- | --- | --- |
+   | `TestVendoredBookOrbitTypesAreTheUpstreamTree` | `internal/bookorbit`, **in `make check`** | no | have the vendored bytes moved under us? |
+   | `TestVendoredBookOrbitTypesManifestIsCurrent` | `internal/bookorbit`, **in `make check`** | no | is the per-file diagnosis still accurate? |
+   | `TestDependedOnTypeFilesCarryThePinnedDeclarationDigest` | `internal/bookorbit`, **in `make check`** | no | have the five transcribed files' **declarations** moved? |
+   | `TestSpecDriftBookOrbitTypesStillMatchUpstream` | `internal/bookorbit`, **`make spec-drift` only** | **yes** | two questions, graded differently |
+
+   ⚠️ **The network half asks two questions, and they are not the same news.** The tree at the
+   **pinned commit** must equal what we vendored — a mismatch there is *our* bug, and it invalidates
+   everything else the package asserts, since every transcription cites that commit. The tree at
+   **`main`** differing is *upstream news*, and the target grades each changed file by whether
+   `internal/bookorbit` transcribes it. The test emits a `SPEC_DRIFT_VERDICT:` line — `drift`,
+   `unreached`, `path-moved` — as a contract with the `Makefile`, so an outage or a local git failure
+   is not reported as upstream movement.
+
+8. **`SPEC_DRIFT_FLOOR` is raised 1 → 2 in the same change, and that is what makes the network half
+   non-vacuous.** `make spec-drift` counts `--- PASS:`/`--- FAIL:` lines matching the reserved
+   `TestSpecDrift` prefix and fails if fewer than the floor **actually ran**, because `go test -run`
+   that matches nothing exits 0 and a green over zero checks is not a clean bill of health. Adding a
+   drift test without raising the floor leaves the new check free to vanish silently — hence
+   `docs/DEVELOPMENT.md` §11 rule 4's requirement that the two move together, honoured here.
+
+### Rejected
+
+- **Vendor only the five files a transcription reads today.** Cheaper and smaller, and it silently
+  un-covers the next slice: the moment somebody transcribes a sixth file the guard says nothing about
+  it and nobody notices, because a guard that quietly shrank is indistinguishable from one that held.
+- **A plain SHA-256 over a concatenation of the files.** Not comparable to upstream without
+  downloading every byte, and it asks a reader to trust that we hashed the right bytes in the right
+  order. The tree name needs neither.
+- **The whole-tree hash as the *only* signal.** Correct offline, where the bytes are frozen; useless
+  as the only input to the network half, for the alarm-fatigue reason in decision 5 — it fires on a
+  fixed typo in a JSDoc line and on a rewrap by a newer Prettier.
+- **[ADR-0046](#adr-0046)'s floor/ceiling split.** It needs a committed document at a release tag and
+  at a branch tip. BookOrbit has neither a committed document nor a release-tag line to split on.
+- **Fetching the spec from a running instance.** `SWAGGER_ENABLED` defaults false, so on a default
+  install there is no served document at all.
+- **Vendoring the NestJS server to close gap 4 below.** Not a proportionate answer to it.
+
+### ⚠️ What this does NOT cover
+
+1. **It pins the file we vendored, not the server the owner runs.** `packages/types` is what
+   BookOrbit's own frontend compiles against at one commit. The owner's instance may be older, newer,
+   or a fork. **A real instance remains the only evidence about a real instance.**
+2. **It sees types, not behaviour.** A handler that stops populating a field, a route that gains a
+   `@RequirePermission`, a query that silently narrows — none of those touch `packages/types`, and
+   every one of them breaks the adapter.
+3. **It sees what upstream declares, not whether we read it right.** A green says the vocabulary has
+   not moved; it says nothing about whether the transcription was correct in the first place.
+   `TestMediaKindVocabularyMatchesTheSource` and `TestPermissionVocabularyMatchesTheSource` are what
+   check that, and they stay necessary.
+4. **The server's own NestJS DTOs are in no file here.** Where a controller returns a class rather
+   than a shared type, nothing in `packages/types` describes it, and the controller, service and
+   repository citations in `internal/bookorbit` are **unpinned by anything**. That is the largest
+   uncovered surface, and it is uncovered deliberately.
+5. **Nothing runs the network half on a schedule.** There is no CI; `make spec-drift` is a thing a
+   person types, behind `USARR_SPEC_DRIFT=1` and the `upstream` build tag. This ADR should not be
+   read as claiming a cadence. The vendored copy and the offline pins stand on their own; *"we will
+   hear when upstream moves"* is only as true as somebody's habit of running that target.
+
+### Consequences
+
+**Re-vendoring becomes a deliberate multi-part change, by design.** A newer BookOrbit commit means
+updating, in one change: `vendoredTypesCommit`, `vendoredTypesTree`, the five
+`dependedOnDeclarations` digests, `api/specs/bookorbit-types.manifest`, and the BookOrbit rows in
+`api/specs/SOURCES.md` — and then **re-reading** the transcriptions that feed off whichever files
+changed, because a moved type is exactly when a hand-transcription stops being true. The failure
+messages spell that sequence out rather than inviting an observed hash to be pasted over the
+constant.
+
+**The gate grows three offline checks and no network calls**, so `make check` keeps its exactly-two
+and `make check-offline` its zero. **`api/specs/` is now the settled home for vendored upstream
+artefacts of any format**, not only OpenAPI JSON; `SOURCES.md` gained a BookOrbit section carrying
+the provenance, the tree name, the guard split and the five uncovered surfaces above.
