@@ -1,0 +1,24 @@
+# The build context is only what `make build` needs; everything below is either
+# regenerated in the builder or has no business in the image.
+
+# VCS
+.git
+.gitignore
+
+# Build outputs — the builder produces its own
+/usarr
+web/build
+internal/web/spa/*
+!internal/web/spa/.gitkeep
+
+# Dependencies — reinstalled from the lockfiles inside the builder
+web/node_modules
+
+# Local dev + editor state
+.dev
+.env
+.env.*
+*.log
+
+# Docs, mockups and tooling not needed to build the binary
+docs

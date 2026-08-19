@@ -2,8 +2,11 @@
 #
 # ─── HONESTY NOTICE ──────────────────────────────────────────────────────────
 # UsArr is PRE-ALPHA. The build is real now: ./cmd/usarr, ./internal/..., ./web/
-# and ./internal/db/migrations/ all exist, so build, test and check work. What is
-# still missing is ./deploy/Dockerfile, so `make docker` WILL fail. Targets that
+# and ./internal/db/migrations/ all exist, so build, test and check work.
+# ./deploy/Dockerfile now exists too, so `make docker` no longer fails on an
+# absent file — but it was added in an agent container with NO Docker daemon and
+# has never been built there, so a working image is an UNVERIFIED claim until a
+# `make docker` on a host with a daemon proves it (rule 2 below; §8). Targets that
 # reference a path that does not exist yet remain the build contract the commits
 # that create it are written against, not a description of a working build.
 #
