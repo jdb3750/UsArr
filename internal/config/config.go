@@ -283,6 +283,17 @@ func (c *Config) TrustedProxyWarnings() []string {
 	return out
 }
 
+// ErrHelpRequested is returned by Load when -h or --help was passed. Like
+// ErrVersionRequested it is a control-flow signal and not a failure: the caller
+// prints WriteUsage's block to stdout and exits 0. A flag that asks a question
+// must not report failure for having been answered, and -h used to — it reached
+// the caller wrapped as `parse flags: flag: help requested`, on stderr, exit 1.
+//
+// The narrowness is the point: ONLY flag.ErrHelp becomes this. Every other
+// parse error still arrives as an ordinary wrapped error and still exits 1,
+// because those are real failures and scripts read that status.
+var ErrHelpRequested = errors.New("config: --help requested")
+
 // ErrVersionRequested is returned by Load when --version was passed. It is a
 // control-flow signal rather than a failure: the caller prints the build
 // identity and exits 0. It is a sentinel and not a bool on Config because Load

@@ -433,6 +433,12 @@ func TestVersionFlagShortCircuitsLoad(t *testing.T) {
 		if errors.Is(err, ErrVersionRequested) {
 			t.Errorf("Load(%v) short-circuited to --version", tc.args)
 		}
+		// Nor to --help. ErrHelpRequested is the one parse outcome that exits 0,
+		// and it is reachable ONLY from flag.ErrHelp: a malformed command line
+		// that arrived here as a question would report success for failing.
+		if errors.Is(err, ErrHelpRequested) {
+			t.Errorf("Load(%v) short-circuited to --help", tc.args)
+		}
 	}
 }
 
@@ -443,17 +449,23 @@ func TestVersionFlagShortCircuitsLoad(t *testing.T) {
 // the binary that implements it — an operator could read the whole of --help and
 // conclude UsArr has no way to rotate a key.
 //
-// It is asserted through Load rather than by calling the usage function, because
-// the usage function is unexported and, more to the point, what matters is that
-// the text reaches the path -h actually takes.
+// The text no longer travels in the error: -h returns ErrHelpRequested and the
+// caller prints WriteUsage to stdout, exit 0. So this asserts the two halves it
+// can see from here — that -h is that signal and not a failure, and that the
+// block WriteUsage prints names the subcommand. That the caller actually joins
+// them is TestRunHandlesHelpFlag in cmd/usarr, which is where the join lives.
 func TestUsageNamesTheSubcommand(t *testing.T) {
-	_, err := Load(Options{Args: []string{"-h"}})
-	if err == nil {
-		t.Fatal("Load(-h) returned no error; -h has to surface the usage text somewhere")
+	for _, arg := range []string{"-h", "--help"} {
+		if _, err := Load(Options{Args: []string{arg}}); !errors.Is(err, ErrHelpRequested) {
+			t.Errorf("Load(%s) = %v, want ErrHelpRequested", arg, err)
+		}
 	}
-	for _, want := range []string{"key rotate", "Flags:", "-secret-key-file"} {
-		if !strings.Contains(err.Error(), want) {
-			t.Errorf("`usarr -h` output does not contain %q:\n%s", want, err)
+
+	var b strings.Builder
+	WriteUsage(&b)
+	for _, want := range []string{"Usage:", "key rotate", "Flags:", "-secret-key-file"} {
+		if !strings.Contains(b.String(), want) {
+			t.Errorf("`usarr -h` output does not contain %q:\n%s", want, b.String())
 		}
 	}
 }

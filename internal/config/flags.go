@@ -1,6 +1,7 @@
 package config
 
 import (
+	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -45,21 +46,14 @@ type flags struct {
 // lands.
 var keyRotateArgs = []string{"key", "rotate"}
 
-func parseFlags(args []string) (flags, map[string]bool, error) {
-	var f flags
-
-	// A LEADING subcommand is lifted off before the FlagSet sees it. Go's flag
-	// package stops parsing at the first non-flag argument, so without this
-	// `usarr key rotate --config-dir /config` would treat --config-dir as a
-	// positional and reject it — which is the form every operator will type
-	// first. The trailing form is handled after Parse; both reach the same
-	// FlagSet, so there is still exactly one parser and one idea of what a
-	// valid argument is.
-	if len(args) >= len(keyRotateArgs) && slices.Equal(args[:len(keyRotateArgs)], keyRotateArgs) {
-		f.keyRotate = true
-		args = args[len(keyRotateArgs):]
-	}
-
+// newFlagSet registers the command line into f. It is separate from parseFlags
+// for one reason: -h now answers on stdout and exits 0 (ErrHelpRequested), so
+// the caller prints the usage block AFTER Load has returned and the FlagSet
+// parseFlags built is long gone. Both paths build the FlagSet here, so there is
+// still exactly ONE definition of what a flag is and what it says — a second,
+// hand-written usage string would drift from the flags it claims to describe on
+// the first flag anyone adds.
+func newFlagSet(f *flags) *flag.FlagSet {
 	fs := flag.NewFlagSet("usarr", flag.ContinueOnError)
 	fs.SetOutput(io.Discard)
 
@@ -111,7 +105,46 @@ func parseFlags(args []string) (flags, map[string]bool, error) {
 		fs.PrintDefaults()
 	}
 
+	return fs
+}
+
+// WriteUsage prints the usage block -h reaches, to w. Exported because the
+// answer now goes to stdout from the caller rather than out of an error, and
+// because printing it is the whole of what ErrHelpRequested asks for.
+func WriteUsage(w io.Writer) {
+	var f flags
+	fs := newFlagSet(&f)
+	fs.SetOutput(w)
+	fs.Usage()
+}
+
+func parseFlags(args []string) (flags, map[string]bool, error) {
+	var f flags
+
+	// A LEADING subcommand is lifted off before the FlagSet sees it. Go's flag
+	// package stops parsing at the first non-flag argument, so without this
+	// `usarr key rotate --config-dir /config` would treat --config-dir as a
+	// positional and reject it — which is the form every operator will type
+	// first. The trailing form is handled after Parse; both reach the same
+	// FlagSet, so there is still exactly one parser and one idea of what a
+	// valid argument is.
+	if len(args) >= len(keyRotateArgs) && slices.Equal(args[:len(keyRotateArgs)], keyRotateArgs) {
+		f.keyRotate = true
+		args = args[len(keyRotateArgs):]
+	}
+
+	fs := newFlagSet(&f)
+
 	if err := fs.Parse(args); err != nil {
+		// -h and --help are the ONE parse outcome that is not a failure: the
+		// operator asked a question and the FlagSet answered it. Reporting a
+		// non-zero status for that is what --version already declines to do.
+		// Every OTHER parse error keeps its exit code and its stderr, prefix
+		// and all — widening this would change how the binary reports a
+		// genuinely malformed command line.
+		if errors.Is(err, flag.ErrHelp) {
+			return f, nil, ErrHelpRequested
+		}
 		var b strings.Builder
 		fs.SetOutput(&b)
 		fs.Usage()

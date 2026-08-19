@@ -86,3 +86,49 @@ func TestRunHandlesVersionFlag(t *testing.T) {
 		t.Errorf("commit on stdout = %q, want %q; output was:\n%s", got, commit, out)
 	}
 }
+
+// TestRunHandlesHelpFlag pins the whole of what -h owes: exit 0, on stdout, with
+// the usage block intact. It goes through run() rather than through
+// config.WriteUsage because the three are only true together — WriteUsage alone
+// would still pass with -h wired back to the parse-error path, printing the same
+// text to stderr and exiting 1, which is exactly what this replaced.
+//
+// Asserted with a config dir that cannot be created, like --version above: an
+// operator must be able to ask an installed binary how to run it without holding
+// the privileges running it needs.
+func TestRunHandlesHelpFlag(t *testing.T) {
+	for _, arg := range []string{"-h", "--help"} {
+		t.Setenv("USARR_CONFIG_DIR", "/proc/self/usarr-must-not-be-created")
+
+		origArgs := os.Args
+		origStdout := os.Stdout
+		t.Cleanup(func() { os.Args, os.Stdout = origArgs, origStdout })
+
+		r, w, err := os.Pipe()
+		if err != nil {
+			t.Fatalf("os.Pipe: %v", err)
+		}
+		os.Args = []string{"usarr", arg}
+		os.Stdout = w
+
+		runErr := run()
+		_ = w.Close()
+		os.Stdout = origStdout
+
+		out, err := io.ReadAll(r)
+		if err != nil {
+			t.Fatalf("read captured stdout: %v", err)
+		}
+		if runErr != nil {
+			t.Errorf("run() with %s = %v, want nil (exit 0)", arg, runErr)
+		}
+		for _, want := range []string{"Usage:", "key rotate", "Flags:", "-secret-key-file"} {
+			if !strings.Contains(string(out), want) {
+				t.Errorf("`usarr %s` stdout does not contain %q:\n%s", arg, want, out)
+			}
+		}
+		if strings.Contains(string(out), "parse flags") {
+			t.Errorf("`usarr %s` stdout carries a parse-error prefix:\n%s", arg, out)
+		}
+	}
+}
