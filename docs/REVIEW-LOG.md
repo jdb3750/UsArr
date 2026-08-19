@@ -20457,3 +20457,304 @@ both and nothing about whether any of the prose is true. What is re-runnable is 
 `git show d16d1e7 --unified=0 -- docs/DECISIONS.md` returns six hunk headers including `@@ -81`,
 `@@ -2088`, `@@ -2118` and `@@ -2153`; `git show 92eff15 --unified=0 -- docs/DECISIONS.md` returns
 two, `@@ -106,0 +107` and `@@ -7216,0 +7218,95`. That difference is the whole finding.
+
+---
+
+# Documentation batch, 2026-08-19 — one prohibition that no guard can express, two over-corrections caught before they landed, and a citation sweep measured rather than relayed
+
+**`LS-370` is the next free id in the `LS-` series** (`LS-369` was the last allocated, on the
+`ADR-0052` pre-merge review). The `SD-`, `DS-` and `RK-` series run on their own threads and nothing
+here touches them.
+
+**Every claim below was re-measured on this tree rather than transcribed from the brief that ordered
+the work.** Three of the four jobs came with a summary of what would be found, and in two of them the
+summary was wrong in a detail that changes the entry — the counts in `LS-374`, and the reason in
+`LS-370`. Both corrections are stated where they belong rather than absorbed.
+
+## LS-370 — `Options.SPKIPin` on a `ClassDerived` client is prohibited in prose and cannot be guarded as worded. Found, not fixed; the reopening condition is a real derived-class caller
+
+**The prohibition, quoted.** `internal/ssrf/ssrf.go:102-105`, closing the `CONSTRAINT` paragraph on
+`Options.SPKIPin`: *"Until that is fixed — by selecting the TLS config per connection, or by
+building `ClassDerived` clients without the pin and relying on the class policy — **do not set
+`SPKIPin` on a `ClassDerived` client that is expected to reach anything but the instance itself**."*
+The reason it gives is at `:96-100`: a pin is installed on the whole transport, so a pinned client
+reaches exactly one https host, and `security.md` §2's table says a derived URL that is *not* on the
+originating instance should fall through to the strict `ClassProvider` policy. With a pin installed
+those public-CDN fetches are refused instead. It fails **closed**, which is the right direction, and
+it silently breaks the documented fallback.
+
+**Nothing enforces it.** `Options.normalize()` (`ssrf.go:120-145`) carries exactly one cross-field
+guard, and it is the *required-field* direction: `Class == ClassConfigured && AllowedHostPort == ""`
+→ `ErrInvalidOptions` (`:124-127`, *"There is no safe default for 'which host may this client
+reach'"*). No branch anywhere reads `Class` and `SPKIPin` together. `tlsConfig` (`:215-233`) checks
+the pin's **shape** — `len(pin) != sha256.Size` → `ErrInvalidOptions` (`:223-225`) — and otherwise
+takes `class` only to label errors. So the pin's length is guarded and its compatibility with the
+class is not, and `NewClient` returns a working client for the one combination the file says never to
+build.
+
+🚩 **The finding that is not in the brief: the prohibition as worded is not mechanically checkable at
+all, and that is why a three-line guard is the wrong reflex.** Its subject is *"a `ClassDerived`
+client **that is expected to reach anything but the instance itself**"* — the caller's intent, not a
+field value. A blanket `Class == ClassDerived && len(SPKIPin) > 0` refusal in `normalize()` would
+forbid a configuration the same paragraph calls correct: a derived-class client that only ever
+fetches from the pinned instance, where `effectiveClass` (`policy.go:219-224`) resolves the request
+to `ClassConfigured` and the pin is exactly the right control. So a guard here would either encode a
+policy the file has not chosen, or refuse a legitimate build. **The choice belongs to the first
+design that has a derived-class caller**, and it has two shapes: narrow the comment to "never, on any
+derived client" and the guard becomes three lines, or land the per-connection TLS config the comment
+already names and the prohibition disappears with it.
+
+**It is vacuous today, measured rather than assumed.** No production code constructs a `ClassDerived`
+client: `grep -rn ClassDerived` over the module returns nothing outside `internal/ssrf`, and inside
+it the only construction site is `client_test.go:286`. The pipeline that would have one — the image
+path behind `image_asset.origin_class` — is unbuilt. **It is vacuous from the other side too:**
+`internal/httpapi/services.go:185` (*"`TLSSPKIPin` is deliberately NOT set here, and the column is
+left NULL"*) and `internal/httpapi/ports.go:81` (*"There is deliberately NO `TLSSPKIPin` field"*)
+mean no production `Options` carries a pin at all. Two independent reasons the combination cannot
+occur, either of which can stop being true on its own.
+
+**Relationship to the two entries already here, because this is not a third report of the same
+thing.** Round 2's **SSRF-02** (§ *"A pinned client cannot fetch any `derived` URL…"*, this file
+line 81) was closed as *"Applied as documentation"* — and the documentation is there, verbatim above.
+**SR-02** recorded that the pin is never *recorded* in the first place. Neither says the documented
+prohibition has no guard. That gap is this entry, and it is deliberately recorded here rather than
+left as a comment nobody greps.
+
+⏭️ **Reopening condition, stated so it fires on the change rather than on a sweep.** The first
+`ssrf.Options` literal outside `internal/ssrf`'s own tests that sets `Class: ClassDerived` — which is
+the image pipeline landing — **or** the first production write to `service_instance.tls_spki_pin`,
+whichever comes first. At that moment this decision is due: narrow the comment and add the guard, or
+build the per-connection TLS config. Until then a guard would be a rule with no subject.
+
+## LS-371 — the `Makefile` comment said `go list ./...` returns 11 packages; it returns 14, and the count is deleted rather than refreshed
+
+**Measured, not corrected to a new number.** `go list ./...` returns **14** packages on this tree and
+`go list -tags bench ./...` returns **15**, the extra one being `internal/db/spike` — which is the
+comment's whole point and the only part of it that was still true. Go 1.25.13.
+
+ℹ️ **The gate says the same thing three targets above, without being asked.** `lint-go`'s own banner
+on this run prints *"lint-go: linting 15 Go packages — 14 untagged, plus 1 behind `.golangci.yml`'s
+build-tags (upstream,bench)"*, and `vuln` prints *"scanning 14 Go packages"*. That is the banner
+`Makefile:784-786` exists for, and it had been reporting the correct figure the whole time this
+comment carried the wrong one — two counts of the same set, twenty lines apart, one of them
+computed and one of them typed.
+
+**A refreshed count is the same bug on a timer**, which is `DS-06`'s finding one file along, and the
+lint banner three targets above this one learned it the hard way (`Makefile:784-786`: the banner
+printed `go list ./...`'s figure while golangci-lint opened a different set). So the paragraph now
+says `go list ./...` *"does not mention it AT ALL"* and states in the line why no number is quoted.
+The consequence the comment exists for — a deliberate type error in that package passed fmt-check,
+lint, test and vuln, all green — is untouched.
+
+ℹ️ **The brief located this at `Makefile:829`; it is at `Makefile:851`** on `origin/main` at
+`dd88a67`. Twenty-two lines of drift in a file two lanes have edited tonight, which is the same
+argument the citation sweep below makes about line numbers in general.
+
+## LS-372 — the §7 audit verdict "the internet-exposure controls do not exist" was false of three of them, and would have deleted the only sentence saying they are on every response
+
+**Caught before it was written into `docs/reference/security.md`, and recorded anyway, because an
+over-correction is a defect in the same record.** The wording would otherwise come back the next time
+someone sweeps that section — a sweep that removes a true statement is the night's own defect class
+pointed backwards.
+
+**What actually exists, each measured at a symbol.**
+
+| Control | Where | State |
+|---|---|---|
+| Strict CSP, no `unsafe-inline`, no `unsafe-eval` | `internal/httpapi/middleware.go:187-190` — `default-src 'self'; img-src 'self' data:; style-src 'self' 'report-sample'; script-src 'self' 'report-sample'; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'` | ✅ **Built**, and guarded: `security_headers_test.go:165` fails any directive carrying `'unsafe-inline'`, `'unsafe-eval'`, `'unsafe-hashes'` or `*` |
+| `X-Content-Type-Options: nosniff` | `middleware.go:132` (also `internal/web/web.go:180`, `internal/httpapi/json.go:112`) | ✅ **Built** |
+| `Referrer-Policy: no-referrer` | `middleware.go:133` | ✅ **Built** |
+| `frame-ancestors 'none'` | inside the CSP above; asserted by name at `security_headers_test.go:134` | ✅ **Built** |
+| A one-shot first-run owner setup | `internal/httpapi/auth.go:376-381` — `handleSetup` reads `s.store.Owner()` first and returns `409 CodeAlreadySetup` *"an owner account already exists"* once one does | ✅ **Built**, and genuinely one-shot: the close is the handler's first statement, not a UI state |
+| HSTS | nowhere — `Strict-Transport-Security` does not appear in the tree | ⏭️ **Absent** |
+| Plaintext-HTTP refusal, and its "behind a TLS-terminating proxy" mode | nowhere | ⏭️ **Absent** |
+
+🔍 **One more the audit did not name in either direction:** `Cross-Origin-Opener-Policy: same-origin`
+is set at `middleware.go:191` and is not in §7's list at all. Not a defect — the list is what the
+exposure checklist owes, not an inventory — but worth knowing before anyone "adds" it.
+
+**§7's shipped text is already correct and was not edited.** It reads *"Partly in force already, on
+every response and not only an exposed one: the strict CSP, `X-Content-Type-Options: nosniff`,
+`Referrer-Policy: no-referrer` and `frame-ancestors 'none'` … and first-run owner creation is
+one-shot and closes once an owner exists. Not built: HSTS, the plaintext-HTTP refusal…"*. The audit's
+verdict would have replaced that with a blanket absence.
+
+**What it would have cost, stated concretely rather than as "inaccuracy".** Three things, in
+increasing order of damage. It would have deleted the only sentence in the document saying these
+headers are on **every** response rather than only an exposed one — the fact that makes them a
+posture and not a deployment option. It would have turned five working controls into an open to-do
+list, which is what the next person reads §7 for. And the predictable way a reader discharges that
+to-do is by writing a second security-headers middleware beside the working one, which is how an
+install ends up emitting two `Content-Security-Policy` headers whose effective policy is the
+intersection — a policy nobody wrote and nobody can read off either source.
+
+## LS-373 — the same audit understated `Field.privacy`: the indexer replication has no redaction pass to fail, and one of the four credential fields carries no `privacy` marker at all
+
+**The verdict as drafted said `Field.privacy` names which upstream fields to redact.** True as far as
+it goes, and it understates the design by one whole step: on the replication path the credential
+never reaches a row that could need redacting.
+
+**Two named allowlists, in series, verified as types rather than as prose.**
+`mapping.CatalogIndexer` (`internal/servarr/mapping/indexer.go:28+`) is the first — its own doc
+comment is *"IT IS AN ALLOWLIST, AND THAT IS THE WHOLE POINT OF THE TYPE … this type does not redact
+`fields`, does not carry a `map[string]any` and does not embed the upstream resource"*, and it has
+no `Fields` member, no `Presets` member and no open map. `store.Indexer`
+(`internal/store/indexers.go:25+`) is the second and has the same shape, and `ReplaceIndexers`
+(`:83`) inserts **fifteen named columns** into `indexer_catalog`, not one of which can hold a field
+entry. There is no point on that path at which a credential exists in a value that a redactor could
+be asked to clean.
+
+🚩 **The fact that makes the design load-bearing rather than merely tidy, and which the brief did not
+carry: filtering by `Field.privacy` would not have been sufficient.** The fixture at
+`internal/servarr/mapping/indexer_test.go:36-40` is four real credential classes, and the fourth —
+the session cookie — arrives with **no `privacy` key at all**; only the passkey, the API key and the
+RSS key are marked. The test file says so itself at `:23-25`: *"the fourth — the cookie — with
+nothing at all, which is exactly why UsArr does not filter this array by privacy and instead never
+carries it."* A redaction pass keyed on `Field.privacy` would have written the cookie to the
+database.
+
+🔥 **Guarded, and the guard names the value it chases.**
+`TestCatalogProjectionCannotCarryAnIndexerCredential`
+(`internal/servarr/mapping/indexer_test.go:108`) runs a populated `fields[]` through the projection
+and hunts `fixturePasskey = "PASSKEY-cf19d0a7e4b28356-MUST-NOT-LEAK"` — *"deliberately word-shaped
+and unmistakable, so a leak assertion fails loudly rather than on a substring that might be a
+coincidence."*
+
+⚠️ **One precision the entry owes, because "there is no redaction pass" is too broad if left
+unqualified.** `servarr.SanitizeIndexer` (`internal/servarr/redact.go:87-97`) *is* a redaction pass
+and it is real — it strips `Fields` and `Presets` from an `IndexerResource` at the client boundary
+(`client.go:514`), pinned by `client_test.go:124-129`. The claim is about the **replication** path
+specifically: that path does not depend on it, because it never handles the resource type in the
+first place.
+
+**What it would have cost.** A document saying "the credential is redacted" invites the maintenance
+that redaction needs and, worse, invites the refactor the code deliberately refused — collapsing
+`CatalogIndexer` into "the upstream resource plus a redactor", which is smaller, obvious, and would
+have shipped the cookie. §1.5's existing sentence (`security.md:227-229`, *"the indexer replication
+path goes further than redaction, projecting through named allowlists so a private value never
+reaches the row at all"*) is what stops that, and the over-correction would have removed it.
+
+## LS-374 — `LS-321`'s two dead-citation families, verified against the headings and re-counted. Both inferences were right; both counts were low
+
+**`LS-321` marked its section mappings 🔍 inference and said so.** They are now measurements, and
+they hold. The counts do not.
+
+### Family 1 — `schema.md §6.1`
+
+**The heading genuinely does not exist, at any depth.** `docs/reference/schema.md` runs
+`## 6. Provenance and release candidates` (`:779`) straight to `## 7. Search` (`:909`).
+
+**Where the cited content actually lives: `### 1.1 Subtype tables` (`schema.md:170`–`:443`), all
+four rules the eighteen sites appeal to.** *"Rule: **every `kind` has a subtype table or an explicit
+justification for not having one**"* at `:188`. *"**`person` is excluded from the media-type
+navigation enum, the Tier 1 prefix index and the FTS corpus**"* at `:342`. *"**`creator_work_id`
+points at a `work` of kind `artist` or of kind `person`**"* at `:328` — which is what
+`credits_test.go:420`'s *"a credit pointing at a 'book' means a book is credited as its own author"*
+rests on. And the enrichment cost, *"a second FTS write per item, in the transaction the 100 ms batch
+window exists to keep short"*, at `:368` — which `credits.go:429` and `searchdoc_people_test.go:233`
+quote verbatim. Every citation in the family resolves to §1.1; none resolves anywhere else.
+
+**The count is eighteen, not seventeen, plus four continuations.** `LS-321`'s list is a code sweep
+and it is complete *as* a code sweep — the eighteenth is `docs/reference/search.md:84`,
+*"schema.md §6.1 owns the detail"*, a doc citing a doc. Four further sites carry a **bare** `§6.1`
+inside a comment block that names `schema.md` in the same block, and were fixed with it because a
+half-corrected block is worse than an uncorrected one: `internal/store/credits.go:33`,
+`internal/store/credits_test.go:210`, `internal/libsync/credits_test.go:478`,
+`internal/db/queryplan_test.go:385`. **Twenty-two sites, twenty changed.**
+
+ℹ️ **`queryplan_test.go` already had the right answer four lines above the wrong one** — `:380` reads
+*"normative in schema.md §1.1"* and `:385` read *"(§6.1)"*. The target was in the tree the whole time.
+
+⏭️ **Two are deliberately not changed: `internal/db/migrations/00007_work_credit.sql:43` and
+`:174`.** A merged migration is never edited (`CLAUDE.md` Conventions; `DEVELOPMENT.md` §6), and
+`LS-321` gave `00005:221` exactly this treatment. **This entry is the pointer for both**: `:43`
+means §1.1's subtype-table rule at `schema.md:188`, `:174` means §1.1's exclusion rule at
+`schema.md:342`.
+
+🚩 **And a difference from `LS-321` worth recording, because it changes what protects those two
+lines.** `00005:221` sits *inside* a `CREATE TABLE`, so SQLite stores it in `sqlite_schema.sql` and
+`TestMigrationRoundTrip` compares it byte-for-byte — which is why `LS-321` could fire that guard from
+the snapshot side. `00007:43` and `:174` are **file-level** `--` comments outside every statement:
+`grep -n "§6.1" internal/db/testdata/schema.sql` returns **nothing**. The never-edit rule still binds
+them; the mechanism that enforces it for `00005` does not reach them. An edit to those two lines
+would pass the whole gate.
+
+### Family 2 — `ARCHITECTURE §2073`
+
+**Confirmed as a line number wearing a section number's clothes, and the drift is visible in the
+record.** `ARCHITECTURE.md`'s numbered sections do not reach 2073; the target is
+`## 13. Performance budget`, whose table row *"`GET /api/v1/search?q=…` (FTS hybrid + rerank) | < 15
+ms | < 50 ms"* is the figure **all eight** sites quote. `LS-321` measured that heading at
+`ARCHITECTURE.md:2074`; it is at **`:2078`** today, four lines further down after two days — so the
+number was already moving while it was being cited, which is the argument for §-by-heading in one
+observation.
+
+**`§13` is the house form and was already in use**: `http-api.md` §7.2 reads *"ARCHITECTURE §13's
+budget table said `?kind=movie` until 2026-08-19"*.
+
+**The count is eight, not six.** `LS-321`'s list omits `docs/reference/http-api.md:1090` and
+`internal/httpapi/librarysearch.go:19` — the second is an easy transposition, since its list does
+carry `librarysearch.go:131` and `search.go:19`. All eight changed.
+
+### What was checked and deliberately left alone
+
+**`§14.5` is untouched**, as `LS-321` recorded it correct: five sites, `cmd/usarr/logredact.go:11`,
+`internal/ssrf/redact.go:21`, `internal/httpapi/redact.go:12` and `:109`,
+`internal/httpapi/redact_test.go:10`.
+
+🚩 **`§6.1` is a live heading in three other documents, and a blind `s/§6.1/§1.1/` would have broken
+every citation to them.** `ARCHITECTURE.md` `### 6.1 The three-layer core` (`:704`),
+`http-api.md` `### 6.1 Query parameters` (`:1098`), `CONFIGURATION.md` `### 6.1 What to back up, and
+what must never be in the same archive` (`:622`). The sites citing those were read and **not
+touched** — among them `internal/store/credits.go:291` and `:320` (ARCHITECTURE),
+`internal/httpapi/library_browse_test.go:542` and `web/src/lib/search.ts:156` (http-api),
+`cmd/usarr/keyladder_test.go:68` and `.env.example:83` (CONFIGURATION). This is why the sweep was
+line-targeted rather than pattern-driven: **a "fix" applied to a correct pointer is the same defect
+class this thread has spent the night removing, aimed backwards.**
+
+## LS-375 — `http-api.md`'s preamble stated ignore-unknown-parameters as an API-wide contract pinned by a test that covers one endpoint
+
+**The reading was verified before anything was edited, since the brief that reported it asked for
+exactly that.** The preamble opened *"An unrecognised query parameter is IGNORED, not refused — **on
+every endpoint in this file**"* with no note of what backs it. §7.1 read *"the preamble's API-wide
+rule, pinned on this endpoint by `TestUnrecognisedQueryParametersAreIgnoredNotRefused`"*.
+
+**What the test actually covers, read rather than inferred.**
+`internal/httpapi/library_browse_test.go:564` drives `callBrowseWorks`, which builds a request for
+**`/api/v1/library`** and calls `s.handleBrowseWorks` directly (`:17-28`) — one endpoint, and not
+even through the mux. Its cases: nine unknown names alone, three alongside a recognised one, the
+envelope's silence about all of them, and the converse — a *known* name with an unknown value is a
+`400`. Thorough at one endpoint; evidence about no other.
+
+**So the contract was stated API-wide and the evidence was one endpoint** — a claim wider than what
+is behind it, which is precisely what someone eventually quotes as *"pinned API-wide"*.
+
+**Fixed in the direction the finding asks for, and no wider.** The preamble now states the behaviour,
+then names the pin and its exact reach in requirement mood: every other endpoint in the file **owes**
+it, the pin is not evidence that it has it, and *"do not quote this rule as 'pinned API-wide'"*. §7.1
+now says this is *the one endpoint where it is pinned*. **No per-endpoint tests were added** — that is
+a larger job than this batch and widening the evidence to match the contract is now written down as
+the open work.
+
+ℹ️ **The test's own header already says the honest version** — *"It is pinned here because the
+library grid has the most parameters to typo, but the rule is the package's"* — and it was left
+alone. The document was the surface stating more than it could show.
+
+## What a green gate is worth on this batch
+
+**`make check` is green at the tip, and on the Go and Makefile half of this change that is worth
+something.** Twenty-six of the twenty-eight citation edits are inside Go files — comments and test
+failure strings — so
+`build-tagged`, `lint` and `test` prove they still compile and still pass — a botched line-targeted
+`sed` inside a raw string would show up there. The gate says nothing about whether the pointers now
+resolve; that is the heading-and-line evidence quoted in `LS-374`, re-runnable by anyone.
+
+**On the three `docs/` files — this one, `reference/http-api.md` and `reference/search.md` — it is
+worth nothing, for the reason this file has now recorded three times:** `make check` reads `docs/` through **gitleaks alone** — no prettier target covers
+`docs/*.md` — so a green attests *"no credential-shaped string was added"* and not one word about
+whether the prose is true.
+
+🔥 **Nothing here claims a fired guard it did not fire.** `LS-370` records an **absent** guard and
+fires nothing by construction; `LS-372` and `LS-373` cite guards that already exist and were read,
+not run against a planted failure. Where an entry names a test, it names the file and line so the
+next reader can fire it themselves.
