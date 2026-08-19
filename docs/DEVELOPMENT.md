@@ -1577,6 +1577,29 @@ paragraph describing a repo that no longer exists.
   end the worktree with `git worktree remove` rather than deleting the directory, so nothing is left
   registered or half-referenced. **The symptom is `lint-go` reporting issues at paths that do not
   exist**, on a tree where those same files lint clean.
+
+  ⚠️ **One shared binary, two failure modes — and isolating the cache fixes only the first.** The
+  contamination above is a cache-entry collision. The other is *contention*, and it reads as a broken
+  gate: `golangci-lint` takes a run lock at `filepath.Join(os.TempDir(), "golangci-lint.lock")` — a
+  fixed path derived from `TMPDIR`, **not** from `GOLANGCI_LINT_CACHE` (read in v2.12.2,
+  `pkg/commands/run.go`, `acquireFileLock`, over `gofrs/flock`; the same file the `computePkgHash`
+  keying above was read in). It retries once a second for five seconds, then gives up with
+
+  ```
+  Error: parallel golangci-lint is running
+  ```
+
+  and exit 3. Three agents hit that in one night here, each with its own cache directory, because the
+  remedy above does not and cannot avoid it — the contention is over the lock, not the cache. **Fired
+  deliberately, both halves**: with an unrelated `flock -x` holding `$TMPDIR/golangci-lint.lock` and
+  `GOLANGCI_LINT_CACHE` pointed at an empty private directory, the pinned `/root/go/bin/golangci-lint`
+  printed exactly that line and exited 3; the identical command after the lock released printed
+  `0 issues.` and exited 0. **This is the one gate red where re-running is the right response**, and
+  it needs saying in a section that otherwise treats a red as a fact to investigate: nothing is being
+  papered over, because nothing was measured — the run never started. Recognise it by that string,
+  retry, and only go hunting for a defect if it survives. The config-level answer is
+  `run.allow-serial-runners: true`, which makes the wait unbounded instead of failing at five seconds;
+  `.golangci.yml` does not set it, so retrying is the operating procedure today.
 * **A sequential id read out of a file is a race, not a lookup.** `M5-NN` entry ids, `M5.N` subsection
   numbers, ADR numbers and migration numbers are all allocated by reading the highest one already
   present, and **two agents that read at the same moment both get the right answer and both are wrong
