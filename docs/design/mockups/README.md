@@ -595,7 +595,9 @@ slugs.
 ## Type-appropriate content without per-type screens
 
 The whole component set is `ItemTable` + `ItemGrid`, plus `SectionHeader`, `LevelBar` and
-`ScopeChip`. Column set, default sort and level count are **configuration keyed by media type**,
+`ScopeChip` — ⚠️ **`ScopeChip` is specified and not built**; the note under
+`../DESIGN-DIRECTION.md` §9.7's table records what blocks it and where the measurement lives.
+Column set, default sort and level count are **configuration keyed by media type**,
 not new components — which is why an audiobook row can carry a narrator and a duration while a
 comic row carries a publisher and a gap list, in the same table.
 
