@@ -14,21 +14,39 @@ import (
 	"github.com/jdb3750/UsArr/internal/store"
 )
 
-// The BookOrbit catalogue adapter — SLICE 1: PROSE ONLY, END TO END.
+// The BookOrbit catalogue adapter — PROSE ONLY, END TO END, with its credits,
+// its files and its year.
 //
-// ADR-0052 makes BookOrbit v0.1's catalogue source. This file is the second
-// half of slice 1 (internal/bookorbit/catalogue.go is the first): it turns two
+// ADR-0052 makes BookOrbit v0.1's catalogue source. This file is the second half
+// of slice 1 (internal/bookorbit/catalogue.go is the first): it turns two
 // BookOrbit reads into store.CatalogueContainer and store.CatalogueItem values
 // and hands them to the same channel-1 importer the Kavita adapter feeds. Read
 // kavita.go first; this then reads as a translation rather than an invention.
 //
-// # What this slice does, and the four things it deliberately does not
+// # What this adapter does, and the two things it deliberately does not
 //
 // DOES: list the libraries the credential can see, walk each one's books page by
 // page, and write ONE work of kind 'book' per PROSE book — an ebook or an
 // audiobook, which are one kind differing only in edition.format (ADR-0031).
+// The three passes are here and the second and third cost NO extra HTTP:
+// StreamItems (this file), StreamCredits (bookorbitcredits.go) and StreamFiles
+// (bookorbitfiles.go), the latter two served from cards this walk kept.
 //
-// DOES NOT:
+// ⚠️ THIS HEADER LISTED FOUR THINGS THE ADAPTER DID NOT DO AND TWO OF THEM HAVE
+// LANDED, which is worth recording rather than deleting because the reasons
+// given were the right reasons and they were discharged rather than waived:
+//
+//   - *"CREDITS AND EDITIONS … it is the slice that decides how much of a page
+//     is buffered"*. It decided: see BookOrbitSource.cards, which keeps one
+//     small struct per MAPPED book and states what that costs against
+//     streamAndApply's "ONE UNBOUNDED ALLOCATION IN THE IMPORT". Nothing buffers
+//     a page.
+//   - *"work.year … store.CatalogueItem has no Year field … it belongs with the
+//     pass that has a reason to touch it"*. That pass is the credit pass, and
+//     store.CreditSet has carried Year since Kavita's. No field was added to
+//     CatalogueItem and no read was added anywhere.
+//
+// STILL DOES NOT:
 //
 //  1. COMICS. A comic-format book is SKIPPED AND COUNTED, never guessed at. The
 //     unit-of-work question for comics is open — BookOrbit's series have no
@@ -38,22 +56,10 @@ import (
 //     cascade). Counting is the whole of the honesty here: a skipped item that
 //     vanishes silently looks exactly like one that was never there. See
 //     Skipped.
-//  2. CREDITS AND EDITIONS. authors, narrators and files[] all ride the card
-//     this walk already reads, so implementing CreditSource and FileSource costs
-//     ZERO extra HTTP — which is precisely why it is a slice of its own rather
-//     than a free extra here: it is the slice that decides how much of a page is
-//     buffered, and importer.go's streamAndApply calls its item slice "THE ONE
-//     UNBOUNDED ALLOCATION IN THE IMPORT" and budgets it at three short strings
-//     per item.
-//  3. work.year. BookOrbit puts publishedYear right on the card, so unlike
-//     Kavita this source COULD fill a phase-A year — but store.CatalogueItem has
-//     no Year field (Kavita's year arrives on store.CreditSet, because its
-//     series list carries none). Adding one is a change to the shared write
-//     path, and it belongs with the pass that has a reason to touch it. Until
-//     then work.year is NULL for BookOrbit and the grid renders without a year.
-//  4. CHANNEL 3b AND CHANNEL 4. No delta walk, no reconciliation sweep, no
-//     cover fetch. And no migration: every column written here already exists in
-//     00005_library_sync.sql.
+//  2. CHANNEL 3b AND CHANNEL 4. No delta walk, no reconciliation sweep, no
+//     cover fetch, and no per-book detail read. And STILL no migration: every
+//     column the three passes write already exists in 00005_library_sync.sql and
+//     00007_work_credit.sql.
 
 // BookOrbitReader is the slice of *bookorbit.Client this adapter uses.
 //
@@ -155,15 +161,70 @@ type BookOrbitSource struct {
 	// — see bookorbitcompleteness.go for why the two absences must not collapse.
 	completeness map[string]ContainerCompleteness
 
+	// cards is what the item walk KEEPS BACK for the two passes that run after
+	// it — the credits, the year and the files, all of which ride the card the
+	// walk already decoded. It is keyed by the book's remote id, the same string
+	// CreditRequest.RemoteID and FileRequest.RemoteID carry.
+	//
+	// ⚠️ THIS MAP IS THE DECISION THIS SLICE EXISTS TO MAKE, and the cost is
+	// named rather than absorbed. streamAndApply calls its []ImportedItem "THE
+	// ONE UNBOUNDED ALLOCATION IN THE IMPORT" and budgets it at three short
+	// strings per item; this is a SECOND allocation of the same order, one entry
+	// per MAPPED book, holding a handful of names and a file reference each. It
+	// is not a new order of growth, and it does not scale with page size — a
+	// page is decoded, mapped and released exactly as before.
+	//
+	// THE ALTERNATIVE WAS TO RE-WALK, AND IT IS WORSE ON EVERY AXIS. BookOrbit
+	// has no per-book batch route (bookOrbitExternalIDs's header says so of the
+	// detail read), so a credit pass that did not keep the card would either
+	// issue one GET per book or replay the whole paged walk — trading a bounded
+	// allocation for N round trips against a live upstream, on data UsArr
+	// already had in hand and threw away. The seam if a library ever measures
+	// too large for this is the map itself: it is written in exactly one place
+	// and read in exactly two.
+	//
+	// ⚠️ A COMIC AND AN UNKNOWN GET NO ENTRY. They are skipped by StreamItems,
+	// so no work exists for their credits to hang on and the importer never asks
+	// for them; keeping their cards would be a buffer that only ever grew.
+	cards map[string]bookOrbitCard
+
 	// gateOnce makes the §14 consultation happen exactly once per source,
 	// whichever catalogue read comes first.
 	gateOnce sync.Once
 	gateErr  error
 }
 
+// bookOrbitCard is the slice of one BookCard that the item pass keeps for the
+// credit and file passes.
+//
+// IT IS A PROJECTION OF A PROJECTION, and holding bookorbit.Book whole would be
+// the easier and wrong choice: the card also carries the title, the subtitle,
+// the identifiers and two timestamps, every one of which the item pass has
+// ALREADY WRITTEN. Keeping them would double the buffer to carry values nobody
+// reads again.
+type bookOrbitCard struct {
+	// Authors and Narrators are the card's arrays, already trimmed and
+	// blank-free by internal/bookorbit. They are the credit pass's whole input.
+	Authors   []string
+	Narrators []string
+
+	// PublishedYear is BookCard.publishedYear, 0 for absent. It rides here
+	// rather than on store.CatalogueItem because CatalogueItem has no Year field
+	// and store.CreditSet does — see bookorbitcredits.go.
+	PublishedYear int64
+
+	// Files is the card's file references. The file pass filters them by role
+	// and never re-reads them.
+	Files []bookorbit.BookFile
+}
+
 // NewBookOrbitSource wraps a client.
 func NewBookOrbitSource(c BookOrbitReader) *BookOrbitSource {
-	return &BookOrbitSource{Client: c, skips: map[string]*SkipTally{}}
+	return &BookOrbitSource{
+		Client: c,
+		skips:  map[string]*SkipTally{},
+		cards:  map[string]bookOrbitCard{},
+	}
 }
 
 func (s *BookOrbitSource) log() *slog.Logger {
@@ -257,6 +318,20 @@ func (s *BookOrbitSource) gate(ctx context.Context) error {
 // container holds one kind. Splitting one container into two libraries is a
 // deviation from §17.8 that needs an ADR, and it is comics' slice to ask for.
 const bookKind = "book"
+
+// bookRemoteKind is service_item_link.remote_kind for every row this adapter
+// writes.
+//
+// 'book' is the upstream's OWN noun for the row — the table is `books`, the
+// route is /books, the DTO is BookCard. remote_kind takes it verbatim, and it is
+// part of ux_sil's key, so it must never be "series" the way Kavita's is.
+//
+// IT IS A CONSTANT RATHER THAN A LITERAL BECAUSE THREE PLACES NOW SPELL IT:
+// mapBook writes it, and the credit and file passes match on it to decide
+// whether a request is one of theirs. Two spellings would not fail to compile —
+// they would produce an import whose second and third passes silently found
+// nothing.
+const bookRemoteKind = "book"
 
 // Containers reads GET /api/v1/libraries and gives each one the 'book' kind.
 //
@@ -357,6 +432,12 @@ func (s *BookOrbitSource) StreamItems(ctx context.Context, fn func(store.Catalog
 				tally.Comics++
 				return nil
 			case bookorbit.MediaKindEbook, bookorbit.MediaKindAudiobook:
+				// KEPT BEFORE IT IS HANDED OVER, not after. fn may return an
+				// error that ends the stream, and a book the importer HAS
+				// already applied must not be missing from the buffer the two
+				// later passes read — the stream's partial-delivery contract is
+				// that "the calls to fn happened and their effects stand".
+				s.keepCard(b)
 				return fn(mapBook(b, ref))
 			default:
 				tally.Unknown++
@@ -379,6 +460,45 @@ func (s *BookOrbitSource) StreamItems(ctx context.Context, fn func(store.Catalog
 		}
 	}
 	return read, nil
+}
+
+// keepCard files one mapped book's credits, year and files for the two passes
+// that run after the stream closes. See BookOrbitSource.cards.
+//
+// THE KEY IS THE REMOTE ID ALONE and not (kind, id), because this adapter writes
+// exactly one remote_kind — bookRemoteKind — and mapBook is the only place a
+// BookOrbit item's identifiers are minted. A second kind arriving here would be
+// a bug in mapBook rather than a collision this map could resolve.
+func (s *BookOrbitSource) keepCard(b bookorbit.Book) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.cards == nil {
+		s.cards = map[string]bookOrbitCard{}
+	}
+	s.cards[strconv.FormatInt(b.ID, 10)] = bookOrbitCard{
+		Authors:       b.Authors,
+		Narrators:     b.Narrators,
+		PublishedYear: b.PublishedYear,
+		Files:         b.Files,
+	}
+}
+
+// card reads back what keepCard filed.
+//
+// A MISS IS NOT AN ERROR, and both passes treat it as Kavita treats an
+// unparseable remote id: nothing was attempted and there is no upstream to
+// blame. It happens for a request whose remote id this adapter never wrote —
+// an item left in service_item_link by some other source, or a source reused
+// across two imports — and inventing a failure for it would put a
+// `file_walk_failed` row in sync_report describing a read that never happened.
+func (s *BookOrbitSource) card(remoteKind, remoteID string) (bookOrbitCard, bool) {
+	if remoteKind != bookRemoteKind {
+		return bookOrbitCard{}, false
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	c, ok := s.cards[remoteID]
+	return c, ok
 }
 
 func (s *BookOrbitSource) tallyFor(ref string) *SkipTally {
@@ -437,11 +557,7 @@ func mapBook(b bookorbit.Book, containerID string) store.CatalogueItem {
 	it := store.CatalogueItem{
 		RemoteID: strconv.FormatInt(b.ID, 10),
 
-		// 'book' is the upstream's OWN noun for this row — the table is `books`,
-		// the route is /books, the DTO is BookCard. service_item_link.remote_kind
-		// takes it verbatim, and it is part of ux_sil's key, so it must never be
-		// "series" the way Kavita's is.
-		RemoteKind: "book",
+		RemoteKind: bookRemoteKind,
 
 		ContainerID: containerID,
 		Kind:        bookKind,
@@ -466,7 +582,9 @@ func mapBook(b bookorbit.Book, containerID string) store.CatalogueItem {
 		// verbatim and unparsed" (§6.5 rule 3). For BookOrbit that is the primary
 		// file's format token — 'epub', 'm4b', 'pdf' — which is a fact about THIS
 		// book rather than about its container, and it is the input the file pass
-		// will turn into edition.format without a second read.
+		// turns into edition.format without a second read — see
+		// bookOrbitEditionFormat, which is the reader this column was written
+		// for.
 		RemoteSubtype: primaryFormat(b),
 
 		AddedAt:         b.AddedAt,
@@ -544,8 +662,14 @@ const HardcoverBookSource = "hardcover_book"
 //     trusting a field.
 //   - isbn13 → an EDITION identifier, and amendment 4 is categorical that "an
 //     ISBN or an ASIN must never satisfy ux_extid_work_strong". external_id's
-//     CHECK requires exactly one of work_id / edition_id, slice 1 writes no
-//     edition rows, so there is nowhere correct to put it. HELD, NOT WRITTEN.
+//     CHECK requires exactly one of work_id / edition_id, so it may not be
+//     written against the work. HELD, NOT WRITTEN. ⚠️ THIS ENTRY USED TO ADD
+//     *"slice 1 writes no edition rows"* as its second reason and that reason
+//     has expired — bookorbitfiles.go writes one primary edition per book. The
+//     answer does not change, because there is still no way for an adapter to
+//     write an edition-scoped external_id: store mints the edition inside its
+//     own file writer and returns no id, and store.FileSet has no identifier
+//     field. That is a change to the shared write path when someone wants it.
 //   - hardcoverEditionId → an edition identifier by its own name. Same answer.
 //
 // ⚠️ openLibraryId IS THE ONE THIS SLICE MOST WANTS AND CANNOT HAVE. It is a

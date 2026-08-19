@@ -52,9 +52,17 @@ type HTTPDoer interface {
 type Timeouts struct {
 	Default time.Duration
 
-	// List is the budget for a paged list read. Nothing in slice 0 uses it —
-	// this client makes no list call yet — and it is here so that the field's
-	// meaning is fixed before the first caller needs it rather than after.
+	// List is the budget for a paged list read: THE WHOLE WALK, not one page.
+	// StreamBooks takes it once around the entire page loop and gives each
+	// individual request Timeouts.Default — catalogue.go:690 carries the
+	// argument for that split.
+	//
+	// ⚠️ THIS COMMENT USED TO READ *"Nothing in slice 0 uses it — this client
+	// makes no list call yet — and it is here so that the field's meaning is
+	// fixed before the first caller needs it rather than after"*. The caller
+	// arrived: Client.Libraries and Client.StreamBooks are both in this package.
+	// The field was correctly placed and the sentence simply outlived the state
+	// it described.
 	List time.Duration
 }
 

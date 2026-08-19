@@ -613,12 +613,69 @@ func TestBookOrbitFullImportFromCassettes(t *testing.T) {
 
 	// The isbn13 on the cassette's first card is an EDITION identifier and
 	// amendment 4 is categorical that it must never satisfy ux_extid_work_strong.
-	// Slice 1 writes no edition rows, so the honest answer is no row anywhere.
+	//
+	// ⚠️ THIS ASSERTION'S REASON CHANGED AND ITS EXPECTED VALUE DID NOT. It read
+	// "slice 1 writes no edition rows, so the honest answer is no row anywhere",
+	// and edition rows now exist — see the two below. What has NOT arrived is a
+	// path to write an EDITION-SCOPED external_id: store.CatalogueItem.ExternalIDs
+	// are work-scoped, the edition is minted inside store's file writer, and
+	// store.FileSet has no field for an identifier. So the row would still have
+	// nowhere correct to go, for a new reason.
 	if n := readOne(`SELECT COUNT(*) FROM external_id WHERE source LIKE 'isbn%'`); n != 0 {
-		t.Errorf("isbn rows = %d, want 0 — there is nowhere correct to put an edition id yet", n)
+		t.Errorf("isbn rows = %d, want 0 — an edition-scoped external_id has no writer", n)
 	}
-	if n := readOne(`SELECT COUNT(*) FROM edition`); n != 0 {
-		t.Errorf("edition rows = %d, want 0 — editions and files are the next slice", n)
+
+	// ── the editions, the files, the credits and the year ───────────────────
+	//
+	// ⚠️ THESE FOUR BLOCKS REPLACE `edition rows = 0` AND `media_file rows = 0`.
+	// The cassette is unchanged: the same three recorded cards that produced no
+	// editions now produce two, because the adapter implements FileSource and
+	// CreditSource. That is the whole of this change measured against a real
+	// recorded response rather than a hand-built struct.
+	if n := readOne(`SELECT COUNT(*) FROM edition WHERE is_primary = 1`); n != 2 {
+		t.Errorf("primary editions = %d, want 2 — one per mapped book, never one per import", n)
+	}
+	if n := readOne(`SELECT COUNT(*) FROM edition WHERE format = 'audiobook'`); n != 1 {
+		t.Errorf("audiobook editions = %d, want 1 — the m4b card. This is the row the "+
+			"Audiobooks screen seeks on; without it every BookOrbit book renders as an Ebook", n)
+	}
+	if n := readOne(`SELECT COUNT(*) FROM edition WHERE format = 'ebook'`); n != 1 {
+		t.Errorf("ebook editions = %d, want 1 — the epub card", n)
+	}
+
+	// The file rows carry the OPAQUE SURROGATE and the upstream's size. The
+	// cassette's epub says 1234567 bytes; a build that dropped sizeBytes at the
+	// decode boundary gives 0 here and nothing else notices.
+	var path string
+	var size int64
+	if err := st.DB().Read().QueryRowContext(t.Context(), `
+		SELECT f.path, f.size_bytes FROM media_file f
+		  JOIN work w ON w.id = f.work_id WHERE w.title = 'The Hobbit'`).Scan(&path, &size); err != nil {
+		t.Fatalf("read The Hobbit's file row: %v", err)
+	}
+	if path != "bookorbit:bookfile:1011" || size != 1234567 {
+		t.Errorf("media_file = (%q, %d), want (bookorbit:bookfile:1011, 1234567)", path, size)
+	}
+
+	// The credits, from the SAME cards — no second request exists in either
+	// cassette, which is what makes this pass free.
+	if n := readOne(`SELECT COUNT(*) FROM work_credit WHERE role = 'author'`); n != 2 {
+		t.Errorf("author credits = %d, want 2 — Tolkien and Weir", n)
+	}
+	if n := readOne(`SELECT COUNT(*) FROM work_credit WHERE role = 'narrator'`); n != 1 {
+		t.Errorf("narrator credits = %d, want 1 — Ray Porter, on the audiobook only", n)
+	}
+	if n := readOne(
+		`SELECT COUNT(*) FROM work WHERE kind = 'person' AND title = 'Ray Porter'`); n != 1 {
+		t.Errorf("person works named Ray Porter = %d, want 1", n)
+	}
+
+	// And the year, which arrives on the credit set rather than on the item.
+	if n := readOne(`SELECT COUNT(*) FROM work WHERE year IS NOT NULL`); n != 2 {
+		t.Errorf("works with a year = %d, want 2 — publishedYear rides the card", n)
+	}
+	if n := readOne(`SELECT year FROM work WHERE title = 'The Hobbit'`); n != 1937 {
+		t.Errorf("The Hobbit's year = %d, want 1937", n)
 	}
 
 	// And the audiobook is a BOOK work whose subtype token says it is audio.

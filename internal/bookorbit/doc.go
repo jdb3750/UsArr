@@ -112,17 +112,34 @@
 // opposite of principle 3 — and the gate ADR-0052 actually names is on the
 // catalogue read, which is slice 1's to consult.
 //
-// # Scope: this is the client, and slice 0 of it
+// # Scope: this is the CLIENT, and it now reads the catalogue too
 //
 // It does: build against a user-configured base URL behind the injected
 // SSRF-policy client, mint and cache the credential, probe reachability with the
 // @Public() health route, make ONE authenticated read (GET /api/v1/app-info) to
-// prove the bearer is accepted, classify the account's scope, and classify and
-// bound errors.
+// prove the bearer is accepted, classify the account's scope, classify and bound
+// errors — AND read the catalogue: Client.Libraries is GET /api/v1/libraries,
+// Client.StreamBooks is the paged walk of POST /api/v1/libraries/{id}/books, and
+// Client.LibraryStats is GET /api/v1/libraries/{id}/stats. All three decode
+// through NARROW ALLOWLIST DTOs (catalogue.go), which is what keeps per-user
+// reading state out of this process entirely.
 //
-// It does NOT: read a catalogue, know what a library is, fetch a cover, write a
-// schema row, or import anything. There is no GET /libraries call in this
-// package and that absence is deliberate — a slice-0 client that already read
-// the container list would have quietly started the catalogue adapter. Slice 1
-// is internal/libsync/bookorbit.go and it consumes this package.
+// ⚠️ THIS SECTION USED TO BE HEADED *"this is the client, and slice 0 of it"*
+// AND TO SAY THE PACKAGE *"does NOT: read a catalogue, know what a library is …
+// There is no GET /libraries call in this package and that absence is
+// deliberate"*. Every clause of that is now false, and the record is kept rather
+// than deleted because the reasoning was sound while it held: a slice-0 client
+// that had read the container list early would have quietly started the
+// catalogue adapter before anything consumed it. What changed is that the
+// consumer exists — internal/libsync/bookorbit.go — so the reads have a caller
+// rather than being speculative. THIS PARAGRAPH IS ALSO THE STANDING WARNING:
+// a package doc is what CLAUDE.md tells a reader to trust for what a package has
+// and has not got, so it is the first thing to correct when the tree moves under
+// it, and the second time it went stale is why the correction is written this
+// way.
+//
+// It still does NOT: fetch a cover, write a schema row, or import anything. No
+// file here touches internal/store or internal/db; the mapping onto UsArr's
+// schema is internal/libsync/bookorbit.go's, and this package deals only in
+// BookOrbit's own nouns.
 package bookorbit
