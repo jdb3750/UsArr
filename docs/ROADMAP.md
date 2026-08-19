@@ -71,6 +71,14 @@ box this pass does not name as attested at `c7d9ed3`, not at the baseline line a
 the two items it added · no §3 read except the one clause named in the citation note · **no
 line-citation sweep, again.**
 
+**COMMITS LANDED MID-PASS, and the baseline is deliberately NOT advanced past what was read.**
+`13878f2..81108d9` adds `internal/bookorbit` (slice 0), `internal/breaker`, `librarygrid.ts`'s Music
+A-to-Z notice and three `docs/` catch-ups. **It touches no file this pass fired on**, and the four
+checks above were **re-run against `81108d9`** and still hold: `search.md` §4 still marks
+Jaro-Winkler *"primary"*, the three `rerankWeight*` constants are unchanged,
+`TestSearchOrderIsTheServersAndIsNotScoreOrder` still has no `func`, and every `web/src/` test
+citation still resolves. **Nothing else in that range was read.**
+
 **INHERITED from the `c7d9ed3` baseline. Its own attestation follows, unchanged and NOT re-fired:**
 ⚠️ **That baseline moved from `7bd45e9` by the ADR-0052/0053 consolidation pass, and what that pass
 fired is listed rather than summarised**, because the intervening range is large — it carries Go,
