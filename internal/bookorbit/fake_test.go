@@ -8,6 +8,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -110,6 +111,19 @@ type fake struct {
 	// recently issued token — which is what an expired JWT looks like from the
 	// client's side.
 	acceptOnlyLatest bool
+
+	// ── the catalogue routes (slice 1) ──────────────────────────────────────
+
+	// libraries is what GET /api/v1/libraries answers. The shape is
+	// LibraryRepository.findAllForUser's projection — the NON-superuser one,
+	// which is what UsArr's shared viewer account actually receives.
+	libraries []map[string]any
+
+	// books are the BookCards, keyed by library id.
+	books map[int64][]map[string]any
+
+	// booksHandler replaces the paging behaviour wholesale.
+	booksHandler http.HandlerFunc
 }
 
 func newFake(t *testing.T) *fake {
@@ -149,6 +163,26 @@ func newFake(t *testing.T) *fake {
 		}
 		f.defaultAppInfo(w, r)
 	}))
+	mux.HandleFunc("GET "+apiPrefix+"/libraries", f.record(func(w http.ResponseWriter, r *http.Request) {
+		if !f.bearerOK(r) {
+			nestErrorText(w, r, http.StatusUnauthorized, "Unauthorized")
+			return
+		}
+		out := f.libraries
+		if out == nil {
+			out = []map[string]any{}
+		}
+		writeJSON(w, http.StatusOK, out)
+	}))
+
+	mux.HandleFunc("POST "+apiPrefix+"/libraries/{id}/books", f.record(func(w http.ResponseWriter, r *http.Request) {
+		if f.booksHandler != nil {
+			f.booksHandler(w, r)
+			return
+		}
+		f.defaultBooks(w, r)
+	}))
+
 	mux.HandleFunc("/", f.record(func(w http.ResponseWriter, r *http.Request) {
 		nestError404(w, r)
 	}))
@@ -205,6 +239,78 @@ func (f *fake) defaultAppInfo(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{
 		"version": "v1.4.2", "updateAvailable": false, "latestVersion": "v1.4.2", "maxUploadSizeMb": 200,
 	})
+}
+
+// defaultBooks is POST /api/v1/libraries/{id}/books, paging honestly.
+//
+// ⚠️ IT SERVES EXACTLY THE REQUESTED SIZE UNTIL THE LAST PAGE, because that is
+// what a real BookOrbit does and because the walk's stop condition is a SHORT
+// page. A fake that shrank pages of its own accord would let a broken stop
+// condition pass here and then spin against a real instance.
+func (f *fake) defaultBooks(w http.ResponseWriter, r *http.Request) {
+	if !f.bearerOK(r) {
+		nestErrorText(w, r, http.StatusUnauthorized, "Unauthorized")
+		return
+	}
+	libID, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
+	if err != nil {
+		nestErrorText(w, r, http.StatusBadRequest, "Validation failed (numeric string is expected)")
+		return
+	}
+	var q bookQueryRequest
+	blob, _ := io.ReadAll(r.Body)
+	if err := json.Unmarshal(blob, &q); err != nil {
+		nestErrorText(w, r, http.StatusBadRequest, "Unexpected token in JSON")
+		return
+	}
+	// BookQueryPipe's zod bounds, enforced rather than assumed.
+	if q.Pagination.Size < 1 || q.Pagination.Size > 200 {
+		nestErrorJSON(w, r, http.StatusBadRequest,
+			[]string{"pagination.size: Number must be less than or equal to 200"})
+		return
+	}
+	if q.Pagination.Page < 0 {
+		nestErrorJSON(w, r, http.StatusBadRequest,
+			[]string{"pagination.page: Number must be greater than or equal to 0"})
+		return
+	}
+
+	all := f.books[libID]
+	start := min(q.Pagination.Page*q.Pagination.Size, len(all))
+	end := min(start+q.Pagination.Size, len(all))
+	items := all[start:end]
+	if items == nil {
+		items = []map[string]any{}
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"items": items, "total": len(all), "page": q.Pagination.Page, "size": q.Pagination.Size,
+	})
+}
+
+// fakeCard builds one BookCard. Field names are packages/types/src/book.ts's.
+func fakeCard(id int64, title string, extra map[string]any) map[string]any {
+	c := map[string]any{
+		"id": id, "status": "present", "coverAspectRatio": "book",
+		"title": title, "subtitle": nil,
+		"authors": []string{}, "narrators": []string{},
+		"seriesId": nil, "seriesName": nil, "seriesIndex": nil, "seriesMemberships": []any{},
+		"files": []map[string]any{
+			{"id": id*10 + 1, "format": "epub", "role": "primary", "sizeBytes": 987654},
+		},
+		"publishedDate": nil, "publishedYear": nil, "language": nil,
+		"genres": []string{}, "tags": []string{},
+		"rating": nil, "readingProgress": nil, "readStatus": nil,
+		"addedAt": "2026-08-01T10:00:00.000Z", "updatedAt": "2026-08-17T07:00:30.118Z",
+		"metadataScore": nil, "hasCover": true,
+		"hasMetadataLocks": false, "lockedFields": []string{},
+		"publisher": nil, "pageCount": nil,
+		"isbn13": nil, "hardcoverId": nil, "hardcoverEditionId": nil,
+		"customMetadata": []any{},
+	}
+	for k, v := range extra {
+		c[k] = v
+	}
+	return c
 }
 
 func (f *fake) bearerOK(r *http.Request) bool {

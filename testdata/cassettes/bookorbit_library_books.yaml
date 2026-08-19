@@ -1,0 +1,277 @@
+---
+# SYNTHETIC — hand-authored from bookorbit/bookorbit@73b7877d
+# (auth.controller.ts's @Post('magic-links/login'), library.controller.ts's
+# @Post(':id/books'), BookService.queryForLibrary, BooksPage and BookCard in
+# packages/types/src/book.ts, and book/utils/assemble-book-cards.ts, which is
+# what actually builds each card). NOT a wire capture; no live BookOrbit was
+# contacted.
+#
+# THREE CARDS, ONE PER MEDIA KIND THE MAPPING HAS TO TELL APART, because a
+# fixture of three ebooks would prove that the walk decodes and nothing about the
+# decision it exists to make:
+#
+#   * 101 The Hobbit  — files[0].format 'epub'  -> getBookMediaKind 'ebook'
+#   * 102 Project Hail Mary — 'm4b'             -> 'audiobook'
+#   * 103 Saga, Vol. 1 — 'cbz'                  -> 'comic', which slice 1 SKIPS
+#
+# The three per-user fields are present and populated on purpose — readStatus,
+# readingProgress and rating are the reading state of the BookOrbit ACCOUNT UsArr
+# borrows, and the projection must be seen to drop them rather than merely not
+# to want them.
+#
+# A THIRD INTERACTION SERVES LIBRARY 2 AN EMPTY PAGE, and it is not padding: it
+# is what an account granted a library it can see and that holds nothing looks
+# like, and it keeps the fixture honest against bookorbit_libraries.yaml, which
+# names two libraries. A walk that skipped a container because the cassette had
+# nothing for it would be testing the harness, not the adapter.
+#
+# ⚠️ ONE PAGE PER LIBRARY, AND THE PAGING LOOP IS THEREFORE NOT EXERCISED HERE. The walk
+# stops on a SHORT page, so a cassette that crossed a page boundary would need
+# 200 cards in its first interaction — a fixture nobody would read. The boundary
+# is crossed against the local fake in internal/bookorbit/catalogue_test.go
+# instead, over real HTTP with a generated library. Said out loud because a
+# reader could otherwise take this file for coverage it does not give.
+#
+# Note also what the go-vcr matcher does and does not do: it matches on method
+# plus REDACTED URL and NOT on the request body (internal/vcrscrub's Matcher says
+# why), so two page requests to this same path would replay in recorded order
+# rather than by their bodies. That is a property to design a fixture around, not
+# one to lean on.
+version: 2
+interactions:
+    - id: 0
+      request:
+        proto: HTTP/1.1
+        proto_major: 1
+        proto_minor: 1
+        content_length: -1
+        host: bookorbit.test:3000
+        headers:
+            Accept:
+                - application/json
+            Content-Type:
+                - application/json
+        url: http://bookorbit.test:3000/api/v1/auth/magic-links/login
+        method: POST
+        body: '{"token":"<redacted>"}'
+      response:
+        proto: HTTP/1.1
+        proto_major: 1
+        proto_minor: 1
+        content_length: -1
+        headers:
+            Content-Type:
+                - application/json; charset=utf-8
+        status: 200 OK
+        code: 200
+        duration: 1ms
+        body: |-
+            {
+              "accessToken": "<redacted>",
+              "user": {
+                "id": 7,
+                "username": "usarr",
+                "name": "UsArr service account",
+                "email": null,
+                "active": true,
+                "isSuperuser": false,
+                "isDefaultPassword": false,
+                "settings": {},
+                "avatarUrl": null,
+                "provisioningMethod": "shared",
+                "permissions": []
+              }
+            }
+    - id: 1
+      request:
+        proto: HTTP/1.1
+        proto_major: 1
+        proto_minor: 1
+        content_length: -1
+        host: bookorbit.test:3000
+        headers:
+            Accept:
+                - application/json
+            Authorization:
+                - <redacted>
+            Content-Type:
+                - application/json
+        url: http://bookorbit.test:3000/api/v1/libraries/1/books
+        method: POST
+        body: '{"sort":[{"field":"addedAt","dir":"asc"}],"pagination":{"page":0,"size":200}}'
+      response:
+        proto: HTTP/1.1
+        proto_major: 1
+        proto_minor: 1
+        content_length: -1
+        headers:
+            Content-Type:
+                - application/json; charset=utf-8
+        status: 200 OK
+        code: 200
+        duration: 6ms
+        body: |-
+            {
+              "items": [
+                {
+                  "id": 101,
+                  "status": "present",
+                  "coverAspectRatio": "book",
+                  "title": "The Hobbit",
+                  "subtitle": "There and Back Again",
+                  "authors": ["J. R. R. Tolkien"],
+                  "narrators": [],
+                  "seriesId": null,
+                  "seriesName": null,
+                  "seriesIndex": null,
+                  "seriesMemberships": [],
+                  "files": [
+                    { "id": 1011, "format": "epub", "role": "primary", "sizeBytes": 1234567 }
+                  ],
+                  "publishedDate": "1937-09-21",
+                  "publishedYear": 1937,
+                  "language": "en",
+                  "genres": ["Fantasy"],
+                  "tags": [],
+                  "rating": 4.5,
+                  "readingProgress": 0.42,
+                  "readStatus": {
+                    "status": "reading",
+                    "source": "manual",
+                    "startedAt": "2026-08-01T00:00:00.000Z",
+                    "finishedAt": null,
+                    "updatedAt": "2026-08-02T00:00:00.000Z"
+                  },
+                  "addedAt": "2026-08-01T10:00:00.000Z",
+                  "updatedAt": "2026-08-17T07:00:30.118Z",
+                  "metadataScore": 88,
+                  "hasCover": true,
+                  "hasMetadataLocks": false,
+                  "lockedFields": [],
+                  "publisher": "George Allen & Unwin",
+                  "pageCount": 310,
+                  "isbn13": "9780007458424",
+                  "hardcoverId": null,
+                  "hardcoverEditionId": null,
+                  "customMetadata": []
+                },
+                {
+                  "id": 102,
+                  "status": "present",
+                  "coverAspectRatio": "square",
+                  "title": "Project Hail Mary",
+                  "subtitle": null,
+                  "authors": ["Andy Weir"],
+                  "narrators": ["Ray Porter"],
+                  "seriesId": null,
+                  "seriesName": null,
+                  "seriesIndex": null,
+                  "seriesMemberships": [],
+                  "files": [
+                    { "id": 1021, "format": "m4b", "role": "primary", "sizeBytes": 987654321 }
+                  ],
+                  "publishedDate": "2021-05-04",
+                  "publishedYear": 2021,
+                  "language": "en",
+                  "genres": ["Science Fiction"],
+                  "tags": [],
+                  "rating": null,
+                  "readingProgress": null,
+                  "readStatus": null,
+                  "addedAt": "2026-08-03T10:00:00.000Z",
+                  "updatedAt": "2026-08-18T09:15:00.000Z",
+                  "metadataScore": 71,
+                  "hasCover": true,
+                  "hasMetadataLocks": false,
+                  "lockedFields": [],
+                  "publisher": "Audible Studios",
+                  "pageCount": null,
+                  "isbn13": null,
+                  "hardcoverId": "hc-42",
+                  "hardcoverEditionId": "hce-9",
+                  "customMetadata": []
+                },
+                {
+                  "id": 103,
+                  "status": "present",
+                  "coverAspectRatio": "book",
+                  "title": "Saga, Vol. 1",
+                  "subtitle": null,
+                  "authors": ["Brian K. Vaughan"],
+                  "narrators": [],
+                  "seriesId": 5,
+                  "seriesName": "Saga",
+                  "seriesIndex": 1,
+                  "seriesMemberships": [
+                    {
+                      "seriesId": 5,
+                      "seriesName": "Saga",
+                      "seriesIndex": 1,
+                      "displayOrder": 0,
+                      "expectedBookCount": 11
+                    }
+                  ],
+                  "files": [
+                    { "id": 1031, "format": "cbz", "role": "primary", "sizeBytes": 55555555 }
+                  ],
+                  "publishedDate": "2012-10-23",
+                  "publishedYear": 2012,
+                  "language": "en",
+                  "genres": ["Comics"],
+                  "tags": [],
+                  "rating": null,
+                  "readingProgress": null,
+                  "readStatus": null,
+                  "addedAt": "2026-08-05T10:00:00.000Z",
+                  "updatedAt": "2026-08-16T11:00:00.000Z",
+                  "metadataScore": 64,
+                  "hasCover": true,
+                  "hasMetadataLocks": false,
+                  "lockedFields": [],
+                  "publisher": "Image Comics",
+                  "pageCount": 160,
+                  "isbn13": "9781607066019",
+                  "hardcoverId": null,
+                  "hardcoverEditionId": null,
+                  "customMetadata": []
+                }
+              ],
+              "total": 3,
+              "page": 0,
+              "size": 200
+            }
+    - id: 2
+      request:
+        proto: HTTP/1.1
+        proto_major: 1
+        proto_minor: 1
+        content_length: -1
+        host: bookorbit.test:3000
+        headers:
+            Accept:
+                - application/json
+            Authorization:
+                - <redacted>
+            Content-Type:
+                - application/json
+        url: http://bookorbit.test:3000/api/v1/libraries/2/books
+        method: POST
+        body: '{"sort":[{"field":"addedAt","dir":"asc"}],"pagination":{"page":0,"size":200}}'
+      response:
+        proto: HTTP/1.1
+        proto_major: 1
+        proto_minor: 1
+        content_length: -1
+        headers:
+            Content-Type:
+                - application/json; charset=utf-8
+        status: 200 OK
+        code: 200
+        duration: 1ms
+        body: |-
+            {
+              "items": [],
+              "total": 0,
+              "page": 0,
+              "size": 200
+            }
