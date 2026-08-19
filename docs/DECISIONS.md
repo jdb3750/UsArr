@@ -100,6 +100,7 @@ because no ADR ever decided it. Annotating leaves that failure mode nowhere to h
 | [0046](#adr-0046) | Kavita's contract tests pin **TWO** specs: the release the owner runs is the **floor**, `develop` is the **ceiling** | **Accepted** — 2026-08-17; **implements a policy `api/specs/SOURCES.md` already stated and the tree had not acted on** (*"a green contract test here is evidence about `develop`"*); **changes what a green means, not what the code does** — no adapter field, request or migration changes; **renames** `api/specs/kavita.json` → `kavita-develop.json` and **adds** `kavita-v0.9.0.2.json`; every spec-reading test runs against **both**, named per file, with enum coverage **equal** to the ceiling and a **superset** of the floor; `ceilingOnlyProperties` machine-checks the five modelled properties that **decode to nothing on the owner's server**; the `cbr` external_id is **unreachable** on the stable line and now says so; raises three open questions it does not close (Prowlarr has the same gap, `'cbr'` is an unenumerated `external_id.source`, and the floor's re-pin cadence) — **question 2 settled 2026-08-17** by the rename to `comicbookroundup` (`LS-73`); ⚠️ **amended 2026-08-17** — the decision stands unchanged **for Kavita**, but it is **not a template**: it rests on the unstated assumption that **upstream regenerates its spec per release**, which Prowlarr does not — its `openapi.json` is the **same git blob** at tag `v2.5.2.5491` and at `develop`, so open question 1's *"the same shape of gap"* is wrong about the shape and the two-spec structure there would manufacture the false green this ADR abolishes. The remedy is chosen **per upstream** and is [ADR-0047](#adr-0047); and where a spec self-reports a placeholder `info.version`, identity is by **blob SHA** |
 | [0047](#adr-0047) | Prowlarr pins **ONE** spec — floor and ceiling are the same git blob — guarded by an offline blob-identity pin in `check` plus a network drift check outside it | **Accepted** — 2026-08-17; **is the per-upstream remedy [ADR-0046](#adr-0046)'s 2026-08-17 amendment (`LS-53`, `cf5fab5`) points at**, and **answers [ADR-0046](#adr-0046)'s open question 1** (*"`prowlarr.json` has the same shape of gap"*) by **correcting its premise** — measured independently by both threads, `src/Prowlarr.Api.V1/openapi.json` is the **same blob `134d31d7…`** at `v2.5.2.5491` and `develop`, not *"develop, a minor version ahead"*; **the two-spec split is vacuous here, not impossible** — nothing stops two byte-identical copies being vendored, and the second would prove exactly what the first already proves (the Context paragraph's wording, which this row previously overstated); **changes what a green means, not what the code does** — no adapter field, request or migration changes, no file added or renamed; the one file is stale (last regenerated **2025-06-07**, 33 releases ago) and describes **neither ref reliably**; `TestVendoredSpecIsThePinnedBlob` pins the blob **offline, in `check`**, `TestSpecDriftRefsStillShareThePinnedBlob` catches upstream regenerating **on the network, in `make spec-drift`, never in `check`**, and `knownSpecDivergences` machine-checks the `Limit`/`Offset` `int?` gap (PR #2654, `v2.3.6.5351`) as **still live**; `info.version` **`1.0.0`** is Swashbuckle's placeholder and is pinned to by nothing; leaves [ADR-0035](#adr-0035), [ADR-0041](#adr-0041) and [ADR-0046](#adr-0046) untouched; the floor `v2.5.2.5491` is **owner-confirmed 2026-08-17**; raises two open questions it does not close (the floor drifts when the owner's auto-updating box does, and `make spec-drift` is unautomated) |
 | [0048](#adr-0048) | A library **proposal** is not a row in `library`; a row is created only on Accept | **Accepted** — 2026-08-17; **refines [ADR-0026](#adr-0026)** (its binding model, four verbs, single-kind rule and four tables are untouched — what is decided is *when a `library` row comes into existence*, which ADR-0026 did not say); **applies [ADR-0004](#adr-0004)** rather than excepting it — the connect probe is a **setup** action, not a render path; **answers the open decision `web/src/routes/libraries/+page.svelte` records at `78660a4`**, which named three candidates and picked none — this takes the first, *a proposal stops being a row until it is accepted*, and **rejects the other two in writing**; **closes off a third `managed_by` state and any `proposed` flag on `library`**; **costs no migration, no data change and no new state** — ⚠️ **and not for the reason it first appears**: `managed_by` **cannot** express "proposed" and never could, which is a fact *for* this decision rather than against it, because after it the unaccepted state has no persistent representation to record; existing `managed_by = 'auto'` rows are **declared** accepted on upgrade rather than read as accepted, since the column cannot tell an accepted library from one the user has never been shown; states plainly that **it describes unbuilt behaviour on two counts** — `'user'` has never been written by any code path, so §17.8's one-way door is specified and unimplemented, and today's import **creates rows unconditionally**, so implementing Accept **removes** creation from the import path rather than adding a screen to it; **that removal is not done here** — it belongs to the library thread that builds §17.8 |
+| [0049](#adr-0049) | Key ids are **derived from the key material**; there is no counter and no settings row | **Accepted** — 2026-08-19; **enables `usarr key rotate`** rather than being asked for by it; `crypto.KeyID(kek)` is the first four bytes big-endian of `sha256("usarr/kek-id/v1" || kek)`, forced nonzero, so **a key file names its own id** and no second artifact has to stay consistent with the key material across a crash — which is exactly the window rotation exists to survive, since the SQLite transaction and the key-file write are not one atomic unit; **closes off a monotonic counter and a `key_id` row in a settings table**, both of which reintroduce that window (and the settings row puts key identity *inside* the thing being rotated); startup registers the live key under both `KeyID(kek)` and the legacy id `1`, so **every existing row keeps opening with no migration** and the first rotation retires `1`; **costs no migration** — `service_instance.kek_id` is already `INTEGER`; **adds no HKDF label** and does not touch `derive.go`'s five frozen ones; ⚠️ **publishes a 32-bit hash of the KEK in every stored row**, accepted in writing because RFC 3394 key-wrap **already** gives an offline attacker an *exact* per-row oracle for the same question, so a 32-bit filter grants no capability the ciphertext did not |
 
 ---
 
@@ -6181,3 +6182,110 @@ rather than a line in a spec.
    than silently dropped, in a `Decision` column. If a decline is not persisted either, it is
    recomputed on every probe and the user re-declines it every connect. That is a proposal-lifetime
    question this ADR's answer makes sharper without answering.
+
+---
+
+<a id="adr-0049"></a>
+## ADR-0049 — Key ids are derived from the key material; there is no counter and no settings row
+
+**Status:** Accepted · 2026-08-19 · **Enables `usarr key rotate`** (`docs/ROADMAP.md`,
+`reference/security.md` §1.5, `CONFIGURATION.md` §3.4) rather than being asked for by it ·
+**Closes off two alternatives**: a monotonic counter, and a key-id row in a settings table ·
+**Costs no migration** — `service_instance.kek_id` is already `INTEGER` and already carries the id ·
+**Does not touch `internal/crypto/derive.go`'s five frozen HKDF labels**, and adds none · **Publishes
+a 32-bit hash of the KEK in every stored row**, which is analysed below and accepted.
+
+### Context
+
+Every stored envelope has carried its wrapping key's id since the first commit
+(`reference/security.md` §1.1: `kek_id (uint32 BE) || nonce || wrapped_dek || ciphertext || tag`),
+and `service_instance.kek_id` duplicates it as a plain column so a rotation can find the remaining
+work without opening anything. Both were built for rotation. Neither said **where the number comes
+from**.
+
+What the tree actually did was hard-code it: `cmd/usarr/app.go` called `crypto.NewKeyring(1, kek)`,
+so every row ever sealed says `1`, and **nothing anywhere persisted which key material the id `1`
+corresponds to**. That is fine while there is exactly one key forever. It stops being fine the moment
+there are two, which is the entire content of a rotation.
+
+### The decision
+
+**`crypto.KeyID(kek)` — the first four bytes, big endian, of
+`sha256("usarr/kek-id/v1" || kek)`, forced nonzero — is the id of a key.** A key file therefore names
+its own id, and startup registers the key derived from `keys/secret.key` under both `KeyID(kek)` and
+the legacy id `1`, primary on the former.
+
+Three consequences, in the order they matter:
+
+1. **There is no second piece of state to keep consistent across a crash.** The rotation's whole
+   safety argument is that the SQLite transaction and the key-file write are not one atomic unit
+   (§1.5). Anything that stores "the current key id" separately from the key sits in exactly that
+   window: promote the file and die before the counter is written, and every row names an id nothing
+   holds; write the counter and die before the file, and the id names material that no longer exists.
+   A derived id cannot disagree with the key, because it *is* the key, hashed.
+2. **An interrupted rotation is fully readable from the two files alone.** `keys/secret.key` and
+   `keys/secret.key.new` are the keyring. Startup derives both ids, registers both keys, and every
+   row opens — with no bookkeeping, no recovery step, and nothing to reconcile.
+3. **The legacy id keeps every existing row opening with no migration.** The same key registers at
+   `1` as a decrypt-only entry. New rows seal under the derived id; a rotation moves the old ones off
+   `1` like any other id, and the first rotation on an existing install retires it for good.
+
+`0` is never a real id: it is the placeholder `CreateServiceInstanceSealed` writes into `kek_id`
+between its insert and its seal. When the hash lands on `0` — one run in 2^32 — the id becomes `1`,
+the id the same key is registered at anyway, so nothing special-cases it.
+
+### The alternatives, and why they lose
+
+**A monotonic counter (`1`, `2`, `3`, …), persisted somewhere.** The obvious design, and it is the
+one that fails at the exact moment rotation exists to survive. It needs a home — a settings table, a
+sidecar file, a line inside the key file — and every home reintroduces the two-artifact consistency
+problem in clause 1. It also needs a reader on the startup path that must never disagree with what
+the key files hold, which is a second ladder to keep in step with the one in `config.ResolveMasterKey`.
+Nothing about a counter is *wrong*; it just buys ordering, which nothing here needs, at the price of
+the one property that matters.
+
+**A `key_id` row in a settings table.** Worse than the counter on the same axis and worse again on
+another: the database is the thing being rotated. Deciding which key opens the database from a row
+*inside* the database is fine only while the row is plaintext and the schema is reachable — which it
+is today — but it puts key identity behind migrations, backups and restores. A restored database with
+a stale settings row would claim material that the config volume no longer holds, and the failure
+would be a decrypt error rather than a named refusal.
+
+**Keeping the hard-coded `1` and rotating "in place".** Rejected outright: two different keys both
+claiming id `1` is precisely the state AEAD cannot distinguish from corruption, which is the argument
+`crypto.Keyring`'s own doc comment already makes.
+
+### What this publishes, and why it is nothing
+
+**Every stored row now contains a 32-bit hash of the KEK**, in `service_instance.kek_id` and in the
+envelope header. An offline attacker holding a database file can compute `KeyID` of any candidate key
+and compare.
+
+This grants them nothing they did not already have. RFC 3394 key-wrap **already** gives an exact,
+per-row oracle for the same question: unwrap the row's DEK under a candidate KEK and the integrity
+check tells you, without ambiguity, whether the candidate is right. That check is exact where this one
+is 32 bits wide, it is available on every row, and it has been there since the first commit. A
+candidate filter that is strictly weaker than a test the attacker can already run adds no capability.
+What it costs the attacker is one SHA-256 instead of one AES key-unwrap per guess — and the guessing
+itself is bounded by the KEK being HKDF output over 32 bytes of `crypto/rand`, which is not
+brute-forceable at any hash speed.
+
+The id is **not** secret and is not treated as one: it is printed by `usarr key rotate`, logged at
+startup, and written into audit metadata. It must never become an authentication input.
+
+### Consequences
+
+* **`crypto.KeyID` is now load-bearing and its definition is frozen in the same sense the HKDF labels
+  are.** Changing the constant, the digest or the truncation makes every stored row name an id the
+  keyring no longer derives. It lives in `internal/crypto/keyid.go` rather than beside the HKDF
+  labels in `derive.go` precisely so the two categories are not confused: the labels are bound into
+  ciphertext as domain-separation inputs, this one produces a public identifier.
+* **Key ids are no longer small integers, and operator-facing output shows them.** `1` became
+  `4205839355`. Anything that assumed a low id — a hand-written test fixture, a log grep — is wrong,
+  and `service_instance.kek_id` is `INTEGER`, so nothing in the schema notices.
+* **`LegacyKEKID = 1` is permanent.** It is registered on every start for as long as any install can
+  still hold a row sealed before this change, which is forever in the absence of a migration that
+  rewrites them. It costs one map entry.
+* **A rotation's re-wrap loop terminates on `kek_id <> new`, not `kek_id = old`.** With derived ids a
+  row can legitimately sit at a *third* id — an earlier interrupted attempt, a row restored from an
+  older backup — and "not at the new id" counts it as work instead of walking past it.

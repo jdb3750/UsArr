@@ -145,6 +145,33 @@ const (
 	AuditResultFail = "fail"
 )
 
+// The key-rotation vocabulary, one action per phase of `usarr key rotate`.
+//
+// Three actions rather than one with a phase field, because CONFIGURATION.md
+// §3.4 step 5 asks for one entry per phase and the phases are what an operator
+// reconstructing an interrupted rotation needs to see in order: a prepare with
+// no rewrap after it says the new key file was written and nothing else
+// happened; a rewrap with no promote says the key files were never touched.
+// A single action name would put all three in one bucket and make that reading
+// a matter of parsing metadata.
+//
+// Metadata on these rows carries COUNTS AND KEY IDS ONLY. A key id is public —
+// it is already in every envelope header and in service_instance.kek_id — and
+// nothing else about a key belongs in a table that is append-only by design.
+const (
+	// AuditActionKeyRotatePrepare records the new key material being written
+	// and registered. Both ids are live for decryption from this row onwards.
+	AuditActionKeyRotatePrepare = "key.rotate.prepare"
+
+	// AuditActionKeyRotateRewrap records the re-wrap pass and how many rows it
+	// moved to the new id.
+	AuditActionKeyRotateRewrap = "key.rotate.rewrap"
+
+	// AuditActionKeyRotatePromote records secret.key.new becoming secret.key
+	// and the superseded key leaving the keyring.
+	AuditActionKeyRotatePromote = "key.rotate.promote"
+)
+
 // AuditQuery narrows a scoped audit read.
 //
 // Both filters are OR-within, AND-between: an empty slice means "any". They

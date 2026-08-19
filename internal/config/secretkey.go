@@ -564,3 +564,115 @@ func readKeyFile(path, origin string) ([]byte, error) {
 	}
 	return ValidateMasterKey(string(raw), origin+" ("+path+")")
 }
+
+// ReadNewSecretKey reads and validates keys/secret.key.new, the file that
+// exists only while a rotation is in flight.
+//
+// A missing file is reported as os.ErrNotExist for the caller to interpret:
+// startup treats it as "no rotation in flight", and `usarr key rotate` treats it
+// as "nothing to resume, generate fresh material". Every other failure is fatal
+// and names the path, because a half-rotated install whose new key is present
+// but unreadable must never be mistaken for either of those.
+func (c *Config) ReadNewSecretKey() ([]byte, error) {
+	path := c.NewSecretKeyPath()
+	if _, err := os.Stat(path); err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return nil, err
+		}
+		return nil, fmt.Errorf("stat %s: %w", path, err)
+	}
+	return readKeyFile(path, path)
+}
+
+// GenerateNewSecretKey writes fresh master-key material to keys/secret.key.new
+// and returns it.
+//
+// It goes through writeSecretFile, so it is O_EXCL: it never clobbers an
+// existing secret.key.new, because that file is a rotation in flight and
+// overwriting it strands every row already re-wrapped under the key it holds.
+// The caller resumes from an existing one instead of calling this.
+//
+// The directory is fsynced as well as the file. A key file whose CONTENT is
+// durable but whose directory ENTRY is not is a file that vanishes on a power
+// cut, and rotation is precisely the procedure where the crash window matters:
+// the whole two-phase design assumes that once this returns, both keys can be
+// found again.
+func (c *Config) GenerateNewSecretKey() ([]byte, error) {
+	if err := os.MkdirAll(c.KeysDir(), SecretDirMode); err != nil {
+		return nil, fmt.Errorf("create %s: %w", c.KeysDir(), err)
+	}
+	if err := os.Chmod(c.KeysDir(), SecretDirMode); err != nil {
+		return nil, fmt.Errorf("chmod %s: %w", c.KeysDir(), err)
+	}
+
+	key := make([]byte, MasterKeyLen)
+	if _, err := rand.Read(key); err != nil {
+		return nil, fmt.Errorf("generate a new master key: %w", err)
+	}
+	path := c.NewSecretKeyPath()
+	if err := writeSecretFile(path, base64.StdEncoding.EncodeToString(key)+"\n"); err != nil {
+		return nil, err
+	}
+	if err := syncDir(c.KeysDir()); err != nil {
+		return nil, err
+	}
+	return key, nil
+}
+
+// PromoteNewSecretKey makes keys/secret.key.new the master key: fsync it,
+// rename(2) it over keys/secret.key, fsync the directory.
+//
+// It is rename(2), and this is the ONE place in this package where replace
+// semantics are correct. writeSaltFile deliberately uses link(2) so that it can
+// never clobber, because two racing first runs must converge on one salt; here
+// the destination is a file the caller has just PROVEN is superseded — every
+// stored row has been re-wrapped under the new key and verified — and replacing
+// it is the entire operation. Reusing writeSaltFile would refuse, leave
+// secret.key.new in place forever, and turn a completed rotation into one that
+// can never finish.
+//
+// rename(2) is atomic: a reader sees either the old key or the new one, never a
+// partial file and never neither. That is what leaves the window closed if the
+// process dies inside this function.
+func (c *Config) PromoteNewSecretKey() error {
+	newPath := c.NewSecretKeyPath()
+	// Sync the content again before publishing it under the live name. It was
+	// synced when written, but a resumed rotation did not write it — this run
+	// only read it — and one extra fsync costs nothing next to the failure it
+	// rules out.
+	// #nosec G304 -- the path is built from USARR_CONFIG_DIR; see writeSecretFile.
+	f, err := os.Open(newPath)
+	if err != nil {
+		return fmt.Errorf("open %s: %w", newPath, err)
+	}
+	if err := f.Sync(); err != nil {
+		_ = f.Close()
+		return fmt.Errorf("fsync %s: %w", newPath, err)
+	}
+	if err := f.Close(); err != nil {
+		return fmt.Errorf("close %s: %w", newPath, err)
+	}
+
+	if err := os.Rename(newPath, c.SecretKeyPath()); err != nil {
+		return fmt.Errorf("rename %s to %s: %w", newPath, c.SecretKeyPath(), err)
+	}
+	return syncDir(c.KeysDir())
+}
+
+// syncDir fsyncs a directory so a rename or create is durable, not just the
+// bytes inside the file.
+//
+// Best effort on the error from Sync itself: a few filesystems refuse to sync a
+// directory handle at all, and failing a completed rotation over that would be
+// worse than the risk it covers. A directory that cannot even be OPENED is a
+// different matter and is reported.
+func syncDir(dir string) error {
+	// #nosec G304 -- dir is built from USARR_CONFIG_DIR and is opened read-only
+	// purely to fsync the directory entry. Nothing is read from the handle.
+	d, err := os.Open(dir)
+	if err != nil {
+		return fmt.Errorf("open %s to fsync it: %w", dir, err)
+	}
+	_ = d.Sync()
+	return d.Close()
+}

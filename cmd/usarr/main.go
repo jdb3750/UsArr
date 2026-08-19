@@ -52,6 +52,18 @@ func printVersion(w io.Writer) {
 		version, commit, buildDate, goVersion())
 }
 
+// buildInfo is the stamped build identity, in the shape internal/httpapi wants.
+// It is a function so that every entry point — the server and the maintenance
+// subcommands — reports the identity the same way.
+func buildInfo() httpapi.BuildInfo {
+	return httpapi.BuildInfo{
+		Version:   version,
+		Commit:    commit,
+		BuildDate: buildDate,
+		GoVersion: goVersion(),
+	}
+}
+
 // drainDeadline bounds graceful shutdown.
 //
 // The SSE stream is why this is not longer: an event stream never ends on its
@@ -81,6 +93,19 @@ func run() error {
 		// it has to be pipeable into grep by deploy/status.sh.
 		printVersion(os.Stdout)
 		return nil
+	case errors.Is(err, config.ErrKeyRotateRequested):
+		// A different program, selected by the same parser that resolved the
+		// configuration it runs against. It returns instead of falling through:
+		// nothing below this line — the listener, the prober, the sweeper —
+		// belongs to a maintenance command.
+		//
+		// Signals are trapped so a Ctrl-C during a long re-wrap ends between
+		// batches rather than mid-transaction. Interrupting is safe at any
+		// point: both keys are on disk until the promote step, so an aborted
+		// rotation leaves every row readable and resumes on the next run.
+		rotateCtx, stopRotate := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+		defer stopRotate()
+		return runKeyRotate(rotateCtx, cfg, newLogger(cfg), buildInfo(), os.Stdout)
 	case err != nil:
 		return err
 	}
@@ -105,13 +130,7 @@ func run() error {
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
-	build := httpapi.BuildInfo{
-		Version:   version,
-		Commit:    commit,
-		BuildDate: buildDate,
-		GoVersion: goVersion(),
-	}
-	a, err := buildApp(ctx, cfg, log, build)
+	a, err := buildApp(ctx, cfg, log, buildInfo())
 	if err != nil {
 		return err
 	}
