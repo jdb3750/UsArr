@@ -117,10 +117,15 @@ func text(s string) string { return strings.TrimSpace(clean(s)) }
 // this list at all, which is the shape ADR-0052's "explicit libraryIds grant"
 // produces.
 //
-// ⚠️ THAT SCOPING IS INVISIBLE FROM HERE. `contentFilters` also narrows the join,
-// so an account carrying one gets a SUBSET of the libraries with nothing in the
-// response saying a filter applied. UsArr cannot detect it from this route and
-// must not claim the list is the whole instance.
+// ⚠️ bookCount IS NOT A TOTAL — but the list IS the granted set. `contentFilters`
+// lands in the books LEFT JOIN ON rather than in a WHERE, so it shorts each
+// count without dropping a row; membership is userLibraryAccess alone. Treat
+// this as "what the credential was granted", never as the whole instance.
+//
+// The shortfall is measurable rather than guessable: GET /libraries/{id}/stats
+// takes neither a user nor filters, so its totalBooks minus a status='present'
+// page count is exactly what a filter hid. Recorded so the first caller that
+// wants that number subtracts for it instead of inferring it.
 func (c *Client) Libraries(ctx context.Context) ([]Library, error) {
 	var raw []libraryDTO
 	if err := c.do(ctx, request{
