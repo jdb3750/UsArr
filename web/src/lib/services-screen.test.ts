@@ -620,6 +620,88 @@ describe('a failed connection test names the likely causes for its error class',
 	it('still says something useful for an unrecognised failure', () => {
 		expect(likelyCauses('something went sideways', 'prowlarr').length).toBeGreaterThan(0);
 	});
+
+	/*
+	 * THE ARM ORDER, DRILLED ON THE REAL STRING.
+	 *
+	 * `testBookOrbit` reports an app-info auth failure with the word "refused" in
+	 * it (cmd/usarr/services.go), which the transport arm's `refused` matches. The
+	 * transport arm used to run first, so all three app-info auth failures were
+	 * answered with advice about the wrong port. The wrapper sentence below is
+	 * verbatim from that adapter and the tail after the colon is the shape
+	 * internal/bookorbit's APIError.Error() prints; only the upstream's own words
+	 * at the very end stand in for text BookOrbit chooses.
+	 */
+	const appInfoRefusal = (upstream: string) =>
+		'the magic-link token is valid and BookOrbit issued an access token, but that token was ' +
+		'refused on GET /api/v1/app-info, which needs no permission at all: ' +
+		upstream;
+
+	const APP_INFO_AUTH_FAILURES = [
+		[
+			'a password change pending on the account',
+			'bookorbit AppInfo: GET /api/v1/app-info -> 403: Password change required'
+		],
+		[
+			'a bearer the guard rejects outright',
+			'bookorbit AppInfo: GET /api/v1/app-info -> 401: Unauthorized'
+		],
+		[
+			'an account without the reach',
+			'bookorbit AppInfo: GET /api/v1/app-info -> 403: insufficient permissions'
+		]
+	] as const;
+
+	it('answers every app-info auth failure with auth advice, never with the port', () => {
+		for (const [what, upstream] of APP_INFO_AUTH_FAILURES) {
+			const causes = likelyCauses(appInfoRefusal(upstream), 'bookorbit');
+			// ⚠️ THE ABSENCE ASSERTION IS GUARDED. `[]` and `['']` both satisfy
+			// "does not mention the port", and both would be a broken panel.
+			expect(causes.length, what).toBeGreaterThan(0);
+			for (const cause of causes) expect(cause.trim(), what).not.toBe('');
+			const joined = causes.join(' ');
+			expect(joined, what).not.toContain('The wrong port');
+			expect(joined, what).toContain('magic-link token');
+		}
+	});
+
+	it('keeps the port arm firing for what it exists for, and only for that', () => {
+		// The shapes that actually reach here, all of them through the pinned
+		// dialer, so all of them carrying net.OpError's prefix (internal/ssrf/dial.go).
+		const transport = [
+			'get "http://prowlarr.lan:9696/api/v1/system/status": ssrf: dial prowlarr.lan:9696: dial tcp 10.0.0.4:9696: connect: connection refused',
+			'dial tcp: lookup prowlarr.lan: no such host',
+			'context deadline exceeded (Client.Timeout exceeded while awaiting headers)',
+			'dial tcp 10.0.0.4:9696: connect: network is unreachable'
+		];
+		for (const message of transport) {
+			const causes = likelyCauses(message, 'prowlarr');
+			expect(causes.length, message).toBeGreaterThan(0);
+			expect(causes[0], message).toContain('The wrong port');
+		}
+		// The other direction: an arm that fires on everything is no arm. A failure
+		// with no transport shape must reach the default advice instead.
+		const unrecognised = likelyCauses('something went sideways', 'prowlarr');
+		expect(unrecognised.length).toBeGreaterThan(0);
+		for (const cause of unrecognised) expect(cause.trim()).not.toBe('');
+		expect(unrecognised.join(' ')).not.toContain('The wrong port');
+	});
+
+	it('does not read a port that happens to contain 401 as an auth failure', () => {
+		// What moving the auth arm up would otherwise cost: a bare /401/ matches
+		// inside `:4013`, and that message is a dial failure, not a refused key.
+		const causes = likelyCauses('dial tcp 10.0.0.4:4013: connect: connection refused', 'prowlarr');
+		expect(causes[0]).toContain('The wrong port');
+	});
+
+	it('still names the key on a plain 401 from an *Arr', () => {
+		expect(
+			likelyCauses(
+				'servarr SystemStatus: GET /api/v3/system/status -> 401: Unauthorized',
+				'sonarr'
+			)[0]
+		).toContain('API key');
+	});
 });
 
 describe('the connected panel names what actually answered', () => {
@@ -805,6 +887,27 @@ describe('the three 409s are told apart on `error`, and only one is not a refusa
 		const note = conflict('not_a_catalogue_source');
 		expect(note.phase).toBe('refused');
 		expect(note.consequence).toContain('No import started');
+	});
+
+	it('locates the missing catalogue reader in UsArr, never in the service', () => {
+		// The server's sentence renders directly beneath this title and reads
+		// "UsArr has no catalogue reader for this service", so a headline claiming
+		// the service has no catalogue contradicted the line under it. What made
+		// that visible was a BookOrbit, which registers as `role: library` and so
+		// renders the Sync button; it has an adapter now, and the rule does not
+		// depend on it — the code is shown to whichever kind has no adapter next.
+		const note = syncRefusal(
+			409,
+			'not_a_catalogue_source',
+			'UsArr has no catalogue reader for this service',
+			'Run a sync on a service UsArr can import from'
+		);
+		// ⚠️ GUARDED: an empty title satisfies every `not.toMatch` below.
+		expect(note.title.trim()).not.toBe('');
+		expect(note.title).toContain('UsArr');
+		expect(note.title).not.toMatch(/no catalogue|has no catalogue|nothing to import/i);
+		// And the pair must not disagree, which is the whole defect.
+		expect(note.message).toContain('no catalogue reader');
 	});
 
 	it('reads service_disabled as its own sentence, not as the other two', () => {
