@@ -553,7 +553,19 @@ export function appendPage(feed: RecentFeed, page: RecentPage): RecentFeed {
  * not retry either: the same cursor produces the same 400. The screen surfaces
  * the server's `action` and offers to start again from the newest items, which
  * is a request with NO cursor and therefore cannot fail the same way.
+ *
+ * ⚠️ IT TAKES THE CURSOR THAT WAS ACTUALLY SENT, AND THAT SECOND ARGUMENT IS
+ * THE WHOLE OF THE RULE RATHER THAN A CONVENIENCE. The wire cannot tell a
+ * rejected cursor apart from any other bad request: `400 bad_request` is one
+ * code covering several causes, and on `GET /api/v1/library` it also covers a
+ * bad `media_type`, a bad `sort`, an unknown `lib` slug and a malformed
+ * `limit` (http-api.md §7.7). Deciding from the status and the code alone
+ * therefore tells a user whose FILTER is wrong that their bookmark has gone
+ * stale, and offers them a restart that will fail in exactly the same way.
+ * A request that carried no cursor cannot have had one rejected, so that case
+ * is answered here rather than guessed at from the response.
  */
-export function cursorRejected(error: unknown): boolean {
+export function cursorRejected(error: unknown, sentCursor: string | undefined): boolean {
+	if (sentCursor === undefined) return false;
 	return error instanceof ApiError && error.status === 400 && error.code === 'bad_request';
 }

@@ -106,8 +106,8 @@ plan.
 
 **Build the base with intentional space for what comes later.** Several deferred features have
 an obvious seam in the current design: the provider registry is an interface a plugin host
-could implement, the search retriever is pluggable behind one boundary, `work_relation` already
-carries confidence and evidence columns. Keep those seams — they cost almost nothing now and
+could implement, the search retriever is pluggable behind one boundary, `work_relation` is designed
+to carry confidence and evidence columns. Keep those seams — they cost almost nothing now and
 are expensive to retrofit. This is not a licence to build the deferred feature early: the seam
 ships, the feature does not.
 

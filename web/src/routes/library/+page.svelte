@@ -9,34 +9,41 @@
 	 * columns from the same wire type, because §6.2 makes those two responses
 	 * identical key for key so that one row renders both.
 	 *
-	 * ⚠️ WHAT IT IS NOT, AND WHY NOT — because §16 asks for something wider and a
-	 * reader will otherwise take this for a half-finished version of it. §16
-	 * names a per-type library GRID, with covers, a media-type filter and a sort
-	 * control. Every one of those is blocked on a backend read that does not
-	 * exist today, and the blocks were checked against the handlers rather than
-	 * assumed:
+	 * ⚠️ WHAT IT IS NOT, AND WHERE THAT SCREEN NOW IS. §16 also names a per-type
+	 * library GRID with a sort control and a library scope, and this file used to
+	 * say that none of it could be built because `GET /api/v1/library` did not
+	 * exist. IT EXISTS. `internal/httpapi/server.go` routes it, `handleBrowseWorks`
+	 * serves it, and `routes/library/[type]/+page.svelte` renders it — one place
+	 * per media type, ordered server-side, scoped by `?lib=`.
 	 *
-	 *   THE GRID and its per-type routes need a browse read. There is no
-	 *     `GET /api/v1/library`; `internal/httpapi/server.go` routes
-	 *     `/api/v1/library/recent` and nothing else under that prefix.
-	 *   COVERS need an image endpoint. There is none, and `$lib/library`'s own
-	 *     header names cover art as absent from this wire.
-	 *   A TYPE FILTER needs a filtered read. `handleRecentWorks` parses `limit`
-	 *     and `cursor`, and nothing else.
-	 *   A SORT CONTROL needs a sortable read. The order is hard-coded
-	 *     `added_at DESC, id DESC` in the statement itself.
+	 * ⚠️ THAT DOES NOT MAKE THIS SCREEN A PREDECESSOR OF IT, and §17.2 keeps both.
+	 * `docs/reference/http-api.md` §7 is explicit that the browse read *"is a
+	 * different endpoint from §1, not a superset of it"*: §17.2 closes Block C at
+	 * ONE table, ONE order and NO filters, so a sixth media type adds rows to it
+	 * rather than a sixth region (ADR-0028), and `/library/recent?media_type=…`
+	 * would put a filter on the endpoint whose whole design is that it has none.
+	 * The two share a row shape and a paging rule and share no cursor (§7.5).
 	 *
-	 * ⚠️ AND A CLIENT-SIDE FILTER OR SORT IS NOT THE WORKAROUND, WHICH IS THE
-	 * ONE THING TO GET RIGHT HERE. What this screen holds is a keyset PREFIX of
-	 * the catalogue: the newest N rows, for whatever N the user has pressed
-	 * `Load more` up to. A control that filtered or sorted that prefix would
-	 * present itself as operating on the library and would in fact operate on
-	 * the prefix, so `no comics found` would mean `no comics in the newest 200
+	 *   THIS SCREEN        every media type at once, newest first, to the end of
+	 *     the catalogue. `handleRecentWorks` parses `limit` and `cursor` and
+	 *     nothing else, and the order is hard-coded `added_at DESC, id DESC`.
+	 *   THE PER-TYPE GRID  one type at a time, in one of §7.6's three orders,
+	 *     inside §7.3's library scope.
+	 *   COVERS are in NEITHER, and that has not changed: there is still no image
+	 *     endpoint anywhere in the mux, so no screen in this tree renders a
+	 *     poster. `$lib/library`'s own header names cover art as absent.
+	 *
+	 * ⚠️ AND A CLIENT-SIDE FILTER OR SORT IS STILL NOT THE WORKAROUND HERE, WHICH
+	 * IS THE ONE THING TO GET RIGHT ON THIS SCREEN. What it holds is a keyset
+	 * PREFIX of the catalogue: the newest N rows, for whatever N the user has
+	 * pressed `Load more` up to. A control that filtered or sorted that prefix
+	 * would present itself as operating on the library and would in fact operate
+	 * on the prefix, so `no comics found` would mean `no comics in the newest 200
 	 * rows` and a sort by title would put the alphabetically-first row of the
 	 * prefix at the top and call it the library's first. Both are confidently
-	 * wrong answers, which is worse than no control at all. The real controls
-	 * arrive with the backend browse read that can apply them to the whole
-	 * table; until then this screen offers neither, and no column is `sortable`.
+	 * wrong answers, which is worse than no control at all. The screen that CAN
+	 * apply them to the whole table is the per-type grid, which applies them
+	 * server-side; this one offers neither, and no column is `sortable`.
 	 *
 	 * A LOCAL SQLITE READ, so principle 1 holds all the way through: no render
 	 * path here waits on an *Arr or on a media server, and there is no upstream
@@ -188,7 +195,7 @@
 			// because resetting "turns a stale bookmark into a Load-more loop that
 			// re-serves the first page for ever and looks like the list is stuck".
 			// Retrying here would build that loop on the other side of the wire.
-			rejected = cursorRejected(caught);
+			rejected = cursorRejected(caught, request.cursor);
 		} finally {
 			loadingMore = false;
 		}

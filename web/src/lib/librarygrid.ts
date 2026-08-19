@@ -1,0 +1,495 @@
+/**
+ * THE PER-TYPE LIBRARY GRID, CLIENT SIDE — `GET /api/v1/library`.
+ *
+ * ARCHITECTURE.md §17.2's per-type grid and §17.8's library scope, over the one
+ * endpoint that serves both. `docs/reference/http-api.md` §7 is the contract and
+ * this module is written against it rather than against a memory of it.
+ *
+ * WHAT IS ONE SCREEN AND WHAT IS TWO. `/library` is Home's Block C without
+ * Home's row limit — one unified newest-first table across every media type,
+ * over `GET /api/v1/library/recent`, which takes no filter at all. This module
+ * is the OTHER read: media type is the navigation axis (§8.1 of
+ * `docs/design/DESIGN-DIRECTION.md`, closing OQ-2), so `/library/movies` is a
+ * place, and a library is a SCOPE carried as `?lib=` rather than a place of its
+ * own. The two endpoints share a row shape and a paging rule and share no
+ * cursor (§7.5), so `$lib/library`'s row parsing, availability rendering and
+ * feed algebra are imported here and the query half is new.
+ *
+ * DOM-free and deterministic, like `$lib/library` and `$lib/libraryscreen`, so
+ * the node-environment vitest run can pin every rule in it. `vitest.config.ts`
+ * is `environment: 'node'` with no Svelte plugin, so a rule that lives inside an
+ * `{#if}` in `routes/library/[type]/+page.svelte` is a rule nothing can test —
+ * which is why the sort vocabulary, the cursor-reset rule and the query builder
+ * are functions here rather than markup there.
+ *
+ * IT IS A LOCAL READ (principle 1). `internal/httpapi/library.go` says so at
+ * `handleBrowseWorks`: one SQLite statement per page plus at most one small
+ * statement to resolve `?lib=` slugs, no *Arr, no metadata provider, no image
+ * fetch.
+ *
+ * ⚠️ FIVE PROPERTIES OF THIS ENDPOINT BREAK A CLIENT SILENTLY, AND EACH ONE IS
+ * HELD BY A FUNCTION BELOW RATHER THAN BY A COMMENT.
+ *
+ *   1. `sort=sort_title` IS REFUSED MORE BROADLY THAN "not music".
+ *      `browseWorksSQL` refuses it when `len(kinds) != 1`, and no `media_type`
+ *      at all is six kinds, so the refusal covers `music` AND the unfiltered
+ *      case. `browseSortsFor` derives availability from the kind COUNT rather
+ *      than from a hard-coded "not music".
+ *   2. `sort=year` IS LEGAL IN THE SCHEMA AND REFUSED ON THE WIRE. Migration
+ *      0005's CHECK admits it as a `library.default_sort`; `work.year` has no
+ *      index, so this read refuses it by name. `readBrowseSort` can never
+ *      return it, whatever a URL or a stored default says.
+ *   3. THE CURSOR BINDS TO `sort` ALONE — not to `media_type` and not to `lib`.
+ *      Replaying one under a different sort is a 400, but replaying it under a
+ *      different TYPE or a different SCOPE is a 200 that starts partway into a
+ *      different corpus. Nothing server-side catches it. `browseFeedFor` drops
+ *      the whole feed whenever any of the three changes.
+ *   4. THE ECHOED `limit` IS AUTHORITATIVE (§1.2, which governs both endpoints).
+ *      The server clamps at 200 silently. `nextBrowsePage` asks for the size the
+ *      server said it applied, never for the one this module asked for first.
+ *   5. AN UNKNOWN QUERY PARAMETER IS IGNORED, SILENTLY. `handleBrowseWorks`
+ *      reads five names off `r.URL.Query()` and never enumerates it, so a typo
+ *      answers 200 with an unfiltered page one, which reads as "your library
+ *      has everything in it". ⚠️ NOTHING ON EITHER SIDE OF THE WIRE CATCHES IT:
+ *      no server-side test pins the ignoring, and there is no round trip that
+ *      could report it. `browseParams` is therefore the only builder, and
+ *      `unknownBrowseParams` fails a typo loudly in dev.
+ *
+ * AND ONE ASYMMETRY THAT IS EASY TO GET BACKWARDS: an EMPTY `media_type` is
+ * silently unfiltered, an EMPTY `lib` is a 400 (§7.3 — "a scope was asked for
+ * and nothing was named"). So `lib` is emitted only when there is something to
+ * put in it, and never as `?lib=`.
+ */
+
+import { getJson } from './api';
+import type { HomeMode } from './home';
+import {
+	isMediaType,
+	mediaTypeLabel,
+	toRecentPage,
+	type MediaType,
+	type RecentItem,
+	type RecentPage
+} from './library';
+import { recentEmptyState, type RecentEmptyState } from './libraryscreen';
+
+/** The endpoint, as `internal/httpapi/server.go` routes it. It is NOT a
+ * superset of `/library/recent` and shares no cursor with it (§7 preamble). */
+export const LIBRARY_BROWSE_URL = '/api/v1/library';
+
+/* ── 1. the three orders, and the fourth that is refused ──────────────────── */
+
+/**
+ * §7.6's three orders, in the server's OWN words.
+ *
+ * The vocabulary is `library.default_sort`'s verbatim — migration 0005 spells
+ * it `CHECK (default_sort IN ('sort_title','added_at','year','popularity'))` —
+ * so a client that reads a library's stored default can hand it straight back.
+ * Inventing wire words ("newest", "az") would be a second spelling for one set
+ * of states, which is the drift the endpoint was named against.
+ */
+export const BROWSE_SORTS = ['added_at', 'sort_title', 'popularity'] as const;
+
+export type BrowseSort = (typeof BROWSE_SORTS)[number];
+
+/** `added_at` is the server's default and is what an absent `?sort=` means. */
+export const DEFAULT_BROWSE_SORT: BrowseSort = 'added_at';
+
+/**
+ * ⚠️ THE FOURTH MEMBER OF THE SCHEMA'S CHECK, AND IT MUST NEVER BE SENT.
+ *
+ * `year` is a legal `library.default_sort` value and is refused by this
+ * endpoint with its own message: `work.year` has no index of any kind, so the
+ * order would be a temp b-tree over the whole filtered corpus on every page. It
+ * is named here rather than merely absent from `BROWSE_SORTS`, because the
+ * likeliest way a client sends it is by reading a library's own default back —
+ * not by typing it — and a constant is what a guard can assert against.
+ */
+export const REFUSED_BROWSE_SORT = 'year';
+
+const BROWSE_SORT_LABEL: Record<BrowseSort, string> = {
+	added_at: 'Newest first',
+	sort_title: 'A to Z',
+	popularity: 'Most popular'
+};
+
+export function browseSortLabel(sort: BrowseSort): string {
+	return BROWSE_SORT_LABEL[sort];
+}
+
+export function isBrowseSort(value: string): value is BrowseSort {
+	return (BROWSE_SORTS as readonly string[]).includes(value);
+}
+
+/**
+ * HOW MANY `work.kind` VALUES A MEDIA TYPE RESOLVES TO. `browseKinds` in
+ * `internal/store/browse.go`, mirrored — and mirrored as a COUNT because the
+ * count is the only part of it a client needs, and the kinds themselves are a
+ * server vocabulary this screen must never navigate by (§7.2).
+ *
+ *   movies → movie · tv → series · comics → comic       one kind
+ *   ebooks, audiobooks → book                           one kind, split by
+ *                                                       edition.format
+ *   music → artist AND album                            two kinds
+ *
+ * ⚠️ THIS IS WHAT DECIDES WHETHER A→Z IS OFFERED, and it is a count rather than
+ * a `!== 'music'` test on purpose: the store's condition is `len(kinds) != 1`,
+ * so the refusal already covers a second two-kind type the day one is added,
+ * and a hard-coded exception for music would not.
+ */
+export function browseKindCount(mediaType: MediaType): number {
+	return mediaType === 'music' ? 2 : 1;
+}
+
+/**
+ * The orders this media type can actually be served in.
+ *
+ * §7.6: `sort_title` walks `ix_work_kind_sort`, which is `(kind, sort_title,
+ * id)`, and SQLite cannot supply `ORDER BY` from an index whose leading column
+ * is constrained by `IN` — so it needs the kind as an equality and is refused
+ * for anything that is not exactly one kind. Offering the control anyway would
+ * put a 400 behind a chip that looks like the others.
+ */
+export function browseSortsFor(mediaType: MediaType): BrowseSort[] {
+	return BROWSE_SORTS.filter((s) => s !== 'sort_title' || browseKindCount(mediaType) === 1);
+}
+
+export function browseSortAvailable(sort: string, mediaType: MediaType): sort is BrowseSort {
+	return isBrowseSort(sort) && browseSortsFor(mediaType).includes(sort);
+}
+
+/**
+ * `?sort=` off a URL, and it can only ever answer with an order this media type
+ * can be served in.
+ *
+ * An unknown, refused or unavailable key falls back to the default rather than
+ * erroring, which is `$lib/sortspec.readSort`'s rule for the same reason: a link
+ * that names an order this build cannot serve should still open the screen, and
+ * the screen's own control then says what it is actually sorted by. `year` and
+ * `sort_title`-on-music both land here, so neither can reach the wire.
+ */
+export function readBrowseSort(params: URLSearchParams, mediaType: MediaType): BrowseSort {
+	const raw = (params.get('sort') ?? '').trim();
+	return browseSortAvailable(raw, mediaType) ? raw : DEFAULT_BROWSE_SORT;
+}
+
+/* ── 2. the library scope ─────────────────────────────────────────────────── */
+
+/**
+ * §7.3's bound on `?lib=`, and it is a REFUSAL rather than a clamp.
+ *
+ * Silently dropping slugs WIDENS the page — fewer scope terms means more rows —
+ * which is the one direction a filter must never fail in. So a client that
+ * holds more than this many does not send a truncated list; it says so.
+ */
+export const MAX_LIBRARY_SLUGS = 32;
+
+/**
+ * The `?lib=` slugs a URL carries, in order, with the empty spellings removed.
+ *
+ * ⚠️ AN EMPTY RESULT MEANS "NO SCOPE" AND MUST NEVER BE SENT AS `?lib=`. The
+ * server tests PRESENCE rather than emptiness, so `?lib=`, `?lib=%20` and
+ * `?lib=,,` are all 400 "lib was sent with no library in it" — while an empty
+ * `media_type` is silently unfiltered. The two parameters fail in opposite
+ * directions and only one of them is safe to pass through blind.
+ */
+export function readLibraryScope(params: URLSearchParams): string[] {
+	return (params.get('lib') ?? '')
+		.split(',')
+		.map((s) => s.trim())
+		.filter((s) => s !== '');
+}
+
+/* ── 3. one query, and the route that produces it ─────────────────────────── */
+
+/**
+ * EVERYTHING THE SERVER HAS TO BE TOLD AGAIN ON EVERY PAGE (§7.5: "send
+ * `media_type`, `lib` and `sort` again on every page, unchanged. The server does
+ * not remember them"), and therefore everything a cursor is only valid within.
+ */
+export interface BrowseQuery {
+	mediaType: MediaType;
+	sort: BrowseSort;
+	/** Library slugs. Empty is "every library", never `?lib=`. */
+	libraries: string[];
+}
+
+/**
+ * WHAT A `/library/[type]` URL RESOLVES TO, INCLUDING THE TWO WAYS IT CAN FAIL
+ * BEFORE ANY REQUEST IS MADE.
+ *
+ * Both failures are refusals the client can make on its own, and making them
+ * here is the point: §7.2 and §7.3 tell us exactly what the server will do with
+ * an unknown media type and with a 33rd slug, so sending either would be
+ * spending a round trip to be told something already known — and would put the
+ * server's wording on a mistake the URL bar made.
+ */
+export type BrowseRoute =
+	| { k: 'ok'; query: BrowseQuery }
+	| { k: 'unknown-type'; value: string }
+	| { k: 'too-many-libraries'; count: number };
+
+/**
+ * The route parameter and the query string, resolved together.
+ *
+ * ⚠️ THE TYPE SEGMENT IS VALIDATED AGAINST THE SIX AND IS NEVER PASSED THROUGH.
+ * `media_type` is a closed enum server-side and an unrecognised value is a 400,
+ * never an unfiltered page — so a request built from an unvalidated segment is
+ * a request whose answer is already known. §17.2's enum is `$lib/library`'s
+ * `MEDIA_TYPES` and this function is the only door into a `BrowseQuery`.
+ */
+export function browseRoute(rawType: string, params: URLSearchParams): BrowseRoute {
+	const value = rawType.trim();
+	if (!isMediaType(value)) return { k: 'unknown-type', value };
+	const libraries = readLibraryScope(params);
+	if (libraries.length > MAX_LIBRARY_SLUGS) {
+		return { k: 'too-many-libraries', count: libraries.length };
+	}
+	return { k: 'ok', query: { mediaType: value, sort: readBrowseSort(params, value), libraries } };
+}
+
+/** Whether two queries are the same corpus in the same order. Identity, not
+ * equality of object references: it is what decides whether a cursor is still
+ * meaningful. */
+export function sameBrowseQuery(a: BrowseQuery, b: BrowseQuery): boolean {
+	return (
+		a.mediaType === b.mediaType &&
+		a.sort === b.sort &&
+		a.libraries.length === b.libraries.length &&
+		a.libraries.every((slug, i) => slug === b.libraries[i])
+	);
+}
+
+/* ── 4. the request ───────────────────────────────────────────────────────── */
+
+/** What one page request carries. `cursor` absent is "the start of this order". */
+export interface BrowsePageRequest {
+	limit: number;
+	cursor?: string;
+}
+
+/**
+ * ⚠️ EVERY PARAMETER THIS ENDPOINT READS, AND NOTHING ELSE EXISTS.
+ *
+ * `handleBrowseWorks` reads `media_type`, `sort`, `lib`, `limit` and `cursor`,
+ * and ignores everything else in silence. So `?mediatype=comics` is a 200 with
+ * an unfiltered page one, and there is no error, no log line and no visible
+ * symptom beyond a screen that shows the whole library under a heading that
+ * says Comics. Nothing outside this module may build a query string for this
+ * endpoint.
+ */
+export const BROWSE_PARAMS = ['media_type', 'sort', 'lib', 'limit', 'cursor'] as const;
+
+/**
+ * The parameter names in `params` that this endpoint does not read.
+ *
+ * Pure and exported for its own sake so a test can fire it at a typo as well as
+ * at a correct query: a validator that only ever sees valid input passes a
+ * suite that proves nothing. `gridTemplate`'s content-sized-track guard in
+ * `$lib/list` is the same shape and exists for the same reason.
+ */
+export function unknownBrowseParams(params: URLSearchParams): string[] {
+	const known = new Set<string>(BROWSE_PARAMS);
+	return [...params.keys()].filter((k) => !known.has(k));
+}
+
+/**
+ * One page's query string.
+ *
+ * `media_type` and `sort` go out on EVERY page, unchanged, because the server
+ * does not remember them (§7.5) and because they are part of what the cursor
+ * means. `lib` goes out only when there is a slug to put in it: see
+ * `readLibraryScope` for why an empty one is a 400 rather than "no scope".
+ */
+export function browseParams(query: BrowseQuery, request: BrowsePageRequest): URLSearchParams {
+	const params = new URLSearchParams({
+		media_type: query.mediaType,
+		sort: query.sort,
+		limit: String(request.limit)
+	});
+	if (query.libraries.length > 0) params.set('lib', query.libraries.join(','));
+	// The cursor is set through URLSearchParams rather than concatenated: it is
+	// base64url over a payload that can embed a SQLite datetime with a literal
+	// space in it, and `$lib/library` records the unescaped form arriving as a
+	// panic rather than as a wrong answer.
+	if (request.cursor !== undefined) params.set('cursor', request.cursor);
+	return params;
+}
+
+/** The URL for one page, with the dev-only typo guard on the way out. */
+export function browseRequestUrl(query: BrowseQuery, request: BrowsePageRequest): string {
+	const params = browseParams(query, request);
+	if (import.meta.env.DEV) warnUnknownParams(params);
+	return `${LIBRARY_BROWSE_URL}?${params.toString()}`;
+}
+
+/**
+ * The dev-only half: name the parameters, say why, and DO NOT THROW.
+ *
+ * Throwing would take down a screen over a query-string defect, and a guard
+ * that can break the app is a guard people delete. `import.meta.env.DEV` is a
+ * literal `false` in a production build, so Rollup drops this call and the
+ * function with it.
+ */
+function warnUnknownParams(params: URLSearchParams): void {
+	const unknown = unknownBrowseParams(params);
+	if (unknown.length === 0) return;
+	console.error(
+		`[UsArr library] GET ${LIBRARY_BROWSE_URL} does not read: ${unknown.join(', ')}. ` +
+			'An unrecognised parameter is IGNORED by this endpoint rather than refused, so ' +
+			'the request answers 200 with an unfiltered first page and the screen looks ' +
+			`like it worked. It reads ${BROWSE_PARAMS.join(', ')} and nothing else.`
+	);
+}
+
+/** One page of the grid. A local SQLite read behind the endpoint: it makes no
+ * upstream call and is never on a path that waits for a service. */
+export async function fetchBrowsePage(
+	query: BrowseQuery,
+	request: BrowsePageRequest
+): Promise<RecentPage> {
+	return toRecentPage(await getJson(browseRequestUrl(query, request)), request.limit);
+}
+
+/* ── 5. the feed, and the cursor-reset rule ───────────────────────────────── */
+
+/**
+ * EVERY PAGE READ SO FAR, THE QUERY THEY WERE READ UNDER, AND THE PAGE SIZE THE
+ * SERVER SAID IT APPLIED.
+ *
+ * It is `$lib/library`'s `RecentFeed` plus those two fields, and both are here
+ * because of a property of THIS endpoint that Block C does not have:
+ *
+ *   `query`  a cursor is minted under one `sort` and refused under another, and
+ *            is minted under one `media_type` and one `lib` and SILENTLY
+ *            ACCEPTED under others (§7.5). The query therefore travels with the
+ *            cursor, so the reset can be decided rather than remembered.
+ *   `limit`  the server clamps the page size and echoes what it applied (§1.2,
+ *            which governs both endpoints). A client that keeps asking for its
+ *            own number instead of the echoed one is paging against a size the
+ *            server never agreed to.
+ *
+ * There is deliberately no `hasMore` boolean: "is there more" is
+ * `cursor !== undefined` and nothing else, and two fields that must agree are
+ * two fields that can disagree.
+ */
+export interface BrowseFeed {
+	items: RecentItem[];
+	/** The cursor for the NEXT page. Absent = this is the last page. */
+	cursor?: string;
+	/** Whether the server has answered at least once for THIS query. */
+	loaded: boolean;
+	/** The page size the SERVER applied, once it has said. */
+	limit?: number;
+	/** The query every item here was read under. */
+	query: BrowseQuery;
+}
+
+export function emptyBrowseFeed(query: BrowseQuery): BrowseFeed {
+	return { items: [], loaded: false, query };
+}
+
+/**
+ * ⚠️ THE CURSOR-RESET RULE, AND NOTHING SERVER-SIDE ENFORCES IT.
+ *
+ * A cursor carries its sort and is refused under another one — that failure is
+ * loud and is a 400. It carries NEITHER the media type NOR the library scope,
+ * so replaying it after the user changes either is a `200 OK` whose page starts
+ * partway into a different corpus: rows are skipped, the count is wrong, and
+ * nothing anywhere reports a problem. The endpoint cannot catch it, because
+ * from its side the request is well formed.
+ *
+ * So the feed is dropped whole — items, cursor and echoed limit — the moment
+ * any part of the query changes, and this function is the only thing that says
+ * so. Keeping the rows while dropping the cursor would be worse than either:
+ * the screen would show one type's rows under another type's heading.
+ */
+export function browseFeedFor(feed: BrowseFeed, query: BrowseQuery): BrowseFeed {
+	return sameBrowseQuery(feed.query, query) ? feed : emptyBrowseFeed(query);
+}
+
+/**
+ * THE NEXT PAGE TO ASK FOR, OR `undefined` WHEN THERE IS NONE.
+ *
+ * ⚠️ THE STOP RULE IS `next_cursor`'s ABSENCE AND NEVER A SHORT PAGE.
+ * `ListWorks` walks the dated range and, at the one boundary where that range
+ * runs out, issues a second statement for the undated tail — so under
+ * `added_at` a page can legitimately come back shorter than the limit with rows
+ * still to come. A client that stopped on `items.length < limit` would truncate
+ * the grid at exactly the row whose upstream reported no creation date.
+ *
+ * ⚠️ AND THE PAGE SIZE IS THE ECHOED ONE. `fallback` is only ever used before
+ * the server has said anything; after that the request carries what the server
+ * itself applied, so a clamp cannot leave the client asking for a size it will
+ * not get.
+ */
+export function nextBrowsePage(feed: BrowseFeed, fallback: number): BrowsePageRequest | undefined {
+	const limit = feed.limit ?? fallback;
+	if (!feed.loaded) return { limit };
+	if (feed.cursor === undefined) return undefined;
+	return { limit, cursor: feed.cursor };
+}
+
+/** Whether "Load more" has anything to press for. Derived, never stored. */
+export function browseHasMore(feed: BrowseFeed): boolean {
+	return feed.cursor !== undefined;
+}
+
+/** The feed with one page appended, carrying the server's echoed page size
+ * forward. Immutable, so a Svelte `$state` assignment is what re-renders rather
+ * than a mutation nothing observes. */
+export function appendBrowsePage(feed: BrowseFeed, page: RecentPage): BrowseFeed {
+	const next: BrowseFeed = {
+		items: [...feed.items, ...page.items],
+		loaded: true,
+		limit: page.limit,
+		query: feed.query
+	};
+	if (page.nextCursor !== undefined) next.cursor = page.nextCursor;
+	return next;
+}
+
+/* ── 6. the empty state ───────────────────────────────────────────────────── */
+
+/**
+ * WHY THIS GRID IS EMPTY, AND THE ANSWER IS NOT ALWAYS ABOUT THIS TYPE.
+ *
+ * Two different facts wear the same empty table, and telling them apart is the
+ * whole job:
+ *
+ *   nothing is catalogued at all   the reason is upstream and belongs to
+ *                                  `$lib/libraryscreen`, which already words it
+ *                                  four ways from the services read. Saying "no
+ *                                  comics" to a user with no service connected
+ *                                  would answer a question about the library
+ *                                  with a fact about a filter.
+ *   the catalogue has none of THIS the filter is responsible, and the words say
+ *                                  which filter — the type alone, or the type
+ *                                  inside a library scope.
+ *
+ * `mode === 'library'` is the only case where a library-bearing service is
+ * connected and an empty answer is therefore genuinely about this type; the
+ * other three are `recentEmptyState`'s, verbatim, so the two screens cannot
+ * drift into two stories about one install.
+ */
+export function browseEmptyState(query: BrowseQuery, mode: HomeMode | undefined): RecentEmptyState {
+	if (mode !== 'library') return recentEmptyState(mode);
+	const type = mediaTypeLabel(query.mediaType).toLowerCase();
+	if (query.libraries.length > 0) {
+		return {
+			title: `No ${type} in this scope`,
+			text:
+				`UsArr has catalogued no ${type} in the libraries this view is scoped to. The scope is ` +
+				'part of the address, so clearing it searches every library instead. A library also ' +
+				'holds only what its own sources reported.'
+		};
+	}
+	return {
+		title: `No ${type} catalogued yet`,
+		text:
+			`A library-bearing service is connected and UsArr has written no ${type} rows from it. ` +
+			'Either nothing it reports is of this type, or its first full import has not finished: ' +
+			'that import starts on its own the first time UsArr connects to a service that has never ' +
+			'completed one, and on a large library it runs for minutes rather than seconds.'
+	};
+}

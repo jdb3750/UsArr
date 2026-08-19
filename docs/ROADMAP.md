@@ -11,15 +11,60 @@
 >
 > **No dates and no estimates appear here, ever**, at the owner's standing instruction. Where a line
 > is inference rather than something read off §16, an ADR or the tree, it is marked 🔍.
+>
+> **Citation policy, applied 2026-08-19 to §2's per-type-grid item and the two items after it —
+> AND TO NOTHING ELSE:** prefer function and symbol names over `file:<n>` line citations for any
+> file that moves, Go and Svelte especially. A wrong line number still resolves to a plausible
+> line, so it fails invisibly and reads as checked. Line citations elsewhere in this file were
+>
+> **Extended 2026-08-19 by the Kavita-sunset pass, to exactly TWO further items and to nothing
+> else:** §2's **image-pipeline** item, whose `ARCHITECTURE.md:2649-2651` citation was **~40 lines
+> off** and is a section reference now rather than a corrected number, and §2's **output-codec**
+> item, whose `00005_library_sync.sql:219-236` citation named a schema fact that migration `00008`
+> had already falsified. That pass rewrote §1, §2's image / codec / covers items, §3's sequencing
+> table and its BookOrbit entry, and §4. **It read nothing else for line drift, and no sweep
+> happened this time either.** Every other line citation in this file remains unvetted.
+>
+> **Absence rule, added 2026-08-19 after this file wrongly recorded a probe as *"never run"*:**
+> a missing artefact **in the repo** does not establish that something never happened — a result can
+> live in a thread, on the owner's box, or nowhere. A claim of the form *"X was never done"* needs a
+> source that **would have recorded X**, not merely a place where X is not.
 
-**Last re-derived against:** `origin/main` `047a060` (2026-08-19) — code identical to `9689e56`; what sits above it is this file's own history.
+**Last re-derived against:** `origin/main` `5aee209` (2026-08-19).
+⚠️ **The baseline moved from `3c88b2e` by the probe-correction pass, which re-derived exactly ONE
+fact — that `kavita-cover-probe.sh` did run — and fired NO grep and NO check on this tree.** The
+**nine** commits it moved over touch `docs/` and `web/src/` only: **no Go, no migration**, so §2's fired Go and schema checks are not stale by it, and
+nothing else here was re-fired. Every check quoted below was
+**fired**, not inherited. Precisely: the Go, schema and `ARCHITECTURE.md` reads were fired at
+`d5ab034`, the tip when the Kavita-sunset pass started. `fc2b7c4` and `2ce8ed9` landed mid-pass —
+both touch **`docs/reference/` only**, change no Go and no migration, and both were read directly for
+what §2's obligation 3 says about them.
 
 ---
 
 ## 1. The objective
 
-1. v0.1 proves the **replica thesis on real data**: the owner's own Kavita, imported, delta-synced,
-   reconciled, searched and rendered from local SQLite ([ADR-0041](./DECISIONS.md#adr-0041), §16).
+1. ⚠️ **SUPERSEDED 2026-08-19 BY AN OWNER DECISION — pending an ADR that is NOT YET WRITTEN.**
+   The objective read, and the old text is kept visible rather than deleted:
+   *"~~v0.1 proves the **replica thesis on real data**: the owner's own Kavita, imported,
+   delta-synced, reconciled, searched and rendered from local SQLite
+   ([ADR-0041](./DECISIONS.md#adr-0041), §16).~~"*
+
+   **Joe is sunsetting Kavita. OWNER-DECIDED, not delegated**, 2026-08-19, in his own words:
+   > *"i'm gonna sunset kavita. bookorbit is phenomenal. atm i have a sidecar approach of pulling
+   > data from mangabaka. but i think there's going to be official support in the near future."*
+
+   **What survives is the rule**, which no re-sequencing has ever moved: **one source, proven on
+   real data, before a second adapter**. **What is falsified is the claim that Kavita is that
+   source** — the owner will not be running it, so a replica proven against it would be proven on
+   data nobody keeps, which is the one thing the criterion was written to prevent.
+   [ADR-0041](./DECISIONS.md#adr-0041) states the position this supersedes; **it is not amended
+   here, because this file cannot amend an ADR** — see §3.
+   ⚠️ **No ADR number is cited, on purpose: none is allocated.** `0051` is the highest on `main` at
+   the baseline above. Do not invent the next one; writing it belongs to the lane that owns
+   `DECISIONS.md`.
+   **Until that ADR lands, v0.1's proven source is UNDECIDED — it is not "BookOrbit" yet.** The
+   owner named a direction, not an adapter assignment (§3).
 2. Alongside it, **Prowlarr Search-and-Grab** is v0.1's one write path — the request surface for all
    six media types (§8.5, §16).
 3. Five screens ship: Home, Services, Libraries, Search, Requests (`CLAUDE.md`, §17).
@@ -29,6 +74,13 @@
 ## 2. v0.1 remaining work
 
 Ordered roughly by what the rest depends on, not by size.
+
+⚠️ **EVERY ITEM BELOW THAT NAMES KAVITA INHERITS §1's SUPERSEDED FRAMING** — channel 3b, channel 4,
+the per-series volume/chapter walk, the *"not identified"* badge, and the zero-external-providers
+evidence clause. **The work each names is real and source-shaped; which source it is written against
+is the open question**, and not one of them is re-pointed here, because re-pointing them is the
+unwritten ADR's job, not this file's. Items marked 🛑 **STOPPED** are the different case: those are
+stopped by the decision itself, not merely re-pointed by it.
 
 - [ ] **Channel 3b — the ordered page-walk delta, for Kavita.** The watermark walk with an overlap
       window and a client-side stop, so an import is not the only way the replica moves.
@@ -88,33 +140,190 @@ Ordered roughly by what the rest depends on, not by size.
       `internal/db/migrations`.
 
 - [ ] **The image pipeline, including the §4.4.1 cold-start plan.** `image_asset` is in the schema;
-      nothing in `internal/` or `cmd/` writes or serves it. ⚠️ **§16 puts this and the library grid
-      in ONE line item** (`ARCHITECTURE.md:2649-2651`) — this item and the grid item below are two
-      halves of one §16 line, not two independent lines.
-      *Authority:* §4.4, §16 v0.1 entry.
-      *Done when:* `grep -rn 'INSERT INTO image_asset' --include=*.go internal/` returns a hit
-      **outside `_test.go`**.
-      ⚠️ **The old check was falsely green** and read
-      `grep -rln image_asset --include=*.go internal/ cmd/`. It matches five files: three are
-      comment-only mentions (`internal/ssrf/policy.go:12`, `ssrf.go:68`, `redact.go:14`) and the
-      other two are tests. The new check returns exactly one hit today —
-      `internal/db/migrate_test.go:1483` — which the `_test.go` clause excludes.
+      nothing in `internal/` or `cmd/` writes or serves it.
+      ⚠️ **§16 puts this and the library grid in ONE line item** — the sentence in **§16's v0.1
+      entry** reading *"Library grid with "Load more" + `content-visibility` on grid rows carrying
+      explicit ARIA roles (§4.5), keyset pagination, image pipeline **including the §4.4.1
+      cold-start plan**"*. This item and the grid item below are two halves of that one sentence,
+      not two independent lines.
+      ⚠️ **That citation used to read `ARCHITECTURE.md:2649-2651` and was ~40 lines off** — the
+      sentence sits at 2689-2691 on the baseline above. It is **a section reference now, not a
+      corrected line number**, per the header's citation policy: a number in a file that moves
+      fails invisibly and reads as checked.
+      🛑 **THE KAVITA-SPECIFIC HALF IS STOPPED BY DECISION (§1) — not abandoned, and not a gap.**
+      That is the cover **fetch path** against `GET /api/Image/series-cover`, and the four facts
+      `kavita-cover-probe.sh` was written to answer (`REVIEW-LOG.md` LS-260).
+      ⚠️ **CORRECTED 2026-08-19. This item used to read *"~~There is no probe result to carry: the
+      probe was never run.~~"* — FALSE.** It was written from a repo search that found no result
+      artefact, which is precisely the trap the header's **absence rule** now names: the repo is not
+      a source that would have recorded the run. **The probe WAS run, 2026-08-19, by the owner
+      against his own live Kavita**; he pasted the full raw output into the library-sync thread
+      (04:23:04Z) and **deliberately committed nothing**, which is why the tree holds no artefact.
+      **What it measured:** 5 of 5 covers `image/png`, ~165 KiB median; `ETag` on **0 of 5**,
+      `Last-Modified` on **5 of 5**, and an `If-Modified-Since` re-request earned a **304** — so
+      **the timestamp is the revalidation key, not the entity tag**; `primaryColor` present as a hex
+      colour on **5 of 5**, **all distinct**.
+      **Against LS-260's four questions that is *answered in part*, NOT *satisfied*:** it answers
+      **Q3 in full** — content type, size, and the validator **fired** rather than reported, which is
+      the standard LS-260 set for itself — and it meets **Q2's stated-in-advance criterion**,
+      *present **and** varied*, so `USABLE` rather than `POPULATED BUT USELESS`. 🔍 **Q1 (the
+      header-vs-query auth gate, which LS-260 calls *the* gate) and Q4 (what a cover-less series
+      returns) are NOT in the results summarised here, and this file cannot tell whether the raw
+      output answered them** — the thread is the source, not this line. **Do not record LS-260 as
+      discharged on the strength of this paragraph.**
+      The script and its stated-in-advance criterion sit at the repo root; **nothing further is owed
+      against them — because §1 stops the source, not because the probe never ran.** What is *not*
+      stopped is everything source-independent — the encoder, the seven-width allowlist, the cache and
+      the route.
+      *Authority:* §4.4, §16's v0.1 entry.
 
-- [ ] **The image pipeline's OUTPUT CODEC is undecided, and no encoder can be written until it is.**
-      §4.4 names **AVIF as its only output codec** (`ARCHITECTURE.md:326-327`, again :347 and :355)
-      and **never names a base or fallback format**; `image_asset` has **no format column**
-      (`internal/db/migrations/00005_library_sync.sql:219-236`). Serving upstream bytes unmodified
-      is **not permitted as written**: §4.4:326 mandates ingest-time downscale to the seven-width
-      allowlist, so an encoder is mandatory and only the codec is negotiable.
-      ⚠️ *"AVIF is not buildable under `CGO_ENABLED=0`"* is **FALSIFIED, 2026-08-19.**
-      `gen2brain/avif` v0.6.0 is **MIT**, contains **no `import "C"` anywhere**, and reaches
-      aom/dav1d through `wazero` + `purego` — verified against the extracted module in `GOMODCACHE`,
-      not from memory.
-      🔍 **A RECOMMENDATION, not a decision, and no ADR backs it:** name **stdlib JPEG** as the base
-      format now and defer AVIF, keeping the seam. Proposing that as an ADR belongs to the sync
-      thread, not to this file.
-      *Authority:* §4.4, §16 v0.1 entry.
-      *Done when:* an ADR names the base format, and the schema carries whatever column it needs.
+      *Done when — **ALL THREE** legs. The first two run from a clean checkout:*
+      1. **A registered image route exists.**
+         `grep -nE 'mux\.Handle(Func)?\("[A-Z]+ /(api/v1/)?(img|image|cover)' internal/httpapi/server.go`
+         returns a hit. **Fired on the baseline tree: exit 1, no output — RED today.** The mux
+         registers no route under `img`, `image`, `cover`, `poster` or `thumb`.
+      2. **A non-test writer stores a REAL format, not NULL.**
+         `grep -rn 'INSERT INTO image_asset' --include=*.go internal/ cmd/ | grep -v _test.go`
+         returns a hit, **and that same file references** `store.ValidImageFormat` or
+         `store.ImageFormatJPEG`. **Fired: exit 1 on the first half — RED today**; the only non-test
+         references to the format vocabulary anywhere in the tree are its own declarations in
+         `internal/store/images.go`.
+      3. **Bytes actually come back.** Against a running instance,
+         `curl -sS -o /dev/null -w '%{http_code} %{content_type} %{size_download}\n' '<base>/img/<key>?w=342'`
+         answers `200`, an `image/*` content type and a **non-zero** size. (This container has no
+         `sqlite3` CLI, so this leg is deliberately a request rather than a query.)
+
+      **The clause that stops this being weakened back:** the three legs exist because **a writer
+      that fetches nothing, decodes nothing and serves nothing satisfies a bare SQL grep exactly** —
+      a colour-only or state-only `INSERT` is indistinguishable from a working pipeline to leg 2
+      alone, and legs 1 and 3 are what refuse it.
+      ⚠️ **THIS IS THE SECOND FALSELY-GREENABLE CHECK ON THIS ONE ITEM, AND RECORDING THAT IS THE
+      POINT.** The **first** read `grep -rln image_asset --include=*.go internal/ cmd/` and matched
+      five files — three comment-only mentions in `internal/ssrf` (`policy.go`, `ssrf.go`,
+      `redact.go`) and two tests. Its replacement,
+      `grep -rn 'INSERT INTO image_asset' … outside _test.go`, was **also** falsely greenable, for
+      the reason in the clause above. Two misses on one line is a pattern, not luck: **a done-check
+      for a pipeline has to name the pipeline's OUTPUT, never one of its INSERTs.**
+
+      **WHAT THE FIRST WRITER OWES: THREE OBLIGATIONS AND ONE DESIGN DECISION.** They are kept
+      together here rather than scattered, because this file is where someone will look to find out
+      what is actually owed. Every one was verified against the tree at the baseline above.
+
+      **Obligation 1 — the format vocabulary.**
+      - **Any future `image_asset` writer must reference `store.ValidImageFormat` (or
+        `store.ImageFormatJPEG`), or `make check` goes RED.**
+        `TestImageWritesValidateTheFormatVocabulary` (`internal/store/imagelint_test.go`) is an AST
+        walk over non-test code that matches `INSERT` / `INSERT OR IGNORE` / `REPLACE` / `UPDATE`
+        against `image_asset`, including quoted, backticked and `main.`-qualified spellings, and it
+        **fires its own matcher against known strings before trusting it**. It is **vacuous today**
+        because no writer exists, and **it flips the moment one does — including a writer that
+        stores only NULL.** [ADR-0050](./DECISIONS.md#adr-0050) and
+        `internal/db/migrations/00008_image_asset_format.sql` both name it as the thing that keeps
+        ADR-0039's never-written validator from repeating.
+
+      **Obligation 2 — the wire reaches more screens than it looks like it does.**
+      - **`store.RecentWork` reaches TWO registered endpoints, not one** — `GET
+        /api/v1/library/recent` (`handleRecentWorks`) and `GET /api/v1/library`
+        (`handleBrowseWorks`), which share `recentWorkResponse` and `toRecentWorkResponse` in
+        `internal/httpapi/library.go`. **So a colour field added to `RecentWork` lands on the
+        library grid as well as on Home's recently-added table — and the grid is the screen tinted
+        tiles are for.** That is a property of the shape, not an accident.
+        ⚠️ **It is NOT three, and the tree is explicit about why.** `/api/v1/search` returns
+        `store.SearchHit` through its own allowlist in `internal/httpapi/librarysearch.go`;
+        `internal/store/searchlibrary.go`'s doc comment says it in terms — *"THE FIELDS ARE
+        RecentWork'S FIELDS, ON PURPOSE … Nothing is shared in the type system yet"*. Giving search
+        the same field is **a third, separate edit**, not a consequence of the first two.
+        ⚠️ **This was handed to this pass as *"THREE endpoints"*. The tree says two**, and the tree
+        wins: two registered handlers share the row type today, and search is the separate edit
+        above. The point being made survives the correction intact — **the colour field still lands
+        on the library grid, which is the screen tinted tiles are for**; only the count was wrong.
+
+      **Obligation 3 — REJECT A `source_url` THAT STILL CARRIES A CREDENTIAL. ⚠️ THIS WAS
+      DOCUMENTED AS SHIPPED WHEN IT IS NOT, AND THAT IS WHY IT IS ON THIS LIST.**
+      - **It does not exist.** There is no image pipeline, and **`source_url` appears in non-test Go
+        exactly once, in a comment** — `internal/ssrf/redact.go:14`. Fired on the baseline tree:
+        `grep -rn 'source_url\|SourceURL' --include=*.go internal/ cmd/ | grep -v _test.go` returns
+        that one line and nothing else.
+      - **`docs/reference/security.md` §5 and `docs/reference/schema.md` §12 BOTH ASSERTED IT IN THE
+        PRESENT TENSE** — *"an ingest assertion rejects writing a `source_url` …"* — so **a reader
+        who checked `security.md` yesterday would have believed UsArr already had this guard.** It
+        has none. That is the whole reason the obligation belongs on the roadmap and not only in a
+        reference file: this is where someone looks to find out what is owed.
+      - **Cite the corrections, never the original claim — and they are TWO commits, not one.**
+        `fc2b7c4` (*"the credential deny-list has one home, and it is not these files"*) removed a
+        **contradictory fourth deny-list** from both sites — `api_key`, `apikey`, `token`, `key=` —
+        and pointed them at **`internal/ssrf/redact.go`'s `credentialParams`**, whose own header
+        calls it *"the ONE deny-list"*. ⚠️ **`fc2b7c4` fixed the NAMES and left the TENSE**; this
+        pass read it and said so. **`2ce8ed9`** (*"the credential-free `source_url` rule is owed,
+        not implemented"*) is what fixed the tense, landing while this pass was running — §5 now
+        reads *"no row may be written whose `source_url` still carries a credential parameter — the
+        ingest path that writes these rows **owes** that assertion"*, and §12 the same. **Both
+        reference files are correct as of the baseline above; the obligation is still unmet in
+        code.**
+      - **The obligation on the writer:** strip credential parameters before the row is written,
+        with the names taken from `credentialParams` and **never restated locally** — and note
+        `cache_key = sha256(source_url)[:16]`, so getting this wrong does not merely leak, it makes
+        a provider-key rotation silently invalidate the whole image cache.
+
+      **The design decision — and it is the tint.**
+      ⚠️ **The *"zero-fetch tinted placeholder as a real first slice"* framing DIED WITH THE KAVITA
+      SUNSET**, and the reason is written here so nobody reconstructs it from the old text. It was
+      zero-fetch **only** because Kavita hands out a precomputed per-series colour —
+      `SeriesDto.primaryColor` / `secondaryColor`, declared on four DTOs in
+      `internal/kavita/resources.go` and forwarded by `internal/kavita/redact.go`; **nothing in
+      `internal/libsync` ever read either, so the slice was unbuilt, not half-built.**
+      **VERIFIED at BookOrbit HEAD `73b7877`: BookOrbit exposes NO precomputed cover colour.** No
+      colour column on books, book metadata, series or any cover table — the only colour anywhere in
+      its Drizzle schema is `annotations.color`, a highlight colour. `sharp` is its only image
+      library and its cover path merely resizes and re-encodes; `sharp`'s `stats().dominant` is
+      never called, and there is no blurhash or thumbhash anywhere. Kavita is the unusual one here.
+      🔍 **Inference on top of those verified facts — labelled as inference:** with no colour to
+      read, a tint needs a cover **fetched and decoded**, which does not make the work *bigger* so
+      much as **not independent**. This pipeline already fetches, decodes and downscales every
+      cover, so **averaging a colour during a decode that is happening anyway is a small rider on
+      this item — one extra field written during that decode**, not a separate slice.
+      **Sync's measurement stands and is carried, not re-derived:** ~**90%** of the tinted-tile
+      design is adapter-independent — the writer, the credential-free URL discipline, idempotency,
+      the wire field and the guards — and **survives a backend switch untouched.** It simply lands
+      *inside* the pipeline rather than ahead of it.
+      ⚠️ **An option seen and NOT taken, recorded so it is not re-derived as a discovery:** compute
+      the tint **in the browser** from an already-decoded `<img>`, which is exactly what BookOrbit's
+      own UI does (`client/src/features/book/lib/cover-tint.ts`, canvas hue-binning, persisting
+      nothing). It works, and it is **declined by default under principle 1**: it puts work on the
+      render path. Taking it would need an explicit argument, not a preference.
+      ⚠️ Not the same question, and already settled the other way: `REVIEW-LOG.md` **V-15 deleted**
+      the averaged-colour machinery from *poster titles* — title and year sit below the tile on the
+      chrome's own ground. It **narrowed rather than withdrew** the contrast rule for a **row-level
+      tint**, *"where the ground is known"*, which is this.
+
+- [x] **FALSIFIED 2026-08-19 — ~~The image pipeline's OUTPUT CODEC is undecided, and no encoder can
+      be written until it is~~. It is decided, and the schema already carries the column this item
+      said was missing.** The old claim is kept visible; the checks that falsified it are below.
+      [ADR-0050](./DECISIONS.md#adr-0050) is **Accepted, 2026-08-19**: **stdlib JPEG is the base
+      output format**, **AVIF is deferred with its seam kept** (reopening condition named), and
+      *"one codec per row"* is an explicit invariant — `orig` included, so **there is no passthrough
+      width**.
+      ⚠️ **The claim *"`image_asset` has **no format column**"* IS FALSE ON THIS TREE.**
+      `internal/db/migrations/00008_image_asset_format.sql` adds `image_asset.format` — nullable
+      `TEXT`, no default, **no `CHECK`** on ADR-0039's reasoning — where **NULL deliberately means
+      *"no encoded bytes exist for this row yet"***. The citation
+      `00005_library_sync.sql:219-236` described the schema **before 0008** and is **dropped rather
+      than corrected**, per the header's citation policy.
+      ⚠️ The item's *own* earlier falsification stands and is not re-litigated: *"AVIF is not
+      buildable under `CGO_ENABLED=0`"* is false — `gen2brain/avif` v0.6.0 is MIT and cgo-free.
+      ⚠️ The 🔍 **recommendation this item carried** — *"name stdlib JPEG as the base format now and
+      defer AVIF, keeping the seam"* — **is precisely what ADR-0050 decided.** It is no longer a
+      recommendation and no longer belongs to any thread.
+      🔍 **One live consequence of §1's sunset — flagged as inference, and NOT acted on here.**
+      ADR-0050 names its likeliest reopening trigger as **input decode**, on the stated grounds that
+      *"Kavita is v0.1's catalogue source"* and its *Save Media As* setting can emit AVIF that this
+      binary cannot decode. **If Kavita stops being the source, that reasoning loses its subject.**
+      Whether the trigger survives against a different backend is the ADR lane's question, not this
+      file's, and nothing is re-planned around it here.
+      *Authority:* [ADR-0050](./DECISIONS.md#adr-0050),
+      `internal/db/migrations/00008_image_asset_format.sql`, §4.4.
+      *Was done when:* an ADR named the base format **and** the schema carried whatever column it
+      needed. Both happened, on the same day this item said neither had.
 
 - [x] **FALSIFIED 2026-08-19 — ~~Library grid: "Load more", keyset pagination,
       `content-visibility` on grid rows with explicit ARIA roles~~.** All three primitives ship.
@@ -132,34 +341,87 @@ Ordered roughly by what the rest depends on, not by size.
       set* in Go, so there is no keyset position a cursor could name — `reference/http-api.md` §6.5
       publishes exactly that, and `web/src/lib/search.test.ts:74-82` asserts no second page exists.
       **Lifting that cap would be a store redesign contradicting a published contract, and needs an
-      ADR first. It is not a missing feature.** What the falsification did surface is the next two
-      items.
+      ADR first. It is not a missing feature.** What the falsification did surface is the grid item
+      that follows.
 
-- [ ] **The PER-TYPE library grid, `/library/{type}` — and it is BACKEND-BLOCKED.** Not one
-      all-types screen: navigation is §17.2's **six-value media-type enum**, one sidebar entry per
-      type (`ARCHITECTURE.md:3037`, enum table :3046-3052), and item routes are already
-      `/library/{type}/{id}` (`web/src/lib/library.ts:269`). §16 puts it in v0.1 **in the same
-      sentence as the image pipeline** (:2649-2651), so it is that line's other half. The §4.5
-      primitives ship (see the falsified item above); **the screen does not** — `web/src/routes/`
-      holds `libraries/`, which is §17.8's row view, and no grid route.
-      **Nothing on the wire can back it.** §13 budgets `GET /api/v1/library?kind=…` and `?lib=…`
-      (:2101-2102), but **neither is a registered route**: `internal/httpapi/server.go:274`
-      registers `GET /api/v1/library/recent` and that is the only library read there. Its handler
-      parses **only `cursor` and `limit`** (`internal/httpapi/library.go:158,220`), over SQL
-      hard-ordered `ORDER BY w.added_at DESC, w.id DESC` (`internal/store/recent.go:264`) — no kind
-      facet, no library scope, no sort.
-      ⚠️ **The interim `/library` table is a SLICE of this line item and NEVER a tick.** A frontend
-      thread is building a single `/library` table over `/library/recent`, the one catalogue read
-      that exists; it is **not on `origin/main` at the baseline above**, so nothing here reports it
-      as shipped, and when it lands it discharges no part of this item. **Its missing type filter
-      and sort control are a DECISION, with a reason.** Over an endpoint with no kind facet and one
-      fixed order, either control could only act on the rows already loaded, and a control that
-      silently operates on the loaded window is precisely §17's dishonesty — the rule that already
-      keeps §17.8's screen free of controls no endpoint backs. **A later review files both absences
-      as intentional, not as a gap.**
-      *Authority:* §16 v0.1 entry, §17.2, §17, §13's budget table, §4.5.
-      *Done when:* `GET /api/v1/library` is a registered route carrying a kind facet, **and** a
-      `/library/{type}` route renders over it.
+- [ ] **The PER-TYPE library grid, `/library/{type}` — the SCREEN. It is no longer backend-blocked.**
+      Not one all-types screen: navigation is §17.2's **six-value media-type enum**, one sidebar
+      entry per type *that has content*, and item routes are already `/library/{type}/{id}` — named
+      in the `RecentItem.id` doc comment in `web/src/lib/library.ts`. §16 puts the grid in v0.1 **in
+      the same sentence as the image pipeline** (§16's v0.1 entry), so it is that line's other half.
+      The §4.5 primitives ship (see the falsified item above).
+      ✅ **THE BROWSE READ SHIPPED** — `f80097f`, merged as `1c13afd`. `GET /api/v1/library` is a
+      registered route, served by **`handleBrowseWorks`** (`internal/httpapi/library.go`) over
+      **`store.ListWorks`** / `browseWorksSQL` (`internal/store/browse.go`). It takes `media_type`,
+      `lib`, `sort`, `limit` and `cursor` (`reference/http-api.md` §7.1); an unrecognised value of
+      any of them is a `400`, never a silently unfiltered page, and `?lib=` slugs resolve through
+      **`resolveBrowseLibraries`**. Three orders are live in **`browseSorts`** — `added_at`,
+      `sort_title`, `popularity` — with `year` refused and never substituted;
+      [ADR-0051](./DECISIONS.md#adr-0051)'s 2026-08-19 amendment owns that gap.
+      ⚠️ **THE FILTER PARAMETER IS `media_type`, NOT `kind`, and the two were separated on
+      purpose.** `kind` is a real column with twelve members that ships on this wire **in every row
+      under its own name**, beside `media_type`; the nav enum has six. Two of the six (**Ebooks**
+      and **Audiobooks**) are the *same* kind split by `edition.format`. §13's budget rows and
+      `reference/http-api.md` §7.2 both spell the parameter `media_type`, and ARCHITECTURE §13
+      carries a dated ⚠️ recording that its own `?kind=movie` row was the same mistake.
+      ⚠️ **THREE CLAIMS HERE WERE FALSIFIED BY THE BROWSE MERGE and are corrected above.** This item
+      read *"BACKEND-BLOCKED"*, *"neither is a registered route"*, and that
+      `internal/httpapi/server.go` *"registers `GET /api/v1/library/recent` and that is the only
+      library read there"*. The mux registers **both** reads today. It also read that the interim
+      `/library` table was *"not on `origin/main`"* — it is: `web/src/routes/library/+page.svelte`.
+      **What is still missing is the FRONTEND.** `web/src/routes/` holds `library/` — one unified
+      newest-first table that still reads **only** `/api/v1/library/recent` — plus `libraries/`,
+      which is §17.8's row view. **There is no `/library/{type}` route and no grid.**
+      ⚠️ **The interim `/library` table is a SLICE of this line item and NEVER a tick.** Its missing
+      type filter and sort control were justified here by *"an endpoint with no kind facet and one
+      fixed order"* — **that premise has expired**: the facet and three orders now exist. The
+      controls are simply not wired yet. 🔍 Inference: the §17 honesty rule that justified their
+      absence no longer applies once a control can act on the whole table, so the next move is to
+      wire them, not to re-argue them.
+      *Authority:* §16's v0.1 entry, §17.2, §17, §13's budget table, §4.5,
+      `reference/http-api.md` §7.
+      *Done when:* a `/library/{type}` route exists under `web/src/routes/` and renders over
+      `GET /api/v1/library`.
+
+- [ ] **A facet-counts read — until there is one, a data-driven sidebar has NO honest source.**
+      `reference/http-api.md` §7.1 closes the wire question: *"There are **no facet counts** beside
+      the chips; each is its own aggregate and its own read."* `design/DESIGN-DIRECTION.md` §8.1
+      decided the opposite shape — *"one sidebar entry per type **that has content**"* — and §17.2's
+      nav table repeats it. The sidebar the design asks for cannot be built over the wire as it is.
+      ⚠️ **The frontend's interim answer is to ship NO media-type entries — not six placeholders —
+      and that is DELIBERATE, not a gap.** `web/src/routes/+layout.svelte`'s file header records the
+      reason: §17.2's hard rule is that a type the user does not have is *not shown AT ALL*, so six
+      placeholder rows would break that rule in the one place it is most visible. `NAV_GROUPS` in
+      that file therefore ships the fixed entry set only, and labels `/library` **"Recently added"**
+      rather than "Library" so the row does not promise the screen §16 specifies.
+      🔍 Inference: §13 already budgets **"1 keyset page + 6 sidebar `COUNT(*)`"** at < 15 ms p50, so
+      the cost is priced — but nothing decides whether the counts ride the browse response or their
+      own endpoint, and that closes off an alternative, so it needs an ADR.
+      *Authority:* `reference/http-api.md` §7.1, `design/DESIGN-DIRECTION.md` §8.1, §17.2, §13.
+      *Done when:* per-media-type counts reach the client from a documented read **and** `NAV_GROUPS`
+      is driven from them — **or** an ADR records the alternative.
+
+- [ ] **The COVERS / POSTER half of §16's grid line — there is NO image route at all.**
+      The browse merge covered only the row-grid half of §16's v0.1 sentence. **Searched
+      `internal/httpapi/server.go` for `img`, `image`, `cover`, `poster`, `thumb` and `MediaCover`:
+      the only hits are two comment lines in the middleware chain, and nothing registers a route
+      under any of them.** No handler in `internal/httpapi/` matches `handle*(Image|Cover|Poster|Img)`
+      either. §13 budgets `GET /img/{k}?w=342` at < 3 ms p50 on a cache hit; that route does not
+      exist.
+      The schema is ahead of the wire — `image_asset`, `work.poster_asset_id` and
+      `work.backdrop_asset_id` are in `internal/db/migrations/00005_library_sync.sql` — which is why
+      `reference/http-api.md` §7.1 says shipping `poster_asset_id` today *"would be an id the client
+      cannot turn into anything"*, and why the browse response does not ship it.
+      ⚠️ **This is the SERVING half only.** Producing the bytes is the image-pipeline item above.
+      ⚠️ **The third check on this §16 line is now a FALSIFIED box, not an open one:** the *"undecided
+      output codec"* item above is closed by [ADR-0050](./DECISIONS.md#adr-0050), so the encoder is
+      no longer blocked on a decision. One §16 line, three separate checks, one of them discharged.
+      🛑 **Nothing in THIS item is stopped by §1's sunset.** The route, its key, the `Content-Type`
+      derived from `image_asset.format` and the id on the browse response are all
+      source-independent. What §1 stopped is the Kavita **fetch** half, which is the item above.
+      *Authority:* §16's v0.1 entry, §4.4, §13's budget table, `reference/http-api.md` §7.1.
+      *Done when:* an image route is registered in `internal/httpapi/server.go`'s mux **and** the
+      browse response carries an id that resolves through it.
 
 - [ ] **A relevance score on the wire.** §17.4 rule 2 orders grouped results *"by the group's
       best-scoring hit, descending"*, and §6.2 publishes no score — *"**`items` is ordered by
@@ -228,7 +490,8 @@ Ordered roughly by what the rest depends on, not by size.
 | Item | Blocked on / sequenced behind |
 |---|---|
 | ~~Wiring Kavita's `PluginVersion`, or any second Kavita endpoint taking a credential in a query or path~~ | **UNBLOCKED.** All four LS-170 steps landed (`REVIEW-LOG.md` LS-170 § *Applied*), so the ordering constraint that gated this is discharged. `PluginVersion` remains unwired: nothing calls it, and whether to wire it is a separate decision that LS-170 no longer gates. |
-| A second catalogue adapter (Navidrome, then Audiobookshelf, then Komga) | v0.1's Kavita adapter landing and running against a real library. The rule is unchanged across every re-sequencing: **one source, proven on real data, before a second adapter** (§16.0, §16.1, [ADR-0036](./DECISIONS.md#adr-0036)). |
+| A second catalogue adapter (Navidrome, then Audiobookshelf, then Komga) | ⚠️ **THE SEQUENCE IS NOW CONTRADICTED BY AN OWNER DECISION (§1) AND CANNOT BE FIXED FROM THIS FILE.** It read: *"~~v0.1's Kavita adapter landing and running against a real library~~"*. **ARCHITECTURE §16.1 sequences the post-v0.1 sources and §16.1 is NOT this file's to edit** — it still says *"Kavita is no longer in this table because it moved INTO v0.1"*, still calls Kavita *"v0.1's one catalogue source and the sync core's first adapter"*, and still rests the table's order on that. **§16.1 AND AN ADR MUST BOTH BE UPDATED BY THE LANES THAT OWN THEM.** This row is the pointer, deliberately, and not a fresher claim: no replacement gate is written here, because writing one would be inventing the decision the ADR owes. **The rule itself is untouched and survives every re-sequencing: one source, proven on real data, before a second adapter** (§16.0, §16.1, [ADR-0036](./DECISIONS.md#adr-0036)). |
+| **The Kavita adapter code itself — RE-SEQUENCED, NOT CUT** | **Nothing.** It **STAYS IN THE TREE**: `internal/kavita`, `internal/libsync`'s Kavita path, `00006_kavita_subtypes.sql` and the recorded fixtures all remain, because **other people run Kavita** and principle 3 (*pluggable by default*) is the reason the adapter exists at all. **What the sunset stops is INVESTMENT, not the code** — no deletion, no deprecation notice, no migration. Read any Kavita item in §2 as *"unfunded, still standing"*, never as *"dead"*. |
 | The minimal write path — `monitor`, `unmonitor`, `delete`, `add`, the queue worker and its settlement loop | **v0.2**, with the first \*Arr adapter ([ADR-0042](./DECISIONS.md#adr-0042), [ADR-0045](./DECISIONS.md#adr-0045)). `write_queue` stays in the schema with **no writer for the whole of v0.1** — that is the seam, and it costs no migration ([ADR-0039](./DECISIONS.md#adr-0039)). |
 | [ADR-0039](./DECISIONS.md#adr-0039)'s outstanding Go `state`-vocabulary declaration and validation | The first `write_queue` writer, which is v0.2's. |
 | The minimal match-correction UI — the remedy for the badge in §2 | **v0.2** ([ADR-0043](./DECISIONS.md#adr-0043), [ADR-0045](./DECISIONS.md#adr-0045)). v0.1 ships the defect's badge without its remedy for a whole milestone, and §16 states that cost rather than burying it. |
@@ -264,29 +527,107 @@ post-v0.1 catalogue sequence, *"numbered by order, not by version"*, with *"Navi
 v0.4"* as its only version pin.
 
 Two caveats this does not paper over: **Navidrome is not a member of v0.2** — §16 pins no catalogue
-source to it and has #1 landing *"before or alongside"* — and Navidrome is still **sequenced behind
-v0.1's Kavita adapter running on a real library**, per the table above.
+source to it and has #1 landing *"before or alongside"* — and Navidrome was **sequenced behind v0.1's
+Kavita adapter running on a real library**, per the table above.
+⚠️ **THAT SECOND CAVEAT IS THE ONE §1 BROKE**, and the recommendation is left standing rather than
+rewritten, because rewriting it here would be inventing the ADR's answer. Its *reasoning* is if
+anything strengthened — Navidrome runs on the owner's own stack and can therefore be **proven on real
+data**, which is the rule that outlived the source. Its *ordering premise* is void: there is no
+settled v0.1 Kavita adapter for it to sit behind any more. **Which source now precedes it is §16.1's
+and the ADR's to say.**
 
 **Wording this into §16 or an ADR belongs to the implementation thread, not to this file.**
 
-### Open decision — BookOrbit as a books backend
+### BookOrbit — the direction is OWNER-DECIDED; the ADAPTER is gated on an unwritten ADR
 
-**Tracking, not a decision. No ADR backs it, and §16 assigns BookOrbit nothing.**
+⚠️ **THIS SECTION USED TO BE HEADED *"Open decision — BookOrbit as a books backend"* AND IS NO LONGER
+OPEN.** §1 carries the owner's words. ⚠️ **This paragraph used to add *"~~Two of that entry's
+three Against findings are also falsified below~~"*, and the 2026-08-19 watermark downgrade made that
+count wrong.** As it stands below: the **no-inbound-API-key** finding is **falsified**, the
+**no-manga-or-comic-external-ids** finding is **narrowed**, and the **`updatedAt` watermark** finding
+is **substantially UPHELD** — it is the bullet that overwrote it that was wrong. The old text is kept
+visible so the reversal is legible:
 
-Joe is standing up a BookOrbit instance and is leaning toward migrating his books backend off Kavita
-(2026-08-18, verbatim: *"in my heart i kind of want to migrate to book orbit… it doesn't have a paid
-tier"*). What a 2026-08-17 evaluation at BookOrbit HEAD `4a420a04` found, on both sides:
+> **~~Tracking, not a decision.~~** ~~Joe is standing up a BookOrbit instance and is **leaning
+> toward** migrating his books backend off Kavita (2026-08-18: *"in my heart i kind of want to
+> migrate to book orbit… it doesn't have a paid tier"*).~~ ⚠️ ~~**Against:** **no inbound API key** —
+> headless auth needs the account password, which is worse than UsArr's Kavita credential model; an
+> `updatedAt` watermark that **misses tag, genre and author edits**; and **no manga or comic external
+> ids**.~~ ⚠️ ~~**The standing recommendation from that evaluation is: do NOT switch UsArr's first
+> adapter off Kavita.**~~
 
-- **For:** a real versioned `/api/v1`, nothing paywalled, and 14 free per-book external ids.
-- **Against:** **no inbound API key** — headless auth needs the account password, which is worse than
-  UsArr's Kavita credential model; an `updatedAt` watermark that **misses tag, genre and author
-  edits**; and **no manga or comic external ids**.
+⚠️ **THE STANDING RECOMMENDATION IN THAT LAST STRUCK LINE IS SUPERSEDED — say so explicitly, because
+striking it through was never the same as reconciling it.** *"Do not switch UsArr's first adapter off
+Kavita"* is **reversed by §1's OWNER DECISION**, which is not this file's to re-argue: the owner is
+sunsetting Kavita, so the source that recommendation was protecting is going away. **It is kept
+visible as the record of what was believed and why**, not as advice still in force. **An ADR is
+pending** and no number is cited, because none is allocated on `main`; **until it lands, v0.1's
+proven source is UNDECIDED (§1)** — the recommendation being dead does not by itself name a
+successor.
 
-**The standing recommendation from that evaluation is: do NOT switch UsArr's first adapter off
-Kavita.** If Joe confirms after standing his instance up, a BookOrbit adapter becomes a *candidate*
-work item — the importer, stream and UI plumbing is source-agnostic and **the Kavita adapter stays
-either way** — and §16.1's Navidrome-next sequencing may be revisited. **Nothing is re-planned around
-this until he confirms.**
+That evaluation ran at HEAD **`4a420a04`** (2026-08-17). **§16 still assigns BookOrbit nothing, and
+no ADR backs any of this.**
+
+- [ ] **The BookOrbit catalogue adapter — GATED ON THE UNWRITTEN ADR (§1), and on nothing else.**
+      **Do not start it before that ADR exists.** No number is cited because none is allocated.
+      ❓ **THE GATING UNKNOWN — READ THIS BEFORE THE WATERMARK QUESTION, BECAUSE IT CAN VOID THAT
+      QUESTION ENTIRELY.** **UsArr's catalogue unit is the SERIES. The ordered read verified on
+      BookOrbit is over BOOKS.** ⚠️ **UNVERIFIED: nobody has checked whether a SERIES-level ordered
+      read exists at all.** If it does not, **incremental sync (channel 3b) is unavailable for a
+      reason that has nothing to do with the watermark**, and no amount of `updatedAt` completeness
+      rescues it. **What would settle it:** the same kind of source read that produced the verified
+      facts below, at a named HEAD, over BookOrbit's **series** routes — looking for a list endpoint
+      that takes an order/sort key **and** pages over series. That read was done for books and **was
+      not done for series**. **The ADR must answer this before it answers the watermark.**
+
+      **Verified facts, read off BookOrbit's own source at HEAD `73b7877`, release `v2.6.0`** — carry
+      these into the ADR rather than re-deriving them:
+      - ✅ **§14 IS SATISFIED, and this falsifies the *"no inbound API key"* finding above.**
+        **Magic-link tokens** give a **storable, revocable, optionally-expiring** credential that is
+        **NOT the account password.** The credential model is therefore no worse than the Kavita one
+        it was said to lose to — it is better on revocation.
+      - ✅ **Covers on `/api/v1` are HEADER-authenticated, with no credential in the URL.**
+        ⚠️ **The OPDS surface is different and must not be used:** it puts an **HMAC cover token in
+        the query string**, so **an adapter must go through `/api/v1`.** This is the exact shape of
+        the question `REVIEW-LOG.md` LS-260 had to write a probe for against Kavita, and here it is
+        answerable from source.
+      - ✅ **Comics are real: CBZ / CBR / CB7**, with a **`comic_metadata` table** and a
+        **`comicvineId`** field. This narrows — it does not fully falsify — the *"no manga or comic
+        external ids"* finding above.
+      - ✅ **Licence AGPL-3.0.** Compatible; no licence question to answer.
+      - ⚠️ **DOWNGRADED 2026-08-19 — THE WATERMARK IS INCOMPLETE, NOT ABSENT.** This bullet used to
+        read *"~~THE ONE CONFIRMED OBSTACLE … THERE IS NO CHANGE WATERMARK OF ANY KIND … So an
+        adapter must full-resync or diff locally … It is not partial; it is absent, and that is the
+        harder claim.~~"* **That was a three-hop compression** — *"misses some edits"* → *"no
+        watermark"* → *"full resync only"* — and every hop hardened a claim the evidence does not
+        carry. ⚠️ **It also contradicted this same section**, whose struck evaluation block above
+        reads *"an `updatedAt` watermark that misses tag, genre and author edits"*. **The struck
+        version was the closer one**; this correction restores it rather than the bullet that
+        overwrote it.
+        **What the evidence supports:** there is **no `since`-style FILTER parameter and no changes
+        feed** — but **`updatedAt` exists, and BookOrbit's API admits it as a SORT KEY with paging**,
+        which is **an ordered page walk**: the incremental shape channel 3b is already built around
+        (§7.1a). **Do not assert full-resync-only.**
+        ❓ **What is genuinely unsettled is `updatedAt`'s COMPLETENESS.** It is set
+        **application-side, with no DB trigger**, and **authors, tags and genres are not columns on
+        the book row** — so a metadata-only edit can fail to move it. **What `updatedAt` does and
+        does not cover is a probe's answer, not a reading's**: mutate a tag, a genre and an author on
+        a known book, re-read `updatedAt`, report which moved it. **Commissioning that probe is the
+        ADR's**, the same way LS-200's and LS-260's were commissioned.
+      - ❓ **OPEN QUESTION for manga identity: MangaUpdates, AniList and MyAnimeList ids are
+        ABSENT.** `comicvineId` does not cover manga. Whether that is answered by the owner's own
+        **MangaBaka sidecar** (§1, his words), by the *"official support"* he expects, or by
+        something in UsArr is **undecided and belongs in the ADR.**
+      *Authority:* §1's owner decision. **§16 assigns this nothing; this box is not a milestone
+      claim.**
+      *Done when:* the ADR exists, names a source for v0.1, **answers the series-vs-books gating
+      unknown above**, and states **what the incremental read is** — an ordered `updatedAt` page
+      walk, a local diff, or a full resync — rather than presuming any of the three. ⚠️ **This line
+      used to demand *"~~the full-resync-or-local-diff decision~~"*, which presumed the absence claim
+      corrected above.** **Until then this item is a specification, not work in progress.**
+
+**The importer, stream and UI plumbing is source-agnostic, and the Kavita adapter stays either way** —
+see the blocked table above, where that is now its own row.
 
 ---
 
@@ -296,8 +637,16 @@ Things no agent in this repo can do. Nothing here is blocked on code.
 
 - **Run `deploy/update.sh`** on the server to pull and restart. `deploy/status.sh` reports what is
   running.
-- **Run a full sync on the Kavita instance** so the library the importer reads is current.
-- **Confirm or drop the BookOrbit direction** once the instance is up (§3).
+- 🛑 ~~**Run a full sync on the Kavita instance** so the library the importer reads is current.~~
+  **STOPPED BY DECISION (§1)** — nothing is owed against an instance that is being sunset. The same
+  goes for `kavita-cover-probe.sh`. ⚠️ **CORRECTED 2026-08-19: this line used to say the probe was
+  *"~~written and never run~~"*. It WAS run** — by the owner, against his live instance, 2026-08-19,
+  results pasted into the library-sync thread and deliberately not committed; §2's image-pipeline
+  item carries what it measured and which LS-260 questions that does and does not answer. The script
+  stays at the repo root with its criterion intact, and is not a task any more.
+- ✅ ~~**Confirm or drop the BookOrbit direction** once the instance is up (§3).~~ **DONE — he
+  confirmed it, 2026-08-19 (§1).** What replaces it is not his: **an ADR is owed**, and writing it
+  belongs to the lane that owns `DECISIONS.md`, not to this list.
 - **Verify Symfonium's `apiKeyAuthentication` support against a live client** before any gateway code
   is written. Far out — it gates v0.4, not v0.1 — but it is unverified and the whole v0.4 success
   criterion rests on it (§16 v0.4 entry).

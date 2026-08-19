@@ -19247,6 +19247,189 @@ is a worse falsehood than the silence this change removes. **The seam if it ever
 batched writer in `internal/store`** — one transaction, N inserts — which keeps every row and costs
 nothing at the call site.
 
+## LS-320 — §3's and §3.4's "nothing reads this field" went false an hour after they were written
+
+**Applied.** `docs/reference/http-api.md` said in two places that `file_read_failures` was on the
+wire with no consumer: §3's preamble (*"has **no consumer yet** — it is on the wire and nothing reads
+it"*) and §3.4's closing paragraph (*"Nothing reads this field today — `web/src/lib/services.ts`
+models `last_full_sync_at` and `work_count` and stops there"*). Both were true when written and
+neither survived `885dac0`, which is reachable from `origin/main` and carries `6e5918b`'s Items-cell
+consumer. Verified in the tree rather than from the commit: `web/src/lib/api.ts`'s `ServiceHealth`
+mapper holds `fileReadFailures: num(value.file_read_failures) ?? 0`, and
+`web/src/lib/services.ts`'s `fileReadNote` returns `File list not read for N items` for a non-zero
+value and `''` for zero.
+
+**Named by anchor, not by line.** Both replacements point at the function and the file plus what it
+renders — `fileReadNote`, the `Items` cell's muted second line — because this document has just
+spent a pass moving off citations that rot, and a line number would be the same defect in a new
+place. The §3.4 paragraph keeps its *what a consumer has to do* job: the three obligations still
+stand for the next consumer, they are simply no longer addressed to a first one.
+
+**The rest of §3.4 was checked for the same rot and holds.** The producer (`internal/libsync`'s
+`StreamFiles`), the `file_walk_failed` kind, the *"this field is that table's only reader"* claim
+(`store.FileWalkFailuresByInstance` is still `sync_report`'s only read — `internal/httpapi/library.go`
+says in its own comment why it writes a log instead), the window (`created_at >= last_full_sync_at`,
+matching that function's doc), the distinctness rule, the `libsync.Report.FileReadFailures`
+collision, and the `ssrf.RedactText` quotation — which is verbatim against `internal/ssrf/redact.go`,
+not a paraphrase — are all still accurate. §1.4.1's *"not counted yet"* rendering, which §3.4 calls
+its missing half, is also unchanged.
+
+## SD-03 — `work_relation` "already carries" columns in a table no migration creates. **Applied in `FUTURE.md`; the `CLAUDE.md` half is split.**
+
+**An instance of `SD-01`, and a sharper one than any row of `SD-02`.** `SD-02`'s twenty-one rows are
+overwhelmingly claims that are *true now and will decay*; nineteen were verdicted true. This one was
+**already false when measured**, which puts it with `SD-02p` — the `make dev` **(not yet)** marker —
+rather than with the rest of the table.
+
+**Measured at `3c88b2e`, in a worktree off the fetched `origin/main`.** `grep -rn work_relation
+internal/db/migrations/` returns **two comment lines and no DDL**:
+`00005_library_sync.sql:47` and `00006_kavita_subtypes.sql:44`, both listing the table among the
+deferred, the second pinning it to **v0.3** explicitly. `internal/db/migrate_test.go:471` carries
+`"work_relation"` in the `deferred` slice of `TestDeferredTablesAreAbsent` (`:435`), under a `// v0.3`
+comment, and `:478` fails the build if the table is present. The design of record is
+`docs/reference/schema.md` **§11 *Cross-media edges · v0.3*** (`:1311`), whose DDL (`:1314-1328`) does
+declare `confidence REAL NOT NULL DEFAULT 1.0` (`:1322`) and `evidence TEXT NOT NULL` (`:1323`). So
+the *columns* are real as a design and the *table* is not real as a schema, and every site below
+collapsed that distinction into the present tense.
+
+**Every present-tense site, measured rather than assumed.** The brief predicted two in `FUTURE.md`;
+there are two there, but only one uses the word *"already"* — the second says plainly `work_relation`
+*"carries"*, inside a *"Three things, all already present"* list where the other two members
+(`edition.format` at `00005_library_sync.sql:373`, `external_id` in the same migration) genuinely
+**are** present. That framing is the more dangerous of the pair: it borrows the truth of two real
+columns to carry a third that does not exist.
+
+| Site | The claim | State |
+|---|---|---|
+| `docs/FUTURE.md:194` | *"**`work_relation` already carries `confidence REAL` and `evidence TEXT NOT NULL`**"* — the named seam for the cross-media fuzzy-match tier | ✅ **Applied.** Now *"is designed to carry"*, citing §11 as the design of record and naming the deferral plus `TestDeferredTablesAreAbsent` |
+| `docs/FUTURE.md:681` | *"Three things, **all already present** … `work_relation` **carries** `confidence` and `evidence`"* — the named seam for book edition-linking | ✅ **Applied.** Now *"two in the shipped schema, one designed"*, with the same citation |
+| `CLAUDE.md:109` | *"`work_relation` **already carries** confidence and evidence columns"* | 🔶 **Split — see below** |
+| `docs/ARCHITECTURE.md:1875` | *"`work_relation` **already carries** `confidence`…"* | ⏭️ **Open, not touched** — same defect, different owner |
+| `docs/DECISIONS.md:582`, `:729`, `:3240` | *"already carries the"* / *"carries"* | ⏭️ **Open, not touched** — ADR bodies are dated records; whether they may restate in the present tense is `SD-02t`'s question, not this entry's |
+| `docs/design/DESIGN-DIRECTION.md:2814` | *"`work_relation` **already carries** `confidence` and `evidence`"* | ⏭️ **Open** — design-area owned, on `SD-02r`'s precedent |
+| `internal/store/searchlibrary.go:27` | *"work_relation **carries** the confidence and evidence columns"* | ⏭️ **Open** — a code comment, and the one site a reader is least likely to check against the schema |
+
+**The `CLAUDE.md` half was split rather than committed whole, and the split is the finding's point.**
+`CLAUDE.md` additions need Joe's approval; **only factual corrections are exempt**. The tense fix
+alone — *"already carries"* → *"is designed to carry"* — names the **same seam**, the **same two
+columns** and the **same table**, redirects nobody, and adds no instruction. It is the exemption's
+central case, and leaving it would have `CLAUDE.md` failing its own *"No invented status. Never
+document a feature as existing when it does not."* So the tense fix is applied. The **enrichment**
+that `FUTURE.md` received — the §11 citation, the v0.3 deferral, the test name — is *new content in
+`CLAUDE.md`*, and telling agents a test forbids creating the table is guidance that is not there
+today. That half is **drafted and handed to Joe, not committed.**
+
+**The guard was fired, not trusted.** `TestDeferredTablesAreAbsent` is cited in the corrected prose
+as the thing that keeps the table out, so it was made to fail on purpose rather than assumed to work:
+a throwaway `00010_TEMP_guardprobe.sql` creating `work_relation` was added, and the test failed with
+`migrate_test.go:479: work_relation exists, but no shipped migration should create it`. The probe was
+then deleted and the test returns `ok`. It asserts the real table name against the real migrated
+schema — it is not a guard that has never been triggered, and not one probing a proxy for its
+condition.
+
+**What `make check` green is worth here.** Nothing, as evidence about this entry. This change is
+`docs/` prose plus one `CLAUDE.md` line; `make check` reads `docs/` only through `gitleaks`, so a
+green attests *"no credential-shaped string"* and **not** that the prose is now true. The claims
+above are load-bearing and each carries its own `file:line`, measured at `3c88b2e`, because that —
+and not the gate — is what a reader can re-run.
+
+**`SD-03` is the next free top-level id after `SD-01`, `SD-01a` and `SD-02`.** The `LS-`/`RK-` series
+run on their own threads and are not renumbered against it; a gap in either is fine and nobody
+closes one.
+
+## LS-321 — `00005`'s `source_url` comment cites `security.md §6` and the rule is §5; the migration is not edited and this entry is the pointer
+
+**The report was right, and the check was run rather than assumed.**
+`internal/db/migrations/00005_library_sync.sql:221` reads
+`source_url TEXT NOT NULL UNIQUE,      -- CREDENTIAL-STRIPPED. See security.md §6.`
+`docs/reference/security.md` **§6** is *"Sessions, CSRF, rate limiting, audit"* (`:516`). The
+credential-stripped `source_url` rule is in **§5**, *"Redaction is middleware, not a convention"*
+(`:373`), at `:411-419` — *"`image_asset.source_url` and the `http_cache` keys store the
+**credential-stripped** URL, and no row may be written whose `source_url` still carries a credential
+parameter"*, including the `cache_key = sha256(source_url)[:16]` consequence the migration's
+`cache_key` comment depends on. So the citation is off by one section, in the same class as the
+`schema.md:1346` miscite.
+
+**The other four `security.md` citations in the migrations were checked and all four hold.**
+`00001_initial.sql:102` (`§6`, *"who deleted this"* → Sessions/CSRF/audit), `:106` (`§5`, redaction),
+`:139` (`§1`, credential encryption at rest), `00005:224` (`§2`, the SSRF derived-URL class) and
+`00005:876` (`§5`). The defect is one line, not a pattern in that file.
+
+### Why the comment is not corrected in place
+
+**Something does verify merged-migration content, and it is not goose.** `internal/db/migrate.go`
+embeds `migrations/*.sql` and hands them to `goose.NewProvider`; goose v3.27.3 records
+`version_id`/`is_applied`/`tstamp` and computes no checksum — a grep for `checksum|sha256|md5` across
+the module finds one unrelated `crc32` comment in `lock/session_locker_options.go`. So goose would
+not notice.
+
+**`TestMigrationRoundTrip` would.** That comment sits *inside* the `CREATE TABLE image_asset`
+statement, SQLite stores intra-statement comment text verbatim in `sqlite_schema.sql`, and
+`dumpSchema` (`internal/db/migrate_test.go:1059`) reads `sql` straight out of `sqlite_schema` and
+compares the result to `internal/db/testdata/schema.sql` with `got != string(want)`. The string is
+therefore checked in at `internal/db/testdata/schema.sql:292`, byte-for-byte.
+
+🔥 **Fired rather than trusted.** Editing a migration is out of scope for this pass, so the guard was
+fired from the other side: `security.md §6.` → `§5.` on `testdata/schema.sql:292` alone, which
+produces the identical diff. `go test ./internal/db -run TestMigrationRoundTrip` went from `ok` to
+`--- FAIL`, printing the two `source_url` lines against each other. Restored, `git status` clean,
+green again. Go 1.25.13, tree `ef3f041`.
+
+**And the test's own doc comment names this exact case** — *"This catches … drift: **a migration
+edited after it shipped**"* (`migrate_test.go:25-27`). The rule has a mechanism here, not just a
+convention.
+
+**No document scopes the rule to DDL.** `CLAUDE.md` Conventions: *"A merged migration is never
+edited — write a new one."* `docs/DEVELOPMENT.md` §6: *"**Never edit a migration that has shipped.**
+Add a new one."* Both unqualified; no ADR narrows either. The one recorded exception is §2's *"On
+editing migration 0001"*, and it turns on **0001 not being merged yet** — *"The rule exists to stop
+history being rewritten under deployed databases; there are no deployed databases"* — which is the
+opposite of this case.
+
+**The house pattern already exists, twice.** `docs/reference/schema.md:684-685` leaves a superseded
+`00005` comment standing deliberately and corrects it in the doc instead — *"the comment is not
+edited here because it transcribes migration 0005's own SQL, and a merged migration is never
+edited"*. **LS-297** does the same for `00003`'s false `ALTER TABLE`/`CHECK` sentence: *"`00003` is
+not edited — a merged migration is never edited — and this entry is the pointer."* This entry is the
+same move for `00005:221`.
+
+**What was changed:** one ⚠️ note at the top of `security.md` §6 redirecting a reader who followed
+the citation, naming the migration and the snapshot as uncorrected-by-design, and saying explicitly
+that `00001`'s §6 citation is *not* part of the defect. Nothing in `internal/db/` is touched.
+
+### Two adjacent families found by the same sweep, reported and not fixed
+
+Both are outside this pass's scope (they are Go source, and one of them is a merged migration again),
+and neither is asserted beyond what a grep shows.
+
+- **`schema.md §6.1` does not exist.** `docs/reference/schema.md` has `## 6.` (*Provenance and
+  release candidates*, `:779`) and no `6.1` heading at any depth. Seventeen sites cite it:
+  `internal/db/migrations/00007_work_credit.sql:43` and `:174`, `internal/db/migrate_test.go:2732`
+  and `:2745`, `internal/store/credits.go:20`, `:156`, `:429`, `internal/store/catalogue.go:978`,
+  `internal/store/credits_test.go:194`, `:212`, `:246`, `:420`,
+  `internal/store/searchdoc_people_test.go:72`, `:104`, `:233`,
+  `internal/libsync/credits_test.go:519`, and `cmd/usarr/import_e2e_test.go:423`. 🔍 **Inference:**
+  the two rules they attribute to it — *"every `kind` has a subtype table or an explicit
+  justification"* and *"`person` is excluded from … the Tier 1 prefix index and the FTS corpus"* —
+  are both in **§1.1**, the second verbatim at `schema.md:342-343`. `00007:43` and `:174` are in a
+  merged migration and get the same treatment as this entry if anyone acts on it.
+- **`ARCHITECTURE.md §2073` does not exist** and reads as a line number that became a section number.
+  Six sites: `internal/httpapi/doc.go:20`, `search.go:19`, `librarysearch.go:131`, `server.go:311`,
+  `librarysearch_test.go:140`, `internal/store/searchlibrary.go:18`. 🔍 **Inference:** every one of
+  them describes a latency budget, and `ARCHITECTURE.md:2074` is `## 13. Performance budget`.
+  `ARCHITECTURE.md §14.5` (five sites in four files: `cmd/usarr/logredact.go:11`,
+  `internal/ssrf/redact.go:21`, `internal/httpapi/redact.go:12` and `:109`,
+  `internal/httpapi/redact_test.go:10`) is a different
+  shape — §14 has no numbered subsections, but it is a numbered list whose **item 5** is
+  *"Redaction is middleware, not convention"* (`ARCHITECTURE.md:2248`), which is what those comments
+  mean; `redact.go:109` writes it as *"§14.5 item 5"*, so the notation is at least self-consistent.
+
+### What a green gate is worth on this commit
+
+`make check` reads `docs/` through **gitleaks only**. A docs-only green attests *"no
+credential-shaped string was added"* and nothing whatever about whether the prose above is correct.
+The claims that carry weight here are the ones with a command behind them: the fired round-trip
+guard, and the greps quoted with file and line.
 ---
 
 # ADR-0052 — the catalogue-source swap to BookOrbit, and what the drafting brief got wrong
