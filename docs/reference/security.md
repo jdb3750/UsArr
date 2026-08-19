@@ -127,31 +127,59 @@ the ciphertext" are the same instruction, and users follow the one in the layout
 `CONFIGURATION.md` §5 is authoritative for where that is; the nightly job and the API backup exclude
 it explicitly, and the host-migration procedure names the key as a **separate step**.
 
-### 1.5 Rotation — two-phase, resumable, and on the v0.1 milestone
+### 1.5 Rotation — two-phase, resumable, and built
 
-`usarr key rotate` and `usarr keygen` are **v0.1 deliverables**. A documented recovery path that is
-on no milestone is a recovery path that does not exist when the first user needs it.
+`usarr key rotate` **is implemented** (`cmd/usarr/keyrotate.go`). `usarr keygen` is not; §3.5 of
+`CONFIGURATION.md` remains the route for a lost key, and rotation is the route for a *compromised*
+one. A documented recovery path that is on no milestone is a recovery path that does not exist when
+the first user needs it, which is why this one was on v0.1.
 
-⚠️ **None of it is built yet.** The binary has no subcommands at all, and `keys/secret.key.new` has
-no caller anywhere in the tree. What follows is the design the implementation must satisfy;
-`CONFIGURATION.md` §3.4 carries the same warning and §3.5 is the only key-replacement route that
-works today. What *is* implemented is the substrate rotation needs: every envelope carries its
-wrapping key's id (§1.1), and `internal/crypto` re-wraps a DEK without re-encrypting the payload.
+**There is no "keyring file".** An earlier draft of this section named one; nothing ever wrote it and
+nothing needs it. The key files on disk **are** the keyring: `keys/secret.key` is the live key,
+`keys/secret.key.new` is the pending one, and the keyring is rebuilt from whichever of them exist at
+every start. That is the whole of the persisted rotation state, and it is what makes the procedure
+crash-safe — there is no second artifact that can disagree with the key material, because key ids
+are derived from the key material itself (ADR-0049).
+
+**Rotation re-wraps; it never re-encrypts.** `crypto.Keyring.Rewrap` unwraps the row's DEK under the
+old KEK and re-wraps it under the new one, leaving the nonce, the ciphertext, the GCM tag and the
+AAD untouched. It never sees a plaintext credential and never needs the AAD, which is what makes a
+batch interruptible at any row boundary and what makes a row whose `base_url` was edited (§1.6)
+rotate normally instead of blocking the whole procedure.
 
 ```
-1. Generate KEK_new. Write it to secret.key.new (mode 0600, fsync, fsync the directory).
-2. Register BOTH keys as active in the keyring file. Commit that state to disk before touching
-   the database. From here, either key can open any row.
-3. Re-wrap in batches, per row:
+1. Refuse if the key came from USARR_SECRET_KEY or USARR_SECRET_KEY_FILE. The command can only
+   manage keys/secret.key; a key UsArr does not own cannot be renamed into place.
+2. Resume from an existing secret.key.new if there is one; otherwise generate KEK_new and write
+   secret.key.new through the O_EXCL never-clobbering writer (mode 0600, fsync the file, fsync
+   the directory).
+3. Register BOTH keys. Primary is the new one; the old one and the legacy id 1 stay registered
+   for decryption. From here, either key opens any row.
+4. Re-wrap in keyset-paginated batches, one bounded transaction each:
        BEGIN IMMEDIATE
-         decrypt with kek_id = old  →  re-encrypt with KEK_new (new AAD unchanged)
-         UPDATE … SET api_key_enc = ?, kek_id = :new WHERE id = ?
+         re-wrap the DEK: kek_id = old  →  kek_id = new (nonce, ciphertext, tag, AAD unchanged)
+         UPDATE service_instance SET api_key_enc = ?, kek_id = :new WHERE id = ?
        COMMIT
-   Progress is durable: SELECT count(*) WHERE kek_id = :old is the remaining work.
-4. Only when zero rows remain at the old kek_id: atomically rename secret.key.new → secret.key,
-   drop the old key from the keyring, fsync.
-5. On restart mid-rotation, the keyring shows two active keys and step 3 simply resumes.
+   Progress is durable, and the remaining work is
+   SELECT count(*) WHERE kek_id <> :new — "not at the new id", not "at the old id", so a row
+   left at some third id by an earlier attempt is counted as work rather than skipped.
+   TOMBSTONED ROWS ARE INCLUDED; see REVIEW-LOG.md RK-01 for why that has to be said out loud.
+5. VERIFY. Re-read every row and prove the new material opens it: the kek_id column names the new
+   id, the id inside the envelope agrees with the column, and the wrapped DEK unwraps under it
+   (crypto.Keyring.Verify, which returns no plaintext). Any failure aborts before any key file is
+   touched.
+6. Only then promote: fsync secret.key.new, rename(2) it over secret.key, fsync the directory,
+   drop the superseded keys from the keyring. rename(2) — not the link(2) that writeSaltFile uses
+   — because promotion needs replace semantics and writeSaltFile refuses to clobber by design.
+7. One audit_log row per phase: key.rotate.prepare, key.rotate.rewrap (with the count),
+   key.rotate.promote. Metadata carries counts and key ids only.
 ```
+
+**On restart mid-rotation the server registers both keys and continues serving; it does NOT rotate.**
+Every row stays openable, a warning names `keys/secret.key.new`, and the primary stays on
+`secret.key` so nothing new is sealed under material the operator has not promoted. Resuming is an
+operator action with an audit trail — re-run `usarr key rotate`, which adopts the existing
+`secret.key.new` rather than generating a third key.
 
 The earlier design promised rotation "inside one transaction" — but the SQLite transaction and the
 key-file write are **not one atomic unit**, so commit-then-crash-before-keyfile-write (or the

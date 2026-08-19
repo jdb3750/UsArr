@@ -220,6 +220,38 @@ func (k *Keyring) Open(envelope []byte, aad AAD) ([]byte, error) {
 	return plaintext, nil
 }
 
+// Verify checks that an envelope's DEK unwraps under the key id the envelope
+// itself records, and returns no plaintext.
+//
+// It exists for the last step before a rotation promotes the new key file: the
+// only honest question at that point is "can the material I am about to make
+// authoritative open this row", and Open cannot answer it. Open needs the AAD,
+// which binds the row's base_url, so it fails on a row whose URL was edited
+// without the credential being re-entered (security.md §1.6) — a legitimate,
+// pre-existing state that has nothing to do with the rotation. Verify stops at
+// the RFC 3394 integrity check on the wrapped DEK, which is the layer rotation
+// actually touched, so it separates "the new key is wrong" from "this row was
+// already unopenable".
+//
+// It returns no plaintext ON PURPOSE. Nothing about proving a key works needs a
+// credential in memory, let alone in a caller that might log it.
+func (k *Keyring) Verify(envelope []byte) error {
+	kekID, _, wrapped, _, err := parseEnvelope(envelope)
+	if err != nil {
+		return err
+	}
+	kek, err := k.kek(kekID)
+	if err != nil {
+		return err
+	}
+	dek, err := unwrapKey(kek, wrapped)
+	if err != nil {
+		return fmt.Errorf("%w: kek_id=%d: %w", ErrDecrypt, kekID, err)
+	}
+	zero(dek)
+	return nil
+}
+
 // Rewrap re-wraps an envelope's DEK under a different registered KEK without
 // touching the ciphertext.
 //

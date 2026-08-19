@@ -4,6 +4,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"slices"
 	"strings"
 )
 
@@ -30,10 +31,35 @@ type flags struct {
 	// the command line — a second, hand-rolled scan of os.Args would drift from
 	// this FlagSet's idea of what a valid argument is.
 	showVersion bool
+
+	// keyRotate is the `usarr key rotate` subcommand, and it is here for the
+	// same reason showVersion is: the alternative is a second scan of os.Args
+	// with its own opinion of what an argument means. It is not a configuration
+	// value either — it selects which program runs.
+	keyRotate bool
 }
+
+// keyRotateArgs is the ONLY accepted positional form. Two words rather than one
+// because `key` is a noun with more verbs coming (§3.4 pairs rotate with
+// keygen), and a flat `rotate` would have to be renamed the moment a second one
+// lands.
+var keyRotateArgs = []string{"key", "rotate"}
 
 func parseFlags(args []string) (flags, map[string]bool, error) {
 	var f flags
+
+	// A LEADING subcommand is lifted off before the FlagSet sees it. Go's flag
+	// package stops parsing at the first non-flag argument, so without this
+	// `usarr key rotate --config-dir /config` would treat --config-dir as a
+	// positional and reject it — which is the form every operator will type
+	// first. The trailing form is handled after Parse; both reach the same
+	// FlagSet, so there is still exactly one parser and one idea of what a
+	// valid argument is.
+	if len(args) >= len(keyRotateArgs) && slices.Equal(args[:len(keyRotateArgs)], keyRotateArgs) {
+		f.keyRotate = true
+		args = args[len(keyRotateArgs):]
+	}
+
 	fs := flag.NewFlagSet("usarr", flag.ContinueOnError)
 	fs.SetOutput(io.Discard)
 
@@ -72,8 +98,24 @@ func parseFlags(args []string) (flags, map[string]bool, error) {
 		fs.Usage()
 		return f, nil, fmt.Errorf("parse flags: %w\n\n%s", err, b.String())
 	}
+	// Positional arguments. Exactly one form is a subcommand; EVERY other
+	// positional keeps erroring exactly as it did before subcommands existed,
+	// including the near misses — a bare `usarr key`, a `usarr key rotate now`,
+	// or a typo'd verb. A parser that quietly accepted a prefix of a subcommand
+	// would let `usarr key` mean something, and there is nothing it can mean.
 	if fs.NArg() > 0 {
-		return f, nil, fmt.Errorf("unexpected argument %q", fs.Arg(0))
+		if !f.keyRotate && slices.Equal(fs.Args(), keyRotateArgs) {
+			f.keyRotate = true
+		} else {
+			return f, nil, fmt.Errorf("unexpected argument %q", fs.Arg(0))
+		}
+	}
+	if f.showVersion && f.keyRotate {
+		// Two programs asked for at once. Silently letting --version win would
+		// exit 0 having rotated nothing, which is the worst possible answer to
+		// "did my key rotate?".
+		return f, nil, fmt.Errorf("--version and %q are two different commands; pass one",
+			strings.Join(keyRotateArgs, " "))
 	}
 
 	set := map[string]bool{}

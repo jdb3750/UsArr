@@ -2025,7 +2025,7 @@ drwx------ 3 root root 4096 … logs
 | **DS-07** | **§16 says the Services UI does not exist; a 677-line Services screen ships.** `docs/ARCHITECTURE.md:2203` — *"the Services health **screen** (its endpoint exists, the UI does not)"*; `README.md:70` — `\| **Services health screen** … \| 📋 Planned — v0.1 \|` with no partial marker, though the README uses `🚧 Partial` elsewhere (`:66`). `web/src/routes/services/+page.svelte` is 677 lines: it lists instances, renders `state` + verbatim `problem` from `GET /api/v1/services/health`, adds, edits, re-tests, removes, and handles the sudo re-prompt. `web/src/routes/+page.svelte:39` tells a fresh user *"Start on Services"* — because without it there is no way to add a Prowlarr instance at all | **Open — recorded here rather than applied.** The file's own header (`:3-15`) is precise and honest about what it is — *"the SCAFFOLDING version… deliberately NOT the screen §17.3 specifies… Delete this file wholesale when §17.3 lands"* — §16 and the README simply have not absorbed it. **Fix shape:** §16 gains a partial/scaffolding row and the README's row moves to `🚧 Partial`. This is the rare direction where §16 **understates**, and it understates by exactly the amount that matters to a first-time user: whether the install is usable without `curl`. Corroborated by the fresh-install pass, which drove the whole add-a-service flow through the shipped screen |
 | **DS-08** | **`HttpOnly; Secure; SameSite=Lax` is stated unconditionally in two docs; `Secure` is conditional in code.** `docs/ARCHITECTURE.md:1786` and `docs/reference/security.md:378`, identical wording. `internal/httpapi/auth.go:306-308` — `secureCookies` returns `clientOf(r.Context()).scheme == "https"`, so `Secure` is omitted on plain HTTP | **Split. The code half is already dispositioned; the doc half is Open.** The reviewer states plainly that **the code is right and the docs are wrong**, and the argument at `auth.go:293-305` is the same one Round 2 accepted at **W-02**: `CONFIGURATION.md:630` (§8.1) makes plain HTTP on a trusted LAN the documented v0.1 default, browsers discard `Secure` cookies over http, so an unconditional `Secure` means nobody can log in on the default deployment. **Recorded as a deliberate decision rather than a defect**, cross-referenced to W-02. What is **still open** is exactly what W-02 did not do: the carve-out exists only as a Go comment, and neither of the two documents a reviewer actually reads records it. **Fix shape:** one sentence in each of `ARCHITECTURE.md:1786` and `security.md:378`. Independently corroborated by the security pass, which verified by execution that both cookies carry `Secure=true` over HTTPS |
 | **DS-09** | **§17.3's state vocabulary and the code's disagree in both directions.** `docs/ARCHITECTURE.md:2489` names four states (`healthy` / `degraded` / `down` / `needs re-identification`); `:2493` asserts *"`not configured` is already a first-class state with its own token"*. `internal/httpapi/services.go:540-546` defines **five** — the four plus `unknown`, returned for a disabled instance (`:679`) and as the fallback (`:694`) — and `not configured` **exists nowhere in the codebase**. The function's own doc comment at `:668` says *"derives the four states"* while its body returns five | **Open — recorded here rather than applied.** Both directions are wrong, which is why it is one entry and not two. **Fix shape:** §17.3 gains `unknown` and drops the `not configured` claim; `services.go:668`'s doc comment says five. **Low-severity rider, flagged as INFERENCE by the reviewer:** §17.3's plain-language amendment (`:2503-2509`) requires `paused — 7 failed attempts, retrying 14:19` rather than `degraded / breaker open`, and `this may be a different Sonarr` rather than `needs re-identification`, while the API returns the raw tokens. That is *plausibly* intended as a UI-layer rendering concern and the §17.3 screen is not built — but **nothing in the code or docs says which layer owns it**, and that is the part worth settling |
-| **FI-06** | **No single-instance lock: two processes will share one config directory and one database.** Both start, both serve, both write. The port collision **is** caught (`usarr: USARR_BIND_ADDRESS/USARR_PORT: cannot listen on 0.0.0.0:18484: bind: address already in use`, exit 1) — a *different* port on the same volume is not | **Open — recorded here rather than applied.** This defeats the documented single-writer discipline from outside the process, where DL-03 defeats it from inside, and it would break key rotation mid-flight. The realistic first-run mistake is a systemd unit plus a manual `./usarr` to "just check something". **Fix shape:** a `flock` on the config directory, failing closed with a message naming the other PID |
+| **FI-06** | **No single-instance lock: two processes will share one config directory and one database.** Both start, both serve, both write. The port collision **is** caught (`usarr: USARR_BIND_ADDRESS/USARR_PORT: cannot listen on 0.0.0.0:18484: bind: address already in use`, exit 1) — a *different* port on the same volume is not | **Open — recorded here rather than applied.** This defeats the documented single-writer discipline from outside the process, where DL-03 defeats it from inside, and it would break key rotation mid-flight. The realistic first-run mistake is a systemd unit plus a manual `./usarr` to "just check something". **Fix shape:** a `flock` on the config directory, failing closed with a message naming the other PID. ⚠️ **See the dated FI-06 note at the end of this file** (2026-08-19): `usarr key rotate` now **detects and refuses** the mid-flight case rather than closing it, and the note says why adding the lock to the startup path was left to a thread that owns it |
 
 **SR-02, SR-03, DL-04…DL-08 and FI-06 — the proving commands, carried verbatim:**
 
@@ -17339,3 +17339,246 @@ behaviour was never pinned, which is why it survived.
 know about `files`**, and the line numbers they cite for the publish sites (`importer.go:213`, `:370`,
 `:443`) have been stale since well before this change. The `files` phase landed without them; fixing
 that is a documentation pass on §5, not a rider on a two-word bug.
+
+---
+
+## LS-260 — four facts gate the cover-art work, and every one of them lives inside the owner's Kavita
+
+**Raised, not fixed — because it is not fixable here.** The deliverable is a second probe the owner
+runs against his own instance, `kavita-cover-probe.sh` at the repo root, alongside `LS-200`'s
+`kavita-volume-walk-probe.sh`. This entry is the criterion written down **before** it runs.
+
+**Why a second probe rather than a paragraph.** The same reason `LS-200` gave, in
+`internal/libsync/doc.go`'s words: *"A SPEC TELLS YOU A FIELD EXISTS. IT DOES NOT TELL YOU WHICH CODE
+PATH POPULATES IT, OR WHETHER ANY DOES."* Four questions gate cover art, they are all facts about a
+running controller, and the tree cannot answer one of them.
+
+| # | Question | What it decides |
+|---|---|---|
+| **1** | Does `GET /api/Image/series-cover` accept the Auth Key in the **`x-api-key` header**? | whether a full-admin credential has to travel in a URL on every cover fetch |
+| **2** | Does a **free** Kavita populate `SeriesDto.primaryColor` / `secondaryColor`? | whether a zero-fetch tinted placeholder is a real first slice or a fiction |
+| **3** | What `Content-Type` and size does a cover come back as, and is a validator honoured? | whether decoding needs a dependency this project does not have, and whether refreshes can be conditional |
+| **4** | What does a series with **no** cover return — 404 or a 200 placeholder? | whether a failed fetch is retried or cached as permanently absent |
+
+**Question 1 is the gate, and the reason it is a question at all is recorded in this repo.** The
+vendored spec declares exactly one security scheme — `AuthKey`, `x-api-key`, `in: header` — and
+declares it **globally**. That is not evidence about any particular controller, and this repo has
+already written down the counter-example: `internal/kavita/doc.go:62` says it in one line —
+*"GET /api/Plugin/version?apiKey= is [AllowAnonymous] and validates the key"* — and
+`api/specs/SOURCES.md` says the same where it explains how the Kavita version has to be asked for:
+*"(anonymous, and it puts the credential in the query string)"*. That controller is
+`[AllowAnonymous]` and **validates the key out of the QUERY STRING itself**, which is why
+`cmd/usarr/kavita_e2e_test.go` actively asserts that the connection test never calls it. `GET /api/Health` is a second `[AllowAnonymous]` controller. A global `security`
+block that two known controllers ignore is a claim, not a finding. So the probe **tests three ways —
+header only, `?apiKey=` only, and neither — and prints the status of each**, because the three
+statuses together are the answer and any one of them alone is not.
+
+**The criterion, stated in advance.** Question 1 **PASSES** if the header-only request returns 200.
+If header-only fails and query-only succeeds that is a **FAIL WITH CONSEQUENCES**, and the verdict
+says the consequences in full rather than reporting a status: the credential then lands in Kavita's
+access log and in any reverse proxy's, it has to be scrubbed from every error string UsArr logs or
+renders, and no recorded `go-vcr` fixture may keep it. That is §14's problem, not a tuning
+difference. Question 2 is **USABLE** only if the colours are present *and* varied — the probe
+separates "populated" from "informative" and reports `POPULATED BUT USELESS` when every sampled
+series carries the same tint or every value is all-zero, because a field that is filled and constant
+answers nothing. Question 4 reports **UNDETERMINED** when every sampled series has a cover, and does
+not guess.
+
+**Endpoints and parameters verified against `api/specs/kavita-v0.9.0.2.json`** — the floor spec, the
+release the owner runs — before a line of the script was written: `GET /api/Image/series-cover`
+(declares **both** a `seriesId` `int32` and an `apiKey` `string`, both `in: query`, which is what
+makes the three-way test constructible at all); `POST /api/Series/all-v2` with `PageNumber` /
+`PageSize` / `context` in the query and `SeriesFilterV2Dto` in the body, returning `SeriesDto[]`;
+`GET /api/Health`. `SeriesDto` was read field by field: `primaryColor` and `secondaryColor` are
+`string, nullable`, and `coverImage` is a `string, nullable` **storage path** — which is why the
+probe records only whether it is null and never prints it. The single global `AuthKey` scheme is
+`x-api-key`, `in: header`, and question 1 exists precisely because that declaration is global.
+
+**Written jq-absent from the first line, and this is the whole reason the design differs from
+`LS-200`'s.** `jq` is **not installed on the owner's box**. The volume probe treated it as optional
+and consequently reported **four of its five questions UNANSWERED** on the run that mattered. This
+probe **does not use `jq` anywhere** — not as a fallback, not as a fast path. Every extraction is
+`grep -o` and `sed` over shapes the payload guarantees: `SeriesDto` contains **no nested object**, so
+on a one-element page each of `"id"`, `"primaryColor"`, `"secondaryColor"` and `"coverImage"` occurs
+exactly once and needs no parser. `od` is used for one optional magic-byte cross-check and its
+absence costs that one line and nothing else.
+
+**Output constraint, same as `LS-200`, with one deliberate exception.** Counts, classifications,
+status codes, header **names**, byte sizes and timings; never the Auth Key, the base URL, a library
+name, a series title, a file path or a `coverImage` value; series named by sample slot. The
+exception is that the probe **prints the `primaryColor` / `secondaryColor` hex values**, and it is
+deliberate: they are tints derived from cover art, they name nothing, and *"5 of 5 carry a colour"*
+is not the answer to question 2 — a field can be populated and useless, and only the values show it.
+That exception is fenced rather than trusted: `safe_color()` prints a value **only** if it matches a
+3-, 6- or 8-digit hex colour, and reports anything else as `NON-HEX (withheld, N chars)`. Validator
+values are **not** printed — an `ETag` can be derived from a file's identity and a `Last-Modified` is
+a file mtime — so `ETag` and `Last-Modified` are reported as present/absent and by whether a
+conditional re-request earns a 304.
+
+**Firing the validator rather than reporting it.** `DEVELOPMENT.md` §11's rule — a guard that has
+never been triggered is indistinguishable from no guard — applies to a *measurement* too. A response
+that carries an `ETag` proves nothing about whether the server honours `If-None-Match`. The probe
+therefore sends the conditional request and reports `NOT AVAILABLE IN PRACTICE` when a validator
+header is present but no 304 comes back, which is a different and more useful answer than "ETag:
+yes".
+
+**Re-run it** when the Kavita release moves off `0.9.0.2`, and before any commit that decides how
+UsArr stores or refreshes cover art.
+
+## LS-261 — what `make check` green is worth on this change, and the four defects a drill caught that a read did not
+
+**A shell script and a log entry. `make check` compiles no line of either**, exactly as `LS-201`
+recorded for the first probe. `gofumpt`, `golangci-lint`, `go build -tags=bench`, `go test` and
+`govulncheck` do not read `.sh` files, and `gitleaks` reads these two files only for
+credential-shaped strings — of which there are none, the probe holding no key and no fixture key.
+The green attests that **the rest of the tree still builds and passes**, which on a change that
+touches no Go is the correct claim and no larger one.
+
+**So the script was checked by three other means, named so the next reader can repeat them.**
+`shellcheck` **is still not installed in this container** — recorded as a gap, not skipped past.
+Instead: `bash -n` for syntax; a field-by-field read of `api/specs/kavita-v0.9.0.2.json` for every
+endpoint, parameter and DTO field the script touches; and **a dry run against a fake Kavita** in
+sixteen shapes. That stub is **not committed**, for `LS-201`'s reasons unchanged: it exists to answer
+what this probe asks, it carries a hard-coded fake key `gitleaks` would rightly object to, and a
+fixture no gate step reads is a file that rots.
+
+| Shape driven | What it showed |
+|---|---|
+| header auth works, query works, anonymous refused | the `PASS` path |
+| header 401, query 200 | `FAIL, WITH CONSEQUENCES` renders in full |
+| all three 200 | `PASS, with a caveat` — the controller is anonymous, and that is said |
+| colours JSON `null` | `NOT USABLE` |
+| every series the same colour | `POPULATED BUT USELESS` |
+| every colour `#000000` | same, and the all-zero count is printed |
+| a **non-colour string** in `primaryColor` | withheld as `NON-HEX (withheld, 40 chars)` — the planted value was a series title |
+| WebP covers | reported as WebP by header **and** by magic bytes |
+| no `ETag`, no `Last-Modified` | `revalidation: ABSENT` |
+| `ETag` present, 304 never returned | `NOT AVAILABLE IN PRACTICE` |
+| a coverless series returning 404 | `cache it as absent` |
+| a coverless series returning a 200 placeholder | `UsArr cannot tell by status alone` |
+| every series has a cover | `UNDETERMINED`, not guessed |
+| no `Pagination` header | falls back to one page, says the total is unknown |
+| `401` on `all-v2`; host unreachable | stop at section 0, `INCONCLUSIVE`, exit 1, no URL in the message |
+| `od` removed from `PATH`; `--api-key` on the command line; `--sample` > library size; a key full of shell metacharacters; a base URL with a reverse-proxy path prefix | degrade or refuse cleanly, in that order |
+
+🔥 **Four real defects came out of that, and two of them would have wrecked the owner's run.**
+
+1. **The probe went blind whenever it answered its own first question with "not the header".** In
+   query-auth mode it proved query auth works, then kept sending header auth for sections 4, 5 and
+   6 — and reported `Q3 UNANSWERED`, `Q4 UNANSWERED`, `cold start UNANSWERED`. **A probe that throws
+   away three of its four questions to make a point about the first is the exact failure this probe
+   was written to avoid**, reproduced from the inside. The run now picks whichever variant returned
+   200 and uses it for every image call below, and says which one it picked.
+2. **The wide page scan undercounted by one series, silently.** `sed` leaves the final object without
+   a trailing newline, so `wc -l` read **39** for a stub with a known **40**. The last series
+   vanished from every count downstream — including the coverless-series hunt, where the missing one
+   could have been the only answer to question 4. Caught only because the stub had a known count;
+   a read would not have found it.
+3. **The magic-byte cross-check read whichever body came back last, including an error page** left
+   by a failing sample. It now reads the last body that was actually a 200.
+4. **The conditional re-request hardcoded header auth**, so on an instance where the header does not
+   work the revalidation answer would have been a 401 misreported as "no 304".
+
+⚠️ **What the fake server cannot prove.** It answers what the probe *asks*, so it validates parsing,
+arithmetic, redaction, auth-mode selection and failure handling — and **nothing at all** about what
+Kavita's real `ImageController` does with an `x-api-key` header. That is the entire question, and it
+is why the script exists.
+
+---
+
+## RK-01 — the rotation's termination condition would have read "done" with tombstoned rows still under the old key
+
+**Found by execution, before `usarr key rotate` had a line of code**, while reading which existing
+store helpers the re-wrap pass could stand on. It is a defect *avoided* rather than *fixed* — the
+command has never shipped in the broken shape — but it is recorded as a finding rather than a code
+comment because the trap is invisible at the call site and the next person to touch this will reach
+for the same helpers.
+
+**The shape.** Two facts in `internal/store/serviceinstance.go` disagree, and only together:
+
+| Helper | Treats a soft-deleted row as |
+|---|---|
+| `UpdateServiceInstanceCredential` (and every other credential/field UPDATE in the file) | invisible — every statement carries `AND deleted_at IS NULL`, and `expectOneRow` turns a tombstone into `ErrNotFound` |
+| `CountEncryptedCredentials` | **present** — `WHERE length(api_key_enc) > 0`, no `deleted_at` clause, and its own comment says so: *"Tombstoned rows count — their ciphertext is still there"* |
+
+Both are correct for what they were written for. `SoftDeleteServiceInstance`'s contract is that the
+id stays burned and the row is gone as far as callers are concerned, so a user action must not touch
+it; and the startup salt/key refusal must count tombstones, or an install whose only sealed rows are
+deleted ones would start and silently derive a fresh KEK over live ciphertext.
+
+**Why that combination is fatal to a rotation specifically.** A rotation built on the visible-row
+helpers reads a tombstone (nothing filters the *read* the counting query models), fails to update it,
+and then asks "how many rows remain at the old key id" using a query that **can** see it. Depending
+on which side of that mismatch the loop's condition falls, it either spins forever on a row it cannot
+write, or — the dangerous one — counts only what it could see, reports zero remaining, and promotes:
+`rename(2)` puts the new key over `secret.key`, the old key file is gone, and the tombstone's
+ciphertext is wrapped under a KEK that no longer exists anywhere. **Permanently unopenable
+ciphertext, produced by the one procedure whose entire purpose is not to produce any.**
+
+It is not a hypothetical row, either. A tombstone is what an operator has after deleting a service
+they misconfigured — the single most likely row on a pre-alpha install — and `service_instance` never
+hard-deletes.
+
+**The fix.** Three new methods in `internal/store/rotate.go`, each of which ignores `deleted_at`, each
+named so the omission cannot be read as an oversight:
+`ListCredentialEnvelopesIncludingDeleted`, `RewrapCredentialsIncludingDeleted`,
+`CountCredentialsOutsideKEKIDIncludingDeleted`. A block comment above the three carries the argument
+in full and states the rule for anything that follows: *"Anything else that needs a credential must
+use the `deleted_at`-filtered helpers in `serviceinstance.go`."*
+
+Two further details fell out of writing them:
+
+* **The count is `kek_id <> :new`, not `kek_id = :old`.** With content-derived ids (ADR-0049) a row
+  can legitimately sit at a *third* id — an earlier interrupted attempt, a row restored from an older
+  backup — and "at the old id" walks straight past it.
+* **The read and the count apply the identical `length(api_key_enc) >= crypto.MinEnvelopeLen`
+  filter.** `CreateServiceInstanceSealed` writes a one-byte placeholder between its insert and its
+  seal; if the read skipped it and the count did not, the loop would never terminate.
+
+**The guard was fired against the gap, not written around it.** `TestRotationReachesSoftDeletedRows`
+(`internal/store/rotate_test.go`) asserts the premise before it asserts the fix — it calls
+`UpdateServiceInstanceCredential` on the tombstone and **requires** it to fail — so the test would
+stop meaning anything the day that helper started matching tombstoned rows, instead of quietly
+passing. `TestKeyRotateKeepsEveryCredentialOpenable` (`cmd/usarr/keyrotate_test.go`) runs the same
+case end to end through the real command and opens the tombstone's credential afterwards.
+
+---
+
+## FI-06 — note: `usarr key rotate` mitigates in-process rather than adding the lock
+
+**FI-06 (no single-instance lock) stays open, and this note records what the key-rotation work did
+about it — which is deliberately not "add a lock".**
+
+FI-06's own text names key rotation as one of the things a second process would break, and it is
+right: with no lock, a running server can seal a credential under the **old** key while
+`usarr key rotate` is re-wrapping, and that row would then be stranded when the key file is promoted.
+
+**Why the lock was not added here.** FI-06's stated fix shape is a `flock` on the config directory,
+failing closed with a message naming the other PID. That is a change to the **startup path of the
+server**, on a box that is already running — the owner's. A `flock` that fails closed turns any stale
+lock into a server that will not come back up: a container killed with `SIGKILL` on a filesystem where
+the lock is not released as expected, a `--config-dir` on an NFS or overlay mount with imperfect
+`flock` semantics, or simply a second process the operator forgot about. The blast radius of getting
+it wrong is *the service does not start*, and it would land as a side effect of a maintenance
+subcommand rather than as a change anyone chose to review on its own terms. **Adding it belongs to a
+thread that owns the startup path and can test the failure modes; it does not belong to this one.**
+
+**The mitigation that did land, in `cmd/usarr/keyrotate.go`:**
+
+1. **The re-wrap pass is re-checked, not assumed.** After each full pass it re-reads
+   `CountCredentialsOutsideKEKIDIncludingDeleted(new)`. A row written under the old key during the
+   pass shows up there.
+2. **It retries a bounded number of times** (`rotateExtraPasses = 3`) and then **fails closed**,
+   naming the real remedy: *"Stop the UsArr server and re-run `usarr key rotate`; it resumes where it
+   left off."* An unbounded retry against a busy server would spin forever; a single pass would
+   promote over a row it had missed.
+3. **Promotion is gated on a full verify pass**, not on the count alone: every row must name the new
+   id, the envelope's own id must agree with the column, and the wrapped DEK must unwrap under it. A
+   row concurrently re-sealed under the old key fails that check and aborts the rotation **before any
+   key file is touched**.
+4. **`CONFIGURATION.md` §3.4 tells the operator to stop the server first**, and says why, citing
+   FI-06 by name.
+
+So the window FI-06 describes is **detected and refused** rather than closed. That is strictly weaker
+than a lock and is not offered as a substitute for one: FI-06 remains **Open**, with its fix shape
+unchanged.

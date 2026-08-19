@@ -177,9 +177,14 @@ Ordered roughly by what the rest depends on, not by size.
       *Authority:* §10, §16 v0.1 entry.
       *Done when:* a tag vocabulary has a writer and a filter path in `internal/`.
 
-- [ ] **`usarr key rotate`, working, on top of key versioning and AAD.**
+- [x] **`usarr key rotate`, working, on top of key versioning and AAD.**
+      **Landed.** `cmd/usarr/keyrotate.go` is the subcommand: refuse under `USARR_SECRET_KEY`/
+      `USARR_SECRET_KEY_FILE` → resume or generate `keys/secret.key.new` → register both keys →
+      re-wrap in keyset-paginated batches, tombstones included → prove every row unwraps under the
+      new key → `rename(2)` the file into place. Key ids are content-derived (**ADR-0049**), so a
+      key file names its own id and an interrupted rotation is readable from the two files alone.
       *Authority:* §14, `reference/security.md` §1.5, §16 v0.1 entry.
-      *Done when:* `grep -rn 'rotate' cmd/usarr/*.go` finds a subcommand, not nothing.
+      *Done when:* `grep -rn 'rotate' cmd/usarr/*.go` finds a subcommand, not nothing. ✅
 
 - [x] **LS-170 — lift `httpapi.redactText` into `internal/ssrf`, and the three fixes around it.**
       **All four steps landed** (`dff0fa7`, `44b9354`, `a13bf6f`, `3fe94aa`): `ssrf.RedactText` is
