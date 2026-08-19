@@ -21979,7 +21979,7 @@ ADR-0047 read in `DECISIONS.md` rather than taken on report**. The five strings 
 have carried — `72207f8`, `vendoredtypes`, `bookorbit-types`, `SWAGGER_ENABLED`, `scope_test` —
 returned nothing in this file before this entry, so it is a new finding and not an amendment.
 
-# The hard-coded inner alias in the scope predicates: one site found by a drill arm, a class of three found by sweeping, and two of the three still open
+# The hard-coded inner alias in the scope predicates: one site found by a drill arm, a class of three found by sweeping, all three now closed
 
 **`LS-379`, allocated by the coordinator.** The `LS-` series is block-allocated by decade lanes and
 the gaps are deliberate; nobody closes one. `LS-378` is the high-water on `main`, landed immediately
@@ -21987,11 +21987,13 @@ before this at content commit `d9d9c99`, and this entry sits beside it under the
 Nothing here touches the `SD-`, `DS-` or `RK-` series, no migration or ADR is allocated by this lane,
 and nothing in `DECISIONS.md` is edited by it.
 
-**Everything below was measured at `4731c7d`**, the tip after merging `origin/main`, which carries
-the fix commit `8e6cbbf`. Where what is in the tree differs from what this lane was told, the tree is
-what is written down, and the divergence is named rather than smoothed over.
+**The sweep below was measured at `4731c7d`**, where site 1 was fixed by `8e6cbbf` and sites 2 and 3
+were still open. **`1c281ca` has since closed sites 2 and 3**, and this entry was corrected against it
+before landing rather than left to describe a tree that had moved. Both tips are named throughout,
+because *when* each thing was true is part of the record. Where the tree differed from what this lane
+was told, the tree is what is written down.
 
-## LS-379 — a correlated `EXISTS` with a hard-coded inner alias silently stops filtering when the outer table shares that alias; three predicates have the shape, one is fixed
+## LS-379 — a correlated `EXISTS` with a hard-coded inner alias silently stops filtering when the outer table shares that alias; three predicates had the shape, all three are now fixed
 
 🔻 **The mechanism, in one predicate.** A scope predicate that cannot compare a column directly has to
 reach its table through a correlated subquery, and the correlation is **by name**: the subquery's only
@@ -22018,7 +22020,7 @@ for `library_source`, `sdl` for `search_doc_library`. A later author writing a s
 one of those tables reaches for exactly the alias the predicate already occupies, because it is the
 house convention. The trap is baited with the conventional choice.
 
-## The class, swept: three predicates carry the shape, two carry it still
+## The class, swept: three predicates carried the shape
 
 🔻 **1. `Scope.workVisibilityPredicate` (`internal/store/recent.go`) — found first, now FIXED.** It
 hard-coded `sil`. The collision is not hypothetical for this one: `workServiceLinksSQL`
@@ -22026,8 +22028,9 @@ hard-coded `sil`. The collision is not hypothetical for this one: `workServiceLi
 rendered over that read would have collapsed exactly as described. **Closed by content commit
 `8e6cbbf`** — described below.
 
-🔻 **2. `Scope.libraryVisibilityPredicate` (`internal/store/libraries.go`) — the identical trap, STILL
-OPEN at `4731c7d`.** It hard-codes `ls`, and it does so **twice**, in both arms of its disjunction:
+🔻 **2. `Scope.libraryVisibilityPredicate` (`internal/store/libraries.go`) — the identical trap, open
+at `4731c7d`, closed by `1c281ca`.** It hard-coded `ls`, and it did so **twice**, in both arms of its
+disjunction:
 
 ```go
 return `(NOT EXISTS (SELECT 1 FROM library_source ls
@@ -22037,21 +22040,27 @@ return `(NOT EXISTS (SELECT 1 FROM library_source ls
                        AND ls.service_instance_id IN (` + placeholders(len(args)) + `)))`, args
 ```
 
-Both arms collapse together under a colliding outer alias, and the disjunction makes it worse rather
-than better: the first arm — the deliberate `NOT EXISTS` loophole for §6.5 rule 5's source-less
-retained orphan — becomes `NOT EXISTS (… WHERE ls.library_id = ls.library_id)`, false whenever the
-table is non-empty, while the second becomes trivially true. The predicate degenerates to *"does this
-caller see any library source anywhere"*. **`library_source ls` is a live outer alias in this
-package** — `librarySourcesSQL` and two further statements in `libraries.go`, plus one in
-`catalogue.go` — so the table this predicate must not collide with is aliased `ls` in four places
-already.
+Both arms collapse together under a colliding outer alias, and **the disjunction makes it worse in a
+way this lane got only half right.** This entry originally recorded one direction: the `EXISTS` arm
+goes trivially true and the predicate degenerates to *"does this caller see any library source
+anywhere"*. `1c281ca` measured **both**, and they fail in **opposite** directions — the `NOT EXISTS`
+arm, the deliberate loophole for §6.5 rule 5's source-less retained orphan, becomes a question about
+`library_source` alone and **loses the very libraries it exists to admit.** So the defect is a leak
+*and* a disappearance at once, **normally masked by the `OR`**. Measured on `seedLibrariesCorpus`
+before the fix: library 3 came back under a scope holding only instance 1 (`[1 2 3]`, want `[1 2]`),
+and library 4 **vanished** under a scope holding only an instance with no sources (`[]`, want `[4]`).
+📌 **A disappearance is the failure mode a leak-hunting sweep is least likely to find**, because every
+instinct here is tuned to look for rows that should not be there. **`library_source ls` is a live
+outer alias in this package** — `librarySourcesSQL` and two further statements in `libraries.go`, plus
+one in `catalogue.go` — so the table this predicate must not collide with is aliased `ls` in four
+places already.
 
-🔻 **3. `searchScopePredicate` (`internal/store/searchlibrary.go`) — the identical trap, STILL OPEN at
-`4731c7d`**, and it is a free function rather than a `Scope` method, which is why a sweep that
-enumerated only `func (s Scope)` would miss it. It hard-codes `sdl` over `search_doc_library`,
-correlating on `sdl.doc_rowid = <docRowidColumn>`.
+🔻 **3. `searchScopePredicate` (`internal/store/searchlibrary.go`) — the identical trap, open at
+`4731c7d`, closed by `1c281ca`**, and it is a free function rather than a `Scope` method, which is why
+a sweep that enumerated only `func (s Scope)` would miss it. It hard-coded `sdl` over
+`search_doc_library`, correlating on `sdl.doc_rowid = <docRowidColumn>`.
 
-⚠️ **The third one is materially less protected than the other two, and this is the precision the
+⚠️ **The third one was materially less protected than the other two, and this is the precision the
 latent-versus-live argument turns on.** `workVisibilityPredicate` and `libraryVisibilityPredicate`
 both short-circuit to `1=1` when `Scope.AllInstances` is true, so on v0.1's single owner **the
 defective string is never built at all**. `searchScopePredicate` has **no `AllInstances` branch** —
@@ -22105,41 +22114,43 @@ predicate in would now render valid correlated SQL — **and would still be a le
 and now sole reason, that a work-level predicate over a link read hands back links on instances the
 caller cannot see. Repairing the alias did not make the wrong predicate safe to use there.
 
-## Where this diverges from what the lane was told
+## Two reports this lane could not confirm when it looked, and what happened to each
 
-⚠️ **This lane was told `8e6cbbf` closed all three sites with the same drill. At `4731c7d` it does
-not, and the record has to say so.** `8e6cbbf` touches six files — `recent.go`, `worklinks.go`,
-`scopealias_test.go`, and the three test files carrying plan guards. **`libraries.go` and
-`searchlibrary.go` are not among them**, and `scopealias_test.go`'s three arms all name
-`workVisibilityPredicate` or `scopeLinkAlias`. There is no `scopeLibraryAlias`, no equivalent
-derivation over `search_doc_library`, and no drill arm planting an outer `ls` or an outer `sdl`.
-**Sites 2 and 3 are open**, and this entry is the record that they are.
+🔍 **This lane was told `8e6cbbf` closed all three sites. At `4731c7d` it had not**, and saying so was
+the reason sites 2 and 3 got closed rather than assumed closed. `8e6cbbf` touches six files —
+`recent.go`, `worklinks.go`, `scopealias_test.go`, and three test files carrying plan guards —
+and **`libraries.go` and `searchlibrary.go` are not among them**; its three drill arms all name
+`workVisibilityPredicate` or `scopeLinkAlias`. **`1c281ca` is what actually closed the other two**,
+and it exists because the gap was reported instead of papered over. 📌 **The near-miss is the useful
+part: a class declared closed one site early is more dangerous than one never swept**, because the
+declaration retires the very suspicion that would have found the rest.
 
-⚠️ **This lane was also told `libraryVisibilityPredicate` had been observed actually leaking — a
-library sourced only on an out-of-scope instance coming back. That could not be reproduced at this
-tip, and the entry does not claim it.** Both of its call sites correlate `l.id` over `FROM library l`
-— `listLibrariesSQL` in `libraries.go` and the slug resolver in `browse.go` — so neither presents a
-colliding outer qualifier, and no test in the package aliases an outer `ls` against it. On the
-evidence in the tree, site 2 is latent for the same reason site 1 was: **the collision is available,
-not taken.** It may well have been observed under a drill arm that has not landed, and if so the arm
-is the thing that should land; **what must not happen is this entry recording an observation the tree
-cannot support.** The finding is serious enough on its merits — an open silent-full-leak shape in two
-scope predicates — that overstating it would only make it easier to dismiss.
+✅ **This lane was also told `libraryVisibilityPredicate` had been observed actually leaking. It could
+not be reproduced at `4731c7d`, and this entry declined to claim it** — both call sites correlate
+`l.id` over `FROM library l`, so nothing presented a colliding qualifier, and no test in the package
+aliased an outer `ls`. **`1c281ca` then supplied the measurement**, under a drill arm planting exactly
+that alias, and it found more than the report described: not only the leak but the orphan-arm
+disappearance above. **So the report was right and this lane could not yet see why.** The entry stands
+as first written on the point of method: *what must not happen is a record asserting an observation
+the tree cannot support*. The fix is not to trust the report harder, it is to land the arm that makes
+it reproducible — which is what happened, and the arm is now permanent.
 
 ## The claim the PM required stated explicitly: latent today, live the moment multi-user ships
 
-✅ **No query is wrong in production right now, at any of the three sites**, and that is worth stating
-precisely rather than as reassurance. v0.1 is single-user, the owner's scope is `OwnerScope`, and
-`OwnerScope` sets `AllInstances: true` (`internal/store/store.go`), which short-circuits sites 1 and
-2 before their subqueries are built. Site 3 does build its subquery for the owner, but no caller
-aliases an outer `sdl`. A record that overstated today's exposure would be as damaging as one that
-missed the defect.
+✅ **No query was wrong in production at any of the three sites, at any point**, and that is worth
+stating precisely rather than as reassurance. v0.1 is single-user, the owner's scope is `OwnerScope`,
+and `OwnerScope` sets `AllInstances: true` (`internal/store/store.go`), which short-circuited sites 1
+and 2 before their subqueries were built. Site 3 did build its subquery for the owner, but no caller
+aliases an outer `sdl` — the three live callers pass `l.id`, `f.rowid` and `t.rowid`. **Nothing
+leaked in any shipped tree**, and `1c281ca` states the same. A record that overstated today's exposure
+would be as damaging as one that missed the defect.
 
-🔻 **It goes live the moment multi-user does, and it goes live silently.** The second a user exists
-whose `AllInstances` is false, sites 1 and 2 render their third branch for real, and the first author
-who writes a scoped read **over** `library_source` or `search_doc_library` — the most natural tables
-in the schema to write such a read over — gets a full leak with a scope parameter sitting in the
-signature looking correct.
+🔻 **It would have gone live the moment multi-user did, and silently.** The second a user exists whose
+`AllInstances` is false, sites 1 and 2 render their third branch for real, and the first author who
+writes a scoped read **over** `library_source` or `search_doc_library` — the most natural tables in
+the schema to write such a read over — would have got a full leak with a scope parameter sitting in
+the signature looking correct. **That is the window `1c281ca` closed before it opened**, which is the
+whole value of fixing a latent authorization defect ahead of the milestone that arms it.
 
 🔍 **Why that timing is the point, verified rather than repeated.** `CLAUDE.md`'s principle 4 and
 `ADR-0019` hold that every user-scoped row carries `user_id` **from migration 0001**, precisely so
@@ -22159,9 +22170,9 @@ multi-user arrives, and these predicates are where being in place is not the sam
 
 ## The ruled fix shape, recorded so the two open sites inherit it
 
-⏭️ **`internal/store` is not edited by this entry** — the repair belongs to the lane that owns the
-scope helpers, and for site 1 it is already done. The ruled shape is recorded here so sites 2 and 3
-cannot be closed in a way that contradicts it:
+⏭️ **`internal/store` is not edited by this entry** — the repair belonged to the lane that owns the
+scope helpers, and all three sites are now done. The ruled shape is recorded here because it is what
+both fix commits actually followed, and because the next correlated-subquery predicate inherits it:
 
 🔻 **Not alias-as-parameter.** The reasoning is worth quoting because it is the non-obvious half:
 *"a required parameter moves the trap one step rather than removing it: the caller passes an alias in
@@ -22178,14 +22189,20 @@ prefix construction transfers directly to `ls` and `sdl`.
 🔍 **The fallback, only where derivation is impossible in the query shape, is parameterise AND
 guard** — accept the alias and reject a value colliding with the outer scope, so the failure is loud
 at the boundary instead of silent in the result set. Second choice on purpose: it converts the trap
-into an error rather than removing it. Nothing in sites 2 or 3 appears to need the fallback; both
-correlate to a single caller-supplied column exactly as site 1 did.
+into an error rather than removing it. **It was not needed:** sites 2 and 3 correlate to a single
+caller-supplied column exactly as site 1 did, and `1c281ca` generalised the derivation into
+`derivedInnerAlias(prefix, column)` in `store.go`, keeping a per-table prefix so a query plan still
+names the table it is about. Its comment pins the load-bearing constraint — **the prefix must be a
+non-empty constant, because that is what makes the alias strictly longer than the qualifier it must
+never equal, and the length argument is the entire proof.**
 
-⚠️ **A drill is required at each remaining site, and its shape is fixed** by the four steps
-`scopealias_test.go` already demonstrates: plant a row outside the caller's scope, alias the outer
-table with the colliding name, **watch the leak**, then apply the fix and watch it hold — plus the
-arm that restores the hard-coded alias to confirm the assertion still catches it. A fix landed
-without first witnessing the leak is a fix against a proxy.
+✅ **A drill was required at each site, and each site has one.** `scopealias_test.go` now carries
+eight arms: a leak arm per predicate that plants a row outside the caller's scope, aliases the outer
+table with the colliding name and **watches the leak**, each with a **permanent mutation twin** that
+puts the hard-coded alias back and fails if that mutation turns out to be a no-op — so the guard is
+known to detect the defect rather than merely to pass — plus
+`TestDerivedInnerAliasesNeverEqualTheOuterQualifier` pinning the no-fixed-point property itself. A fix
+landed without first witnessing the leak is a fix against a proxy, and none of these were.
 
 ## How it was found, and the part that generalises
 
@@ -22202,10 +22219,12 @@ produced.
 📌 **The reusable lesson, and it is worth more than any of the individual sites: a defect found at one
 site is a hypothesis about a class until someone sweeps the class.** One call site was found by
 accident. The sweep turned that single site into three — including one, `searchScopePredicate`, that
-a search for `func (s Scope)` would never have returned, because it is a free function. **The sweep
-is also how the two clean siblings became a result**, which is the same act of enumeration paying
-twice. And the sweep is not finished: two of the three sites are still open at this tip, which is the
-strongest possible argument for the lesson, since the class was declared closed one site early.
+a search for `func (s Scope)` would never have returned, because it is a free function, and one whose
+second failure mode was a **disappearance** that no leak-hunt would have surfaced. **The sweep is also
+how the two clean siblings became a result**, the same act of enumeration paying twice. And the class
+was twice declared closed while still open — once at `8e6cbbf`, once in the brief that relayed it —
+which is the strongest available argument for the lesson: **the declaration of closure is itself the
+thing that stops the sweep.**
 
 📌 **The narrower lesson about drills.** A drill arm that fails *harder* than its author predicted has
 found something the author did not know. The instinct that costs the finding is to adjust the arm
@@ -22220,11 +22239,12 @@ every arm attests nothing about it** — `gofumpt`, `golangci-lint`, `build-tagg
 Go and web suites and `govulncheck` all measured Go and Svelte trees that adding a Markdown section
 does not alter. **`gitleaks`, via `make secrets`, is the one arm that reads this diff**, and what it
 attests is roughly *"no credential-shaped string in the added prose"* — nothing whatever about
-whether the prose is true. Sharper still: **the gate is green right now with sites 2 and 3 open.**
-Nothing in `make check` can fail because a scope predicate carries this shape, since no fixture
-plants an out-of-scope row behind a colliding alias at either site. The suite's greenness is
-evidence about the code that was drilled and about nothing else, which is this entry's own thesis
-restated as a property of the gate.
+whether the prose is true. Sharper still, and this was literally observed: **the gate ran green on a
+tree with sites 2 and 3 still open.** Nothing in `make check` could fail because a scope predicate
+carried this shape, since no fixture planted an out-of-scope row behind a colliding alias at either
+site — which is exactly why `1c281ca` had to add those fixtures for the gate to have any opinion at
+all. A suite's greenness is evidence about the code that was drilled and about nothing else, which is
+this entry's own thesis restated as a property of the gate.
 
 🔍 **The verification behind this entry is therefore manual, and is listed so it can be repeated at
 `4731c7d`:** all four `Scope` methods enumerated with `func (s Scope)` and the free
@@ -22232,9 +22252,9 @@ restated as a property of the gate.
 body read for a correlated subquery and its inner alias; `library_source ls` and
 `search_doc_library sdl` grepped as **outer** aliases to establish which collisions are live;
 `listLibrariesSQL` and `browse.go`'s slug resolver read to confirm both library call sites pass
-`l.id`; `8e6cbbf` read as a diff rather than from its message, including its `--stat`, to establish
-which files it did and did not touch; `scopealias_test.go`'s three function names read to establish
-the drill's actual coverage; `OwnerScope` and `Scope.AllInstances` read in `store.go` for the
+`l.id`; `8e6cbbf` and `1c281ca` read as diffs rather than from their messages, including `--stat`, to
+establish which files each did and did not touch; `scopealias_test.go`'s function names read at both
+tips to establish the drill's actual coverage before and after; `OwnerScope` and `Scope.AllInstances` read in `store.go` for the
 latency argument, and `searchScopePredicate`'s branch structure read to establish that it has no such
 short-circuit; and `00001_initial.sql` with
 `00002_user_scope_provenance_release_candidate.sql` read directly for the `user_id` claim rather than
