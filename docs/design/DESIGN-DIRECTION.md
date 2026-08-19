@@ -2851,6 +2851,20 @@ the feature does not.** These are layout obligations, not v0.1 work.
   v0.1 (ADR-0032). §17.2's rule — a type the user does not have is not shown at all — means the
   *presence* of each is a data change rather than a layout change, **provided nothing hard-codes a
   type list anywhere**. That is now a live requirement rather than a future-proofing note.
+  ⚠️ **The rule was narrowed on 2026-08-19 and this bullet kept the un-narrowed form**, so the
+  seam it describes is real for two of the three places and not for the third.
+  [ADR-0053](../DECISIONS.md#adr-0053) carves **the sidebar** out of *"not shown at all"* and leaves
+  Block A and search groups under it: **nothing UsArr serves answers per-type presence**
+  ([`reference/http-api.md`](../reference/http-api.md) §7.1 — *"no facet counts … each is its own
+  aggregate and its own read"*), so the shipped shell renders **all six entries unconditionally**,
+  no row carries a count, and an empty type says it is empty on its own screen (§8.1). **Per-type
+  hiding is closed, not abandoned, and it reopens on one named condition — a facet read**: one
+  statement answering which of the six types have rows under the current scope, published on
+  `reference/http-api.md`. Until then the sidebar half of this bullet is a screen the wire cannot
+  serve, and ADR-0053 is the record that says so, so a later pass does not "restore" it as though
+  it had been dropped by accident. **The seam itself survives intact** — hard-coding a type list is
+  still forbidden, because the facet read turns the sidebar back into a data change without a
+  layout change, which is exactly what this bullet exists to protect.
 - **Libraries grow without bound and the layout must not care.** The scope chip (§8.1) is the seam:
   a library is `?lib=` on an existing route, so a user with thirty libraries costs zero new page
   types and zero sidebar rows.
