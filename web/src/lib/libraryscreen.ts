@@ -1,16 +1,18 @@
 /**
  * THE `/library` SCREEN'S MODEL — the whole-catalogue "Recently added" list.
  *
- * WHAT THE SCREEN IS, AND WHAT IT DELIBERATELY IS NOT. ARCHITECTURE.md §16
- * names a per-type library GRID with covers, a type filter and a sort control.
- * None of those can be built against the API that exists: there is no
- * `GET /api/v1/library`, `GET /api/v1/library/recent` parses only `limit` and
- * `cursor` and is hard-ordered `added_at DESC, id DESC`, `GET /api/v1/search`
- * refuses a request with no `?q=`, and no endpoint serves an image. So this
- * screen is the honest slice of that specification: Home's Block C without
- * Home's row limit, paging the WHOLE catalogue over the one endpoint that
- * answers. The grid, the filter and the sort arrive with the backend browse
- * read and not before.
+ * WHAT THE SCREEN IS, AND WHAT IT DELIBERATELY IS NOT. ARCHITECTURE.md §16 also
+ * names a per-type library GRID with a sort control and a library scope. ⚠️ THIS
+ * HEADER USED TO SAY THAT NONE OF IT COULD BE BUILT BECAUSE THERE WAS NO
+ * `GET /api/v1/library`. There is one now, and the grid is a SEPARATE screen
+ * over it — `routes/library/[type]`, modelled by `$lib/librarygrid`. This screen
+ * did not become its predecessor: §17.2 keeps both, and http-api.md §7 is
+ * explicit that the browse read is *"a different endpoint from §1, not a
+ * superset of it"*, because Block C is closed at one table, one order and no
+ * filters. `GET /api/v1/library/recent` still parses only `limit` and `cursor`
+ * and is still hard-ordered `added_at DESC, id DESC`, which is what makes a
+ * filter or a sort ON THIS SCREEN a control over a keyset prefix. Covers are
+ * absent from both: no endpoint in the mux serves an image.
  *
  * WHY THE COPY LIVES HERE RATHER THAN IN THE TEMPLATE. `vitest.config.ts` is
  * `environment: 'node'` with no Svelte plugin, so a rule inside an `{#if}` in a
@@ -24,6 +26,12 @@
  * IT IS NOT A SECOND COPY OF THE RECENT FEED. The paging, the stop rule, the
  * media-type vocabulary and the availability rendering all belong to
  * `$lib/library` and are imported from there by the route.
+ *
+ * ⚠️ AND `recentEmptyState` IS SHARED WITH THE PER-TYPE GRID, deliberately.
+ * `$lib/librarygrid.browseEmptyState` answers the three non-`library` modes by
+ * calling it, because those three are facts about what is CONNECTED rather than
+ * about a media type, and two screens telling one install two stories about its
+ * own services is the drift this module was written to prevent.
  */
 
 import type { HomeMode } from './home';

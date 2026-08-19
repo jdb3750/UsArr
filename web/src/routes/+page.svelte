@@ -488,7 +488,7 @@
 			// re-serves the first page for ever and looks like the list is stuck".
 			// Retrying here would build that loop on the other side of the wire. The
 			// screen surfaces the action and offers a restart the user presses.
-			recentRejected = cursorRejected(error);
+			recentRejected = cursorRejected(error, request.cursor);
 		} finally {
 			recentLoading = false;
 		}
