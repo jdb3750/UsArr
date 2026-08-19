@@ -410,7 +410,9 @@ silently change which resource a redirect resolves to. The tracker-specific name
 - **`key_prefix`, never the key**, is what appears in logs and in the audit trail.
 - **URLs stored in the database are in scope too**: `image_asset.source_url` and the `http_cache`
   keys store the **credential-stripped** URL, and an ingest assertion rejects writing a `source_url`
-  containing `api_key`, `apikey`, `token` or `key=`. TMDB v3, Fanart.tv and Comic Vine all
+  that still carries a credential parameter. **Which names those are is `internal/ssrf/redact.go`'s
+  `credentialParams` to say, not this bullet's** — a shorter list restated here is the second
+  deny-list, and the one that drifts is the one that leaks. TMDB v3, Fanart.tv and Comic Vine all
   authenticate by query parameter, so without this the key persists in the database, in every
   `VACUUM INTO` backup and in any support bundle — and, because `cache_key = sha256(source_url)[:16]`,
   rotating the provider key would silently invalidate the entire image cache. Derive `cache_key`

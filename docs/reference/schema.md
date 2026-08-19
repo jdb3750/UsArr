@@ -1361,8 +1361,10 @@ CREATE INDEX ix_img_state ON image_asset(state, expires_at);
 
 `origin_class` and `origin_service_instance_id` are what let the fetcher select an SSRF policy from
 the **row** rather than from the URL string, which is the fix for the derived-URL class
-(security.md §2). An ingest assertion rejects writing a `source_url` containing `api_key`, `apikey`,
-`token` or `key=`.
+(security.md §2). An ingest assertion rejects writing a `source_url` that still carries a credential
+parameter. Which parameter names count is `internal/ssrf/redact.go`'s `credentialParams` to say, and
+this file deliberately keeps no second copy of that list: a restated subset is correct only until the
+code moves, and nothing signals when it does.
 
 **`format` records what UsArr's own encoder produced, not what the origin server served.**
 [ARCHITECTURE.md](../ARCHITECTURE.md) §4.4's ingest-time downscale to a seven-width allowlist puts an
