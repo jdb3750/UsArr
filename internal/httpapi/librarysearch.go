@@ -68,8 +68,10 @@ import (
 // result row and a recently-added row render identically (§17.2's Type / title /
 // year / Have grammar), so a client reuses one row component across Home and
 // Search. The two structs are separate because the two reads are separate; the
-// rendering key set is the same on purpose and
-// TestSearchResponseKeysAreTheAllowlist pins it.
+// rendering key set is the same on purpose, and it is
+// TestSearchItemKeysAreRecentWorkKeysPlusScore that pins THAT — the two
+// allowlist tests each pin one struct against a hand-copied list of its own and
+// neither can see the pair drift apart.
 //
 // `score` is the one key Home has no analogue for and cannot have one for: Home
 // orders by date, so there is no relevance for it to carry. A client reusing the
