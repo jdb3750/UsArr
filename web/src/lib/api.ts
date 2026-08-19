@@ -1160,9 +1160,16 @@ function toTestResult(value: unknown): ConnectionTestResult {
  *
  * The ORDER is the picker's order, and `prowlarr` stays first because
  * `SERVICE_KINDS[0]` is the add-form's default and Prowlarr is the one every
- * install needs. `kavita` joins it as v0.1's catalogue source (ADR-0041).
+ * install needs. `kavita` joins it as v0.1's catalogue source (ADR-0041), and
+ * `bookorbit` as ADR-0052's.
+ *
+ * ⚠️ APPEARING HERE MEANS A SERVICE CAN BE ADDED, NOT THAT ITS CATALOGUE CAN BE
+ * READ. The two are separate registrations on the server — the kind decides what
+ * may be stored, `cmd/usarr`'s registry decides what each stored kind can then
+ * do — and for `bookorbit` today that is the credential handshake and the health
+ * probe. The Services screen says so per row rather than this picker hiding it.
  */
-export const SERVICE_KINDS = ['prowlarr', 'kavita'] as const;
+export const SERVICE_KINDS = ['prowlarr', 'kavita', 'bookorbit'] as const;
 
 const DEFAULT_PORTS: Record<string, string> = { 'http:': '80', 'https:': '443' };
 

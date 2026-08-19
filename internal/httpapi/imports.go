@@ -122,9 +122,15 @@ func importStartError(err error) error {
 			"an import is already running for this service; a second one was not started").
 			withAction("Wait for the running import to finish")
 	case errors.Is(err, ErrNotCatalogueSource):
+		// ⚠️ THE WORDING COVERS TWO DIFFERENT SERVICES and must not claim the
+		// stronger of them. A Prowlarr has no catalogue at all; a BookOrbit has
+		// one and UsArr has no reader for it yet (internal/bookorbit is ADR-0052
+		// slice 0, and internal/libsync has no BookOrbit source). "Carries no
+		// catalogue" was true of the first and false of the second, and this
+		// screen must not tell a user their books do not exist.
 		return errStatus(http.StatusConflict, CodeNotCatalogueSource,
-			"this service carries no catalogue to import").
-			withAction("Run a sync on a catalogue service")
+			"UsArr has no catalogue reader for this service").
+			withAction("Run a sync on a service UsArr can import from")
 	}
 	// Everything else is a configuration failure the user can act on — most
 	// often a credential that will not open — and it is rendered verbatim for
