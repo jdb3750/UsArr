@@ -193,12 +193,12 @@ export function browseSortsFor(mediaType: MediaType | undefined): BrowseSort[] {
  *
  * ⚠️ THE SERVER'S OWN 400 TEXT MUST NEVER REACH THIS SCREEN, and that is the
  * whole reason this string exists rather than a `catch` that renders
- * `ApiError.action`. `handleBrowseWorks` answers an unservable sort with
- * *"sort_title needs a media_type of one kind — not music — and there is no
- * index behind year at all"*: it is one shared sentence for two different
- * refusals, it names a parameter and a column rather than anything on screen,
- * and it talks about music and about year to a reader who asked for neither.
- * Correct for a wire consumer, wrong for this audience.
+ * `ApiError.action`. `handleBrowseWorks` answers an unservable all-types
+ * alphabetical sort with *"add a media_type — movies, tv, ebooks, audiobooks or
+ * comics — to sort by title, or sort by added_at or popularity"*: it is
+ * addressed to whoever is building the query string, and it names wire
+ * parameters and sort keys rather than anything on screen. Correct for a wire
+ * consumer, wrong for this audience.
  *
  * ⚠️ AND IT IS STATED RATHER THAN OFFERED-THEN-REFUSED. `browseSortsFor` keeps
  * the option out of the control entirely, so this note is the only place the
