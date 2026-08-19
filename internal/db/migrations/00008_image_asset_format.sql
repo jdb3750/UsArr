@@ -1,0 +1,138 @@
+-- Migration 0008 — image_asset.format, so a cached image's encoding is a fact
+-- ON THE ROW rather than a fact about whatever the pipeline happened to emit.
+--
+-- SCOPE. Exactly one column and nothing else:
+--
+--   image_asset.format
+--
+-- No index, no CHECK, no new table, no rebuild. The index is left out for
+-- 00001's rule — an index nothing queries is a claim nobody has tested — and
+-- no query filters or orders by format today.
+--
+-- WHY THIS EXISTS. ARCHITECTURE.md §4.4 specified an OUTPUT CODEC (AVIF) and
+-- never named a base format, so the pipeline's stored bytes had no declared
+-- encoding at all and the table had no column to record one in. ADR-0050 closes
+-- that gap in both halves: stdlib JPEG is the named base output format, AVIF is
+-- deferred with its seam kept, and this column is the seam. Without it, a row
+-- encoded as JPEG today and a row re-encoded as AVIF after the deferral is
+-- reopened are indistinguishable, and `/img` cannot set a Content-Type without
+-- sniffing bytes it already wrote.
+--
+-- THIS IS FREE TODAY AND WOULD NOT BE LATER. Nothing in Go writes image_asset —
+-- measured on this tree: the only non-test references under internal/ are three
+-- comments in internal/ssrf and one query-plan assertion in queryplan_test.go.
+-- So there are zero rows, and the column costs a DDL rewrite and nothing else.
+-- image_asset is a PARENT of `work` twice over (work.poster_asset_id and
+-- work.backdrop_asset_id both REFERENCE it), which makes it one of the more
+-- expensive tables in this schema to rebuild; doing this after the image
+-- pipeline has populated a cache would be a 12-step rebuild instead of a
+-- one-line ALTER. That asymmetry is the whole reason this lands now.
+--
+-- WHY `format` AND NOT `mime`. The column holds a short lowercase codec token —
+-- 'jpeg' today, 'avif' if ADR-0050's deferral is reopened, possibly 'webp' —
+-- and NOT a media type like 'image/jpeg'. Four reasons, in order of weight:
+--
+--   * The value every reader branches on is the CODEC. The /img handler picks a
+--     Content-Type from it, the cache picks a file suffix from it, and a
+--     re-encode pass asks "was this row written under the old codec". A token
+--     answers all three with an equality test; a media type answers them after
+--     stripping a constant 'image/' prefix that is identical on every row.
+--   * A media type has aliases and parameters. 'image/jpg' is wrong and is seen
+--     in the wild anyway, and RFC 9110 media types carry optional parameters
+--     after a ';'. A stored media type therefore admits two spellings for one
+--     encoding and a substring nobody wants to parse. A token admits one.
+--   * Content-Type is a PRESENTATION detail of one surface. It is derivable
+--     from the token in a one-line lookup; the reverse — recovering the codec
+--     from an arbitrary media type string — is parsing.
+--   * The upstream's declared media type is NOT what this column records. This
+--     column records what UsArr's own encoder produced, and §4.4's ingest-time
+--     downscale to a seven-width allowlist means every stored byte has been
+--     decoded and re-encoded. What the origin server called it is history.
+--
+-- NULLABLE, WITH NO DEFAULT, AND THAT IS THE LOAD-BEARING CHOICE.
+-- An image_asset row is created in state 'pending' — before any bytes are
+-- fetched, and long before any encoder has run. At that moment the row's format
+-- is not 'jpeg'; it is UNKNOWN, and it stays unknown until the encode lands.
+-- A NOT NULL DEFAULT 'jpeg' would write a positive claim about bytes that do
+-- not exist, and would leave no value that means "not encoded yet" — so a
+-- reader could not tell "encoded as JPEG" from "never encoded", which is
+-- exactly the shape of the have_count NOT NULL DEFAULT 0 defect this project
+-- has already been bitten by twice. NULL means "no encoded bytes exist for this
+-- row", it is the honest value at INSERT time, and it is intended to be
+-- co-extensive with state <> 'ready'.
+--
+-- 0003's NOT NULL DEFAULT 'confirmed' is the correct opposite and not a
+-- contradiction: there, the default was TRUE of every pre-existing row, because
+-- a provenance row was only ever written after a 2xx. Here there are no
+-- pre-existing rows and no encoder, so there is no fact for a default to state.
+--
+-- NO CHECK CONSTRAINT — AND THIS TIME THE CHOICE WAS REALLY AVAILABLE.
+-- ⚠️ 00003's header says a CHECK "is the one thing ALTER TABLE cannot express".
+-- That is imprecise and was measured to be so before this migration was
+-- written: on SQLite 3.53.4, the version this tree links,
+-- `ALTER TABLE t ADD COLUMN b TEXT CHECK (b IS NULL OR b IN ('x','y'))`
+-- SUCCEEDS on a STRICT table and the constraint is then enforced on insert.
+-- What ALTER TABLE cannot do is ALTER or DROP an EXISTING CHECK. So a CHECK
+-- here was on the table and is declined on its merits, not forbidden:
+--
+--   * The vocabulary is EXPECTED to grow. ADR-0050 defers AVIF rather than
+--     rejecting it and names the condition that reopens it, so 'avif' is a
+--     planned second member, and 'webp' is a plausible third. A CHECK written
+--     today is a rebuild scheduled for the day the deferral is reopened.
+--   * That rebuild is not cheap. image_asset is referenced by two `work`
+--     columns, so widening the CHECK means the 12-step procedure on a parent
+--     table with a populated image cache behind it.
+--   * The precedent is direct and it points one way. ADR-0039 dropped
+--     write_queue.state's CHECK outright on exactly this reasoning;
+--     image_asset's OWN `role` and `state` columns carry no CHECK for the same
+--     reason; provenance.acquisition_state (00003) and audit_log.result (00001)
+--     are the same shape.
+--
+-- WHERE THE GO-SIDE VALIDATION LIVES, NAMED HERE BECAUSE THE LAST TIME THIS
+-- PROMISE WAS MADE IT WAS NEVER KEPT. ADR-0039's outstanding debt is that the
+-- Go validator it promised for write_queue.state was never written, so that
+-- vocabulary is enforced nowhere that runs. This migration does not repeat
+-- that. It ships with the enforcement, in internal/store/images.go:
+--
+--   * `store.ImageFormatJPEG` and `store.ValidImageFormat` declare and check the
+--     vocabulary, unit-tested in internal/store/images_test.go.
+--   * `TestImageWritesValidateTheFormatVocabulary`
+--     (internal/store/imagelint_test.go) is an AST walk in the shape of the
+--     existing TestNoCodeMutatesTheAuditLog guard. It passes vacuously while
+--     nothing writes image_asset, and FAILS the moment production code contains
+--     an INSERT or UPDATE against image_asset without any reference to the
+--     validator. The obligation therefore cannot be skipped silently, which is
+--     the specific way ADR-0039's version was lost.
+--
+-- NO TABLE REBUILD IS NEEDED, on 00003's grounds, re-measured rather than
+-- inherited, and TestMigration0008NeedsNoRebuild pins each one:
+--
+--   * ADD COLUMN is legal on a STRICT table, and the table is STRICT afterwards
+--     (verified on 3.53.4; pragma_table_list.strict stays 1).
+--   * A nullable ADD COLUMN with no default rewrites the stored table DDL only.
+--     There are no rows to rewrite in any case.
+--   * No existing CHECK is touched, no foreign key is added, and no index
+--     covers the new column — so the Down block's DROP COLUMN needs no index
+--     dropped first, unlike 00003's.
+--
+-- A merged migration is NEVER edited. Write a new one.
+
+-- +goose Up
+-- +goose StatementBegin
+
+-- NULL means "no encoded bytes exist for this row yet" — see the header. Values
+-- are lowercase codec tokens; the vocabulary is 'jpeg' today and is declared and
+-- enforced in internal/store/images.go, not here. ADR-0050.
+ALTER TABLE image_asset ADD COLUMN format TEXT;
+
+-- +goose StatementEnd
+
+-- +goose Down
+-- Downgrades are not a supported user path (docs/CONFIGURATION.md §6.3). This
+-- block exists so a migration can be tested locally, and for nothing else.
+--
+-- No index to drop first: 00008 creates none. SQLite refuses DROP COLUMN on an
+-- indexed column, which is why 00003's Down needed the extra statement.
+-- +goose StatementBegin
+ALTER TABLE image_asset DROP COLUMN format;
+-- +goose StatementEnd

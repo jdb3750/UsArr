@@ -1347,7 +1347,8 @@ CREATE TABLE image_asset (
   cache_key  TEXT NOT NULL,             -- sha256(credential-stripped source_url)[:16]
   etag TEXT, last_modified TEXT,
   fetched_at TEXT, expires_at TEXT,
-  state      TEXT NOT NULL DEFAULT 'pending'  -- pending|ready|failed|gone
+  state      TEXT NOT NULL DEFAULT 'pending', -- pending|ready|failed|gone
+  format     TEXT                           -- NULL until encoded. jpeg. Added by 00008; ADR-0050
 ) STRICT;
 CREATE INDEX ix_img_state ON image_asset(state, expires_at);
 ```
@@ -1356,6 +1357,27 @@ CREATE INDEX ix_img_state ON image_asset(state, expires_at);
 the **row** rather than from the URL string, which is the fix for the derived-URL class
 (security.md §2). An ingest assertion rejects writing a `source_url` containing `api_key`, `apikey`,
 `token` or `key=`.
+
+**`format` records what UsArr's own encoder produced, not what the origin server served.**
+[ARCHITECTURE.md](../ARCHITECTURE.md) §4.4's ingest-time downscale to a seven-width allowlist means
+every stored byte has been decoded and re-encoded, so the upstream's declared media type is history.
+Three properties, each decided in [ADR-0050](../DECISIONS.md#adr-0050) and argued at length in
+`00008_image_asset_format.sql`'s header:
+
+- **It is a lowercase codec token, not a media type** — `jpeg`, not `image/jpeg`, and not the `jpg`
+  file suffix. `Content-Type` is derived from it by the `/img` surface; the reverse is parsing, and
+  a stored media type would admit both `image/jpeg` and the wrong-but-common `image/jpg` for one
+  encoding.
+- **NULL means "no encoded bytes exist for this row yet"**, and it is the value a row carries at
+  INSERT time, when `state` is `pending` and no encoder has run. There is no default. A
+  `NOT NULL DEFAULT 'jpeg'` would have made "encoded as JPEG" and "never encoded" the same value.
+- **There is no `CHECK`**, on ADR-0039's reasoning and the same reasoning `role` and `state` above
+  already follow: the vocabulary is expected to grow (`jpeg` today, `avif` if ADR-0050's deferral is
+  reopened, possibly `webp`) and SQLite cannot `ALTER` a `CHECK`. ⚠️ Unlike ADR-0039's promise for
+  `write_queue.state`, **the Go-side enforcement shipped with the column**:
+  `internal/store/images.go` declares the vocabulary and `ValidImageFormat` checks it, and
+  `TestImageWritesValidateTheFormatVocabulary` fails the build if a writer against `image_asset`
+  lands without referencing the validator.
 
 **`cache.db`** is a second, disposable database holding `http_cache(url_hash, etag, last_modified,
 body_hash, fetched_at, expires_at)`, the job queue, unowned-search result caching, and image-cache

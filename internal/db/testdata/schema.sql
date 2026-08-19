@@ -300,7 +300,7 @@ CREATE TABLE image_asset (
   etag TEXT, last_modified TEXT,
   fetched_at TEXT, expires_at TEXT,
   state      TEXT NOT NULL DEFAULT 'pending'  -- pending|ready|failed|gone
-) STRICT;
+, format TEXT) STRICT;
 
 -- table indexer_catalog
 CREATE TABLE indexer_catalog (

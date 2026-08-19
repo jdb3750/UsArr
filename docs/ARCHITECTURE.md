@@ -322,10 +322,21 @@ that is the seam that makes a third tier (FUTURE.md §1) an added factory rather
 
 ### 4.4 Image pipeline
 
+⚠️ **Amended 2026-08-19 by [ADR-0050](./DECISIONS.md#adr-0050): the base output format is stdlib
+JPEG, and AVIF is deferred.** This section named AVIF as the only output codec and **never named a
+base format at all**, which left the pipeline with no declared encoding for the bytes it stores —
+the gap ADR-0050 exists to close. The "AVIF encoded lazily off the request path" sentence below is
+kept as written, because the *lazy, off-the-request-path* shape is what survives; the codec in it is
+not what ships. AVIF is buildable here (`gen2brain/avif`, MIT, cgo-free) and is deferred on a
+measured trade — one dependency plus a **second** WASM runtime against bytes on the wire — with the
+condition that reopens it named in the ADR. `image_asset.format` (migration
+`00008_image_asset_format.sql`) is the seam that keeps the switch cheap.
+
 Posters are the bottleneck: a 60-item viewport at 500×750 is ~5–9 MB per screenful against ~30 KB of
 JSON. **Ingest-time downscale** to a **fixed width allowlist** (`92, 154, 200, 342, 500, 780, orig`;
-arbitrary `?w=` is a cache-poisoning DoS and a live CVE class, GHSA-rrr6-mvwg-9pg9), **AVIF encoded
-lazily off the request path** (~10–20× slower than WebP), **all transcoding behind a
+arbitrary `?w=` is a cache-poisoning DoS and a live CVE class, GHSA-rrr6-mvwg-9pg9), **~~AVIF~~
+JPEG (ADR-0050) encoded lazily off the request path** (~10–20× slower than WebP), **all transcoding
+behind a
 `min(NumCPU, 4)` semaphore** (jellyfin#9795 is exactly this failure), and **ThumbHash inline in every
 list payload** (~25 B/item; chosen over BlurHash on decode cost, 503 µs vs 6.5 ms, because decode
 runs on every page load and encode runs once). Three rules that are not obvious:
@@ -344,7 +355,8 @@ runs on every page load and encode runs once). Three rules that are not obvious:
 
 **4.4.1 Cold start — the moment the speed opinion forms.** §13's first-paint and `/img` numbers are
 **cache-hit** numbers. The real first run fetches 10k posters through UsArr, downscales at up to
-seven widths, encodes ThumbHash and backfills AVIF behind a 4-way semaphore. On a Pi that is not 90
+seven widths, encodes ThumbHash and backfills the remaining widths behind a 4-way semaphore
+(~~AVIF~~ — ADR-0050). On a Pi that is not 90
 seconds, and if nothing is done the new user's first ten minutes are grey boxes — the exact
 impression the architecture exists to avoid. Four rules:
 
@@ -352,8 +364,8 @@ impression the architecture exists to avoid. Four rules:
    `image_asset` rows jump the queue and background backfill runs behind them. This single change is
    what makes cold start feel instant instead of alphabetical.
 2. **Smallest size first.** Fetch 92px, encode ThumbHash and `dominant_color` from it immediately,
-   defer larger widths and AVIF — ThumbHash coverage then races ahead of poster coverage by an order
-   of magnitude.
+   defer larger widths ~~and AVIF~~ (ADR-0050) — ThumbHash coverage then races ahead of poster
+   coverage by an order of magnitude.
 3. **`dominant_color` is available before ThumbHash** (one average over the 92px fetch), so the empty
    card is title and year over a colour fill, never a grey box. **The foreground colour is chosen in
    the pipeline, not in CSS, and it is the one colour in the system that is data rather than a

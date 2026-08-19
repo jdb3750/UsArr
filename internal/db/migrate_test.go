@@ -59,7 +59,7 @@ func TestMigrationRoundTrip(t *testing.T) {
 // asserted rather than derived so that adding a migration is a deliberate edit
 // here too — a version the tests do not know about is a migration nobody
 // round-tripped.
-const latestSchemaVersion int64 = 7
+const latestSchemaVersion int64 = 8
 
 // Down is not a supported user path, but it must work, because it is the
 // cheapest way to test a migration locally. A Down that leaves objects behind
@@ -2315,9 +2315,15 @@ func TestMigrate0006DownAndUp(t *testing.T) {
 
 	created := []string{"work_book", "work_comic", "work_comic_issue"}
 
-	// 0007 now sits on top of 0006, and MigrateDown rolls back exactly one
-	// migration, so this walks past 0007 first and back up past it at the end.
-	// Every assertion below is still about 0006's own block.
+	// 0007 and 0008 now sit on top of 0006, and MigrateDown rolls back exactly
+	// one migration, so this walks past both first and back up past both at the
+	// end. Every assertion below is still about 0006's own block.
+	//
+	// Each new migration adds one step here. That is the maintenance a migration
+	// on top of this one owes, and 0008 pays it the same way 0007 did.
+	if err := d.MigrateDown(ctx); err != nil {
+		t.Fatalf("MigrateDown 8→7: %v", err)
+	}
 	if err := d.MigrateDown(ctx); err != nil {
 		t.Fatalf("MigrateDown 7→6: %v", err)
 	}
@@ -2375,8 +2381,13 @@ func TestMigrate0006DownAndUp(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	// Migrate goes all the way to head, so come back down to 6 — one step per
+	// migration stacked above this one. Another migration adds another step.
 	if err := d.Migrate(ctx); err != nil {
-		t.Fatalf("Migrate 5→7: %v", err)
+		t.Fatalf("Migrate 5→8: %v", err)
+	}
+	if err := d.MigrateDown(ctx); err != nil {
+		t.Fatalf("MigrateDown 8→7: %v", err)
 	}
 	if err := d.MigrateDown(ctx); err != nil {
 		t.Fatalf("MigrateDown 7→6: %v", err)
@@ -2757,6 +2768,12 @@ func TestMigrate0007DownAndUp(t *testing.T) {
 	ctx := t.Context()
 	d := openTestDB(t)
 
+	// 0008 now sits on top of 0007, so walk past it before capturing the schema
+	// this test is about. MigrateDown rolls back exactly one migration.
+	if err := d.MigrateDown(ctx); err != nil {
+		t.Fatalf("MigrateDown 8→7: %v", err)
+	}
+
 	at7, err := dumpSchema(ctx, d.Read())
 	if err != nil {
 		t.Fatal(err)
@@ -2802,8 +2819,12 @@ func TestMigrate0007DownAndUp(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	// Migrate goes all the way to head, so come back down to 7.
 	if err := d.Migrate(ctx); err != nil {
-		t.Fatalf("Migrate 6→7: %v", err)
+		t.Fatalf("Migrate 6→8: %v", err)
+	}
+	if err := d.MigrateDown(ctx); err != nil {
+		t.Fatalf("MigrateDown 8→7: %v", err)
 	}
 	again, err := dumpSchema(ctx, d.Read())
 	if err != nil {
@@ -2811,5 +2832,221 @@ func TestMigrate0007DownAndUp(t *testing.T) {
 	}
 	if again != at7 {
 		t.Error("a Down followed by an Up did not reproduce the schema 0007 creates")
+	}
+}
+
+// TestMigration0008NeedsNoRebuild is 0003's precedent test written for 0008,
+// and it pins the four claims 0008's header makes about ALTER TABLE rather than
+// inheriting them:
+//
+//  1. the column exists, is TEXT, is NULLABLE and has NO default;
+//  2. image_asset is still STRICT after the ADD COLUMN;
+//  3. NULL and 'jpeg' both round-trip, and NULL is what an insert that names no
+//     format gets — so "not encoded yet" is representable and distinguishable;
+//  4. there is deliberately NO CHECK, which is checked by inserting a value the
+//     vocabulary does not contain and requiring the database to ACCEPT it.
+//
+// Claim 4 is the one worth having a test for. "No CHECK" is otherwise an absence,
+// and an absence is exactly what nobody notices being reversed.
+//
+// The rebuild this avoids would copy every image_asset row and, because
+// work.poster_asset_id and work.backdrop_asset_id both reference the table, would
+// drag the 12-step procedure across a parent table.
+func TestMigration0008NeedsNoRebuild(t *testing.T) {
+	ctx := t.Context()
+	d := openTestDB(t)
+
+	// 1. The column's declared shape. NULLABLE WITH NO DEFAULT is the decision,
+	//    not an oversight: an image_asset row is created in state 'pending',
+	//    before any encoder has run, so at INSERT time the format is genuinely
+	//    unknown. A NOT NULL DEFAULT 'jpeg' would assert an encoding for bytes
+	//    that do not exist and leave no value meaning "not encoded yet" — the
+	//    have_count NOT NULL DEFAULT 0 shape this project has been bitten by.
+	var typ string
+	var notNull int
+	var dflt sql.NullString
+	err := d.Read().QueryRowContext(ctx,
+		`SELECT type, "notnull", dflt_value FROM pragma_table_info('image_asset')
+		  WHERE name = 'format'`).Scan(&typ, &notNull, &dflt)
+	if err != nil {
+		t.Fatalf("image_asset has no format column: %v", err)
+	}
+	if typ != "TEXT" {
+		t.Errorf("image_asset.format is %q, want TEXT", typ)
+	}
+	if notNull != 0 {
+		t.Error("image_asset.format is NOT NULL; NULL is how the column says " +
+			"'no encoded bytes exist for this row yet', and without it 'encoded as " +
+			"JPEG' and 'never encoded' are the same value. See 00008's header.")
+	}
+	if dflt.Valid {
+		t.Errorf("image_asset.format defaults to %q; it must have NO default, so that "+
+			"a row created before its encode runs carries NULL rather than a positive "+
+			"claim about bytes that do not exist", dflt.String)
+	}
+
+	// 2. image_asset is still STRICT after the ADD COLUMN. TestAllTablesAreStrict
+	//    covers every table; this pins the one 0008 touched, and it is the claim
+	//    that makes the migration a one-liner rather than a rebuild.
+	var strict int
+	if err := d.Read().QueryRowContext(ctx,
+		`SELECT strict FROM pragma_table_list WHERE name = 'image_asset'`).Scan(&strict); err != nil {
+		t.Fatalf("reading pragma_table_list for image_asset: %v", err)
+	}
+	if strict != 1 {
+		t.Error("image_asset is no longer STRICT after ADD COLUMN")
+	}
+
+	// 3. An insert that names no format gets NULL; one that names 'jpeg' keeps it.
+	if err := d.Write(ctx, func(ctx context.Context, tx *sql.Tx) error {
+		if _, err := tx.ExecContext(ctx, `
+			INSERT INTO image_asset (id, source_url, origin_class, role, cache_key)
+			VALUES (1, 'https://example.invalid/a.jpg', 'provider', 'poster', 'aaaa')`); err != nil {
+			return err
+		}
+		_, err := tx.ExecContext(ctx, `
+			INSERT INTO image_asset (id, source_url, origin_class, role, cache_key, format)
+			VALUES (2, 'https://example.invalid/b.jpg', 'provider', 'poster', 'bbbb', 'jpeg')`)
+		return err
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	var pending sql.NullString
+	if err := d.Read().QueryRowContext(ctx,
+		`SELECT format FROM image_asset WHERE id = 1`).Scan(&pending); err != nil {
+		t.Fatal(err)
+	}
+	if pending.Valid {
+		t.Errorf("a row inserted without a format got %q, want NULL", pending.String)
+	}
+	var encoded string
+	if err := d.Read().QueryRowContext(ctx,
+		`SELECT format FROM image_asset WHERE id = 2`).Scan(&encoded); err != nil {
+		t.Fatal(err)
+	}
+	if encoded != "jpeg" {
+		t.Errorf("format round-tripped as %q, want jpeg", encoded)
+	}
+
+	// 4. There is NO CHECK constraint, and this asserts the absence by exercising
+	//    it. The vocabulary is expected to grow — ADR-0050 defers AVIF with a
+	//    named reopening condition rather than rejecting it — and SQLite cannot
+	//    ALTER an existing CHECK, so a constraint here would schedule a 12-step
+	//    rebuild of a table two `work` columns reference. ADR-0039 made the same
+	//    call for write_queue.state.
+	//
+	//    ⚠️ A CHECK was genuinely available and was declined, rather than being
+	//    impossible. Measured on this tree's SQLite 3.53.4: ADD COLUMN accepts a
+	//    column CHECK on a STRICT table and enforces it. 00003's header sentence
+	//    calling a CHECK "the one thing ALTER TABLE cannot express" is imprecise —
+	//    what ALTER TABLE cannot do is ALTER or DROP an EXISTING one.
+	if err := d.Write(ctx, func(ctx context.Context, tx *sql.Tx) error {
+		_, err := tx.ExecContext(ctx, `
+			INSERT INTO image_asset (id, source_url, origin_class, role, cache_key, format)
+			VALUES (3, 'https://example.invalid/c.bin', 'provider', 'poster', 'cccc', 'not-a-codec')`)
+		return err
+	}); err != nil {
+		t.Errorf("the database REJECTED an unknown format value: %v\n"+
+			"image_asset.format must carry no CHECK constraint — the codec vocabulary "+
+			"grows (jpeg today, avif on ADR-0050's reopening, possibly webp) and SQLite "+
+			"cannot ALTER a CHECK. The vocabulary is enforced in internal/store/images.go "+
+			"and guarded by TestImageWritesValidateTheFormatVocabulary.", err)
+	}
+
+	// 5. STRICT buys almost NOTHING for this column, and that is measured here
+	//    rather than assumed — because assuming it is how a reader talks
+	//    themselves out of the Go validator.
+	//
+	//    A STRICT TEXT column converts a value "if and only if the conversion is
+	//    lossless and reversible", so INTEGER 7 and REAL 1.5 are ACCEPTED and
+	//    stored as '7' and '1.5'. Measured on this tree's SQLite 3.53.4. Only a
+	//    BLOB is refused. An earlier draft of this test asserted that STRICT
+	//    rejects an integer here and the test itself falsified it.
+	//
+	//    ⚠️ The same measurement falsifies a sentence in this file: item 2 of
+	//    TestMigration0003NeedsNoRebuild says "losing STRICT here would silently
+	//    accept an integer state". STRICT accepts an integer state either way.
+	//    That comment is 0003's and is left alone by this migration; recorded as
+	//    LS-287 rather than fixed here.
+	//
+	//    So the only thing standing between image_asset.format and a garbage
+	//    value is internal/store/images.go. That is the argument for shipping the
+	//    validator with the column instead of promising it.
+	if err := d.Write(ctx, func(ctx context.Context, tx *sql.Tx) error {
+		_, err := tx.ExecContext(ctx, `
+			INSERT INTO image_asset (id, source_url, origin_class, role, cache_key, format)
+			VALUES (4, 'https://example.invalid/d.bin', 'provider', 'poster', 'dddd', 7)`)
+		return err
+	}); err != nil {
+		t.Errorf("a STRICT TEXT column refused the integer 7: %v\n"+
+			"If this starts failing, SQLite's STRICT coercion rules changed and the "+
+			"reasoning above — that STRICT protects this column from nothing but a BLOB — "+
+			"needs re-measuring.", err)
+	}
+	var coerced string
+	if err := d.Read().QueryRowContext(ctx,
+		`SELECT format FROM image_asset WHERE id = 4`).Scan(&coerced); err != nil {
+		t.Fatal(err)
+	}
+	if coerced != "7" {
+		t.Errorf("the integer 7 stored as %q, want the string \"7\"", coerced)
+	}
+}
+
+// TestMigrate0008DownAndUp mirrors 0007's round-trip check for a column rather
+// than a table: the Down block must remove exactly `format` and leave every other
+// schema object byte-identical, and a following Up must reproduce 0008 exactly.
+//
+// Unlike 00003's Down, this one drops no index first — 0008 creates none, and
+// SQLite's refusal to DROP COLUMN on an indexed column is therefore not in play.
+// If someone later adds an index over format without amending the Down block,
+// this test is what fails.
+func TestMigrate0008DownAndUp(t *testing.T) {
+	ctx := t.Context()
+	d := openTestDB(t)
+
+	at8, err := dumpSchema(ctx, d.Read())
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if err := d.MigrateDown(ctx); err != nil {
+		t.Fatalf("MigrateDown 8→7: %v", err)
+	}
+	if v, err := d.Version(ctx); err != nil || v != 7 {
+		t.Fatalf("version after Down = %d (err %v), want 7", v, err)
+	}
+	var n int
+	if err := d.Read().QueryRowContext(ctx,
+		`SELECT count(*) FROM pragma_table_info('image_asset') WHERE name = 'format'`).Scan(&n); err != nil {
+		t.Fatal(err)
+	}
+	if n != 0 {
+		t.Error("image_asset.format survived the Down block")
+	}
+
+	at7, err := dumpSchema(ctx, d.Read())
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, obj := range strings.Split(at8, "\n\n") {
+		if obj == "" || strings.Contains(obj, "image_asset") {
+			continue
+		}
+		if !strings.Contains(at7, obj) {
+			t.Errorf("0008's Down block removed or changed an object it did not create:\n%s", obj)
+		}
+	}
+
+	if err := d.Migrate(ctx); err != nil {
+		t.Fatalf("Migrate 7→8: %v", err)
+	}
+	again, err := dumpSchema(ctx, d.Read())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if again != at8 {
+		t.Error("a Down followed by an Up did not reproduce the schema 0008 creates")
 	}
 }

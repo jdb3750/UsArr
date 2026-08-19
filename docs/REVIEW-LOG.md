@@ -17762,3 +17762,275 @@ thread that owns the startup path and can test the failure modes; it does not be
 So the window FI-06 describes is **detected and refused** rather than closed. That is strictly weaker
 than a lock and is not offered as a substitute for one: FI-06 remains **Open**, with its fix shape
 unchanged.
+
+---
+
+## LS-280 — `ARCHITECTURE.md` §4.4 specified an output codec and never specified a base format
+
+**Found by reading §4.4 for a different question and verified against the schema before a word
+moved.** §4.4 says images are *"AVIF encoded lazily off the request path"* and names no other format
+**anywhere in the section** — not as a fallback, not as what the lazy encode is lazy relative to,
+not as what a row holds before the backfill reaches it. §4.4.1 then says *"defer larger widths and
+AVIF"*, a sentence that only parses if something non-AVIF exists at 92px, and never says what.
+
+**This is a missing base case, not a wording nit, and it had three visible consequences:**
+
+| §4.4 as written | What it could not answer |
+|---|---|
+| "AVIF encoded lazily off the request path" | what encoding a row carries *before* the lazy pass runs |
+| — | what `/img` puts in a `Content-Type` |
+| — | where an encoding would be recorded: `image_asset` (`00005_library_sync.sql:219-236`) has **no format and no mime column** |
+
+**Serving upstream bytes untouched was checked as an escape hatch and is not one.** §4.4 mandates
+ingest-time downscale to a seven-width allowlist on a security ground (GHSA-rrr6-mvwg-9pg9,
+cache-poisoning DoS). Downscale is decode-and-re-encode, so UsArr owns an encoder on six of the
+seven widths regardless. **The codec was the only negotiable part.**
+
+**Resolved by [ADR-0050](./DECISIONS.md#adr-0050)**, which names stdlib JPEG as the base format and
+strikes §4.4's and §4.4.1's AVIF mentions in place rather than deleting them. The ADR says the spec
+was wrong in terms rather than patching around it, which is the half of this finding that matters:
+the fix for a spec that quietly lacks a base case is a record saying it lacked one.
+
+---
+
+## LS-281 — the reason for stdlib JPEG is dependency count, and it is written so a reader can disagree with it
+
+**The weak version of this decision is "JPEG is fine", and that version is unreviewable.** What was
+written instead is the project value it rests on and the ledger it is traded against.
+
+**Measured, not asserted:** `go.mod` on this tree lists **five** direct dependencies —
+`ncruces/go-sqlite3`, `pressly/goose/v3`, `x/crypto`, `x/text`, `go-vcr.v4`. `image/jpeg` adds none
+of them, needs no AGPL-compatibility check, and is already inside the `govulncheck` surface that
+sets this project's Go floor.
+
+**Against that, recorded in the ADR rather than left for a reviewer to raise:** JPEG is roughly
+**2–3× larger than AVIF** at equal perceptual quality on photographic content, posters *are*
+photographic content, and §4.4's own worked example is 5–9 MB per screenful — so the cost lands on
+the axis the owner named as requirement number one. The ADR states plainly that it **spends bytes on
+the wire to buy a dependency-free binary**, and that a reader who measures and disagrees is
+supplying a number the ADR did not have rather than overturning a principle.
+
+**One residual risk named rather than glossed:** the stdlib decodes JPEG, PNG and GIF and **not**
+WebP, and `golang.org/x/image/webp` is **decode-only**. If any upstream serves WebP cover art this
+decision costs a dependency anyway. No v0.1 source is known to, and *that is an assumption, not a
+measurement* — it is flagged as such in the ADR and is the likeliest early revisit.
+
+---
+
+## LS-282 — AVIF's deferral is recorded as a measured trade with a reopening condition, and one of its costs was verified rather than quoted
+
+**AVIF is buildable in this binary and the ADR says so first.** `gen2brain/avif` v0.6.0 is MIT and
+cgo-free — libaom compiled to WebAssembly. The `CGO_ENABLED=0` constraint rules it out of nothing,
+and an argument that starts by claiming otherwise is wrong.
+
+**The second WASM runtime was verified on this tree rather than taken from `CLAUDE.md`'s note.**
+The note says `ncruces/go-sqlite3` moved off wazero to `wasm2go` on 2026-03-05 and warns against
+reusing the "shared runtime" argument. Confirmed independently: `grep wazero go.mod go.sum` returns
+**nothing**, and `go list -deps ./... | grep -ci wazero` returns **0**. So wazero is not a cost
+already paid — AVIF would add it from scratch.
+
+**⚠️ The binary-size delta is recorded as UNMEASURED, deliberately, and not estimated.** A guess
+inside a decision record reads as evidence within a week. The ADR therefore states the number is
+unknown and makes obtaining it the reopening condition:
+
+> someone measures **(a)** the binary-size delta from adding `gen2brain/avif` and wazero, and
+> **(b)** the per-image encode cost at the seven allowlisted widths on the owner's hardware, and
+> decides with both numbers in front of them that the bytes are worth it.
+
+Meeting it costs **an ADR amendment plus one map entry** in `internal/store/images.go` — **no
+migration**, which is precisely what `00008`'s absent `CHECK` buys.
+
+**`gen2brain/gav1d` is named in the ADR in order to warn people off it**, not to endorse it: days
+old, negligible adoption, and adjacent enough to `gen2brain/avif` that a future reader could mistake
+proximity for maturity. Nothing should depend on it.
+
+---
+
+## LS-283 — `image_asset.format`, not `image_asset.mime`, and the column holds `jpeg`
+
+**Decided rather than defaulted.** The column holds a lowercase **codec token** — `jpeg` today,
+`avif` if the deferral is reopened, possibly `webp` — and not a media type. Four reasons, in the
+weight order the migration header gives them:
+
+1. **Every reader branches on the codec.** `/img` picks a `Content-Type`, the cache picks a suffix,
+   a re-encode pass asks "was this row written under the old codec". A token answers all three by
+   equality; a media type answers them after stripping a constant `image/` prefix.
+2. **Media types have aliases and parameters.** `image/jpg` is wrong and appears in the wild anyway,
+   and RFC 9110 media types carry optional `;`-parameters. A stored media type admits two spellings
+   for one encoding; a token admits one.
+3. **`Content-Type` is a presentation detail of one surface**, derivable in a one-line lookup. The
+   reverse direction is parsing.
+4. **The column does not record the upstream's declared type.** §4.4's seven-width downscale means
+   every stored byte was decoded and re-encoded by UsArr, so what the origin called it is history.
+
+**Who reads it:** the `/img` handler (Content-Type, cache variant path) and the re-encode/backfill
+pass (which rows predate a codec change). Both are unbuilt, which the ADR states.
+
+---
+
+## LS-284 — no `CHECK` on `image_asset.format`, and the choice was measured to be genuinely available
+
+**ADR-0039's precedent points one way and it was followed**: `write_queue.state`'s `CHECK` was
+dropped outright because a constraint on a still-evolving vocabulary is a liability in a schema that
+cannot be cheaply altered. `image_asset`'s own `role` and `state` carry no `CHECK` for the same
+reason; `provenance.acquisition_state` (`00003`) and `audit_log.result` (`00001`) are the same shape.
+The format vocabulary is **expected** to grow — ADR-0050 defers AVIF rather than rejecting it, so
+`avif` is a *planned* second member.
+
+**⚠️ One inherited claim was measured and is imprecise.** `00003`'s header says a `CHECK` is *"the
+one thing ALTER TABLE cannot express"*. On this tree's SQLite **3.53.4**,
+`ALTER TABLE t ADD COLUMN b TEXT CHECK (b IS NULL OR b IN ('x','y'))` **succeeds** on a `STRICT`
+table and the constraint is then enforced on insert (probed directly before the migration was
+written). What `ALTER TABLE` cannot do is **ALTER or DROP an existing** `CHECK`.
+
+**That correction strengthens the decision rather than weakening it.** A `CHECK` was on the table
+and was declined on its merits: widening it when `avif` lands would need the 12-step rebuild, and
+`image_asset` is a **parent** of `work` twice over (`poster_asset_id`, `backdrop_asset_id`), so that
+rebuild drags a populated image cache and a parent table with it.
+
+**The absence is asserted by exercising it.** `TestMigration0008NeedsNoRebuild` item 4 inserts
+`'not-a-codec'` and **fails if the database rejects it** — an absence is otherwise exactly the kind
+of property nobody notices being reversed.
+
+---
+
+## LS-285 — ADR-0039's outstanding debt is not repeated: the Go validator shipped **with** the column
+
+**This is the finding the no-`CHECK` decision would otherwise have deserved.** ADR-0039 said the
+`write_queue.state` vocabulary *"moves to Go and is validated there"*, and its own dated correction
+records that it never did — no Go code declares or validates that column, so it is enforced nowhere
+that runs. **Making the same trade with the same promise would have been worse than just writing a
+`CHECK`.**
+
+What ships in this commit instead of a promise:
+
+- **`internal/store/images.go`** — `ImageFormatJPEG`, the `imageFormats` set, and `ValidImageFormat`.
+  It follows the `audit_log.result` / `provenance.acquisition_state` pattern already in
+  `internal/store` (constants plus a check at the write site).
+- **`internal/store/images_test.go`** — the unit half. It pins that `""` is **not** a member (the
+  absent value is SQL `NULL`, not an empty token), that media types and file suffixes (`image/jpeg`,
+  `jpg`, `JPEG`) are refused, and that **`avif` is not yet a member** — with a failure message saying
+  that adding it is cheap by design but owes ADR-0050 an amendment.
+- **`internal/store/imagelint_test.go`** — `TestImageWritesValidateTheFormatVocabulary`, an AST walk
+  in the shape of the existing `TestNoCodeMutatesTheAuditLog`. It passes **vacuously** today (and
+  logs `VACUOUS PASS` so a green is never mistaken for a reviewed writer), and **fails** the moment
+  production code contains an `INSERT`/`REPLACE`/`UPDATE` against `image_asset` without any
+  reference to `ValidImageFormat`.
+
+**The guard was fired deliberately in both directions before being trusted**, per `CLAUDE.md` §11's
+rule that an untriggered guard is indistinguishable from no guard. A throwaway
+`internal/store/zz_fireprobe.go` containing an `INSERT INTO image_asset …` made the test **FAIL**
+with the intended message; adding a `ValidImageFormat` reference to the same file made it **PASS**;
+removing the file returned it to the vacuous pass. The probe file is not committed.
+
+**What it does not claim, stated in its own doc comment:** it checks the validator is *referenced*,
+not that it is called on the right value at the right moment. An AST walk cannot know that, and
+over-claiming is what ADR-0039 did. What it removes is the **silent-skip path**, which is how the
+last one was lost.
+
+---
+
+## LS-286 — `format` is nullable with no default, because a default would conflate "unknown" with a value
+
+**This project has been bitten twice this week by exactly this shape** — `have_count NOT NULL
+DEFAULT 0`, where the default is indistinguishable from a measured zero — so the question was asked
+rather than defaulted.
+
+An `image_asset` row is created in state `pending`: **before any bytes are fetched and long before
+any encoder has run.** At that moment the row's format is not `jpeg`, it is **unknown**. A
+`NOT NULL DEFAULT 'jpeg'` would write a positive claim about bytes that do not exist and would leave
+no value meaning "not encoded yet", so "encoded as JPEG" and "never encoded" would be the same
+value — the `have_count` defect, recreated in a fresh column.
+
+**So: `format TEXT`, nullable, no default.** `NULL` means *no encoded bytes exist for this row yet*,
+it is the honest value at `INSERT` time, and it is intended to be co-extensive with
+`state <> 'ready'`.
+
+**`00003`'s `NOT NULL DEFAULT 'confirmed'` is the correct opposite, not a contradiction**, and the
+migration header says why: there the default was **true of every pre-existing row**, because a
+`provenance` row was only ever written after a 2xx. Here there are no pre-existing rows and no
+encoder, so there is no fact for a default to state.
+
+`TestMigration0008NeedsNoRebuild` items 1 and 3 pin both halves: the column is `TEXT`, `notnull = 0`
+and `dflt_value` is **absent**; and an insert naming no format reads back as `NULL` while one naming
+`'jpeg'` round-trips.
+
+---
+
+## LS-287 — `STRICT` protects a `TEXT` vocabulary column from almost nothing, and a comment in `migrate_test.go` says otherwise
+
+**Found by writing an assertion that turned out to be false, which is the useful way to find one.**
+An early draft of `TestMigration0008NeedsNoRebuild` asserted that `STRICT` would reject an integer
+written to `image_asset.format`. **The test failed.**
+
+Measured directly on this tree's SQLite **3.53.4**, inserting into a `STRICT TEXT` column:
+
+| value | result |
+|---|---|
+| `7` (INTEGER) | **accepted**, stored as `'7'` |
+| `1.5` (REAL) | **accepted**, stored as `'1.5'` |
+| `[]byte{1,2}` (BLOB) | **rejected** — *cannot store BLOB value in TEXT column* |
+| `nil` | accepted, stored as `NULL` |
+
+`STRICT` converts a value *"if and only if the conversion is lossless and reversible"*, and
+integer→text is both. **So `STRICT` refuses a BLOB and nothing else**, and it is not a substitute for
+the Go validator. The test now asserts the **real** behaviour (item 5), including the `'7'`
+round-trip, with a failure message telling a future reader that a change here means SQLite's
+coercion rules moved and the reasoning needs re-measuring.
+
+**⚠️ The same measurement falsifies a sentence already in the file, and it is recorded rather than
+fixed.** `TestMigration0003NeedsNoRebuild` item 2 says *"losing STRICT here would silently accept an
+integer state"*. `STRICT` accepts an integer state **either way** — the coercion is the same for
+`provenance.acquisition_state` as for `image_asset.format`. That comment belongs to `0003` and is a
+correctness claim in a test unrelated to this migration, so it is **left alone** and pointed at from
+`00008`'s test comment. Fixing it belongs to whoever next touches that test.
+
+---
+
+## LS-288 — `Progress.Total`'s doc comment claimed an upstream total; both call sites use UsArr's own count
+
+**Handed over by [LS-270](#ls-270), which found it, deliberately left it, and said so** rather than
+losing it — *"fixing a comment in `importer.go` is a production-file edit outside a documentation
+pass and belongs to whoever next touches that type"*. This is that fix.
+
+**Both call sites verified before a word was reworded**, by reading them rather than trusting the
+handover:
+
+| site | what it sets |
+|---|---|
+| `streamAndApplyCredits`'s `flush` | `Total: len(reqs)`, where `reqs` is built one-per-item from the `items []ImportedItem` the pass was handed |
+| `streamAndApplyFiles`'s `flush` | `Total: len(reqs)`, identically |
+
+`reqs` is one-to-one with `items` in both (`make([]…, 0, len(items))` then one `append` per item), so
+`Total` is **UsArr's own count of the items that reached a committed batch** — never a figure any
+upstream reported. `http-api.md` §5.3 has said the true thing since LS-270; the comment did not.
+
+**Rewritten to match the code**, and the old wording is kept as a struck-through ⚠️ note naming
+LS-270 and this entry, so a reader arriving from an old grep is not left wondering. Two facts the
+original comment had **right** are preserved: Kavita's item total lives in a `Pagination` header that
+is middleware and absent from its OpenAPI document (which is *why* no upstream total is available to
+put here), and `omitempty` means **absent = unknown**, never zero and never a denominator.
+
+---
+
+## LS-289 — what a green `make check` attests about this commit, and what it does not
+
+**No gate reads prose.** `gofumpt`, `golangci-lint`, `go test`, `govulncheck` and `pnpm audit` cannot
+tell whether ADR-0050's argument is sound, whether §4.4's amendment is fair to what it amends, or
+whether `jpeg` was the right call. There is no link checker and no prose test in the gate at all.
+
+**What the gate does attest here, and it is not nothing:**
+
+- migration `00008` applies, and its `Down` followed by an `Up` reproduces the schema byte-identically
+  (`TestMigrate0008DownAndUp`);
+- `image_asset` is still `STRICT` after the `ADD COLUMN`, the column is `TEXT`/nullable/defaultless,
+  `NULL` and `'jpeg'` round-trip, and the **absent `CHECK` is exercised** rather than assumed
+  (`TestMigration0008NeedsNoRebuild`);
+- `internal/db/testdata/schema.sql` was regenerated and matches the migrations
+  (`TestMigrationRoundTrip`) — SQLite's in-place DDL rewrite is visible in it as `, format TEXT)
+  STRICT`, which is the header's "no rebuild" claim made legible;
+- the vocabulary guard passes, **and was independently shown to fail** when it should (LS-285).
+
+**What it does not attest:** anything about an image pipeline, because there is not one. Nothing
+fetches, downscales, encodes or serves an image, and nothing writes `image_asset` at all. This commit
+is a decision, a column, a vocabulary and two guards. Read `internal/` for what exists.

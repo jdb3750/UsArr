@@ -101,6 +101,7 @@ because no ADR ever decided it. Annotating leaves that failure mode nowhere to h
 | [0047](#adr-0047) | Prowlarr pins **ONE** spec — floor and ceiling are the same git blob — guarded by an offline blob-identity pin in `check` plus a network drift check outside it | **Accepted** — 2026-08-17; **is the per-upstream remedy [ADR-0046](#adr-0046)'s 2026-08-17 amendment (`LS-53`, `cf5fab5`) points at**, and **answers [ADR-0046](#adr-0046)'s open question 1** (*"`prowlarr.json` has the same shape of gap"*) by **correcting its premise** — measured independently by both threads, `src/Prowlarr.Api.V1/openapi.json` is the **same blob `134d31d7…`** at `v2.5.2.5491` and `develop`, not *"develop, a minor version ahead"*; **the two-spec split is vacuous here, not impossible** — nothing stops two byte-identical copies being vendored, and the second would prove exactly what the first already proves (the Context paragraph's wording, which this row previously overstated); **changes what a green means, not what the code does** — no adapter field, request or migration changes, no file added or renamed; the one file is stale (last regenerated **2025-06-07**, 33 releases ago) and describes **neither ref reliably**; `TestVendoredSpecIsThePinnedBlob` pins the blob **offline, in `check`**, `TestSpecDriftRefsStillShareThePinnedBlob` catches upstream regenerating **on the network, in `make spec-drift`, never in `check`**, and `knownSpecDivergences` machine-checks the `Limit`/`Offset` `int?` gap (PR #2654, `v2.3.6.5351`) as **still live**; `info.version` **`1.0.0`** is Swashbuckle's placeholder and is pinned to by nothing; leaves [ADR-0035](#adr-0035), [ADR-0041](#adr-0041) and [ADR-0046](#adr-0046) untouched; the floor `v2.5.2.5491` is **owner-confirmed 2026-08-17**; raises two open questions it does not close (the floor drifts when the owner's auto-updating box does, and `make spec-drift` is unautomated) |
 | [0048](#adr-0048) | A library **proposal** is not a row in `library`; a row is created only on Accept | **Accepted** — 2026-08-17; **refines [ADR-0026](#adr-0026)** (its binding model, four verbs, single-kind rule and four tables are untouched — what is decided is *when a `library` row comes into existence*, which ADR-0026 did not say); **applies [ADR-0004](#adr-0004)** rather than excepting it — the connect probe is a **setup** action, not a render path; **answers the open decision `web/src/routes/libraries/+page.svelte` records at `78660a4`**, which named three candidates and picked none — this takes the first, *a proposal stops being a row until it is accepted*, and **rejects the other two in writing**; **closes off a third `managed_by` state and any `proposed` flag on `library`**; **costs no migration, no data change and no new state** — ⚠️ **and not for the reason it first appears**: `managed_by` **cannot** express "proposed" and never could, which is a fact *for* this decision rather than against it, because after it the unaccepted state has no persistent representation to record; existing `managed_by = 'auto'` rows are **declared** accepted on upgrade rather than read as accepted, since the column cannot tell an accepted library from one the user has never been shown; states plainly that **it describes unbuilt behaviour on two counts** — `'user'` has never been written by any code path, so §17.8's one-way door is specified and unimplemented, and today's import **creates rows unconditionally**, so implementing Accept **removes** creation from the import path rather than adding a screen to it; **that removal is not done here** — it belongs to the library thread that builds §17.8 |
 | [0049](#adr-0049) | Key ids are **derived from the key material**; there is no counter and no settings row | **Accepted** — 2026-08-19; **enables `usarr key rotate`** rather than being asked for by it; `crypto.KeyID(kek)` is the first four bytes big-endian of `sha256("usarr/kek-id/v1" || kek)`, forced nonzero, so **a key file names its own id** and no second artifact has to stay consistent with the key material across a crash — which is exactly the window rotation exists to survive, since the SQLite transaction and the key-file write are not one atomic unit; **closes off a monotonic counter and a `key_id` row in a settings table**, both of which reintroduce that window (and the settings row puts key identity *inside* the thing being rotated); startup registers the live key under both `KeyID(kek)` and the legacy id `1`, so **every existing row keeps opening with no migration** and the first rotation retires `1`; **costs no migration** — `service_instance.kek_id` is already `INTEGER`; **adds no HKDF label** and does not touch `derive.go`'s five frozen ones; ⚠️ **publishes a 32-bit hash of the KEK in every stored row**, accepted in writing because RFC 3394 key-wrap **already** gives an offline attacker an *exact* per-row oracle for the same question, so a 32-bit filter grants no capability the ciphertext did not |
+| [0050](#adr-0050) | The image pipeline's base output format is **stdlib JPEG**; **AVIF is deferred** with its seam kept | **Accepted** — 2026-08-19; **amends** ARCHITECTURE §4.4 and §4.4.1, which named AVIF as the only output codec and named **no base format at all** — a spec missing its base case, which is why this ADR was owed; the reason for stdlib is **zero new dependencies in a static binary** (UsArr has **five** direct dependencies; `image/jpeg` adds none), **not** "JPEG is good enough" — the ADR records the ledger it is traded against, roughly **2–3× larger** than AVIF on photographic content, so a future reader can weigh it; **AVIF is buildable here** (`gen2brain/avif` v0.6.0, MIT, cgo-free, libaom-as-WASM) and is deferred on a **measured trade with a named reopening condition**, not rejected — one MIT dependency plus a **second** WASM runtime, since `wazero` is **verified absent** from this module graph after `ncruces/go-sqlite3` moved to `wasm2go`, and the **binary-size delta is recorded as UNMEASURED rather than estimated**; **reopens when** someone measures the binary delta and the per-width encode cost and decides the bytes are worth it (an ADR amendment plus one map entry, **no migration**), or when an upstream is found serving a format the stdlib cannot decode (**WebP is the realistic case — `x/image/webp` is decode-only**, named as a residual risk); the seam is **`image_asset.format`** (migration `00008_image_asset_format.sql`) — nullable `TEXT`, no default, **no `CHECK`** on [ADR-0039](#adr-0039)'s reasoning; ⚠️ **unlike ADR-0039 the Go validation SHIPPED WITH THE COLUMN** (`internal/store/images.go`, plus an AST-walk guard that fails `check` if a writer lands without it), because ADR-0039's promised validator was never written and repeating that would be worse than a `CHECK`; ⚠️ **describes a pipeline that does not exist** — nothing writes `image_asset`, so what ships is the decision, the column and the guard |
 
 ---
 
@@ -6289,3 +6290,175 @@ startup, and written into audit metadata. It must never become an authentication
 * **A rotation's re-wrap loop terminates on `kek_id <> new`, not `kek_id = old`.** With derived ids a
   row can legitimately sit at a *third* id — an earlier interrupted attempt, a row restored from an
   older backup — and "not at the new id" counts it as work instead of walking past it.
+
+---
+
+## ADR-0050 — The image pipeline's base output format is **stdlib JPEG**; AVIF is deferred with its seam kept
+
+**Status:** Accepted · **2026-08-19** · **Amends** [`ARCHITECTURE.md`](./ARCHITECTURE.md) §4.4 and
+§4.4.1, which named AVIF as the only output codec and named **no base format at all** · **Applies**
+[ADR-0039](#adr-0039)'s no-`CHECK` reasoning to a second column, and **discharges in code** the
+Go-validation obligation ADR-0039 promised and never wrote · Lands with migration
+`00008_image_asset_format.sql`, whose header carries the schema half of the reasoning next to the
+SQL.
+
+### Context
+
+**§4.4 specified an output codec and never specified a base format. That is the gap, and it is a
+real defect in a spec rather than a wording nit.** The section says images are *"AVIF encoded lazily
+off the request path"* and mentions no other format anywhere — not as a fallback, not as what the
+lazy encode is lazy *relative to*, not as what a row holds before the AVIF backfill reaches it.
+§4.4.1's cold-start plan then says *"defer larger widths and AVIF"*, which only parses if something
+non-AVIF exists at 92px, and never says what. So the pipeline as specified had:
+
+- no declared encoding for the bytes it stores before the AVIF pass runs;
+- no answer for what `/img` puts in a `Content-Type`;
+- no column to record an encoding in — `image_asset` (migration `00005_library_sync.sql`) carries
+  `width`, `height`, `thumbhash`, `dominant_color`, `etag`, `state` and no format or mime column.
+
+**A spec that names a lazy optimisation without naming what it optimises *from* is not
+under-specified at the margin; it is missing its base case.** This ADR is owed because of that, and
+saying so plainly is the point — the alternative was to quietly pick a format in an implementation
+PR and leave §4.4 reading as though it had always been complete.
+
+**Serving upstream bytes untouched is not available as an escape hatch.** §4.4 mandates ingest-time
+downscale to a seven-width allowlist (`92, 154, 200, 342, 500, 780, orig`) because arbitrary `?w=`
+is a cache-poisoning DoS (GHSA-rrr6-mvwg-9pg9). Downscaling is decode-and-re-encode. So UsArr
+*already* owns an encoder on every path except `orig`, and the only open question was which one.
+**The codec is negotiable; the re-encode is not.**
+
+**AVIF is buildable here, so this is a trade and not a limitation.** `gen2brain/avif` v0.6.0 is MIT
+and cgo-free: it ships libaom compiled to WebAssembly and runs it under `tetratelabs/wazero`. The
+`CGO_ENABLED=0` single-static-binary constraint does **not** rule AVIF out, and any argument that
+starts by claiming it does is wrong.
+
+### Decision
+
+> **1. The image pipeline's base output format is JPEG, encoded with the standard library's
+> `image/jpeg`.** Every stored width is JPEG. `image_asset.format` holds the token `jpeg`.
+>
+> **2. AVIF is deferred, not rejected, and the deferral has a named reopening condition** (below).
+> §4.4's *lazy, off-the-request-path, behind a `min(NumCPU,4)` semaphore* shape is unaffected and
+> stands — what changes is which codec that machinery emits.
+>
+> **3. The seam is `image_asset.format`**, added by migration `00008_image_asset_format.sql`: a
+> nullable `TEXT` column holding a lowercase codec token, with **no `CHECK`**, so adding `avif` costs
+> one map entry in Go and no migration at all.
+>
+> **4. The format vocabulary is declared and validated in Go, in this commit, in
+> `internal/store/images.go`** — `ImageFormatJPEG`, `ValidImageFormat`, unit-tested, plus an AST-walk
+> guard (`TestImageWritesValidateTheFormatVocabulary`) that fails `make check` if a writer against
+> `image_asset` ever lands without referencing the validator.
+>
+> **5. `ARCHITECTURE.md` §4.4 and §4.4.1 are amended to point here**, with the AVIF mentions struck
+> rather than deleted, per this file's own amendment rule.
+
+### Why stdlib — and the reason is **not** "JPEG is good enough"
+
+**The reason is zero new dependencies in a static binary, and that is a stated project value rather
+than a taste.** `CLAUDE.md` puts *"single static binary"* in the stack conventions, requires an
+AGPL-compatibility check on every new dependency, and makes *"cut before you add"* a working
+practice. `docs/DEVELOPMENT.md`'s gate runs `modverify` and `govulncheck` over the module graph.
+
+The measurement that makes this concrete: **UsArr has five direct dependencies today.**
+
+```
+github.com/ncruces/go-sqlite3   github.com/pressly/goose/v3
+golang.org/x/crypto             golang.org/x/text             gopkg.in/dnaeon/go-vcr.v4
+```
+
+`image/jpeg` adds nothing to that list. It is in the standard library, it encodes as well as
+decodes, its vulnerability surface is already tracked by the `govulncheck` run that sets this
+project's Go floor, and it needs no AGPL check because there is no third party to check.
+
+**A future reader should be able to weigh this rather than obey it, so here is the honest ledger.**
+JPEG is a 1992 codec. Against AVIF at equal perceptual quality it is roughly **2–3× larger** on
+photographic content, and posters are photographic content — on §4.4's own worked example (a 60-item
+viewport at ~5–9 MB) that difference is megabytes per screenful, on the exact axis the owner named
+as requirement number one. **This decision spends bytes on the wire to buy a dependency-free
+binary.** If a future reader measures the two costs below and concludes the bytes matter more, they
+are not overturning a principle — they are supplying the number this ADR did not have.
+
+Three smaller properties, none of them decisive on their own:
+
+- **Universal decode.** Every browser and every OS preview pane renders JPEG. AVIF's browser support
+  is broad in 2026 but is not the same statement.
+- **Encode speed.** §4.4 already records AVIF as *~10–20× slower than WebP*, which is why it was put
+  off the request path. JPEG encode is fast enough that the semaphore is a safety rail rather than a
+  necessity.
+- **Decode coverage is a genuine residual risk and is named here rather than glossed.** The stdlib
+  decodes JPEG, PNG and GIF. It does **not** decode WebP, and `golang.org/x/image/webp` is
+  **decode-only** — so if an upstream serves WebP cover art, this decision means either one new
+  dependency for decode or a failed fetch. No v0.1 source is known to serve WebP `MediaCover`, and
+  that is an assumption, not a measurement. It is the most likely thing to force a revisit before
+  the byte-size argument does.
+
+### Why AVIF is deferred — the measured trade, stated as a trade
+
+**AVIF's cost here is one MIT dependency plus a second WebAssembly runtime, and the second half is
+the part that is easy to get wrong.**
+
+- **`gen2brain/avif` v0.6.0 — MIT, cgo-free, ships libaom as WASM run under `tetratelabs/wazero`.**
+  MIT is AGPL-compatible, so licensing is not the objection.
+- **wazero would be a *second* WASM runtime in this binary, not a shared one.** `CLAUDE.md` records
+  that `ncruces/go-sqlite3` **moved off wazero to `wasm2go` on 2026-03-05**, and explicitly warns
+  against repeating the "shared runtime with the plugin host" argument because it no longer holds.
+  **Verified on this tree, not taken from the note:** `grep wazero go.mod go.sum` returns nothing and
+  `go list -deps ./...` returns **zero** packages matching `wazero`. So the runtime is not already
+  paid for — adding AVIF adds it from scratch.
+- **⚠️ The binary-size delta is UNMEASURED.** A WASM runtime plus a WASM-compiled libaom is
+  plausibly several megabytes on a single static binary, and this ADR does **not** know the number.
+  It is recorded as unknown rather than estimated, because an estimate here would read as evidence.
+- **`gen2brain/gav1d` is days old with negligible adoption, and nothing should depend on it.**
+  Naming it is not an endorsement — it is the opposite: it is in this record so that a future reader
+  finding it does not mistake proximity to `gen2brain/avif` for maturity.
+
+**What reopens this — the condition, stated so it can be met:**
+
+> **Someone measures (a) the binary-size delta from adding `gen2brain/avif` and wazero to this
+> build, and (b) the wall-clock encode cost per image at the seven allowlisted widths on the owner's
+> hardware — and decides, with both numbers in front of them, that the bytes saved on the wire are
+> worth them.** That is an amendment to this ADR plus one entry in `internal/store/images.go`'s
+> `imageFormats` map. **No migration**, because `00008` deliberately left the column unconstrained.
+>
+> A second, independent trigger: **an upstream is found to serve cover art in a format the stdlib
+> cannot decode** (WebP being the realistic case). That forces a dependency decision regardless of
+> the byte-size argument, and it should be taken here rather than in the PR that hits it.
+
+### Alternatives considered and rejected
+
+- **AVIF now, as §4.4 originally said.** Rejected on the trade above: an unmeasured multi-megabyte
+  binary cost and a second WASM runtime, taken *before* anyone has a single real poster in a real
+  cache to measure the saving against. **`CLAUDE.md`'s "cut before you add" points this way and the
+  replica thesis is unproven on real data yet** — the moment to pay for a codec is after the
+  pipeline exists, not in the migration that gives it a column.
+- **WebP as the base.** Rejected on a measured fact: `golang.org/x/image/webp` is **decode-only**,
+  so WebP costs a third-party *encoder* — the same dependency objection as AVIF, for a codec that
+  saves markedly less than AVIF does. It buys the worst of both.
+- **PNG as the base** (also stdlib, also zero dependencies). Rejected: PNG is lossless and is
+  dramatically *larger* than JPEG on photographic content, which inverts the one axis that matters.
+  PNG remains the right choice for logos if the pipeline ever distinguishes them by `role`; that is
+  not decided here and the unconstrained column leaves it open.
+- **Store the upstream's bytes untouched and skip the encode.** Foreclosed by §4.4's own width
+  allowlist, as set out in Context. Recorded because it is the first thing a reader will propose.
+- **Add the column later, when the encoder is written.** Rejected on cost asymmetry. Nothing writes
+  `image_asset` today, so the column is a one-line `ALTER` now; after a populated image cache it is
+  a 12-step rebuild of a table that `work.poster_asset_id` and `work.backdrop_asset_id` both
+  reference. **The seam ships, the feature does not** — which is exactly `CLAUDE.md`'s rule.
+- **Name the format only in Go and leave the schema alone.** Rejected: it makes the encoding of a
+  stored row unrecoverable, so the day a second codec lands there is no way to tell which rows need
+  re-encoding short of sniffing every cached file.
+
+### Consequences
+
+- **`ARCHITECTURE.md` §4.4 and §4.4.1 no longer claim AVIF ships.** The AVIF mentions are struck in
+  place with a pointer here, per this file's amendment rule.
+- **`image_asset` gains one nullable column and no index.** `reference/schema.md` §12 is updated;
+  `internal/db/testdata/schema.sql` is regenerated.
+- **The `/img` surface owes a token→media-type lookup**, one line, when it is built. `jpeg` →
+  `image/jpeg`.
+- **⚠️ This ADR describes a pipeline that does not exist.** Nothing in Go writes `image_asset`,
+  there is no fetcher, no downscaler and no encoder. What ships here is the *decision*, the column
+  and the vocabulary guard — not the image pipeline. Stating that is required by `CLAUDE.md`'s "no
+  invented status", and it is also the honest scope: the reopening condition above is written for
+  whoever builds the pipeline, who will be better placed to measure than this thread was.

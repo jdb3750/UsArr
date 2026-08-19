@@ -150,10 +150,24 @@ type Progress struct {
 
 	Applied int `json:"applied"`
 
-	// Total is the upstream's own total when it reported one, and 0 when it did
-	// not. Kavita's `Pagination` header is middleware and is not in the OpenAPI
-	// document, so "unknown" is a state a client must render as unknown rather
-	// than as zero.
+	// Total is UsArr's OWN count of the work a per-item pass was handed: the
+	// length of the request list built from the items that reached a committed
+	// batch in the `items` phase. It is NOT a figure the upstream reported.
+	//
+	// ⚠️ This comment used to say "the upstream's own total when it reported
+	// one", which was never true of either site that sets it — both
+	// streamAndApplyCredits and streamAndApplyFiles set it to len(reqs).
+	// http-api.md §5.3 has said the true thing since LS-270 recorded the
+	// mismatch; LS-288 fixed the comment.
+	//
+	// No upstream total is available to put here. Kavita reports its own item
+	// total in a `Pagination` header that is middleware and absent from its
+	// OpenAPI document, which is why the `containers`, `items` and `done`
+	// phases send no total at all.
+	//
+	// omitempty, so 0 is absent on the wire and absent means UNKNOWN — not
+	// zero, and not a denominator to fall back on. A client must render it as
+	// unknown.
 	Total int `json:"total,omitempty"`
 }
 
