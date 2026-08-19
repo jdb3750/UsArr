@@ -1,18 +1,28 @@
 /**
- * THE `/library` SCREEN'S MODEL — the whole-catalogue "Recently added" list.
+ * THE EMPTY-STATE COPY THE CATALOGUE SCREENS SHARE.
  *
- * WHAT THE SCREEN IS, AND WHAT IT DELIBERATELY IS NOT. ARCHITECTURE.md §16 also
- * names a per-type library GRID with a sort control and a library scope. ⚠️ THIS
- * HEADER USED TO SAY THAT NONE OF IT COULD BE BUILT BECAUSE THERE WAS NO
- * `GET /api/v1/library`. There is one now, and the grid is a SEPARATE screen
- * over it — `routes/library/[type]`, modelled by `$lib/librarygrid`. This screen
- * did not become its predecessor: §17.2 keeps both, and http-api.md §7 is
- * explicit that the browse read is *"a different endpoint from §1, not a
- * superset of it"*, because Block C is closed at one table, one order and no
- * filters. `GET /api/v1/library/recent` still parses only `limit` and `cursor`
- * and is still hard-ordered `added_at DESC, id DESC`, which is what makes a
- * filter or a sort ON THIS SCREEN a control over a keyset prefix. Covers are
- * absent from both: no endpoint in the mux serves an image.
+ * ⚠️ THIS HEADER HAS BEEN WRONG TWICE AND BOTH CORRECTIONS ARE KEPT, because
+ * the shape of the mistake is the same each time: it described the `/library`
+ * SCREEN, and the screen moved.
+ *
+ *   It first said the per-type grid could not be built because there was no
+ *   `GET /api/v1/library`. There is one, and `routes/library/[type]` is it.
+ *
+ *   It then said `/library` reads `GET /api/v1/library/recent`, is hard-ordered
+ *   `added_at DESC, id DESC`, and therefore cannot carry a sort or a filter
+ *   without those controls operating on a keyset prefix. `/library` now reads
+ *   the BROWSE endpoint and carries both, applied in SQL.
+ *
+ * So this module no longer claims to model a screen. It holds ONE thing, which
+ * has been true throughout: the four ways an empty catalogue reads, in words
+ * that Home's Block C, the all-types view and the six per-type grids must not
+ * disagree about. Read `routes/library` and `$lib/librarygrid` for what the
+ * screens are; this file is not the place to look it up.
+ *
+ * `GET /api/v1/library/recent` still parses only `limit` and `cursor` and is
+ * still hard-ordered, and Home's Block C is still its one caller (§17.2,
+ * ADR-0028: one table, one order, no filters). Covers are absent from every one
+ * of these screens: no endpoint in the mux serves an image.
  *
  * WHY THE COPY LIVES HERE RATHER THAN IN THE TEMPLATE. `vitest.config.ts` is
  * `environment: 'node'` with no Svelte plugin, so a rule inside an `{#if}` in a
@@ -23,15 +33,17 @@
  * depending on what is connected, and rendering the wrong one tells a user with
  * no library-bearing service that an import is on its way.
  *
- * IT IS NOT A SECOND COPY OF THE RECENT FEED. The paging, the stop rule, the
- * media-type vocabulary and the availability rendering all belong to
- * `$lib/library` and are imported from there by the route.
+ * IT IS NOT A SECOND COPY OF ANY FEED. The paging, the stop rule, the
+ * media-type vocabulary and the availability rendering belong to `$lib/library`
+ * and `$lib/librarygrid`, and the routes import them from there.
  *
- * ⚠️ AND `recentEmptyState` IS SHARED WITH THE PER-TYPE GRID, deliberately.
+ * ⚠️ AND `recentEmptyState` IS SHARED WITH THE BROWSE SCREENS, deliberately.
  * `$lib/librarygrid.browseEmptyState` answers the three non-`library` modes by
  * calling it, because those three are facts about what is CONNECTED rather than
  * about a media type, and two screens telling one install two stories about its
- * own services is the drift this module was written to prevent.
+ * own services is the drift this module was written to prevent. It calls it a
+ * FOURTH time for the unscoped all-types view, where an empty answer has no
+ * type and no scope to blame and is therefore exactly this question.
  */
 
 import type { HomeMode } from './home';

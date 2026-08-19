@@ -130,6 +130,7 @@
 	};
 
 	const SERVICES = resolve('/services');
+	const LIBRARY = resolve('/library');
 	const LOGIN = resolve('/login');
 
 	/**
@@ -166,6 +167,33 @@
 	 */
 	function servicesAnchor(serviceInstanceId: number): string {
 		return `${SERVICES}#service-${String(serviceInstanceId)}`;
+	}
+
+	/**
+	 * WHERE A LIBRARY ROW LEADS: the catalogue, scoped to that library.
+	 *
+	 * ⚠️ IT IS THE ALL-TYPES VIEW AND NEVER A PER-TYPE GRID, which is the whole
+	 * decision in this function. A library is a scope over containers, not over
+	 * media types (ADR-0027), and §17.8's flagship shape is one upstream library
+	 * offered as Ebooks AND as Audiobooks — so a row that led to
+	 * `/library/ebooks?lib=…` would silently drop every audiobook in the library
+	 * it claims to open, and the user would have no way to tell. `/library` filters
+	 * by no type at all, so the scope is the only filter and the row shows what
+	 * the row says it shows.
+	 *
+	 * ⚠️ AND THE SLUG IS NEVER EMPTY ON THE WIRE. `?lib=` with nothing in it is a
+	 * 400 rather than "no scope" — the server tests PRESENCE — so a library whose
+	 * slug did not parse gets NO LINK rather than a link to a refusal, which is
+	 * why this returns `undefined` instead of a bare path. `libraries.ts` reads
+	 * the field with `str()`, so a missing or non-string `slug` arrives as `''`.
+	 *
+	 * `URLSearchParams` builds the query rather than a template literal: a slug is
+	 * `[a-z0-9-]` in migration 0005 and would need no escaping, but the encoder is
+	 * what makes that a property of the code rather than of the data.
+	 */
+	function libraryScopeHref(slug: string): string | undefined {
+		if (slug === '') return undefined;
+		return `${LIBRARY}?${new URLSearchParams({ lib: slug }).toString()}`;
 	}
 
 	let libraries = $state<Library[]>([]);
@@ -377,9 +405,23 @@
 			string in `title`. The SLUG IS NOT RENDERED — §17.8 is emphatic that the
 			row's identifier is not drawn as a path, because a self-hoster who reads
 			`/movies` under a library concludes UsArr scans `/movies`, on the screen
-			whose whole point is that it never reads a filesystem.
+			whose whole point is that it never reads a filesystem. It is the link's
+			`?lib=` value and appears nowhere on screen.
+
+			⚠️ A REAL `<a href>`, WHICH IS §17.1's RULE AND NOT A STYLE CHOICE: it
+			middle-clicks, Ctrl-clicks and copies as a link, and a click handler that
+			called `goto` would look identical and break all three. It leads to the
+			ALL-TYPES catalogue scoped to this library, never to a per-type grid —
+			see `libraryScopeHref` for why choosing a type here would hide part of
+			the library the row names.
 		-->
-		<span class="trunc" title={library.name}>{library.name}</span>
+		{@const href = libraryScopeHref(library.slug)}
+		{#if href === undefined}
+			<span class="trunc" title={library.name}>{library.name}</span>
+		{:else}
+			<!-- eslint-disable-next-line svelte/no-navigation-without-resolve -- see libraryScopeHref: a ResolvedPathname cannot carry a query string, and the path half is resolve()'s -->
+			<a class="trunc" {href} title={library.name}>{library.name}</a>
+		{/if}
 	{:else if column.id === 'kind'}
 		{kindLabel(library.kind)}
 	{:else if column.id === 'items'}

@@ -5,15 +5,27 @@
  * endpoint that serves both. `docs/reference/http-api.md` §7 is the contract and
  * this module is written against it rather than against a memory of it.
  *
- * WHAT IS ONE SCREEN AND WHAT IS TWO. `/library` is Home's Block C without
- * Home's row limit — one unified newest-first table across every media type,
- * over `GET /api/v1/library/recent`, which takes no filter at all. This module
- * is the OTHER read: media type is the navigation axis (§8.1 of
- * `docs/design/DESIGN-DIRECTION.md`, closing OQ-2), so `/library/movies` is a
- * place, and a library is a SCOPE carried as `?lib=` rather than a place of its
- * own. The two endpoints share a row shape and a paging rule and share no
- * cursor (§7.5), so `$lib/library`'s row parsing, availability rendering and
- * feed algebra are imported here and the query half is new.
+ * TWO SCREENS, ONE CLIENT. `routes/library/[type]` is one media type at a time
+ * and `routes/library` is all six at once, and they are the SAME read with
+ * `media_type` present or omitted — so `BrowseQuery.mediaType` is optional and
+ * every rule below is written over that optionality rather than duplicated. The
+ * axes are unchanged (§8.1 of `docs/design/DESIGN-DIRECTION.md`, closing OQ-2):
+ * media type is the navigation axis, so `/library/movies` is a place, and a
+ * library is a SCOPE carried as `?lib=` rather than a place of its own.
+ *
+ * ⚠️ `GET /api/v1/library/recent` IS STILL A DIFFERENT ENDPOINT AND STILL HAS A
+ * CLIENT — `$lib/library`'s — because Home's Block C is closed at one table, one
+ * order and no filters (§17.2, ADR-0028). What changed is which screen uses
+ * which: `/library` now reads the BROWSE endpoint, because a screen that sorts
+ * and scopes cannot be served by an endpoint that parses `limit` and `cursor`
+ * and nothing else. At the default the two agree row for row and order for
+ * order — same six kinds, same `added_at DESC, id DESC`, same undated-tail
+ * handoff, same row on the wire — which is what made the switch a switch rather
+ * than a rewrite. `TestBrowseWorksUnfilteredIsBlockCsCorpus`
+ * (`internal/store/browse_test.go`) is that equality, executed. The two share a
+ * row shape and a paging rule and share NO cursor (§7.5), so `$lib/library`'s
+ * row parsing, availability rendering and feed algebra are imported here and
+ * the query half is new.
  *
  * DOM-free and deterministic, like `$lib/library` and `$lib/libraryscreen`, so
  * the node-environment vitest run can pin every rule in it. `vitest.config.ts`
@@ -33,8 +45,11 @@
  *   1. `sort=sort_title` IS REFUSED MORE BROADLY THAN "not music".
  *      `browseWorksSQL` refuses it when `len(kinds) != 1`, and no `media_type`
  *      at all is six kinds, so the refusal covers `music` AND the unfiltered
- *      case. `browseSortsFor` derives availability from the kind COUNT rather
- *      than from a hard-coded "not music".
+ *      case — which is now a SHIPPING screen rather than a hypothetical, since
+ *      `/library` sends no `media_type` at all. `browseSortsFor` derives
+ *      availability from the kind COUNT rather than from a hard-coded "not
+ *      music", and `browseSortNote` states the absence in UsArr's own words
+ *      rather than letting the server's 400 text reach a reader.
  *   2. `sort=year` IS LEGAL IN THE SCHEMA AND REFUSED ON THE WIRE. Migration
  *      0005's CHECK admits it as a `library.default_sort`; `work.year` has no
  *      index, so this read refuses it by name. `readBrowseSort` can never
@@ -142,9 +157,21 @@ export function isBrowseSort(value: string): value is BrowseSort {
  * so the refusal already covers a second two-kind type the day one is added,
  * and a hard-coded exception for music would not.
  */
-export function browseKindCount(mediaType: MediaType): number {
+export function browseKindCount(mediaType: MediaType | undefined): number {
+	if (mediaType === undefined) return ALL_TYPES_KIND_COUNT;
 	return mediaType === 'music' ? 2 : 1;
 }
+
+/**
+ * HOW MANY KINDS THE UNFILTERED CORPUS IS, and it is a number rather than
+ * `MEDIA_TYPES.length` because the two are not the same quantity and only
+ * coincidentally the same digit. `browseKinds("")` in `internal/store/browse.go`
+ * returns `recentWorkKinds`, which is `movie, series, artist, album, book,
+ * comic` — six KINDS over six MEDIA TYPES, where music is two kinds and books
+ * are one kind split by `edition.format`. Counting the nav enum instead would be
+ * right today and wrong the moment either mapping moves.
+ */
+const ALL_TYPES_KIND_COUNT = 6;
 
 /**
  * The orders this media type can actually be served in.
@@ -155,11 +182,56 @@ export function browseKindCount(mediaType: MediaType): number {
  * for anything that is not exactly one kind. Offering the control anyway would
  * put a 400 behind a chip that looks like the others.
  */
-export function browseSortsFor(mediaType: MediaType): BrowseSort[] {
+export function browseSortsFor(mediaType: MediaType | undefined): BrowseSort[] {
 	return BROWSE_SORTS.filter((s) => s !== 'sort_title' || browseKindCount(mediaType) === 1);
 }
 
-export function browseSortAvailable(sort: string, mediaType: MediaType): sort is BrowseSort {
+/**
+ * WHY A TO Z IS MISSING FROM THE ALL-TYPES SCREEN'S SORT CONTROL, IN UsArr's
+ * OWN WORDS.
+ *
+ * ⚠️ THE SERVER'S OWN 400 TEXT MUST NEVER REACH THIS SCREEN, and that is the
+ * whole reason this string exists rather than a `catch` that renders
+ * `ApiError.action`. `handleBrowseWorks` answers an unservable sort with
+ * *"sort_title needs a media_type of one kind — not music — and there is no
+ * index behind year at all"*: it is one shared sentence for two different
+ * refusals, it names a parameter and a column rather than anything on screen,
+ * and it talks about music and about year to a reader who asked for neither.
+ * Correct for a wire consumer, wrong for this audience.
+ *
+ * ⚠️ AND IT IS STATED RATHER THAN OFFERED-THEN-REFUSED. `browseSortsFor` keeps
+ * the option out of the control entirely, so this note is the only place the
+ * order is mentioned; a control that listed A to Z and answered with a banner
+ * would be spending a round trip to say something knowable before it was sent.
+ *
+ * `browseSortNote` is what decides when it prints, and it decides from the kind
+ * COUNT — see `browseKindCount` — never from the library scope. A scope narrows
+ * the rows and changes no index, so `?lib=` has nothing to do with which orders
+ * are servable, and keying the note on it would be a rule that fires on the
+ * wrong condition and reads as if it were right.
+ */
+export const BROWSE_AZ_UNAVAILABLE =
+	'This view spans every media type, and A to Z is not available across all of them.';
+
+/**
+ * The one-line reason to print beside the sort control, or `undefined` when
+ * every order this module knows about is on the control.
+ *
+ * ⚠️ THE PER-TYPE SCREENS GET `undefined` EVEN WHERE THEY DROP THE OPTION.
+ * Music is two kinds, so A to Z is off its control too, and it has always been
+ * dropped silently there. Wording that case is a decision about that screen and
+ * it is not made here; returning the all-types sentence for it would print
+ * "this view spans every media type" on a view that spans exactly one.
+ */
+export function browseSortNote(query: BrowseQuery): string | undefined {
+	if (browseSortsFor(query.mediaType).includes('sort_title')) return undefined;
+	return query.mediaType === undefined ? BROWSE_AZ_UNAVAILABLE : undefined;
+}
+
+export function browseSortAvailable(
+	sort: string,
+	mediaType: MediaType | undefined
+): sort is BrowseSort {
 	return isBrowseSort(sort) && browseSortsFor(mediaType).includes(sort);
 }
 
@@ -173,7 +245,10 @@ export function browseSortAvailable(sort: string, mediaType: MediaType): sort is
  * the screen's own control then says what it is actually sorted by. `year` and
  * `sort_title`-on-music both land here, so neither can reach the wire.
  */
-export function readBrowseSort(params: URLSearchParams, mediaType: MediaType): BrowseSort {
+export function readBrowseSort(
+	params: URLSearchParams,
+	mediaType: MediaType | undefined
+): BrowseSort {
 	const raw = (params.get('sort') ?? '').trim();
 	return browseSortAvailable(raw, mediaType) ? raw : DEFAULT_BROWSE_SORT;
 }
@@ -213,7 +288,16 @@ export function readLibraryScope(params: URLSearchParams): string[] {
  * not remember them"), and therefore everything a cursor is only valid within.
  */
 export interface BrowseQuery {
-	mediaType: MediaType;
+	/**
+	 * ⚠️ ABSENT MEANS EVERY MEDIA TYPE AT ONCE, AND IT IS AN OPTIONAL FIELD
+	 * RATHER THAN AN `'all'` MEMBER OF THE ENUM. §17.2's enum is closed at six
+	 * and the wire's `media_type` is closed at the same six, so a seventh value
+	 * spelled `all` would be a vocabulary this client holds and the server does
+	 * not — and `browseParams` would have to translate it back to an omission on
+	 * every page. Omission is what the endpoint actually understands (§7.2: an
+	 * absent `media_type` is every type), so it is what this field spells.
+	 */
+	mediaType?: MediaType;
 	sort: BrowseSort;
 	/** Library slugs. Empty is "every library", never `?lib=`. */
 	libraries: string[];
@@ -235,6 +319,26 @@ export type BrowseRoute =
 	| { k: 'too-many-libraries'; count: number };
 
 /**
+ * A query that is KNOWN to name a media type, and the route that produces one.
+ *
+ * ⚠️ IT EXISTS BECAUSE `BrowseQuery.mediaType` BECAME OPTIONAL AND THE PER-TYPE
+ * SCREEN'S GUARANTEE DID NOT. `browseRoute` refuses any segment that is not one
+ * of the six before it builds anything, so on that screen the field is always
+ * set — and that screen renders a heading, a page title and an empty state off
+ * it. Without this narrowing those three would each need a fallback for a case
+ * the route has already made unreachable, and a fallback for an unreachable case
+ * is a second answer nobody can ever check.
+ */
+export interface TypedBrowseQuery extends BrowseQuery {
+	mediaType: MediaType;
+}
+
+export type TypedBrowseRoute =
+	| { k: 'ok'; query: TypedBrowseQuery }
+	| { k: 'unknown-type'; value: string }
+	| { k: 'too-many-libraries'; count: number };
+
+/**
  * The route parameter and the query string, resolved together.
  *
  * ⚠️ THE TYPE SEGMENT IS VALIDATED AGAINST THE SIX AND IS NEVER PASSED THROUGH.
@@ -243,14 +347,41 @@ export type BrowseRoute =
  * a request whose answer is already known. §17.2's enum is `$lib/library`'s
  * `MEDIA_TYPES` and this function is the only door into a `BrowseQuery`.
  */
-export function browseRoute(rawType: string, params: URLSearchParams): BrowseRoute {
+export function browseRoute(rawType: string, params: URLSearchParams): TypedBrowseRoute {
 	const value = rawType.trim();
 	if (!isMediaType(value)) return { k: 'unknown-type', value };
+	const resolved = browseQueryFor(value, params);
+	// The narrowing is STRUCTURAL rather than an assertion: the field is written
+	// again from the value `isMediaType` just accepted, so nothing here claims a
+	// property the code does not establish two lines up.
+	if (resolved.k !== 'ok') return resolved;
+	return { k: 'ok', query: { ...resolved.query, mediaType: value } };
+}
+
+/**
+ * THE SAME RESOLUTION FOR THE ALL-TYPES SCREEN, which has no `[type]` segment
+ * to validate and therefore cannot fail the first way.
+ *
+ * ⚠️ IT IS THE SAME FUNCTION UNDERNEATH RATHER THAN A SECOND COPY OF THE SCOPE
+ * BOUND, and that matters more than it looks: the 32-slug bound is a REFUSAL
+ * rather than a clamp (dropping slugs widens the page), so a screen that
+ * resolved its own `?lib=` and forgot the bound would silently show more than
+ * was asked for on exactly the address the bound exists for.
+ */
+export function browseAllTypesRoute(params: URLSearchParams): BrowseRoute {
+	return browseQueryFor(undefined, params);
+}
+
+/** The half both resolvers share: the scope, its bound, and the sort that this
+ * media type can actually be served in. */
+function browseQueryFor(mediaType: MediaType | undefined, params: URLSearchParams): BrowseRoute {
 	const libraries = readLibraryScope(params);
 	if (libraries.length > MAX_LIBRARY_SLUGS) {
 		return { k: 'too-many-libraries', count: libraries.length };
 	}
-	return { k: 'ok', query: { mediaType: value, sort: readBrowseSort(params, value), libraries } };
+	const query: BrowseQuery = { sort: readBrowseSort(params, mediaType), libraries };
+	if (mediaType !== undefined) query.mediaType = mediaType;
+	return { k: 'ok', query };
 }
 
 /** Whether two queries are the same corpus in the same order. Identity, not
@@ -285,11 +416,14 @@ export interface BrowsePageRequest {
  * below is able to assume when it treats these three as "what the client meant".
  */
 export function browseParams(query: BrowseQuery, request: BrowsePageRequest): URLSearchParams {
-	const params = new URLSearchParams({
-		media_type: query.mediaType,
-		sort: query.sort,
-		limit: String(request.limit)
-	});
+	const params = new URLSearchParams({ sort: query.sort, limit: String(request.limit) });
+	// ⚠️ OMITTED, NEVER SENT EMPTY, FOR THE ALL-TYPES VIEW. `?media_type=` with
+	// nothing in it happens to be silently unfiltered today (the handler trims
+	// and tests for `!== ""`), so it would work — but it would be a client
+	// leaning on a parameter's empty spelling meaning the same as its absence,
+	// which is exactly the reading that makes `?lib=` a 400. One rule for both:
+	// a filter with nothing to say does not appear in the query string.
+	if (query.mediaType !== undefined) params.set('media_type', query.mediaType);
 	if (query.libraries.length > 0) params.set('lib', query.libraries.join(','));
 	// The cursor is set through URLSearchParams rather than concatenated: it is
 	// base64url over a payload that can embed a SQLite datetime with a literal
@@ -386,10 +520,15 @@ export function browseEchoDrift(query: BrowseQuery, echo: BrowseEcho): string[] 
 	const drift: string[] = [];
 	// `browseParams` sends both of these on every page, so intent is never
 	// "unset" and an absent echo is always a disagreement.
+	// The comparison is `!==` over two `string | undefined`s and holds in BOTH
+	// directions without a special case: an all-types query means `undefined`,
+	// and the handler omits the key exactly when it applied no type filter, so
+	// agreement on the unfiltered view is `undefined === undefined`. Only the
+	// WORDS need to know which side is which.
 	if (echo.mediaType !== query.mediaType) {
 		drift.push(
-			`media_type: this client asked for ${query.mediaType}, the server applied ` +
-				`${echo.mediaType ?? 'no type filter at all'}`
+			`media_type: this client asked for ${query.mediaType ?? 'every media type'}, ` +
+				`the server applied ${echo.mediaType ?? 'no type filter at all'}`
 		);
 	}
 	if (echo.sort !== query.sort) {
@@ -577,6 +716,21 @@ export function appendBrowsePage(feed: BrowseFeed, page: RecentPage): BrowseFeed
  */
 export function browseEmptyState(query: BrowseQuery, mode: HomeMode | undefined): RecentEmptyState {
 	if (mode !== 'library') return recentEmptyState(mode);
+	// ⚠️ THE ALL-TYPES VIEW HAS NO TYPE TO BLAME, so an empty answer under a
+	// scope is about the SCOPE and an empty answer without one is about the
+	// catalogue — which is `recentEmptyState`'s question, verbatim, rather than a
+	// fifth wording of it. Saying "no items of this type" on a view that filters
+	// by no type would invent a filter to explain an absence that has none.
+	if (query.mediaType === undefined) {
+		if (query.libraries.length === 0) return recentEmptyState(mode);
+		return {
+			title: 'Nothing in this scope',
+			text:
+				'UsArr has catalogued nothing in the libraries this view is scoped to. The scope is part ' +
+				'of the address, so clearing it searches every library instead. A library also holds ' +
+				'only what its own sources reported.'
+		};
+	}
 	const type = mediaTypeLabel(query.mediaType).toLowerCase();
 	if (query.libraries.length > 0) {
 		return {

@@ -105,6 +105,7 @@ because no ADR ever decided it. Annotating leaves that failure mode nowhere to h
 | [0051](#adr-0051) | The library-scoped grid is a **work-driven `EXISTS`**, not a join to `library_member` | **Accepted** — 2026-08-19; **supersedes [ADR-0026](#adr-0026)'s materialisation as read by ARCHITECTURE §6.5 for the `added_at` order ONLY** — §6.5's denormalised `(library_id, sort_title, work_id, edition_id)` key stands, and `TestLibraryScopedKeysetIsASeek` still pins it, but it serves the **`sort_title`** order and **only** that one: measured on the real schema (`ncruces/go-sqlite3`, SQLite 3.53.4), a library-scoped page ordered by `added_at` gets `USE TEMP B-TREE FOR ORDER BY` in **both** topologies §6.5 names, **with and without `ANALYZE`**; the work-driven `EXISTS` over `ix_libmem_work` keeps `SEARCH w USING INDEX ix_work_added (added_at<?)` in **every** configuration measured, **including the multi-value `?lib=a,b` case** — which was a hypothesis until the plan was read, because an `IN` on the leading key column destroys the ordered index in every *member-driven* shape; it is also **the only shape that cannot return one work twice**, since a work filed in two of the named libraries carries **one membership row per library** and a browse row is work-keyed — ⚠️ per-**library**, not per-edition: `library_member`'s key carries `edition_id`, but the only production writer hardcodes the `0` sentinel, so membership is **not** edition-grained in the tree today (`REVIEW-LOG.md` LS-213), and the ADR body's argument, which is about two libraries over one work, is unaffected; **costs one migration** — `00009_edition_format_index.sql`, `ix_edition_format ON edition(format, work_id)`, for the Audiobooks filter and not for the scope; **`ix_libmem_added` is explicitly NOT owed** and must not be added on this ADR's authority; ⚠️ **reopens on `make bench` over a NARROW library** — the `EXISTS` walks the *global* `added_at` order and discards non-members, which suits a broad library and not a narrow one, so a 1%-selective library over a 25k-row kind is the measurement that would send this back to a member-driven shape with a new index; ⚠️ **amended 2026-08-19** — the *"says nothing about `year`"* non-decision gains the shape of the gap it leaves: `default_sort`'s CHECK admits four orders and this read serves three, `?sort=year` is **refused and never substituted**, the endpoint never reads `default_sort` at all, and nothing in the tree writes the column yet — so the trap arms the day §17.8's DETAIL view offers the choice. The decision is untouched |
 | [0052](#adr-0052) | v0.1's catalogue source is **BookOrbit**; **Kavita is sunset** and its adapter **stays in the tree** | **Accepted** — **owner-decided 2026-08-19**; **amends [ADR-0041](#adr-0041)** clause 1 (*"v0.1's catalogue source is **Kavita**"*) — ADR-0041's clauses 2 and 3 are **confirmed**, and its clause 4 (channels **1, 3b and 4**) is **REOPENED as an open question, not re-answered**, because BookOrbit has had no equivalent of [ADR-0035](#adr-0035) §2a's live probe; **amends ARCHITECTURE §16.1's v0.1 entry**, edited in the same change because §16 is scope authority; the decision is **the owner's, not an agent's** — he is sunsetting Kavita entirely, BookOrbit takes everything, his word is **"phenomenal"**, and the repo's own one-day-older record of the same direction is `ROADMAP.md` §3's *"in my heart i kind of want to migrate to book orbit"*; ⚠️ **it REVERSES `ROADMAP.md` §3's standing recommendation** *"do NOT switch UsArr's first adapter off Kavita"*, because **two of the three findings that produced it were re-measured on 2026-08-19 against BookOrbit `main` and are FALSE** — headless auth needs **no password** (`server/src/modules/auth/magic-link.service.ts`; SHA-256-hashed token, `loginWithToken()` validates no password), and **comics ARE covered** (a shipped ComicVine provider), leaving only **manga and anime** identifiers absent (zero hits for `mangabaka`/`anilist`/`myanimelist` repo-wide); 🚩 **and a third claim reached the ADR in relay and was REFUSED on primary source** — *"no watermark, so full resync with no delta channel"* is **false in its strong form**, since `packages/types/src/query.ts` admits `"updatedAt"` as a sort key with page/size paging, which is exactly channel 3b's shape, so writing it in would have foreclosed v0.1 work on a premise the source refutes; what is **genuinely unsettled** is whether that timestamp moves on tag, genre and author edits, since `$onUpdateFn` is **application-level, not a DB trigger** and those live off the book row — §7.1a's **reconciliation-only** fallback is the named failure branch, **not** this ADR's decision; **"sunset" explicitly does NOT mean delete** — `internal/kavita`, `internal/libsync/kavita.go`, both vendored specs and [ADR-0046](#adr-0046)'s contract guard stay and stay green, investment stops, and **no milestone for further Kavita work is invented**, on [ADR-0042](#adr-0042)'s refusal-to-number precedent; **MangaBaka is NOT a dependency** — the owner's *"in the near future"* is **his expectation, nobody's commitment**, native support is an **open PR with no maintainer signoff**, and the adapter is designed against what BookOrbit ships **today**; ⚠️ **MangaBaka data may be fetched at runtime and NEVER vendored, shipped or cached as a dump** — **CC BY-NC-SA 4.0**, verified at `mangabaka.org/data/database`, is **not AGPL-3.0-compatible**, and the dump additionally carries third-party terms it does not license; ✅ **identity needs NO migration and NO new mechanism, which INVERTS this ADR's own first draft** — the draft called BookOrbit's series-level identity a structural degradation and warned of a migration, and a schema check against the tree falsified it: `external_id`'s `source` is plain `TEXT` with **no `CHECK`** and it carries `confidence` (`00005_library_sync.sql:444`), a series **IS a work row** (`work.kind` admits `'series'` and `'comic'`, `:242`) so `work_id` **already is** the series-level column, and `kavitaExternalIDs` **already writes seven series-level ids** including **`mangabaka` at 0.90** (`internal/libsync/kavita.go`, `weblinkid.go:111,162`) — because Kavita's own series ids are **weblink-parsed from what the user tagged**, exactly as BookOrbit's would come from a user-populated custom field, so the two are **the same arrangement** and 0.90 is already the right grade; the one recorded wrinkle is that BookOrbit's custom fields are **book-scoped** (`custom-metadata.ts`, `bookId` FK, no series variant) so the id needs a hoist — **which Kavita also needs and does lossily**; 🚫 **`work_relation` is cited nowhere and must not be added** — it is **absent from the tree** and `internal/db/migrate_test.go` fails if it appears; ⚠️ **ships NO code by design** — it gates the adapter |
 | [0053](#adr-0053) | All six media types are **always** in the sidebar; per-type hiding is closed until a facet read exists | **Accepted** — 2026-08-19; **amends [ADR-0027](#adr-0027)** for its sidebar clause **only** — that ADR's *"a type with zero items is not rendered anywhere"* stands for Block A and for search groups, both of which are unaffected — and amends ARCHITECTURE §17.2 and `design/DESIGN-DIRECTION.md` §8.1 to match the shipped shell; the data-driven sidebar those two specified **cannot be built over the wire UsArr serves**, because `reference/http-api.md` §7.1 states there are *"no facet counts beside the chips; each is its own aggregate and its own read"* and no read answers per-type presence at all; so **all six render unconditionally, no row carries a count**, and the honesty moves to the per-type screen, where `browseEmptyState` names which of three reasons the grid is empty; ⚠️ **the rejected alternative that looks like compliance is hiding a type on a count nobody measured** — it fails silently and removes the very row that would have explained the absence; **adds no endpoint, no migration and no backend change**; ⚠️ **reopens on exactly one condition** — a read answering which of the six types have rows under the current scope, in one statement — at which point the seam is one predicate on `TYPE_NAV`, and §13 has already priced the shape at *"1 keyset page + 6 sidebar `COUNT(*)`"* < 15 ms p50 without deciding whether it rides the browse response or its own endpoint |
+| [0054](#adr-0054) | The search response publishes a per-hit relevance `score`, and the ORDER stays the contract | **Accepted** — 2026-08-19; **amends [`reference/http-api.md`](./reference/http-api.md) §6.2**, which said *"No score is published"*; **unblocks ARCHITECTURE §17.4 rule 2**, whose grouped results are ordered *"by the group's best-scoring hit"* — a comparison **no ordering can answer**, because a row's ordinal position says nothing about the distance between two groups' best rows; the withheld field was stopping the screen from being built, not stopping the misuse it was withheld for, so the misuse is **documented and tested against instead**: §6.2.1 lists two permitted uses and five forbidden ones, each with its mechanism; ⚠️ **the order is still authoritative and is NOT score order** — the media-type diversity injection promotes a row without re-scoring it, so a client re-sorting by the published number silently produces a **worse** list than the one it was given; **adds no migration, no column and no query** — the value was already computed per hit and discarded at the boundary |
 
 ---
 
@@ -7363,3 +7364,118 @@ something on every install today.
 where an implementer meets it rather than only here. The empty states are `browseEmptyState` in
 `web/src/lib/librarygrid.ts`, rendered by `web/src/routes/library/[type]/+page.svelte`. **There is no
 backend half:** this ADR removes a requirement from the wire, and adds none.
+
+---
+
+<a id="adr-0054"></a>
+## ADR-0054 — The search response publishes a per-hit relevance `score`, and the ORDER stays the contract
+
+**Status:** Accepted · **2026-08-19** · **Amends [`reference/http-api.md`](./reference/http-api.md)
+§6.2** — its *"No score is published"* clause, and nothing else on that endpoint ·
+**Unblocks [`ARCHITECTURE.md`](./ARCHITECTURE.md) §17.4 rule 2 and rule 4** · **Adds no migration,
+no column, no query and no upstream call** · **Does not change the ranking, the retrieval, or the
+order any caller receives**
+
+### Context
+
+§17.4 rule 2 specifies the grouped Search screen: *"Group order is by the group's best-scoring hit,
+descending — not a fixed type order — and it is computed once per query and then frozen."* Rule 4
+puts a cross-media linked work *"in the group of its highest-scoring medium"*. Both are comparisons
+between the **best hit of one group and the best hit of another**.
+
+`reference/http-api.md` §6.2 answered with the opposite: *"**`items` is ordered by relevance and the
+ORDER IS THE CONTRACT.** No score is published. The score is normalised per query, so a client
+comparing one across two queries would be comparing nothing; publishing it would also freeze §6.6's
+ranking, which is expected to change."* `internal/httpapi/librarysearch.go` carried the same
+sentence in its own words.
+
+**Neither rule can be built over an ordering alone, and the reason is not a limitation of effort.**
+An ordinal position is a *rank*, and a rank carries no magnitude: `items[3]` being the best hit of
+the Movies group and `items[7]` being the best hit of the Ebooks group tells a client that Movies
+led, and nothing whatever about whether it led by a hair or by a mile. A grouped screen ordered on
+that has no way to distinguish *"the album hit is unambiguous and the two film rows are thin"* —
+§17.4's own worked example, and the case it says the six-type grouping exists for — from the reverse.
+`ROADMAP.md` recorded this as an open item and noted that resolving it *"closes off an alternative
+and needs an ADR"*.
+
+The store had the number all along. `rerank` (`internal/store/searchlibrary.go`) computes a score per
+candidate, sorts on it, and then **threw it away** when it copied the hits out. Nothing had to be
+computed, queried or measured to publish it; it had to be *specified*.
+
+### Decision
+
+> **The search response publishes `score` on every item: the re-rank's own output, a weighted sum of
+> three signals each normalised over the candidate set of that one answer, in `(0, 1]`.**
+>
+> **The ORDER remains the contract, and the order is deliberately NOT score order.** The media-type
+> diversity injection is a promotion and not a re-score, so a promoted row sits above better-scoring
+> rows carrying the lower number it earned. A client that re-sorts by `score` undoes that guarantee
+> and produces a worse list than the one it was handed.
+>
+> **The misuse the field was withheld to prevent is answered by documentation and by tests instead
+> of by absence.** `reference/http-api.md` §6.2.1 states the formula, a comparability table with
+> seven rows, **two** permitted uses and **five** forbidden ones, each with the mechanism that makes
+> it wrong rather than a general caution.
+
+### Alternatives rejected
+
+- **Keep withholding it, and group server-side.** The honest alternative, and it was close. It fails
+  on scope and on sequencing: server-side grouping needs `work_relation`, whose table **does not
+  exist** — it is v0.3, no shipped migration creates it, and `TestDeferredTablesAreAbsent` fails the
+  build if one appears. So this alternative does not defer the screen by a commit, it defers it by
+  two milestones, and it would replace a flat read that meets §13's `p50 < 15 ms` budget with a
+  grouped one that has never been priced. **Cut before you add** points the same way: this ADR adds
+  a field to a struct, that one adds a subsystem.
+- **Amend §17.4 rule 2 to a fixed type order.** Cheapest of all, and it deletes the finding the rule
+  was written from: with six types a fixed order *"buries an unambiguous album hit under two thin
+  film rows"*. It also re-opens the ranking-bias problem §17.4 cites Sushmita et al. for — the whole
+  argument for grouping is that relevance across a film and an audiobook is not comparable, and a
+  fixed order does not avoid making the comparison, it makes it badly and invisibly.
+- **Publish a coarse bucket** — `high` / `medium` / `low`, or a 1–5 star. Strictly worse than the
+  number on both counts. It reads as an absolute judgement of match quality, which is the one thing
+  the value is not, and it destroys exactly the resolution rule 2 needs: the ordering of two groups
+  whose best hits fall in the same bucket becomes arbitrary again.
+- **Publish the RRF value, or the BM25 rank, instead.** Both are further from what the screen needs
+  and closer to what a consumer must not have. The RRF sum is dominated by whether *both* retrieval
+  legs matched a row, so publishing it puts a leg's fingerprint on the wire — the association
+  ARCHITECTURE §8.2 states as a negative and keeps inside fusion. A BM25 magnitude is not on a
+  common scale between the `unicode61` and `trigram` legs at all.
+- **Round it, to discourage over-reading.** Rounding manufactures ties the server did not have, and
+  the single comparison §6.2.1 permits — one hit against another, in one response — is precisely the
+  comparison a tie destroys. The digits are noise; they are not *harmful* noise.
+
+### Consequences
+
+- **The item key set is no longer identical to Home's.** §6.2 said the keys were §1.3's keys so one
+  row component renders both screens; it now says *"§1.3's item keys plus `score`"*. The row
+  component is unaffected — it ignores the field, which is read by the grouping layer above it.
+- **`score` is a security-relevant field, and is documented as one.** Because it is normalised over
+  the candidate set, a document that could enter that set from outside the caller's access scope
+  would make the number an **existence oracle**: a client could watch a visible work's score move and
+  learn that something it may not see matched its query. Scope is enforced *inside* the retrieval
+  legs, before ranking, which is what makes the field safe — and
+  `TestSearchScoreIsBlindToWhatTheCallerCannotSee` fires when the filter is moved to a post-filter,
+  a refactor that returns the same rows and the wrong numbers.
+- **§6.6's ranking is not frozen by this.** §6.2 feared that publishing a score would fix the
+  algorithm. What is published is a *within-answer relative* figure with an explicit "not comparable
+  across versions" row in its table, so changing the weights changes no documented promise. What
+  would be frozen is a score a client was invited to threshold or persist — which is why those two
+  are forbidden uses rather than discouraged ones.
+- **The three signals behind it are still three, not five.** `popularity`, `title_idf` and
+  `in_library` remain hardcoded `0`/`1` in the writer with no reader (§6.6). Publishing the blend
+  does not imply the blend is finished, and §6.2.1 says the weights are *chosen, not tuned*.
+- **The grouped screen is now buildable and is not built here.** This ADR ships the wire piece only.
+
+### What is built
+
+`internal/store/searchlibrary.go`: `SearchHit.Score`, written by `rerank` onto the hit itself so it
+rides through the sort and through `diversify`'s promotion. `internal/httpapi/librarysearch.go`:
+`searchHitResponse.Score`, on the hand-built allowlist, forwarded unrounded and unconditionally.
+`reference/http-api.md` §6.2 and the new §6.2.1 are the contract. The guards are
+`TestSearchScoreIsTheWeightedSumOfTheLiveSignals`, `TestSearchScoreIsBoundedAndPositive`,
+`TestSearchScoreDoesNotDependOnTheLimit`, `TestSearchScoreIsBlindToWhatTheCallerCannotSee` and
+`TestSearchOrderIsNotScoreOrder` in `internal/store`, and
+`TestSearchScoreCrossesTheWireOnTheRightRow`,
+`TestSearchScoreDoesNotDescribeAnythingButTheHit` and the amended
+`TestSearchResponseKeysAreTheAllowlist` in `internal/httpapi` — each one fired by neutering what it
+protects and watching it go red.

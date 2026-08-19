@@ -3,6 +3,8 @@ package store
 import (
 	"context"
 	"database/sql"
+	"math"
+	"sort"
 	"strconv"
 	"strings"
 	"testing"
@@ -833,4 +835,346 @@ func TestTheThreeDeadSignalsAreStillDead(t *testing.T) {
 				"in searchlibrary.go, which documents all three as inert.", n, tc.column, tc.want)
 		}
 	}
+}
+
+// ── SearchHit.Score, the number the wire publishes as §6.2.1's `score` ───────
+//
+// docs/reference/http-api.md §6.2.1 makes four claims to a consumer, and the
+// four tests below are those claims. They are written against the SCORE and not
+// against the order, because the order already has TestSearchLibraryOrderIs-
+// Deterministic and TestDiversifyPromotesAnAbsentMediaType: what is new here is
+// a number a client can read, and every property §6.2.1 promises of it has to be
+// a property something breaks when it stops holding.
+
+// TestSearchScoreIsTheWeightedSumOfTheLiveSignals pins WHAT the number is.
+//
+// §6.2.1 says it is "the weighted sum of three normalised signals" and not a raw
+// bm25 rank, not the RRF value, and not a percentage. Those are four different
+// numbers with the same shape — a small positive float — so an implementation
+// that published any of the other three would look correct in every ordering
+// test in this file. This one computes the documented value independently and
+// insists on it.
+//
+// The corpus is ONE work on purpose: with a single candidate, two of the three
+// components are pinned by construction (rrf/bestRRF = 1 because the candidate
+// IS the best, recency = 1 because one dated candidate is both newest and
+// oldest), which leaves Jaro-Winkler as the only term that has to be computed —
+// and it is computed here from the same inputs the ranker gets rather than
+// copied as a literal, so the test states the FORMULA rather than a number
+// somebody once observed.
+func TestSearchScoreIsTheWeightedSumOfTheLiveSignals(t *testing.T) {
+	f := newSearchFixture(t)
+	f.apply(t, searchItem("1", "1", "comic", "Vinland Saga"))
+
+	hits := mustSearch(t, f.store, OwnerScope(SystemUserID), "vinland").Hits
+	if len(hits) != 1 {
+		t.Fatalf("%d hits, want 1: %q", len(hits), hitTitles(hits))
+	}
+
+	q := buildFTSQueries("vinland")
+	jw := jaroWinkler(
+		normalizeForCompare(strings.Join(q.tokens, " ")),
+		normalizeForCompare(NormalizeForSearch("Vinland Saga")))
+	want := rerankWeightRRF*1.0 + rerankWeightJW*jw + rerankWeightRecency*1.0
+
+	if got := hits[0].Score; math.Abs(got-want) > 1e-12 {
+		t.Errorf("Score = %v, want %v (%.2f·rrf/best + %.2f·jw(%v) + %.2f·recency).\n"+
+			"The published number is the RE-RANK score, not the fusion value and "+
+			"not a bm25 rank — a consumer reading §6.2.1 is told it is the first "+
+			"of those three.",
+			got, want, rerankWeightRRF, rerankWeightJW, jw, rerankWeightRecency)
+	}
+}
+
+// TestSearchScoreIsBoundedAndPositive pins the RANGE §6.2.1 publishes, (0, 1].
+//
+// Both halves matter to a consumer and for different reasons. The upper bound is
+// what lets a grouped card compare its groups' best hits at all; the lower one
+// is why the wire field is unconditional rather than `omitempty` — a zero would
+// be indistinguishable from an absent key, so a hit must never score one.
+func TestSearchScoreIsBoundedAndPositive(t *testing.T) {
+	f := newSearchFixture(t)
+	f.apply(t,
+		searchItem("1", "1", "comic", "Vinland Saga"),
+		searchItem("2", "1", "comic", "Vinland Saga: Book Two"),
+		searchItem("3", "2", "book", "The Long Ships"),
+		searchItem("4", "2", "book", "Saga of the Volsungs"),
+	)
+
+	hits := mustSearch(t, f.store, OwnerScope(SystemUserID), "vinland saga").Hits
+	if len(hits) < 3 {
+		t.Fatalf("%d hits, want at least 3 to have a spread: %q", len(hits), hitTitles(hits))
+	}
+	for _, h := range hits {
+		if !(h.Score > 0 && h.Score <= 1) {
+			t.Errorf("%q scored %v, which is outside (0, 1] — the range §6.2.1 "+
+				"publishes. Every component is normalised to [0,1] and the three "+
+				"weights sum to 1, so a value outside it means a component escaped "+
+				"its normalisation.", h.Title, h.Score)
+		}
+	}
+
+	// A single distinct value across the whole answer would satisfy the bound
+	// above and carry no information at all, which is the vacuous-green this
+	// repo has a rule about: the number has to DISCRIMINATE.
+	if hits[0].Score == hits[len(hits)-1].Score {
+		t.Errorf("every hit scored %v — the field is present and says nothing:\n  %q",
+			hits[0].Score, hitTitles(hits))
+	}
+
+	// THE FLOOR UNDER THE TOP HIT, which is §6.2.1's reason thresholding is a
+	// forbidden use rather than a discouraged one. The rrf component is
+	// normalised against the best candidate IN THE SAME ANSWER, so whichever row
+	// wins that division contributes the whole rerankWeightRRF — and the first
+	// row of the answer scores at least as much as it does. A query that matched
+	// nothing good therefore still leads with a number above the floor, which is
+	// why "hide anything under 0.5" hides everything or nothing depending on the
+	// query rather than filtering by quality.
+	t.Run("a weak match still leads above the floor", func(t *testing.T) {
+		weak := mustSearch(t, f.store, OwnerScope(SystemUserID), "volsungs").Hits
+		if len(weak) == 0 {
+			t.Skip("nothing matched the weak query, so there is no leader to check")
+		}
+		jw := jaroWinkler(normalizeForCompare("volsungs"), normalizeForCompare(weak[0].Title))
+		if jw > 0.6 {
+			t.Fatalf("%q is too good a match for %q (jw=%v) for this subtest to be "+
+				"about a weak one", weak[0].Title, "volsungs", jw)
+		}
+		if weak[0].Score < rerankWeightRRF {
+			t.Errorf("the best hit for a deliberately poor query scored %v, below "+
+				"the %v floor.\nThe floor is what makes a client-side threshold "+
+				"meaningless, and §6.2.1 says so — if it does not hold, that "+
+				"paragraph is wrong.", weak[0].Score, rerankWeightRRF)
+		}
+	})
+}
+
+// TestSearchScoreDoesNotDependOnTheLimit pins §6.2.1's "the score is a property
+// of the query and the corpus, not of how many rows you asked for".
+//
+// It is a real risk rather than a theoretical one: the store retrieves a fixed
+// retrievalLimit candidates, re-ranks the WHOLE of that set, and only then cuts
+// to the caller's limit. Move the cut earlier — an optimisation that looks free
+// — and both normalising denominators change with the page size, so the same
+// work would score differently at limit=1 and limit=100 and a client caching a
+// score across two calls would be comparing nothing.
+func TestSearchScoreDoesNotDependOnTheLimit(t *testing.T) {
+	f := newSearchFixture(t)
+	items := make([]CatalogueItem, 0, 6)
+	for i := range 6 {
+		items = append(items, searchItem(strconv.Itoa(i+1), "1", "comic",
+			"Vinland Saga Volume "+strconv.Itoa(i+1)))
+	}
+	f.apply(t, items...)
+
+	scores := func(limit int) map[int64]float64 {
+		t.Helper()
+		res, err := f.store.SearchLibrary(t.Context(), OwnerScope(SystemUserID), "vinland", limit)
+		if err != nil {
+			t.Fatalf("SearchLibrary(limit=%d): %v", limit, err)
+		}
+		if len(res.Hits) == 0 {
+			t.Fatalf("limit=%d returned nothing", limit)
+		}
+		out := make(map[int64]float64, len(res.Hits))
+		for _, h := range res.Hits {
+			out[h.ID] = h.Score
+		}
+		return out
+	}
+
+	// A SHORT page and the longest one. The comparison has to reach past the
+	// FIRST row to mean anything: the top hit is the best candidate under any
+	// cut, so its normalised rrf and its recency are 1 either way and it would
+	// score the same even under a re-rank that had been narrowed. The rows
+	// BELOW it are where a narrowed candidate set shows.
+	const shortPage = 3
+	short, full := scores(shortPage), scores(SearchMaxLimit)
+	if len(full) <= shortPage {
+		t.Fatalf("the corpus returned %d hits at the maximum limit, so a %d-row "+
+			"page is not actually shorter", len(full), shortPage)
+	}
+	var compared int
+	for id, got := range short {
+		want, ok := full[id]
+		if !ok {
+			continue
+		}
+		compared++
+		if got != want {
+			t.Errorf("work %d scored %v on a %d-row page and %v on a full one.\n"+
+				"§6.2.1 tells a client the score does not depend on the page size, "+
+				"which is only true while the re-rank sees the whole candidate set "+
+				"before the cut.", id, got, shortPage, want)
+		}
+	}
+	if compared < 2 {
+		t.Fatalf("only %d work appeared on both pages, so nothing below the top "+
+			"row was compared", compared)
+	}
+}
+
+// TestSearchScoreIsBlindToWhatTheCallerCannotSee is the access-scope half, and
+// it is the one property of this field that is a SECURITY property rather than
+// an ergonomic one.
+//
+// The score is normalised over the candidate set, so a document that enters that
+// set moves every other document's number. If a document the caller may not see
+// could enter it, the published score would be an existence oracle: a client
+// could watch a visible work's score drop and learn that something it is not
+// allowed to know about matched its query. The scope predicates live INSIDE each
+// retrieval leg for exactly this reason, and this test is what says so.
+func TestSearchScoreIsBlindToWhatTheCallerCannotSee(t *testing.T) {
+	scope := OwnerScope(SystemUserID)
+
+	f := newSearchFixture(t)
+	f.apply(t,
+		searchItem("1", "1", "comic", "Vinland Saga"),
+		searchItem("2", "1", "comic", "Vinland Saga Volume Two"),
+	)
+	before := map[int64]float64{}
+	for _, h := range mustSearch(t, f.store, scope, "vinland").Hits {
+		before[h.ID] = h.Score
+	}
+	if len(before) != 2 {
+		t.Fatalf("baseline: %d hits, want 2", len(before))
+	}
+
+	// TWO VISIBLE ROWS IS THE MINIMUM THIS CAN BE TESTED WITH, and the reason is
+	// worth stating because a one-row version of this test passes under a real
+	// leak. Every component is normalised over the visible set, so with a single
+	// visible row the ratio is 1 whatever else is in the index. What a leak
+	// actually moves is the RELATIVE position of two visible rows inside a leg:
+	// invisible documents interleaving between them change each one's rank, and
+	// therefore the rrf ratio the re-rank divides by.
+	//
+	// Three documents that out-rank both visible ones on the typed text — an
+	// exact normalised title against two longer ones — filed in the OTHER
+	// library, which is then removed from search.
+	f.apply(t,
+		searchItem("3", "2", "book", "Vinland"),
+		searchItem("4", "2", "book", "Vinland"),
+		searchItem("5", "2", "book", "Vinland"),
+	)
+	execTest(t, f.store, `UPDATE library SET include_in_search = 0 WHERE id = ?`,
+		f.libraries["novels"])
+
+	// THE SCORES ARE CHECKED BEFORE THE COUNT, deliberately. A leak that lets
+	// the hidden rows through to the ANSWER shows in both, and the count is
+	// already TestSearchHonoursEnabledAndIncludeInSearch's assertion — if this
+	// test bailed on the count first it would never fire its own claim, and a
+	// guard nobody has watched fail is indistinguishable from no guard.
+	after := mustSearch(t, f.store, scope, "vinland").Hits
+	seen := 0
+	for _, h := range after {
+		want, ok := before[h.ID]
+		if !ok {
+			continue
+		}
+		seen++
+		if h.Score != want {
+			t.Errorf("work %d scored %v alone and %v with three UNSEARCHABLE "+
+				"documents in the database.\nThe score is normalised over the "+
+				"candidate set and the retrieval ranks it is built from, so a row "+
+				"the caller cannot see must never enter either — otherwise the "+
+				"number is an existence oracle for rows outside the caller's "+
+				"scope.", h.ID, want, h.Score)
+		}
+	}
+	if seen != len(before) {
+		t.Errorf("%d of the %d visible works survived the hidden library: %q",
+			seen, len(before), hitTitles(after))
+	}
+	if len(after) != len(before) {
+		t.Errorf("a library removed from search still returns %d hits: %q",
+			len(after), hitTitles(after))
+	}
+}
+
+// TestSearchOrderIsNotScoreOrder is the claim §6.2.1 spends most of its words on:
+// the server's ORDER is authoritative, and a client re-sorting by the published
+// score produces a WORSE list than the one it was handed.
+//
+// The mechanism is diversify. It is a promotion and not a re-score, so a
+// promoted row keeps the score it earned — which is by construction lower than
+// every score above it. Sorting by score therefore sends it straight back down,
+// and the media-type guarantee §4 calls the reason the feature exists is gone.
+//
+// ⚠️ THIS IS THE TEST THAT MUST GO THROUGH rerank. Asserting it against
+// diversify() alone would stay green if the call were deleted — the absorbed
+// guard this area has a recorded history of (LS-01).
+func TestSearchOrderIsNotScoreOrder(t *testing.T) {
+	candidates := make([]searchCandidate, 0, 15)
+	for i := 1; i <= 14; i++ {
+		candidates = append(candidates, searchCandidate{
+			hit:       SearchHit{ID: int64(i), Title: "comic", MediaType: MediaTypeComics},
+			rrf:       0.03,
+			normTitle: "comic",
+		})
+	}
+	candidates = append(candidates, searchCandidate{
+		hit:       SearchHit{ID: 99, Title: "the novella", MediaType: MediaTypeEbooks},
+		rrf:       0.001,
+		normTitle: "zzzzzzzzz",
+	})
+
+	got := rerank([]string{"comic"}, candidates)
+
+	inWindow := func(hits []SearchHit) bool {
+		for _, h := range hits[:diversifyWindow] {
+			if h.ID == 99 {
+				return true
+			}
+		}
+		return false
+	}
+	if !inWindow(got) {
+		t.Fatalf("the ebook is not in the top %d of the server's own order, so "+
+			"there is no promotion for this test to be about", diversifyWindow)
+	}
+
+	// The published score of the promoted row is LOWER than the row above it.
+	// This is the fact that makes a client-side sort destructive, and it is
+	// asserted rather than assumed because a future re-score inside diversify
+	// would silently make the rest of this test vacuous.
+	var promoted SearchHit
+	var pos int
+	for i, h := range got {
+		if h.ID == 99 {
+			promoted, pos = h, i
+		}
+	}
+	if pos == 0 || !(promoted.Score < got[pos-1].Score) {
+		t.Fatalf("the promoted row scored %v against %v above it: diversify is "+
+			"supposed to PROMOTE, not re-score", promoted.Score, got[pos-1].Score)
+	}
+
+	resorted := append([]SearchHit(nil), got...)
+	sort.SliceStable(resorted, func(i, j int) bool { return resorted[i].Score > resorted[j].Score })
+	if inWindow(resorted) {
+		t.Fatalf("re-sorting by score left the ebook in the top %d, so this test "+
+			"cannot show what a client-side sort costs", diversifyWindow)
+	}
+
+	// The point, stated as an assertion rather than as a comment: the two orders
+	// DIFFER, and the server's is the one with the guarantee in it.
+	same := true
+	for i := range got {
+		if got[i].ID != resorted[i].ID {
+			same = false
+			break
+		}
+	}
+	if same {
+		t.Errorf("the server's order and score-descending are the same list, so "+
+			"§6.2.1's warning describes nothing. Sorted:\n  %v", hitIDs(resorted))
+	}
+}
+
+func hitIDs(hits []SearchHit) []int64 {
+	out := make([]int64, len(hits))
+	for i, h := range hits {
+		out[i] = h.ID
+	}
+	return out
 }

@@ -123,11 +123,14 @@ const (
 // overview, remote_path, content_hash and size_on_disk are absent, and
 // remote_path above all is a filesystem path on somebody else's box.
 //
-// THE FIELDS ARE RecentWork'S FIELDS, ON PURPOSE. A search result row and a
-// recently-added row render the same way — Type, title, year, the Have grammar —
-// so a client can reuse one row component. Nothing is shared in the type system
-// yet because the two reads have different keys and a premature common struct
-// would fix the wrong thing.
+// THE RENDERING FIELDS ARE RecentWork'S FIELDS, ON PURPOSE. A search result row
+// and a recently-added row render the same way — Type, title, year, the Have
+// grammar — so a client can reuse one row component. Nothing is shared in the
+// type system yet because the two reads have different keys and a premature
+// common struct would fix the wrong thing.
+//
+// Score is the ONE field RecentWork has no analogue for, and it cannot have one:
+// Home's list is ordered by date, so there is no relevance for it to carry.
 type SearchHit struct {
 	ID int64
 
@@ -155,6 +158,26 @@ type SearchHit struct {
 	HaveCount    int64
 	WantCount    int64
 	Availability sql.NullString
+
+	// Score is rerank's output for this hit: the weighted sum of the three live
+	// signals, in (0,1]. It is written by rerank and by nothing else, so a hit
+	// that never went through the re-rank carries the zero value.
+	//
+	// IT IS A PROPERTY OF ONE ANSWER, NOT OF THE WORK. Two of its three
+	// components are normalised over THE CANDIDATE SET — `rrf` against the best
+	// rrf in the set, recency against the set's added_at order — so the same
+	// work scores differently under a different query, and under the same query
+	// against a different corpus or a different access scope. Nothing may
+	// persist it, cache it across queries, or compare two of them that did not
+	// come out of the same call. docs/reference/http-api.md §6.2.1 is the wire
+	// contract that says this to a consumer, which is where a consumer will
+	// look.
+	//
+	// ⚠️ IT IS NOT THE ORDER. rerank sorts by it and then diversify PROMOTES
+	// rows past better-scoring ones, so the returned slice is deliberately not
+	// score-descending. The order is the answer; this number explains it and
+	// does not reproduce it.
+	Score float64
 }
 
 // SearchResults is one answer, plus the one fact about the query the caller has
@@ -687,6 +710,12 @@ const (
 // always produce the same order. An unstable order across identical requests
 // makes every screenshot and every test flaky, and users read it as the list
 // moving under them.
+//
+// THE SCORE IS PUBLISHED AND THE ORDER IS STILL THE ANSWER. Because every
+// component is normalised over the candidate set rather than over the corpus,
+// the number is meaningful ONLY among hits from one call — TestSearchScore*
+// pins each half of that — and diversify then reorders past it, so the slice
+// this returns is authoritative and the score is an explanation of it.
 func rerank(tokens []string, candidates []searchCandidate) []SearchHit {
 	if len(candidates) == 0 {
 		return []SearchHit{}
@@ -706,30 +735,29 @@ func rerank(tokens []string, candidates []searchCandidate) []SearchHit {
 
 	recency := recencyScores(candidates)
 
-	scored := make([]struct {
-		hit   SearchHit
-		score float64
-	}, len(candidates))
+	// The score is written ONTO THE HIT rather than into a parallel struct the
+	// function then throws away, because it leaves this package: SearchHit.Score
+	// is what internal/httpapi publishes as §6.2.1's `score`. It rides the row
+	// through the sort and through diversify's promotion, so a promoted row
+	// arrives on the wire carrying the score it actually earned — which is the
+	// whole reason a consumer can see that the order is not score order.
+	scored := make([]SearchHit, len(candidates))
 	for i, c := range candidates {
 		jw := jaroWinkler(typed, normalizeForCompare(c.normTitle))
-		scored[i].hit = c.hit
-		scored[i].score = rerankWeightRRF*(c.rrf/bestRRF) +
+		scored[i] = c.hit
+		scored[i].Score = rerankWeightRRF*(c.rrf/bestRRF) +
 			rerankWeightJW*jw +
 			rerankWeightRecency*recency[i]
 	}
 
 	sort.SliceStable(scored, func(i, j int) bool {
-		if scored[i].score != scored[j].score {
-			return scored[i].score > scored[j].score
+		if scored[i].Score != scored[j].Score {
+			return scored[i].Score > scored[j].Score
 		}
-		return scored[i].hit.ID < scored[j].hit.ID
+		return scored[i].ID < scored[j].ID
 	})
 
-	out := make([]SearchHit, len(scored))
-	for i := range scored {
-		out[i] = scored[i].hit
-	}
-	return diversify(out)
+	return diversify(scored)
 }
 
 // recencyScores maps each candidate onto [0,1] by its position in added_at
@@ -780,6 +808,12 @@ const diversifyWindow = 10
 // edge. Nothing is dropped and nothing outside the window is reordered relative
 // to itself, so a caller asking for more rows sees the same list with the
 // promoted rows lifted out of it.
+//
+// ⚠️ "NOT A RE-SCORE" IS EXACTLY WHY A CLIENT MUST NOT SORT BY SearchHit.Score.
+// A promoted row keeps the score it earned, which is by construction lower than
+// that of the rows it was moved above, so re-sorting the returned slice by score
+// sends every promoted row back down and undoes this guarantee in full. The
+// score is published (§6.2.1); the order is what a client renders.
 //
 // THE FLOOR §4 NAMES IS "ABOVE A FLOOR" AND IT IS NOT A NUMBER HERE. Being a
 // fused candidate at all IS the floor: a row only exists in this list because at
