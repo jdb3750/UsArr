@@ -179,8 +179,9 @@ func (p PosterAsset) validate() error {
 	// carries no CHECK constraint because the codec vocabulary is expected to
 	// grow (AVIF is deferred, not rejected), so Go is the only place it is
 	// enforced. ADR-0039 made this exact trade for write_queue.state, promised
-	// the Go validator and never wrote it; this is the line that keeps 00008
-	// from repeating it.
+	// the Go validator and did not write it for a year of commits; this is the
+	// line that keeps 00008 from repeating it. (That debt is paid now —
+	// writequeue.go — but it was paid by a mechanism, not by the promise.)
 	if !ValidImageFormat(p.Format) {
 		return fmt.Errorf("%w: %q is not an image_asset.format this build writes", ErrInvalidImageAsset, p.Format)
 	}

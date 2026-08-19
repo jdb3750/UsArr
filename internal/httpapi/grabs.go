@@ -54,8 +54,11 @@ import (
 //   - The library or media type a category resolved to. The raw Newznab
 //     category ints are here; the resolver lives in internal/servarr/mapping,
 //     which this package may not import (doc.go).
-//   - Write-queue state (pending|inflight|verifying|done|failed). Nothing writes
-//     write_queue yet.
+//   - Write-queue state. The vocabulary is store.ValidWriteQueueState's and
+//     nowhere else's — this list used to restate it as
+//     `pending|inflight|verifying|done|failed`, which had been missing
+//     'awaiting_choice' since ADR-0039. Nothing in v0.1 writes write_queue; the
+//     one writer in the tree is the bench fixture behind `//go:build bench`.
 
 // recentGrabResponse is one acquisition event as it crosses to a client.
 //

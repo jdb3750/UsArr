@@ -12,11 +12,17 @@ package store
 // carry no CHECK.
 //
 // WHY THIS FILE SHIPPED BEFORE THERE WAS A WRITER. ADR-0039 promised the Go
-// validation and it was never written, so write_queue.state is enforced nowhere
-// that runs; that is the failure this file refuses to repeat. The declaration
-// and the check shipped WITH the column, and
-// TestImageWritesValidateTheFormatVocabulary fails the moment a writer lands
-// without calling ValidImageFormat.
+// validation for write_queue.state and did not write it, and that column stayed
+// enforced nowhere that runs for as long as it took someone to read the ADR;
+// that is the failure this file refuses to repeat. The declaration and the check
+// shipped WITH the column, and TestImageWritesValidateTheFormatVocabulary fails
+// the moment a writer lands without calling ValidImageFormat.
+//
+// ⚠️ THE DEBT THIS PARAGRAPH CITES HAS SINCE BEEN PAID — internal/store/
+// writequeue.go declares and validates write_queue.state, and
+// TestWriteQueueWritesValidateTheStateVocabulary is its guard. The lesson is
+// what stands, not the outstanding balance: the mechanism is what kept the
+// promise, and the promise on its own did not.
 //
 // THE WRITER HAS NOW LANDED — imagewrite.go's PosterAsset.validate — so that
 // guard is no longer vacuous, and this file is no longer a promise held open.

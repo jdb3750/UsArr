@@ -43,12 +43,17 @@ var imageAssetWriteSQL = regexp.MustCompile(
 //
 // THE FAILURE IT EXISTS TO PREVENT IS ONE THIS PROJECT ALREADY HAD.
 // ADR-0039 dropped write_queue.state's CHECK and said the vocabulary "moves to
-// Go and is validated there". It never did: the ADR carries a dated correction
-// admitting that no Go code declares or validates write_queue.state, and the
-// column is enforced nowhere that runs. Nothing noticed, because nothing could
-// — the promise lived only in prose. Migration 00008 makes the same trade for
-// image_asset.format, so it owes a mechanism rather than a promise, and this is
-// it.
+// Go and is validated there". It did not, for a year of commits: the ADR carries
+// a dated correction admitting that no Go code declared or validated
+// write_queue.state, and the column was enforced nowhere that ran. Nothing
+// noticed, because nothing could — the promise lived only in prose. Migration
+// 00008 makes the same trade for image_asset.format, so it owes a mechanism
+// rather than a promise, and this is it.
+//
+// ⚠️ write_queue.state HAS ITS VALIDATOR NOW (internal/store/writequeue.go), and
+// its own guard in this shape — TestWriteQueueWritesValidateTheStateVocabulary,
+// in writequeuelint_test.go. It did NOT start vacuous, because
+// internal/db/spike/fixture.go was already writing the column.
 //
 // HOW IT BEHAVES, WHICH IS THE POINT.
 //   - While nothing writes image_asset it passes because there is nothing to
@@ -175,8 +180,9 @@ func TestImageWritesValidateTheFormatVocabulary(t *testing.T) {
 			"image_asset.format carries NO CHECK constraint (migration 00008, ADR-0050) "+
 			"because the codec vocabulary is expected to grow. Go is where that "+
 			"vocabulary is enforced, and this is the writer that owes the call. "+
-			"ADR-0039 made this same trade for write_queue.state and never wrote the "+
-			"validator; that is the outcome this test exists to make impossible.",
+			"ADR-0039 made this same trade for write_queue.state and left the validator "+
+			"unwritten for a year of commits; that is the outcome this test exists to "+
+			"make impossible.",
 			strings.Join(writes, "\n  "))
 	}
 }

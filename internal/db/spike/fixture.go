@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/jdb3750/UsArr/internal/db"
+	"github.com/jdb3750/UsArr/internal/store"
 )
 
 // The fixture is 500,000 rows across the tables migration 0001 actually
@@ -234,20 +235,38 @@ func buildFixture(ctx context.Context, d *db.DB, c fixtureCounts) error {
 
 	// write_queue. Most rows settled, a minority runnable — which is what
 	// ix_wq_runnable's partial index is for.
+	//
+	// ⚠️ THE STATES GO THROUGH internal/store's VALIDATOR BEFORE THE BATCH RUNS,
+	// and this fixture is why that matters more here than the row count
+	// suggests: write_queue.state carries NO CHECK constraint (ADR-0039
+	// decision 1, migration 00005's column comment), and this file is the
+	// tree's ONLY write_queue writer. A validator that the only writer bypassed
+	// would be worse than no validator at all, because ADR-0039's claim would
+	// then read as satisfied while nothing enforced anything.
+	//
+	// wqFixtureState has period 20, so the loop below is an EXHAUSTIVE check of
+	// every value this writer can produce, not a sample.
+	// TestWriteQueueWritesValidateTheStateVocabulary fails the build if this
+	// call is deleted.
+	for i := range 20 {
+		if st := wqFixtureState(i); !store.ValidWriteQueueState(st) {
+			return fmt.Errorf("write_queue fixture: row %d would be seeded with state %q, "+
+				"which is not in the vocabulary internal/store/writequeue.go declares", i, st)
+		}
+	}
 	if err := insertBatched(ctx, d, c.WriteQueue,
 		`INSERT INTO write_queue (idempotency_key, user_id, kind, work_id, service_instance_id,
 		    payload, state, attempts, next_attempt_at, created_at)
 		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		func(i int) []any {
-			state := "done"
+			state := wqFixtureState(i)
+			// next_attempt_at is set only on the runnable states, because
+			// ix_wq_runnable is a partial index on `state IN (…) AND
+			// next_attempt_at <= ?` and a settled row with a due time would
+			// misrepresent how much of the table the sweep actually walks.
 			var next any
-			switch i % 20 {
-			case 0:
-				state, next = "pending", ts(i%86400)
-			case 1:
-				state, next = "inflight", ts(i%86400)
-			case 2:
-				state, next = "verifying", ts(i%86400)
+			if state != store.WriteQueueStateDone {
+				next = ts(i % 86400)
 			}
 			return []any{
 				fmt.Sprintf("01J%026d", i), // ULID-shaped, deliberately synthetic
@@ -379,4 +398,27 @@ func insertBatched(ctx context.Context, d *db.DB, n int, query string, args func
 		}
 	}
 	return nil
+}
+
+// wqFixtureState is the state fixture row i is seeded with: 3 rows in every 20
+// runnable, the rest settled.
+//
+// It is a named function rather than a switch inside the row builder so that the
+// seeder can validate EVERY value it can produce — the period is 20, so twenty
+// calls cover the whole range — against internal/store's vocabulary before
+// writing 8,000 rows. The states are the store constants rather than literals
+// for the same reason: write_queue.state has no CHECK, so a typo here would
+// insert cleanly and then never match ix_wq_runnable's predicate, quietly
+// changing what this whole benchmark measures.
+func wqFixtureState(i int) string {
+	switch i % 20 {
+	case 0:
+		return store.WriteQueueStatePending
+	case 1:
+		return store.WriteQueueStateInflight
+	case 2:
+		return store.WriteQueueStateVerifying
+	default:
+		return store.WriteQueueStateDone
+	}
 }
