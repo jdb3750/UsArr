@@ -24,8 +24,17 @@
 > had already falsified. That pass rewrote §1, §2's image / codec / covers items, §3's sequencing
 > table and its BookOrbit entry, and §4. **It read nothing else for line drift, and no sweep
 > happened this time either.** Every other line citation in this file remains unvetted.
+>
+> **Absence rule, added 2026-08-19 after this file wrongly recorded a probe as *"never run"*:**
+> a missing artefact **in the repo** does not establish that something never happened — a result can
+> live in a thread, on the owner's box, or nowhere. A claim of the form *"X was never done"* needs a
+> source that **would have recorded X**, not merely a place where X is not.
 
-**Last re-derived against:** `origin/main` `3c88b2e` (2026-08-19). Every check quoted below was
+**Last re-derived against:** `origin/main` `5aee209` (2026-08-19).
+⚠️ **The baseline moved from `3c88b2e` by the probe-correction pass, which re-derived exactly ONE
+fact — that `kavita-cover-probe.sh` did run — and fired NO grep and NO check on this tree.** The
+**nine** commits it moved over touch `docs/` and `web/src/` only: **no Go, no migration**, so §2's fired Go and schema checks are not stale by it, and
+nothing else here was re-fired. Every check quoted below was
 **fired**, not inherited. Precisely: the Go, schema and `ARCHITECTURE.md` reads were fired at
 `d5ab034`, the tip when the Kavita-sunset pass started. `fc2b7c4` and `2ce8ed9` landed mid-pass —
 both touch **`docs/reference/` only**, change no Go and no migration, and both were read directly for
@@ -143,10 +152,29 @@ stopped by the decision itself, not merely re-pointed by it.
       fails invisibly and reads as checked.
       🛑 **THE KAVITA-SPECIFIC HALF IS STOPPED BY DECISION (§1) — not abandoned, and not a gap.**
       That is the cover **fetch path** against `GET /api/Image/series-cover`, and the four facts
-      `kavita-cover-probe.sh` was written to answer (`REVIEW-LOG.md` LS-260). **There is no probe
-      result to carry: the probe was never run.** The script and its stated-in-advance criterion sit
-      at the repo root; **nothing is owed against them now.** What is *not* stopped is everything
-      source-independent — the encoder, the seven-width allowlist, the cache and the route.
+      `kavita-cover-probe.sh` was written to answer (`REVIEW-LOG.md` LS-260).
+      ⚠️ **CORRECTED 2026-08-19. This item used to read *"~~There is no probe result to carry: the
+      probe was never run.~~"* — FALSE.** It was written from a repo search that found no result
+      artefact, which is precisely the trap the header's **absence rule** now names: the repo is not
+      a source that would have recorded the run. **The probe WAS run, 2026-08-19, by the owner
+      against his own live Kavita**; he pasted the full raw output into the library-sync thread
+      (04:23:04Z) and **deliberately committed nothing**, which is why the tree holds no artefact.
+      **What it measured:** 5 of 5 covers `image/png`, ~165 KiB median; `ETag` on **0 of 5**,
+      `Last-Modified` on **5 of 5**, and an `If-Modified-Since` re-request earned a **304** — so
+      **the timestamp is the revalidation key, not the entity tag**; `primaryColor` present as a hex
+      colour on **5 of 5**, **all distinct**.
+      **Against LS-260's four questions that is *answered in part*, NOT *satisfied*:** it answers
+      **Q3 in full** — content type, size, and the validator **fired** rather than reported, which is
+      the standard LS-260 set for itself — and it meets **Q2's stated-in-advance criterion**,
+      *present **and** varied*, so `USABLE` rather than `POPULATED BUT USELESS`. 🔍 **Q1 (the
+      header-vs-query auth gate, which LS-260 calls *the* gate) and Q4 (what a cover-less series
+      returns) are NOT in the results summarised here, and this file cannot tell whether the raw
+      output answered them** — the thread is the source, not this line. **Do not record LS-260 as
+      discharged on the strength of this paragraph.**
+      The script and its stated-in-advance criterion sit at the repo root; **nothing further is owed
+      against them — because §1 stops the source, not because the probe never ran.** What is *not*
+      stopped is everything source-independent — the encoder, the seven-width allowlist, the cache and
+      the route.
       *Authority:* §4.4, §16's v0.1 entry.
 
       *Done when — **ALL THREE** legs. The first two run from a clean checkout:*
@@ -513,8 +541,12 @@ and the ADR's to say.**
 ### BookOrbit — the direction is OWNER-DECIDED; the ADAPTER is gated on an unwritten ADR
 
 ⚠️ **THIS SECTION USED TO BE HEADED *"Open decision — BookOrbit as a books backend"* AND IS NO LONGER
-OPEN.** §1 carries the owner's words. Two of that entry's three *"Against"* findings are also
-falsified below. The old text is kept visible so the reversal is legible:
+OPEN.** §1 carries the owner's words. ⚠️ **This paragraph used to add *"~~Two of that entry's
+three Against findings are also falsified below~~"*, and the 2026-08-19 watermark downgrade made that
+count wrong.** As it stands below: the **no-inbound-API-key** finding is **falsified**, the
+**no-manga-or-comic-external-ids** finding is **narrowed**, and the **`updatedAt` watermark** finding
+is **substantially UPHELD** — it is the bullet that overwrote it that was wrong. The old text is kept
+visible so the reversal is legible:
 
 > **~~Tracking, not a decision.~~** ~~Joe is standing up a BookOrbit instance and is **leaning
 > toward** migrating his books backend off Kavita (2026-08-18: *"in my heart i kind of want to
@@ -524,11 +556,30 @@ falsified below. The old text is kept visible so the reversal is legible:
 > ids**.~~ ⚠️ ~~**The standing recommendation from that evaluation is: do NOT switch UsArr's first
 > adapter off Kavita.**~~
 
+⚠️ **THE STANDING RECOMMENDATION IN THAT LAST STRUCK LINE IS SUPERSEDED — say so explicitly, because
+striking it through was never the same as reconciling it.** *"Do not switch UsArr's first adapter off
+Kavita"* is **reversed by §1's OWNER DECISION**, which is not this file's to re-argue: the owner is
+sunsetting Kavita, so the source that recommendation was protecting is going away. **It is kept
+visible as the record of what was believed and why**, not as advice still in force. **An ADR is
+pending** and no number is cited, because none is allocated on `main`; **until it lands, v0.1's
+proven source is UNDECIDED (§1)** — the recommendation being dead does not by itself name a
+successor.
+
 That evaluation ran at HEAD **`4a420a04`** (2026-08-17). **§16 still assigns BookOrbit nothing, and
 no ADR backs any of this.**
 
 - [ ] **The BookOrbit catalogue adapter — GATED ON THE UNWRITTEN ADR (§1), and on nothing else.**
       **Do not start it before that ADR exists.** No number is cited because none is allocated.
+      ❓ **THE GATING UNKNOWN — READ THIS BEFORE THE WATERMARK QUESTION, BECAUSE IT CAN VOID THAT
+      QUESTION ENTIRELY.** **UsArr's catalogue unit is the SERIES. The ordered read verified on
+      BookOrbit is over BOOKS.** ⚠️ **UNVERIFIED: nobody has checked whether a SERIES-level ordered
+      read exists at all.** If it does not, **incremental sync (channel 3b) is unavailable for a
+      reason that has nothing to do with the watermark**, and no amount of `updatedAt` completeness
+      rescues it. **What would settle it:** the same kind of source read that produced the verified
+      facts below, at a named HEAD, over BookOrbit's **series** routes — looking for a list endpoint
+      that takes an order/sort key **and** pages over series. That read was done for books and **was
+      not done for series**. **The ADR must answer this before it answers the watermark.**
+
       **Verified facts, read off BookOrbit's own source at HEAD `73b7877`, release `v2.6.0`** — carry
       these into the ADR rather than re-deriving them:
       - ✅ **§14 IS SATISFIED, and this falsifies the *"no inbound API key"* finding above.**
@@ -544,21 +595,36 @@ no ADR backs any of this.**
         **`comicvineId`** field. This narrows — it does not fully falsify — the *"no manga or comic
         external ids"* finding above.
       - ✅ **Licence AGPL-3.0.** Compatible; no licence question to answer.
-      - 🛑 **THE ONE CONFIRMED OBSTACLE, and the ADR must decide it explicitly: THERE IS NO CHANGE
-        WATERMARK OF ANY KIND.** No `updatedSince`, no changes feed, and **`updatedAt` is *provably*
-        not bumped by tag, genre or author edits.** So **an adapter must full-resync or diff
-        locally**, and **which of those it does is a design decision the ADR owes** — it is not an
-        implementation detail to be discovered later. ⚠️ Note the shape: the earlier evaluation
-        called this *"an `updatedAt` watermark that misses tag, genre and author edits"*, which reads
-        as a partial watermark. **It is not partial; it is absent**, and that is the harder claim.
+      - ⚠️ **DOWNGRADED 2026-08-19 — THE WATERMARK IS INCOMPLETE, NOT ABSENT.** This bullet used to
+        read *"~~THE ONE CONFIRMED OBSTACLE … THERE IS NO CHANGE WATERMARK OF ANY KIND … So an
+        adapter must full-resync or diff locally … It is not partial; it is absent, and that is the
+        harder claim.~~"* **That was a three-hop compression** — *"misses some edits"* → *"no
+        watermark"* → *"full resync only"* — and every hop hardened a claim the evidence does not
+        carry. ⚠️ **It also contradicted this same section**, whose struck evaluation block above
+        reads *"an `updatedAt` watermark that misses tag, genre and author edits"*. **The struck
+        version was the closer one**; this correction restores it rather than the bullet that
+        overwrote it.
+        **What the evidence supports:** there is **no `since`-style FILTER parameter and no changes
+        feed** — but **`updatedAt` exists, and BookOrbit's API admits it as a SORT KEY with paging**,
+        which is **an ordered page walk**: the incremental shape channel 3b is already built around
+        (§7.1a). **Do not assert full-resync-only.**
+        ❓ **What is genuinely unsettled is `updatedAt`'s COMPLETENESS.** It is set
+        **application-side, with no DB trigger**, and **authors, tags and genres are not columns on
+        the book row** — so a metadata-only edit can fail to move it. **What `updatedAt` does and
+        does not cover is a probe's answer, not a reading's**: mutate a tag, a genre and an author on
+        a known book, re-read `updatedAt`, report which moved it. **Commissioning that probe is the
+        ADR's**, the same way LS-200's and LS-260's were commissioned.
       - ❓ **OPEN QUESTION for manga identity: MangaUpdates, AniList and MyAnimeList ids are
         ABSENT.** `comicvineId` does not cover manga. Whether that is answered by the owner's own
         **MangaBaka sidecar** (§1, his words), by the *"official support"* he expects, or by
         something in UsArr is **undecided and belongs in the ADR.**
       *Authority:* §1's owner decision. **§16 assigns this nothing; this box is not a milestone
       claim.**
-      *Done when:* the ADR exists, names a source for v0.1, and states the full-resync-or-local-diff
-      decision. **Until then this item is a specification, not work in progress.**
+      *Done when:* the ADR exists, names a source for v0.1, **answers the series-vs-books gating
+      unknown above**, and states **what the incremental read is** — an ordered `updatedAt` page
+      walk, a local diff, or a full resync — rather than presuming any of the three. ⚠️ **This line
+      used to demand *"~~the full-resync-or-local-diff decision~~"*, which presumed the absence claim
+      corrected above.** **Until then this item is a specification, not work in progress.**
 
 **The importer, stream and UI plumbing is source-agnostic, and the Kavita adapter stays either way** —
 see the blocked table above, where that is now its own row.
@@ -573,8 +639,11 @@ Things no agent in this repo can do. Nothing here is blocked on code.
   running.
 - 🛑 ~~**Run a full sync on the Kavita instance** so the library the importer reads is current.~~
   **STOPPED BY DECISION (§1)** — nothing is owed against an instance that is being sunset. The same
-  goes for `kavita-cover-probe.sh`, which was written and **never run**; it stays at the repo root
-  with its criterion intact, and is not a task any more.
+  goes for `kavita-cover-probe.sh`. ⚠️ **CORRECTED 2026-08-19: this line used to say the probe was
+  *"~~written and never run~~"*. It WAS run** — by the owner, against his live instance, 2026-08-19,
+  results pasted into the library-sync thread and deliberately not committed; §2's image-pipeline
+  item carries what it measured and which LS-260 questions that does and does not answer. The script
+  stays at the repo root with its criterion intact, and is not a task any more.
 - ✅ ~~**Confirm or drop the BookOrbit direction** once the instance is up (§3).~~ **DONE — he
   confirmed it, 2026-08-19 (§1).** What replaces it is not his: **an ADR is owed**, and writing it
   belongs to the lane that owns `DECISIONS.md`, not to this list.
