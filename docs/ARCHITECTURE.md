@@ -2246,8 +2246,9 @@ The tailnet removes the "internet-exposed by design" leg and neither of the othe
    scoping. Images are proxied because `MediaCover` requires it. Nothing leaving UsArr carries a
    backend credential (§5.4).
 5. **Redaction is middleware, not convention.** A fixed deny-list of query parameters — the provider
-   and OpenSubsonic names (`apikey`, `api_key`, `token`, `access_token`, `auth_token`, `sig`,
-   `signature`, `secret`, `secret_key`, `p`, `t`, `s`) **and the private-tracker passkey names**
+   and OpenSubsonic names (`apikey`, `api_key`, `token`, `access_token`, `auth_token`,
+   `refresh_token`, `refreshtoken`, `sig`, `signature`, `secret`, `secret_key`, `p`, `t`, `s`) **and
+   the private-tracker passkey names**
    (`passkey`, `torrent_pass`, `torrentpass`, `rsskey`, `authkey`, `apipasskey`, `cookie`) — plus the
    `Authorization`/`X-Api-Key` headers is redacted **before** any log line, audit row, error message,
    SSE payload or support bundle, at every level including `trace`. The northbound credential rides in

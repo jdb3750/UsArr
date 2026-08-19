@@ -383,7 +383,8 @@ The earlier redaction rule covered **southbound** `Field.privacy` fields only, a
 UsArr's own inbound URLs — which is exactly where the northbound credential lives.
 
 > **A fixed deny-list of query parameters — `apikey`, `api_key`, `token`, `access_token`,
-> `auth_token`, `sig`, `signature`, `secret`, `secret_key`, `p`, `t`, `s`, `passkey`,
+> `auth_token`, `refresh_token`, `refreshtoken`, `sig`, `signature`, `secret`, `secret_key`, `p`,
+> `t`, `s`, `passkey`,
 > `torrent_pass`, `torrentpass`, `rsskey`, `authkey`, `apipasskey`, `cookie` (matched
 > case-insensitively) — and the `Authorization` and `X-Api-Key` headers is redacted to
 > `<redacted>` BEFORE any log line, audit row, error message, SSE payload or support bundle is

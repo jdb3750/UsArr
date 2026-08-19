@@ -21,6 +21,14 @@ import (
 // not the other. ARCHITECTURE.md §14.5 item 5 and security.md §5 document it and
 // must be updated together with it.
 //
+// `refresh_token` / `refreshtoken` are here because of a RESPONSE BODY, not a
+// request: Kavita's UserDto carries `token`, `refreshToken` and `apiKey`
+// together, and it is what POST /api/Plugin/authenticate returns
+// (api/specs/kavita-develop.json, components.schemas.UserDto). Two of those
+// three names were already covered and the third was not — found while working
+// out what a go-vcr cassette could capture coming BACK from a server, which is
+// the direction this list was not originally written for.
+//
 // PRIVATE-TRACKER PASSKEYS are in this list, and they are not hypothetical.
 // Prowlarr's ReleaseResource.infoUrl and .commentUrl are indexer-supplied and
 // are surfaced to the browser as info_url; a private tracker's announce and
@@ -38,15 +46,17 @@ import (
 // that the tracker-specific names do not.
 var credentialParams = map[string]struct{}{
 	// Provider / generic.
-	"apikey":       {},
-	"api_key":      {},
-	"token":        {},
-	"access_token": {},
-	"auth_token":   {},
-	"sig":          {},
-	"signature":    {},
-	"secret":       {},
-	"secret_key":   {},
+	"apikey":        {},
+	"api_key":       {},
+	"token":         {},
+	"access_token":  {},
+	"auth_token":    {},
+	"refresh_token": {},
+	"refreshtoken":  {},
+	"sig":           {},
+	"signature":     {},
+	"secret":        {},
+	"secret_key":    {},
 
 	// OpenSubsonic salt/token/password.
 	"p": {},
@@ -250,6 +260,21 @@ func isCredentialParam(name string) bool {
 	// the services that accept them.
 	_, ok := credentialParams[strings.ToLower(name)]
 	return ok
+}
+
+// IsCredentialParam reports whether name is a credential-bearing parameter under
+// the ONE deny-list above. Case-insensitive.
+//
+// It is exported for callers that redact something that is not a URL and so
+// cannot go through RedactURL — the go-vcr cassette scrubber
+// (internal/vcrscrub) is the reason it exists. That scrubber has to redact a
+// credential carried in a request BODY, in a form encoding and as a JSON object
+// KEY, none of which url.URL can parse. Exporting the predicate is what lets it
+// consult this list instead of growing its own: a second, drifting copy is how a
+// parameter ends up redacted on one code path and not the other, and a cassette
+// is the code path where the drifting copy gets committed to git.
+func IsCredentialParam(name string) bool {
+	return isCredentialParam(name)
 }
 
 // RedactURL renders a URL safe to log: userinfo removed, credential query
