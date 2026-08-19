@@ -264,7 +264,7 @@ func TestUnknownServiceKindIsStillRefused(t *testing.T) {
 		// The supported list must be stable across calls: it is rendered from a
 		// map, and an error message that reorders itself is one a user cannot
 		// search for.
-		if !strings.Contains(body, "kavita, prowlarr") {
+		if !strings.Contains(body, "bookorbit, kavita, prowlarr") {
 			t.Errorf("kind %q: the supported list is missing or unsorted: %s", kind, body)
 		}
 	}

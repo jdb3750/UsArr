@@ -15,6 +15,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/jdb3750/UsArr/internal/bookorbit"
 	"github.com/jdb3750/UsArr/internal/crypto"
 	"github.com/jdb3750/UsArr/internal/httpapi"
 	"github.com/jdb3750/UsArr/internal/kavita"
@@ -89,11 +90,17 @@ type registry struct {
 
 // registryEntry is one instance's live client stack.
 //
-// EXACTLY ONE of prowlarr and kavita is non-nil, chosen by instance.Kind. They
-// are separate fields rather than one interface because the two clients have
-// almost nothing in common at the call site — one is searched and grabbed from,
-// the other is replicated from — and an interface wide enough for both would be
-// the union of two APIs with no shared caller.
+// EXACTLY ONE of prowlarr, kavita and bookorbit is non-nil, chosen by
+// instance.Kind. They are separate fields rather than one interface because the
+// clients have almost nothing in common at the call site — one is searched and
+// grabbed from, the others are replicated from — and an interface wide enough
+// for all three would be the union of three APIs with no shared caller.
+//
+// The two catalogue sources are NOT collapsed into one field either, even though
+// they share a role: they share no method set at all today (kavita.Client has
+// Libraries, bookorbit.Client has an account scope verdict and neither has the
+// other), and a nil-checked pair is what makes `entry.bookorbit == nil` a
+// compile-time-obvious gate at every place that means "kavita only".
 type registryEntry struct {
 	// fingerprint changes whenever base_url or the stored envelope changes, so
 	// an edited instance gets a fresh client rather than one pinned to the old
@@ -110,6 +117,18 @@ type registryEntry struct {
 	// gets a real row on the Services screen instead of a permanent error.
 	kavita *kavita.Client
 
+	// bookorbit is ADR-0052's catalogue-source client. Non-nil only for
+	// kind=bookorbit.
+	//
+	// ⚠️ NOTHING READS A CATALOGUE THROUGH IT, and unlike the kavita field that
+	// is not a "yet" about the wiring — internal/bookorbit is SLICE 0 and has no
+	// catalogue call to make. What this client is for here is the credential
+	// handshake (registry.Test) and the health probe, which is exactly what makes
+	// the kind storable: an added BookOrbit gets a real row on the Services
+	// screen and an honest "no import from this kind yet" from runImport, rather
+	// than a row nothing can open. Slice 1 is internal/libsync/bookorbit.go.
+	bookorbit *bookorbit.Client
+
 	instance store.ServiceInstance
 }
 
@@ -121,6 +140,8 @@ func (e *registryEntry) breakerState() (string, time.Time) {
 		return e.prowlarr.Breaker().State().String(), e.prowlarr.Breaker().RetryAt()
 	case e.kavita != nil:
 		return e.kavita.Breaker().State().String(), e.kavita.Breaker().RetryAt()
+	case e.bookorbit != nil:
+		return e.bookorbit.Breaker().State().String(), e.bookorbit.Breaker().RetryAt()
 	}
 	return "closed", time.Time{}
 }
@@ -228,6 +249,19 @@ func (g *registry) entry(ctx context.Context, instanceID int64) (*registryEntry,
 			g.bootstrapped[instanceID] = true
 			go g.bootstrapImport(g.importCtx, instanceID)
 		}
+	case "bookorbit":
+		client, err := g.newBookOrbit(si, apiKey)
+		if err != nil {
+			return nil, err
+		}
+		e.bookorbit = client
+		// NO BOOTSTRAP IMPORT, and the omission is the deliberate half of this
+		// case. The kavita arm above starts a full catalogue import the moment a
+		// client stack exists; there is no bookorbit equivalent to start, because
+		// internal/libsync has no BookOrbit source yet (ADR-0052 slice 1). An arm
+		// that queued one anyway would launch a goroutine straight into
+		// runImport's "this is not a kavita" refusal, once per client rebuild,
+		// and publish a failed import over SSE for a service that is working.
 	default:
 		// httpapi.serviceKinds refuses an unknown kind at the boundary, so this
 		// is a row that predates a kind being removed — or a hand-edited SQLite.
@@ -383,6 +417,36 @@ func (g *registry) newKavita(si store.ServiceInstance, apiKey string) (*kavita.C
 	})
 }
 
+// newBookOrbit builds the BookOrbit client over that instance's egress client.
+//
+// apiKey here is the raw MAGIC-LINK TOKEN, not an API key. It is the only secret
+// stored for this kind, it goes into the request BODY of the login route and
+// never into a URL, and the short-lived bearer BookOrbit hands back in exchange
+// lives in that client's memory and is never written anywhere (ADR-0052,
+// internal/bookorbit/auth.go).
+//
+// The egress client is newEgressClient's, the same one Kavita and Prowlarr get:
+// resolve-then-pin against this instance's one validated host:port, so the
+// arbitrary internal URL an admin typed into the form cannot be re-resolved
+// somewhere else between validation and connection.
+func (g *registry) newBookOrbit(si store.ServiceInstance, apiKey string) (*bookorbit.Client, error) {
+	httpClient, err := g.newEgressClient(si)
+	if err != nil {
+		return nil, err
+	}
+	return bookorbit.New(bookorbit.Options{
+		BaseURL:        si.BaseURL + si.URLBase,
+		MagicLinkToken: apiKey,
+		HTTPClient:     httpClient,
+		AppVersion:     g.version,
+		// An egress-policy refusal never reached the network, so it is a
+		// configuration bug rather than upstream flakiness and must not trip
+		// the breaker.
+		IsPolicyError: ssrf.IsPolicyError,
+		Logger:        g.log.With("instance_id", si.ID),
+	})
+}
+
 // newProwlarr builds the *Arr client over that instance's egress client.
 func (g *registry) newProwlarr(si store.ServiceInstance, apiKey string) (*servarr.Client, error) {
 	httpClient, err := g.newEgressClient(si)
@@ -469,11 +533,13 @@ func (g *registry) Test(ctx context.Context, req httpapi.TestRequest) (httpapi.T
 	switch kind {
 	case "kavita":
 		return g.testKavita(ctx, req, si, apiKey)
+	case "bookorbit":
+		return g.testBookOrbit(ctx, req, si, apiKey)
 	case "prowlarr":
 		// falls through to the *Arr path below
 	default:
 		return httpapi.TestResult{
-			Message: fmt.Sprintf("UsArr cannot talk to %q yet; v0.1 supports kavita and prowlarr", kind),
+			Message: fmt.Sprintf("UsArr cannot talk to %q yet; v0.1 supports bookorbit, kavita and prowlarr", kind),
 			Action:  "Choose a supported service kind",
 		}, nil
 	}
@@ -610,6 +676,245 @@ func (g *registry) testKavita(ctx context.Context, req httpapi.TestRequest, si s
 	return result, nil
 }
 
+// testBookOrbit is the connection test for ADR-0052's catalogue source.
+//
+// It answers three DIFFERENT questions in order, the same discipline testKavita
+// keeps and for the same §17.3 reason — each has a different fix, and the result
+// must name the ONE button that applies:
+//
+//  1. Is anything there? GET /api/v1/health is @Public() at class level, so it
+//     answers with NO credential and separates "host down" from "host up, token
+//     wrong". Unlike Kavita's bare `Ok` it returns a Terminus report naming each
+//     indicator, so a 503 here is a DIAGNOSIS and is carried forward rather than
+//     ending the test: a failing indicator does not stop a login, and the
+//     credential answer is the more useful half.
+//  2. Is the token good? POST /api/v1/auth/magic-links/login is the ONLY thing
+//     that can answer it. MagicLinkService.loginWithToken checks the hash, the
+//     revocation, the activation, the expiry and the user, and 401s on all five
+//     with one message. THIS IS THE CREDENTIAL PROOF, and it is why the test does
+//     not stop at (1).
+//  3. Does the bearer actually work? GET /api/v1/app-info declares no
+//     @RequirePermission and no library guard, so it answers for any valid JWT.
+//     A mint that succeeds and then cannot make one ordinary call is a real
+//     state — JwtAuthGuard 403s every non-@AllowDefaultPassword route when
+//     user.isDefaultPassword, and the login route is @Public() so the guard never
+//     ran there — and it is the state a "green tick after step 2" would hide.
+//     So an auth-class failure HERE fails the test; anything else is soft and
+//     costs only the version.
+//
+// WHAT IT NEVER DOES is read a library list. testKavita's credential proof is
+// GET /api/Library/libraries and this one's deliberately is not: knowing what a
+// BookOrbit library is belongs to slice 1, and a connection test that already
+// enumerated containers would have quietly started the catalogue adapter.
+// app-info is the equivalent proof with none of that reach.
+func (g *registry) testBookOrbit(ctx context.Context, req httpapi.TestRequest, si store.ServiceInstance, token string) (httpapi.TestResult, error) {
+	client, err := g.newBookOrbit(si, token)
+	if err != nil {
+		return httpapi.TestResult{Message: err.Error(), Action: "Check the base URL"}, nil
+	}
+
+	// (1) Reachability. A 503 with a parsed report is ANSWERED, not failed.
+	healthNote := ""
+	if _, err := client.Health(ctx); err != nil {
+		if !errors.Is(err, bookorbit.ErrUnhealthy) {
+			return httpapi.TestResult{
+				Message: fmt.Sprintf("%s did not answer: %s", req.BaseURL, err.Error()),
+				Action:  "Check the base URL and that BookOrbit is running",
+			}, nil
+		}
+		// Carried, not fatal: BookOrbit is up and has named what is wrong with
+		// itself. Swallowing it would drop the one thing on this screen that
+		// explains a sync that later goes quiet.
+		healthNote = " BookOrbit reports a failing health check: " + err.Error()
+	}
+
+	// (2) The credential proof, and the §14 scope verdict that rides on it for
+	// free — buildUserResponse ships the account's flags and permissions in the
+	// same body as the accessToken, so classification costs no second request.
+	verdict, err := client.Authenticate(ctx)
+	if err != nil {
+		return httpapi.TestResult{
+			Reachable: true,
+			Message:   err.Error() + healthNote,
+			Action:    bookOrbitTestAction(err),
+		}, nil
+	}
+
+	// Past here the TOKEN is proven: an unknown, revoked, deactivated, expired or
+	// orphaned one cannot reach this line. That stays true below even when the
+	// test goes on to fail, and the field says so — "the token is fine, the
+	// account behind it is not" is a different bug report from "bad token".
+	result := httpapi.TestResult{
+		OK: true, Reachable: true, KeyProvenValid: true,
+		AppName: "BookOrbit",
+		// The api PATH, observed rather than assumed: every call above was made
+		// under main.ts's global prefix and answered there. It is not probed the
+		// way an *Arr's is because BookOrbit publishes no version-negotiation
+		// endpoint to probe — there is one prefix and this is it.
+		APIVersion: "v1",
+	}
+
+	// (3) The authenticated read.
+	info, err := client.AppInfo(ctx)
+	switch {
+	case err == nil:
+		if info.VersionKnown() {
+			result.AppVersion = info.Version
+			result.Message = "connected to BookOrbit " + info.Version
+		} else {
+			// `process.env.APP_VERSION ?? 'Local build'`. Reporting "Local build"
+			// as a version would make a self-built instance look like a release
+			// called that, and any future version floor must read it as UNKNOWN
+			// rather than as too old.
+			result.Message = "connected to BookOrbit; it reports no release version, " +
+				"which is what a self-built or development instance does"
+		}
+	case errors.Is(err, bookorbit.ErrUnauthorized),
+		errors.Is(err, bookorbit.ErrForbidden),
+		errors.Is(err, bookorbit.ErrPasswordChangeRequired):
+		// The mint worked and the bearer it produced is refused on the most
+		// permissive route BookOrbit has. Nothing this adapter will ever need can
+		// work, so this is a FAILED test — with key_proven_valid left true,
+		// because the stored token is not the thing that is wrong.
+		return httpapi.TestResult{
+			Reachable: true, KeyProvenValid: true, AppName: "BookOrbit",
+			Message: "the magic-link token is valid and BookOrbit issued an access token, but that " +
+				"token was refused on GET /api/v1/app-info, which needs no permission at all: " +
+				err.Error() + healthNote,
+			Action: bookOrbitTestAction(err),
+		}, nil
+	default:
+		// Soft, exactly as testKavita treats an admin-only version endpoint: the
+		// credential is proven and only the version is missing, and telling a
+		// user to re-enter a working token is worse than not knowing a version.
+		result.Message = "connected to BookOrbit. The version could not be read: " + err.Error()
+	}
+
+	result.Message += healthNote
+	if note, action := bookOrbitScopeNote(verdict); note != "" {
+		result.Message += note
+		result.Action = action
+	}
+	return result, nil
+}
+
+// bookOrbitScopeNote renders the §14 scope verdict for a PASSING test, and the
+// judgement it encodes is deliberate: an over-scoped credential is REPORTED AND
+// STORED, never refused.
+//
+// Three reasons, in the order they decide it:
+//
+//  1. internal/bookorbit already settled the policy for this exact verdict —
+//     "This client REPORTS rather than refuses" (doc.go) — and a connection test
+//     that refused would overturn it from the outside, leaving a user with a
+//     working token, a service they cannot add, and a fix that is entirely on
+//     BookOrbit's side of the fence.
+//  2. ADR-0052's gate is on the CATALOGUE READ, not on storing the credential:
+//     "may not read a catalogue under a shared-account credential until the scope
+//     that account grants has been enumerated against §14". Enumerating is what
+//     scope.go does. Slice 1 is the caller that has to consult Elevated() before
+//     its first read, and it can only do that if the instance exists.
+//  3. CLAUDE.md's third principle. A refusal here would be a screen that says no
+//     without saying what to do, for a service that is answering perfectly.
+//
+// What it is NOT is silent. The finding count and the elevated grants are in the
+// message, and Action names the fix, so the warning is in front of the user at the
+// one moment the fix is one step away — while they are still holding the BookOrbit
+// admin screen that mints links. The prober repeats it on the Services screen
+// afterwards (probeBookOrbit), so it does not evaporate with the panel.
+//
+// NOTHING PERSONAL CROSSES. AccountView is already an allowlist with no email,
+// name or avatar on it, and this reads only the permission names and the findings'
+// own prose — never Username, which is the one remaining field that could name a
+// human.
+func bookOrbitScopeNote(v bookorbit.ScopeVerdict) (note, action string) {
+	if v.Minimal() {
+		return "", ""
+	}
+	var elevated, unneeded []string
+	for _, f := range v.Findings {
+		label := bookOrbitFindingLabel(f)
+		if f.Severity == bookorbit.ScopeElevated {
+			elevated = append(elevated, label)
+			continue
+		}
+		unneeded = append(unneeded, label)
+	}
+
+	if len(elevated) == 0 {
+		return fmt.Sprintf(" This account carries %s UsArr does not use: %s. Harmless, "+
+			"but a narrower account is a smaller blast radius.",
+			plural(len(unneeded), "grant", "grants"), joinCapped(unneeded)), ""
+	}
+	return fmt.Sprintf(" THE ACCOUNT BEHIND THIS TOKEN IS OVER-SCOPED: %s with write or admin "+
+			"reach beyond a catalogue read — %s. UsArr has stored the token and will use it, because "+
+			"refusing a working credential fixes nothing; but everything UsArr does here is read-only, "+
+			"so nothing above an empty permission set is needed.",
+			plural(len(elevated), "grant", "grants"), joinCapped(elevated)),
+		"Mint the link against a shared BookOrbit account with NO permissions and an explicit library grant"
+}
+
+// bookOrbitFindingLabel is one finding in a few words.
+//
+// A permission finding IS its permission name. The three that are not about a
+// permission — the superuser flag, the provisioning method, an inactive account
+// — carry a whole sentence in Detail, written headline-first with the evidence
+// after a semicolon (scope.go's classifyScope). Taking the headline keeps the
+// message readable; the full reasoning stays where a reader who wants it will
+// look, which is the grader.
+func bookOrbitFindingLabel(f bookorbit.ScopeFinding) string {
+	if f.Permission != "" {
+		return string(f.Permission)
+	}
+	if head, _, ok := strings.Cut(f.Detail, ";"); ok {
+		return head
+	}
+	return f.Detail
+}
+
+// joinCapped renders at most a handful of findings. BookOrbit has more than
+// twenty permissions and a superuser holds all of them; a message that listed
+// every one would be a wall of text nobody reads, which is the same failure as
+// saying nothing.
+func joinCapped(items []string) string {
+	const shown = 4
+	if len(items) <= shown {
+		return strings.Join(items, ", ")
+	}
+	return fmt.Sprintf("%s and %d more", strings.Join(items[:shown], ", "), len(items)-shown)
+}
+
+func plural(n int, one, many string) string {
+	if n == 1 {
+		return "1 " + one
+	}
+	return fmt.Sprintf("%d %s", n, many)
+}
+
+// bookOrbitTestAction maps a BookOrbit failure onto the ONE button that fixes it.
+func bookOrbitTestAction(err error) string {
+	switch {
+	case errors.Is(err, bookorbit.ErrPasswordChangeRequired):
+		// The precise diagnosis the sentinel exists for, and it must not read as
+		// a bad token: the link was minted against an account created with
+		// createUser rather than createSharedUser, so BookOrbit demands a
+		// password change before any guarded route answers.
+		return "Mint the link against a SHARED BookOrbit account; this one must change its password first"
+	case errors.Is(err, bookorbit.ErrUnauthorized):
+		return "Mint a new magic-link token: this one is unknown, revoked, deactivated or expired"
+	case errors.Is(err, bookorbit.ErrForbidden):
+		return "Use a magic-link token whose account is active and shared-provisioned"
+	case errors.Is(err, bookorbit.ErrThrottled):
+		// 10 logins a minute on the login route. Not a credential problem at all.
+		return "Wait a minute: BookOrbit throttles the login route to 10 requests per minute"
+	case errors.Is(err, bookorbit.ErrTimeout):
+		return "Check the base URL and that BookOrbit is running"
+	case errors.Is(err, bookorbit.ErrWrongService), errors.Is(err, bookorbit.ErrDecode):
+		return "Check the base URL: that host answered, but not like a BookOrbit"
+	}
+	return "Test connection"
+}
+
 func pluralLibraries(n int) string {
 	if n == 1 {
 		return "1 library"
@@ -729,6 +1034,10 @@ func (g *registry) probe(ctx context.Context, instanceID int64) {
 		g.probeKavita(ctx, entry, health, now)
 		return
 	}
+	if entry.bookorbit != nil {
+		g.probeBookOrbit(ctx, entry, health, now)
+		return
+	}
 
 	status, err := entry.prowlarr.SystemStatus(ctx)
 	if err != nil {
@@ -842,6 +1151,93 @@ func (g *registry) probeKavita(ctx context.Context, entry *registryEntry, health
 			Type:    "warning",
 			Message: "this Kavita account can see no libraries, so there is nothing to replicate",
 		})
+	}
+
+	health.BreakerState, health.BreakerRetryAt = entry.breakerState()
+	g.recordProbe(ctx, instanceID, health, &now)
+}
+
+// probeBookOrbit is the BookOrbit catalogue source's health probe.
+//
+// It reads two things, and the pair is chosen rather than inherited:
+//
+//   - GET /api/v1/health, which needs NO credential and returns a Terminus
+//     report naming each indicator. This is the closest thing any v0.1 service
+//     has to an *Arr's own health warnings, and surfacing those is the single
+//     most valuable thing on the Services screen — so a failing indicator
+//     becomes a WARNING on a row that stays otherwise honest, not a red row and
+//     not a swallowed detail.
+//   - GET /api/v1/app-info, which is the authenticated read. It is what keeps
+//     the credential under continuous proof: a magic-link token that is revoked
+//     upstream at 3am fails HERE and nowhere else, because nothing else in this
+//     build calls BookOrbit at all. It also carries the version.
+//
+// It does NOT read a library list, which is the one structural difference from
+// probeKavita. probeKavita reads GET /api/Library/libraries for two reasons —
+// proving the key, and fetching the container list §17.8's library binding
+// needs — and here the first is app-info's job while the second belongs to
+// slice 1. A prober that enumerated containers now would be the catalogue
+// adapter arriving through the back door.
+//
+// The mint is nearly free: Authenticate reuses the in-memory access token and
+// only re-mints ~60s before its ~15-minute expiry, so a 60-second probe interval
+// costs roughly one login per fifteen probes against a 10-per-minute throttle.
+func (g *registry) probeBookOrbit(ctx context.Context, entry *registryEntry, health httpapi.UpstreamHealth, now time.Time) {
+	instanceID := entry.instance.ID
+
+	if report, err := entry.bookorbit.Health(ctx); err != nil {
+		if !errors.Is(err, bookorbit.ErrUnhealthy) {
+			// Redacted before the row, for the reason given in probe.
+			health.Error = ssrf.RedactText(err.Error())
+			health.BreakerState, health.BreakerRetryAt = entry.breakerState()
+			g.recordProbe(ctx, instanceID, health, nil)
+			return
+		}
+		// Answered, and told us which indicator is down. The instance is
+		// reachable, so this is a warning on a live row rather than a failure —
+		// and it is the diagnosis, so it must not be dropped.
+		for _, ind := range report.Failing() {
+			message := ind.Name + " is " + ind.Status
+			if ind.Message != "" {
+				message = ind.Name + ": " + ind.Message
+			}
+			health.Warnings = append(health.Warnings, httpapi.UpstreamWarning{
+				Source: "BookOrbit", Type: "warning",
+				// Redacted like every other upstream string that reaches a
+				// browser-facing row, even though internal/bookorbit has already
+				// cleaned it: the second pass costs nothing and the day the first
+				// one stops running is not announced.
+				Message: ssrf.RedactText(message),
+			})
+		}
+	}
+
+	info, err := entry.bookorbit.AppInfo(ctx)
+	if err != nil {
+		// The authenticated read is where a revoked or expired magic-link token
+		// surfaces, so this one IS a failure: unlike Kavita's admin-only version
+		// endpoint, app-info needs no permission and any account can read it.
+		health.Error = ssrf.RedactText(err.Error())
+		health.BreakerState, health.BreakerRetryAt = entry.breakerState()
+		g.recordProbe(ctx, instanceID, health, nil)
+		return
+	}
+	if info.VersionKnown() {
+		// "Local build" is deliberately not written here: it is not a version,
+		// and a column showing it as one would make a development instance look
+		// like a release nobody can find.
+		health.AppVersion = info.Version
+	}
+
+	// The §14 scope verdict, repeated on the Services screen so it does not
+	// evaporate with the connection-test panel the user has long since closed.
+	// It costs no request — it was computed from the login body.
+	if verdict, ok := entry.bookorbit.Scope(); ok {
+		if note, _ := bookOrbitScopeNote(verdict); note != "" {
+			health.Warnings = append(health.Warnings, httpapi.UpstreamWarning{
+				Source: "UsArr", Type: "warning", Message: strings.TrimSpace(note),
+			})
+		}
 	}
 
 	health.BreakerState, health.BreakerRetryAt = entry.breakerState()

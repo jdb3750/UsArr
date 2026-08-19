@@ -46,10 +46,53 @@
 > a missing artefact **in the repo** does not establish that something never happened — a result can
 > live in a thread, on the owner's box, or nowhere. A claim of the form *"X was never done"* needs a
 > source that **would have recorded X**, not merely a place where X is not.
+>
+> **Extended 2026-08-19 by the shipped-state batch pass, to exactly the items it touched and to
+> NOTHING ELSE:** §2's **Libraries-row link** item · §2's **all-types scoped view** item · §2's
+> **`?lib=` chip** item · §2's **facet-counts** item, the action-text rider on it **only** · the
+> **one item that pass added** · §3's **BookOrbit adapter** item and the ADR subsection it added at
+> the end of §3. **No other line moved, no sweep happened, and every other line citation
+> in this file is still unvetted.**
 
-**Last re-derived against:** `origin/main` `13878f2` (2026-08-19).
-⚠️ **Advanced from `c7d9ed3` by the ADR-0054 / stale-count pass, which re-derived FIVE things and
-NOTHING ELSE.** Everything else here is **inherited across that range, and the range is not
+**Last re-derived against:** `origin/main` `0085676` (2026-08-19).
+⚠️ **Advanced from `13878f2` by the shipped-state batch pass, which re-derived SEVEN things and
+NOTHING ELSE**, and **the range is not documentation-only** — it carries `web/src/`, `internal/` and
+a whole new package — so **read every box this pass does not name as attested at `13878f2`**, not at
+the baseline line above.
+
+**FIRED at `0085676` by this pass, and this is the whole list:**
+- **The Libraries-row link:** `libraryScopeHref` and the row anchor it feeds in
+  `web/src/routes/libraries/+page.svelte`.
+- **The all-types scoped view:** the browse read in `web/src/routes/library/+page.svelte`, and
+  `browseKindCount` / `browseSortsFor` / `browseSortNote` / `BROWSE_AZ_UNAVAILABLE` in
+  `web/src/lib/librarygrid.ts`.
+- **Who WRITES `?lib=`:** every `set('lib'` and `delete('lib')` under `web/src/`.
+- **The shared action text:** the `store.ErrUnservableSort` arm of the browse error mapping in
+  `internal/httpapi/library.go`.
+- **BookOrbit slice 0:** `internal/bookorbit/`'s file list, `scope.go`'s permission vocabulary and
+  `classifyScope`, and the guards in `scope_test.go`.
+- **The absent service kind:** `serviceKinds` (`internal/httpapi/services.go`), the kind switch in
+  `cmd/usarr/services.go`, and `SERVICE_KINDS` (`web/src/lib/api.ts`).
+- **The breaker lift and the ADR ledger:** `internal/breaker/` with the wrappers in
+  `internal/kavita/breaker.go` and `internal/servarr/breaker.go`; and `grep -n '^## ADR-005[5-8]'
+  docs/DECISIONS.md`, which returned nothing **at this baseline and does not any more** — see the
+  mid-pass note below and §3's closing subsection.
+
+**NOT fired by this pass, and therefore inherited:** no migration and no schema read · no
+`ARCHITECTURE.md` read · no `REVIEW-LOG.md` read · no Go outside the files named above · **no §2 box
+this pass does not name** · **no line-citation sweep, again.** ⚠️ **This pass was deliberately
+SMALL and a deeper re-derivation is expected after it** — it recorded state it was handed and
+verified, and it did not go looking for state it was not handed.
+
+**COMMITS LANDED MID-PASS, and the baseline is deliberately NOT advanced past what was read.**
+`0085676..79d96f8` is `docs/DECISIONS.md` and `docs/REVIEW-LOG.md` only — **no Go, no migration, no
+`web/src/`** — so none of the seven checks above is stale by it. **One of those commits falsified a
+line this pass had already written**, and the correction is at the end of §3 rather than swapped in
+silently. `REVIEW-LOG.md` was not read.
+
+**INHERITED from the `13878f2` baseline. Its own attestation follows, unchanged and NOT re-fired:**
+⚠️ **That baseline advanced from `c7d9ed3` by the ADR-0054 / stale-count pass, which re-derived FIVE
+things and NOTHING ELSE.** Everything else here is **inherited across that range, and the range is not
 documentation-only** — `13878f2` carries Go, `web/src/` and `docs/reference/` changes — so read every
 box this pass does not name as attested at `c7d9ed3`, not at the baseline line above.
 
@@ -566,14 +609,37 @@ Items marked 🛑 **STOPPED** are the different case: those are stopped by the d
       `COUNT(*)`"** at < 15 ms p50, so the cost is priced — but nothing decides whether the counts
       ride the browse response or take their own endpoint. ADR-0053 leaves that to the facet read
       rather than pre-empting it, and it closes off an alternative, so it needs an ADR.
+      ⚠️ **A RIDER, MOVED HERE FROM THE ALL-TYPES ITEM BELOW BECAUSE IT IS SERVER-SIDE TEXT AND
+      THIS IS THE SERVER-SIDE ITEM — and it sits BEHIND the facet counts, not beside them.**
+      `internal/httpapi/library.go` maps `store.ErrUnservableSort` to **one shared action string** —
+      *"sort_title needs a media_type of one kind — not music — and there is no index behind year at
+      all; added_at and popularity work everywhere"* — so **one action string answers two different
+      refusals**, and a caller who asked about neither music nor `year` is told about both.
+      ⚠️ **It is NOT urgent for the SCREENS, and saying so is the point of moving it.**
+      `BROWSE_AZ_UNAVAILABLE` and `BROWSE_AZ_UNAVAILABLE_MULTI_KIND` (`web/src/lib/librarygrid.ts`)
+      keep the option off the control entirely and state the absence in UsArr's own words, so **no
+      reader meets that sentence today**; what is owed is owed to the **wire**, where a consumer
+      still meets it. Whoever is next in `internal/httpapi/library.go` for the facet read is the
+      cheapest person to split it in two.
       *Authority:* `reference/http-api.md` §7.1, [ADR-0053](./DECISIONS.md#adr-0053),
       `design/DESIGN-DIRECTION.md` §8.1, §17.2, §13.
       *Done when:* per-media-type presence reaches the client from a documented read **and**
       `TYPE_NAV` grows the predicate ADR-0053 calls one line wide — **or** an ADR records the
-      alternative.
+      alternative. **The rider above is not part of that condition** — it is carried here, not
+      gated on.
 
-- [ ] **The ALL-TYPES scoped view a Libraries row opens — DECIDED, MEASURED ON THE WIRE, unbuilt.**
-      **The decision, recorded here because it is the kind that gets silently re-decided:** a
+- [x] **SHIPPED 2026-08-19 — ~~The ALL-TYPES scoped view a Libraries row opens — DECIDED, MEASURED
+      ON THE WIRE, unbuilt~~.** `web/src/routes/library/+page.svelte` is it, at `d0215fb`: the screen
+      was switched off `GET /api/v1/library/recent` — which parses `limit` and `cursor` and nothing
+      else — onto `GET /api/v1/library`, the read that accepts `?lib=` and a `sort`. It sends **no
+      `media_type`**, and its sort control is `browseSortsFor(undefined)`, which is `added_at` and
+      `popularity` with `sort_title` filtered out; `browseSortNote` prints
+      `BROWSE_AZ_UNAVAILABLE` beside it so the absence is stated rather than discovered. **The A–Z
+      gate is `browseKindCount`** — the client's copy of the store's `len(kinds) != 1` — so it is
+      derived from the kind COUNT and never from the library scope, which is the flag this item
+      carried and which the implementation took.
+      **The decision this box was written to protect is unchanged, and it is the kind that gets
+      silently re-decided:** a
       Libraries row opens an **all-types** scoped view, **not** a per-type grid. **A library spans
       media types** — §17.8's flagship shape is one upstream library offered as **Ebooks *and*
       Audiobooks** — so picking a type on the user's behalf silently drops most of what they clicked.
@@ -592,48 +658,72 @@ Items marked 🛑 **STOPPED** are the different case: those are stopped by the d
       **spliced into the one `browseWorksSQL` template** as ADR-0051's work-driven `EXISTS`. **There
       is no separate unfiltered path** for an all-types query to fall down. Widening would take
       deleting the splice, not forgetting a branch.
-      ⚠️ **A–Z IS A `400` ON AN ALL-TYPES QUERY, AND THE SORT CONTROL MUST *KNOW* THAT RATHER THAN
-      DISCOVER IT AS AN ERROR.** The refusal is `sort == WorksSortTitle && len(kinds) != 1` — **a
-      kind count, not a library-scope rule** — and the unfiltered case is six kinds. **So this view
-      ships `added_at` and `popularity` only.** `$lib/librarygrid`'s `browseKindCount`,
-      `browseSortsFor` and `browseSortAvailable` are keyed on a **required** `MediaType` and have no
-      all-types arm; giving them one is part of this item. See the A–Z flag on the grid item above.
-      ⚠️ **A small real wrinkle for whoever is next in `internal/httpapi/library.go` — a one-line
-      fix.** `ErrUnservableSort` renders **one shared action**, *"sort_title needs a media_type of one
-      kind — not music — and there is no index behind year at all"*, so **a user arriving from an
-      all-types scoped view is told about a media type they never chose** and about a sort they never
-      asked for. The refusal is right; the copy names the wrong cause for this caller.
+      ✅ **A–Z IS A `400` ON AN ALL-TYPES QUERY, AND THE SORT CONTROL NOW *KNOWS* THAT RATHER THAN
+      DISCOVERING IT AS AN ERROR.** The refusal is `sort == WorksSortTitle && len(kinds) != 1` — **a
+      kind count, not a library-scope rule** — and the unfiltered case is six kinds. This item read
+      that `$lib/librarygrid`'s `browseKindCount`, `browseSortsFor` and `browseSortAvailable` were
+      keyed on a **required** `MediaType` with no all-types arm, and that giving them one was part of
+      this item. **They have one:** `browseKindCount(undefined)` returns `ALL_TYPES_KIND_COUNT`, a
+      literal `6` whose comment says why it is not `MEDIA_TYPES.length` — six kinds over six media
+      types is a coincidence of digits, not an identity.
+      ➡️ **THE `ErrUnservableSort` ACTION-TEXT WRINKLE HAS MOVED OFF THIS ITEM.** It is
+      **server-side text**, not screen work, and it now rides on the **facet-counts item above** and
+      behind it. This box no longer carries it.
       *Authority:* §17.8, §17.2, [ADR-0051](./DECISIONS.md#adr-0051), `reference/http-api.md` §7.1
       and §7.3.
-      *Done when:* a route under `web/src/routes/` renders `GET /api/v1/library` with `?lib=` and
+      *Was done when:* a route under `web/src/routes/` renders `GET /api/v1/library` with `?lib=` and
       **no** `media_type`, and its sort control offers `added_at` and `popularity` without offering
-      A–Z.
+      A–Z. **All three hold.**
 
-- [ ] **A path from a Libraries row INTO its scoped view — nothing links one.** `Library.slug` is
-      parsed (`web/src/lib/libraries.ts`, `slug: str(value.slug)`) and its own doc comment says what
-      it is for — *"it is carried because it is the chip's `?lib=` value"* — while
-      `web/src/routes/libraries/+page.svelte` renders **no link that uses it**: its `href`s go to the
-      login screen and to Services, and nowhere else. **The one screen that knows every library's
-      slug is the one screen that cannot open one.**
-      🔍 Inference, and it is why this sits **before** the chip below rather than after it: a row
-      that opens its own scope discharges most of what the chip is for — *arriving* at a scope —
-      leaving the chip the part a link cannot do, which is **changing** one.
+- [x] **SHIPPED 2026-08-19 — ~~A path from a Libraries row INTO its scoped view — nothing links
+      one~~.** `web/src/routes/libraries/+page.svelte` now carries `libraryScopeHref`, and each row's
+      name is a real `<a href>` built from it: `/library?lib=<slug>`, assembled with
+      `URLSearchParams` rather than a template literal, with a row whose slug did not parse rendering
+      **no link at all** rather than a link to a `400`. The destination is the **all-types** scoped
+      view — the item above, which landed in the same commit — and not a per-type grid, which is the
+      decision that item exists to protect.
+      ⚠️ **CITE `d0215fb`, NOT THE MERGE.** This was relayed as *"merged in `80be22d`"*;
+      `80be22d`'s diff is four `docs/` files, and `d0215fb`
+      (*"feat(web): /library becomes the all-types scoped view, and Libraries rows link into it"*) is
+      where `libraryScopeHref` appears. The kind-count-derived Music A–Z note relayed alongside it is
+      `BROWSE_AZ_UNAVAILABLE_MULTI_KIND` in `web/src/lib/librarygrid.ts`, from `b811616`.
+      ⚠️ **THIS ITEM WAS SEQUENCED AND WRITTEN AS OPEN ABOUT FORTY MINUTES AFTER IT HAD ALREADY
+      MERGED, and it is the SECOND instance today of this file being correct when written and stale
+      within the hour.** The first is the sidebar claim on the facet item below, which carries the
+      worked note; it is not restated here. **Point at it rather than re-learning it.**
       *Authority:* §17.8, `reference/http-api.md` §7.3.
-      *Done when:* a Libraries row is a link whose target carries `?lib=<slug>`.
+      *Was done when:* a Libraries row is a link whose target carries `?lib=<slug>`. **It is.**
 
-- [ ] **The `?lib=` scope chip — the control that WRITES scope. Everything that READS scope ships;
-      nothing authors it.** `design/DESIGN-DIRECTION.md` §8.1 pins it **above the nav** — *"a library
-      is a **scope**, not a place — a multi-select chip pinned above the nav"* — has it render
-      nothing at 0 or 1 library, and hoists it into the top bar at narrow widths because the drawer
-      must never be the only statement of an active scope.
-      **The read end of the loop is complete:** `readLibraryScope` and `MAX_LIBRARY_SLUGS` bound a
-      scope at 32 before anything is sent; `browseParams` **deletes** the parameter rather than
-      emptying it, because an empty `?lib=` is a `400` and not "no scope"; the server echoes the
-      slugs it resolved; and `web/src/routes/library/[type]/+page.svelte` renders *"Scoped to …"*
-      with an address that clears it. **The write end is empty:** nothing in `web/src/routes` puts a
-      slug into `?lib=`.
+- [ ] **The `?lib=` chip — RE-MEASURE WHAT IT STILL OWES, AND REPORT BEFORE BUILDING. This is the
+      CURRENT state of this item, and it is a measurement rather than a build.**
+      `design/DESIGN-DIRECTION.md` §8.1 pins it **above the nav** — *"a library is a **scope**, not a
+      place — a multi-select chip pinned above the nav"* — has it render nothing at 0 or 1 library,
+      and hoists it into the top bar at narrow widths because the drawer must never be the only
+      statement of an active scope.
+      **The read end of the loop is complete, and that part is unchanged:** `readLibraryScope` and
+      `MAX_LIBRARY_SLUGS` bound a scope at 32 before anything is sent; `browseParams` **deletes** the
+      parameter rather than emptying it, because an empty `?lib=` is a `400` and not "no scope"; the
+      server echoes the slugs it resolved; and `web/src/routes/library/[type]/+page.svelte` renders
+      *"Scoped to …"* with an address that clears it.
+      ⚠️ **THIS ITEM'S OWN PREMISE IS FALSIFIED.** It read *"~~the control that WRITES scope …
+      **The write end is empty:** nothing in `web/src/routes` puts a slug into `?lib=`~~"*. Something
+      does: `libraryScopeHref` in `web/src/routes/libraries/+page.svelte` (the item above) authors a
+      scope on every row. **What ships is *arriving* at a scope and *clearing* one** — fired at the
+      baseline above, the only `lib` writes under `web/src/` are `browseParams`'
+      `params.set('lib', …)` in `$lib/librarygrid`, which serialises a scope the screen already
+      holds, and the two `params.delete('lib')` calls in `/library` and `/library/[type]`. **So a
+      grid can drop a scope and cannot change one.**
+      **WHAT IS OWED IS THEREFORE A RE-MEASURE OF §8.1, NOT A CHIP:** subtract *arrive* and *clear*
+      from what §8.1 specifies, and **report the remainder before building any of it.**
+      🔍 Inference, labelled: what looks left is **changing** a scope without returning to Libraries,
+      plus §8.1's **multi-select** across more than one slug, which no link can express. **If that
+      remainder mostly dissolves, the honest outcome is a narrower item or an amendment to §8.1** —
+      not a chip built to a specification written before the entry point existed. Which of those it
+      is, is the measurement's answer and is not pre-empted here.
       *Authority:* `design/DESIGN-DIRECTION.md` §8.1, §17.2, `reference/http-api.md` §7.3.
-      *Done when:* a control in `web/src/routes` sets `?lib=` and removes it again.
+      *Done when:* the re-measure is written down — **either** a control in `web/src/routes` that
+      sets `?lib=` to a slug the screen did not arrive with, **or** a recorded finding that §8.1's
+      remainder is smaller than the chip it specifies.
 
 - [ ] **The COVERS / POSTER half of §16's grid line — there is NO image route at all.**
       The browse merge covered only the row-grid half of §16's v0.1 sentence. **Searched
@@ -726,6 +816,43 @@ Items marked 🛑 **STOPPED** are the different case: those are stopped by the d
       *Authority:* the tree; `CLAUDE.md`'s *verify, don't assert*.
       *Done when:* `git grep TestSearchOrderIsTheServersAndIsNotScoreOrder` finds a `func`, or the
       comment names the guard that exists.
+
+- [ ] **NEW OBLIGATION — VENDOR BookOrbit's `packages/types` UNDER `docs/reference/`, WITH A DRIFT
+      CHECK. Rated ABOVE ordinary hygiene, and the reason is the item.**
+      **Why it is not hygiene: BookOrbit is now v0.1's ONLY catalogue source (§1), so upstream drift
+      is a single point of failure for the WHOLE library** — not the degradation of one source among
+      several, which is what the same bug would have been while more than one adapter was in play. A
+      vocabulary that moves upstream and goes unnoticed downstream mis-grades a credential or
+      mis-reads a payload for everything UsArr holds.
+      **The obligation:** BookOrbit's `packages/types` vendored at a **named upstream commit**, plus
+      a check that fails when the vendored copy and upstream disagree — the shape
+      [ADR-0046](./DECISIONS.md#adr-0046) and [ADR-0047](./DECISIONS.md#adr-0047) already set for the
+      Kavita and Prowlarr specs (an offline identity pin, plus a network drift check), applied to a
+      source that is TypeScript rather than an OpenAPI document. ⚠️ **BookOrbit builds its OpenAPI
+      document at RUNTIME and mounts it only under `SWAGGER_ENABLED`, so there is no served spec to
+      pin instead** — `internal/bookorbit/scope_test.go`'s header records that, and it is why the
+      vendored source is the substitute rather than a second-best.
+      **Why it is owed on top of the guard that exists — a property of that guard, not a fault in
+      it.** `TestEveryBookOrbitPermissionIsClassified` and `TestPermissionVocabularyMatchesTheSource`
+      both range over a list **this build carries**. An addition made upstream is invisible to them;
+      it reaches this binary only as an unrecognised string, and only on a live credential that
+      happens to hold it — **a guard that sees only what it happens to encounter.** Grading the
+      unknown as ELEVATED makes that safe; it does not make it **observable**, and observability is
+      what this obligation buys. ⚠️ **[ADR-0058](./DECISIONS.md#adr-0058) leans on that test** —
+      *"`TestEveryBookOrbitPermissionIsClassified` notices a 24th permission upstream where a
+      paragraph could not"* — and it also calls the grading *"a **maintenance obligation**, not a
+      self-maintaining one"*. **This item is that obligation's mechanism**, and the reach the first
+      quote claims is what a vendored copy plus a drift check would actually supply.
+      🔍 Inference, labelled, and this item should SETTLE it rather than inherit it: **`docs/reference/`
+      holds prose Markdown only today**, while the vendored upstream documents live in `api/specs/`
+      (`kavita-develop.json`, `kavita-v0.9.0.2.json`, `prowlarr.json`). Which of the two is the right
+      home for vendored TypeScript is a choice to make explicitly, not one to take from the brief
+      that raised the obligation.
+      *Authority:* §1, [ADR-0046](./DECISIONS.md#adr-0046), [ADR-0047](./DECISIONS.md#adr-0047),
+      `CLAUDE.md`'s *verify, don't assert*.
+      *Done when:* a vendored copy of BookOrbit's `packages/types` exists at a named upstream commit
+      **and** a check fails when it diverges from upstream — offline for the identity pin, on the
+      network for the drift, so `make check-offline` still runs.
 
 - [ ] **System tags `type:`, `format:`, `source:`, `quality:`, `indexer:` with the `downloadId`
       provenance join.**
@@ -907,6 +1034,30 @@ Tier 0 adapter, and ADR-0052 backs it.
       delta-syncs `work_book` and reconciles `work_comic` is buildable today without waiting on
       anything — but which of the two the adapter starts with is not decided here.
 
+      ✅ **SLICE 0 SHIPPED — AND IT IS A SLICE, NEVER A TICK. THE ADAPTER IS NOT DONE, SO THIS BOX
+      STAYS OPEN.** `c324cbf` (*"feat(bookorbit): slice 0 — the client and the credential path"*,
+      merged `568ddbc`) adds `internal/bookorbit`: the client, the credential path, and `scope.go`,
+      which **grades all 23 members of BookOrbit's permission vocabulary** — transcribed from
+      `packages/types/src/permissions.ts@73b7877d` and pinned against that transcription by
+      `TestPermissionVocabularyMatchesTheSource` — with **an unrecognised permission graded
+      ELEVATED**, on the stated ground that a build cannot judge what a name it has never heard of
+      grants. **The verdict costs no extra requests:** it is computed from the `user.permissions`
+      array the mint already returns (`TestScopeIsPopulatedByTheMintAtNoExtraCost`), exposed as
+      `Client.Scope` and **logged at WARN rather than refused**, so principle 3's *"says what is
+      missing and why"* survives an over-scoped credential instead of being replaced by a silent
+      refusal to connect. **What slice 0 does NOT ship is any catalogue read** — no `StreamItems`, no
+      `internal/libsync` path, nothing against `POST /books/query`.
+      ⚠️ **SLICE 1'S OPENING MOVE, RECORDED HERE RATHER THAN AS AN ITEM OF ITS OWN: THERE IS NO
+      `bookorbit` SERVICE KIND ANYWHERE, so no BookOrbit credential can be stored yet.** Fired at the
+      baseline above: `grep -rn '"bookorbit"' --include=*.go --include=*.ts --include=*.svelte
+      --include=*.sql internal/ cmd/ web/src/` returns **nothing**, and each of the three registries
+      that would have to carry it reads `prowlarr` + `kavita` and no more — `serviceKinds`
+      (`internal/httpapi/services.go`), the per-instance client switch in `cmd/usarr/services.go`
+      (`case "prowlarr"` / `case "kavita"`), and `SERVICE_KINDS` (`web/src/lib/api.ts`). **A slice-0
+      client with nowhere to store a credential is the expected state of a slice, not a defect in
+      it** — which is why this is the first move of the next slice and not a box beside this one.
+      ⚠️ **One of the three is `web/`, which is ANOTHER LANE'S TERRITORY — announce it before
+      touching it.** Registering the kind is not a backend-only edit.
       **Verified facts, read off BookOrbit's own source at HEAD `73b7877`, release `v2.6.0`** — carry
       these into the ADR rather than re-deriving them:
       - ✅ **§14 IS SATISFIED, and this falsifies the *"no inbound API key"* finding above.**
@@ -958,6 +1109,35 @@ Tier 0 adapter, and ADR-0052 backs it.
 
 **The importer, stream and UI plumbing is source-agnostic, and the Kavita adapter stays either way** —
 see the blocked table above, where that is now its own row.
+
+### The two ADRs behind slice 0 — WRITTEN, and they landed while this pass was running
+
+⚠️ **No maximum and no next-free number is written here**, and none is to be inferred from this
+list: reading a maximum out of *this* file mis-allocated an ADR once already (see the baseline
+block). [`DECISIONS.md`](./DECISIONS.md) is authoritative both for what exists and for what is free.
+Specific numbers are cited below because citing a specific ADR is not what went wrong.
+
+- **[ADR-0057](./DECISIONS.md#adr-0057) — the `internal/breaker` lift.** The state machine moved out of
+  `internal/servarr/breaker.go`, and `internal/kavita`'s deliberate copy collapsed onto it. What
+  remains in both packages is a **thin wrapper, not a re-export**, and the distinction is the whole
+  design: each `Allow()` must return **its own package's** `ErrBreakerOpen`, because
+  `internal/libsync` and `internal/releases` match on those sentinels with `errors.Is` and a Kavita
+  failure must not read `servarr: circuit breaker open`. The sentinel became an argument to
+  `breaker.New` instead of a reason to keep a second state machine. The lift's own trigger was
+  written into the copy in advance — *"worth taking the first time a THIRD client needs one"* — and
+  `internal/bookorbit` is that third client.
+- **[ADR-0058](./DECISIONS.md#adr-0058) — the credential-scope grading**, which
+  `internal/bookorbit/scope.go` implements (the slice-0 record above), and which
+  **[ADR-0052](./DECISIONS.md#adr-0052)'s §14 scope gate cites in a dated inline discharge note.**
+- ⚠️ **THIS SUBSECTION WAS WRITTEN AS *"~~allocated … neither ADR is written, and that note is not
+  there yet~~"*, AND WAS FALSE BEFORE IT WAS PUSHED.** It was fired at the baseline above, where
+  `grep -n '^## ADR-005[5-8]' docs/DECISIONS.md` returned nothing — and `24c4a4d`
+  (*"docs: ADR-0057 and ADR-0058 record what slice 0 decided"*) landed in the same window. **Both
+  ADRs are written**, and **ADR-0052 carries its dated inline discharge note pointing at ADR-0058**,
+  which states in terms that *"a discharge is not an amendment"* and strikes nothing in the gate's
+  own paragraph. **This is the THIRD instance today of this file being correct when written and
+  stale within the hour** — see the two on §2's Libraries-row link and facet items. The correction
+  is recorded rather than the claim quietly swapped, because the pattern is the finding.
 
 ---
 
