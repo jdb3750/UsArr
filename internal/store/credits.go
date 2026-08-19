@@ -17,7 +17,7 @@ import (
 // both.
 //
 // WHAT A 'person' WORK DELIBERATELY DOES NOT GET, because each omission is a
-// rule from docs/reference/schema.md §6.1 rather than an oversight:
+// rule from docs/reference/schema.md §1.1 rather than an oversight:
 //
 //   - NO search_doc / search_fts / search_trgm ROW. 'person' is excluded from
 //     the FTS corpus because there is no person screen in any milestone, so a
@@ -30,7 +30,7 @@ import (
 //   - NO library_member ROW. A person is not a catalogue item and belongs to no
 //     library. Nothing files one, which also means no search_doc_library row
 //     could exist for one even if a doc did.
-//   - NO SUBTYPE TABLE. §6.1 gives 'person' an explicit justification for having
+//   - NO SUBTYPE TABLE. §1.1 gives 'person' an explicit justification for having
 //     none; TestMigrate0007NoWorkPersonTable pins the absence.
 //   - NO external_id ROW. See personWorkID below for why the obvious candidate —
 //     Kavita's own person id — is the wrong thing to write.
@@ -153,7 +153,7 @@ type CreditResult struct {
 	// rebuilds nothing, so on a steady-state import this is 0 while
 	// CreditsWritten is not. That gap is the only externally visible difference
 	// between "the doc is kept current" and "the doc is rewritten every import",
-	// which is the cost schema.md §6.1 weighs, so it is reported rather than
+	// which is the cost schema.md §1.1 weighs, so it is reported rather than
 	// inferred from FTS row counts — search_fts is contentless and its rows are
 	// replaced in place, so no count outside this struct can see the difference.
 	DocsRebuilt int
@@ -426,7 +426,7 @@ func applyOneCreditSet(
 	// it runs BEFORE this one and, on a first import, before any credit exists.
 	//
 	// IT IS A SECOND FTS WRITE PER CREDITED ITEM, which is the exact cost
-	// schema.md §6.1 weighed when it left the enrichment owed ("a second FTS
+	// schema.md §1.1 weighed when it left the enrichment owed ("a second FTS
 	// write per item, in the transaction the 100 ms batch window exists to keep
 	// short"). The two SELECTs above and below are what stop it being a second
 	// write per item FULL STOP: a re-import of an unchanged library rewrites

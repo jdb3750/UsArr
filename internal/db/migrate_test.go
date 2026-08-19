@@ -2729,7 +2729,7 @@ func TestMigrate0007CascadesFromBothParents(t *testing.T) {
 // TestMigrate0007NoWorkPersonTable pins a deliberate ABSENCE, which is the kind
 // of decision that otherwise gets "fixed" by the next reader.
 //
-// schema.md §6.1: every kind has a subtype table or an explicit justification
+// schema.md §1.1: every kind has a subtype table or an explicit justification
 // for not having one, and 'person' has the justification — a credited human is a
 // name, some external_id rows and the credits pointing at it, all of which
 // `work`, `external_id` and `work_credit` already carry. A work_person table
@@ -2742,7 +2742,7 @@ func TestMigrate0007NoWorkPersonTable(t *testing.T) {
 	}
 	if n != 0 {
 		t.Error("work_person exists. 'person' has NO subtype table by design " +
-			"(docs/reference/schema.md §6.1); if that is being reversed it needs an ADR, " +
+			"(docs/reference/schema.md §1.1); if that is being reversed it needs an ADR, " +
 			"not a migration.")
 	}
 }

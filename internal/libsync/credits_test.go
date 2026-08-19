@@ -475,7 +475,7 @@ func TestFullImportWritesCredits(t *testing.T) {
 		}
 	}
 
-	// And the corpus still holds the three BOOKS and NEITHER AUTHOR — the §6.1
+	// And the corpus still holds the three BOOKS and NEITHER AUTHOR — the §1.1
 	// exclusion, asserted at the importer level as well as at the store level,
 	// because this is the path a real import takes.
 	assertCorpusIsBooksOnly(t, s, 3)
@@ -516,7 +516,7 @@ func assertCorpusIsBooksOnly(t *testing.T, s *store.Store, want int) {
 		SELECT COUNT(*) FROM search_doc d JOIN work w ON w.id = d.work_id
 		 WHERE w.kind = 'person'`); n != 0 {
 		t.Errorf("%d person work(s) reached the search corpus through the importer. "+
-			"docs/reference/schema.md §6.1 excludes 'person' from the FTS corpus, the "+
+			"docs/reference/schema.md §1.1 excludes 'person' from the FTS corpus, the "+
 			"navigation enum and the Tier 1 prefix index, because there is no person "+
 			"screen in any milestone", n)
 	}

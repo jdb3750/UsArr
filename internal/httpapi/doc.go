@@ -17,7 +17,7 @@
 //     never in its response body. A render path that waited for Prowlarr would
 //     wait 45-60 s on an ordinary bad day. It is not a search of the local
 //     library: /api/v1/search is that, over internal/store's own corpus, and the
-//     two are separate routes because ARCHITECTURE.md §2073 budgets the local
+//     two are separate routes because ARCHITECTURE.md §13 budgets the local
 //     one at p50 < 15 ms and §8.4 says the fan-out cannot meet that.
 //   - GET /api/v1/services/health renders entirely from SQLite plus the last
 //     probe snapshot taken off the render path. The *Arr's own health warnings

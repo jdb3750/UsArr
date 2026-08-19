@@ -420,7 +420,7 @@ func TestAddingAKavitaProducesACatalogue(t *testing.T) {
 		 WHERE w.kind NOT IN ('artist','person')`); n != 0 {
 		t.Errorf("%d credit(s) point at a work that is neither an artist nor a person", n)
 	}
-	// AND NO PERSON REACHED THE SEARCH CORPUS OR A LIBRARY (schema.md §6.1),
+	// AND NO PERSON REACHED THE SEARCH CORPUS OR A LIBRARY (schema.md §1.1),
 	// asserted here as well as in internal/store because this is the path a real
 	// import takes.
 	if n := countIn(t, env, `

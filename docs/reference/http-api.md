@@ -21,10 +21,19 @@ does not say by itself.
 `action` is omitted when there is nothing actionable. `error` is a code from
 `internal/httpapi/errorcodes.go` and is the field to switch on; `message` is prose and may change.
 
-**An unrecognised query parameter is IGNORED, not refused — on every endpoint in this file.** A
-request carrying a name the server does not know is served exactly as if the name were absent: no
-`400`, and no trace of it in the response. It is **case-sensitive**, so `?LIB=` and `?Media_Type=`
-are unrecognised names rather than the parameters they resemble.
+**An unrecognised query parameter is IGNORED, not refused.** A request carrying a name the server
+does not know is served exactly as if the name were absent: no `400`, and no trace of it in the
+response. It is **case-sensitive**, so `?LIB=` and `?Media_Type=` are unrecognised names rather than
+the parameters they resemble.
+
+⚠️ **It is a requirement on every endpoint in this file, and it is PINNED at exactly one of them.**
+`TestUnrecognisedQueryParametersAreIgnoredNotRefused`
+(`internal/httpapi/library_browse_test.go`) exercises **`GET /api/v1/library` and nothing else** —
+it calls `handleBrowseWorks` directly — over nine unknown names alone, three alongside a recognised
+one, the envelope's silence about all of them, and the converse (a *known* name carrying an unknown
+value is a `400`). Every other endpoint in this file **owes** that behaviour; the pin is not
+evidence that it has it. **Do not quote this rule as "pinned API-wide."** Widening the evidence to
+match the contract means a per-endpoint test somebody still has to write.
 
 This is a wire contract and not an implementation detail, because **rejection would break forward
 compatibility in both directions**: a newer client sending a parameter this server has not learned
@@ -1087,7 +1096,7 @@ Ranked full-text search across the works UsArr has replicated, as **one flat lis
 §8.2, §17.4, and [`search.md`](./search.md) §3–§4 for the algorithm).
 
 It is a local read (principle 1) — two SQLite statements, no \*Arr call, no metadata provider, no
-image fetch. ARCHITECTURE §2073 budgets this path at **p50 < 15 ms, p99 < 50 ms**, which is why the
+image fetch. ARCHITECTURE §13 budgets this path at **p50 < 15 ms, p99 < 50 ms**, which is why the
 Prowlarr indexer fan-out no longer answers here: that one cannot meet the budget by construction
 (§8.4) and now lives at `GET /api/v1/releases/search`. **The two are different questions over
 different corpora.** This one searches what you *have* and answers in its body; that one asks
@@ -1296,8 +1305,9 @@ There is **no cover art**: there is no image endpoint, so shipping `poster_asset
 the client cannot turn into anything. There are **no facet counts** beside the chips; each is its
 own aggregate and its own read.
 
-**Any other parameter is ignored, not refused** — the preamble's API-wide rule, pinned on this
-endpoint by `TestUnrecognisedQueryParametersAreIgnoredNotRefused`. So `?mediatype=comics` is a `200`
+**Any other parameter is ignored, not refused** — the preamble's API-wide rule, and this is the
+one endpoint where it is pinned, by `TestUnrecognisedQueryParametersAreIgnoredNotRefused`. So
+`?mediatype=comics` is a `200`
 with an unfiltered first page, while `?media_type=comix` is a `400`: the four names above are
 case-sensitive and every value they take is checked.
 

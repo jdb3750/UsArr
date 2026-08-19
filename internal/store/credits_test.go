@@ -191,7 +191,7 @@ func TestCaseAndPunctuationVariantsAreOnePerson(t *testing.T) {
 
 // ─── The corpus guard ───────────────────────────────────────────────────────
 
-// peopleInCorpus is the invariant query for schema.md §6.1's exclusion rule,
+// peopleInCorpus is the invariant query for schema.md §1.1's exclusion rule,
 // written once and shared by the assertion and by the test that breaks it —
 // catalogue_test.go's reason: a copy-pasted variant is how an invariant
 // assertion silently stops covering the thing it names.
@@ -207,9 +207,9 @@ func peopleInCorpus(t *testing.T, s *Store) int {
 		 WHERE w.kind = 'person'`)
 }
 
-// TestPeopleNeverEnterTheSearchCorpus is the §6.1 exclusion guard.
+// TestPeopleNeverEnterTheSearchCorpus is the §1.1 exclusion guard.
 //
-// docs/reference/schema.md §6.1 and migration 0005's own comment on
+// docs/reference/schema.md §1.1 and migration 0005's own comment on
 // search_doc.kind ("'season','episode','track','comic_issue' and 'person' are
 // excluded") make this a rule, and until ADR-0044 nothing could break it because
 // nothing created a person. Now something does, so the rule needs a witness.
@@ -243,7 +243,7 @@ func TestPeopleNeverEnterTheSearchCorpus(t *testing.T) {
 	assertCorpusInvariants(t, s, 2)
 
 	if n := peopleInCorpus(t, s); n != 0 {
-		t.Errorf("%d person work(s) have a search_doc row. schema.md §6.1 excludes 'person' "+
+		t.Errorf("%d person work(s) have a search_doc row. schema.md §1.1 excludes 'person' "+
 			"from the FTS corpus because there is no person screen in any milestone, so the "+
 			"hit is a result with nowhere to land — and search_doc_library would also put "+
 			"the author inside the user's library grid as an item", n)
@@ -417,7 +417,7 @@ func TestCreditedWorksAreArtistsOrPeople(t *testing.T) {
 		  JOIN work w ON w.id = c.creator_work_id
 		 WHERE w.kind NOT IN ('artist','person')`); n != 0 {
 		t.Errorf("%d credit(s) point at a work that is neither an artist nor a person. "+
-			"schema.md §6.1 makes that a rule, not a convention: a credit pointing at a "+
+			"schema.md §1.1 makes that a rule, not a convention: a credit pointing at a "+
 			"'book' means a book is credited as its own author", n)
 	}
 }
