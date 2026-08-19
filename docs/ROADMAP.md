@@ -50,8 +50,8 @@
 > **Extended 2026-08-19 by the shipped-state batch pass, to exactly the items it touched and to
 > NOTHING ELSE:** §2's **Libraries-row link** item · §2's **all-types scoped view** item · §2's
 > **`?lib=` chip** item · §2's **facet-counts** item, the action-text rider on it **only** · the
-> **one item that pass added** · §3's **BookOrbit adapter** item and the ADR-allocation subsection
-> it added at the end of §3. **No other line moved, no sweep happened, and every other line citation
+> **one item that pass added** · §3's **BookOrbit adapter** item and the ADR subsection it added at
+> the end of §3. **No other line moved, no sweep happened, and every other line citation
 > in this file is still unvetted.**
 
 **Last re-derived against:** `origin/main` `0085676` (2026-08-19).
@@ -75,13 +75,20 @@ the baseline line above.
   `cmd/usarr/services.go`, and `SERVICE_KINDS` (`web/src/lib/api.ts`).
 - **The breaker lift and the ADR ledger:** `internal/breaker/` with the wrappers in
   `internal/kavita/breaker.go` and `internal/servarr/breaker.go`; and `grep -n '^## ADR-005[5-8]'
-  docs/DECISIONS.md`, which returns nothing.
+  docs/DECISIONS.md`, which returned nothing **at this baseline and does not any more** — see the
+  mid-pass note below and §3's closing subsection.
 
 **NOT fired by this pass, and therefore inherited:** no migration and no schema read · no
 `ARCHITECTURE.md` read · no `REVIEW-LOG.md` read · no Go outside the files named above · **no §2 box
 this pass does not name** · **no line-citation sweep, again.** ⚠️ **This pass was deliberately
 SMALL and a deeper re-derivation is expected after it** — it recorded state it was handed and
 verified, and it did not go looking for state it was not handed.
+
+**COMMITS LANDED MID-PASS, and the baseline is deliberately NOT advanced past what was read.**
+`0085676..79d96f8` is `docs/DECISIONS.md` and `docs/REVIEW-LOG.md` only — **no Go, no migration, no
+`web/src/`** — so none of the seven checks above is stale by it. **One of those commits falsified a
+line this pass had already written**, and the correction is at the end of §3 rather than swapped in
+silently. `REVIEW-LOG.md` was not read.
 
 **INHERITED from the `13878f2` baseline. Its own attestation follows, unchanged and NOT re-fired:**
 ⚠️ **That baseline advanced from `c7d9ed3` by the ADR-0054 / stale-count pass, which re-derived FIVE
@@ -831,7 +838,11 @@ Items marked 🛑 **STOPPED** are the different case: those are stopped by the d
       it reaches this binary only as an unrecognised string, and only on a live credential that
       happens to hold it — **a guard that sees only what it happens to encounter.** Grading the
       unknown as ELEVATED makes that safe; it does not make it **observable**, and observability is
-      what this obligation buys.
+      what this obligation buys. ⚠️ **[ADR-0058](./DECISIONS.md#adr-0058) leans on that test** —
+      *"`TestEveryBookOrbitPermissionIsClassified` notices a 24th permission upstream where a
+      paragraph could not"* — and it also calls the grading *"a **maintenance obligation**, not a
+      self-maintaining one"*. **This item is that obligation's mechanism**, and the reach the first
+      quote claims is what a vendored copy plus a drift check would actually supply.
       🔍 Inference, labelled, and this item should SETTLE it rather than inherit it: **`docs/reference/`
       holds prose Markdown only today**, while the vendored upstream documents live in `api/specs/`
       (`kavita-develop.json`, `kavita-v0.9.0.2.json`, `prowlarr.json`). Which of the two is the right
@@ -1099,15 +1110,14 @@ Tier 0 adapter, and ADR-0052 backs it.
 **The importer, stream and UI plumbing is source-agnostic, and the Kavita adapter stays either way** —
 see the blocked table above, where that is now its own row.
 
-### ADR numbers ALLOCATED to work that has landed — relayed, and NOT readable in this tree
+### The two ADRs behind slice 0 — WRITTEN, and they landed while this pass was running
 
-Recorded as **allocation**, not as status. ⚠️ **No maximum and no next-free number is written here**,
-and none is to be inferred from this list: reading a maximum out of *this* file mis-allocated an ADR
-once already (see the baseline block). [`DECISIONS.md`](./DECISIONS.md) is authoritative both for
-what exists and for what is free. Specific numbers are cited below because citing a specific ADR is
-not what went wrong.
+⚠️ **No maximum and no next-free number is written here**, and none is to be inferred from this
+list: reading a maximum out of *this* file mis-allocated an ADR once already (see the baseline
+block). [`DECISIONS.md`](./DECISIONS.md) is authoritative both for what exists and for what is free.
+Specific numbers are cited below because citing a specific ADR is not what went wrong.
 
-- **ADR-0057 — the `internal/breaker` lift.** The state machine moved out of
+- **[ADR-0057](./DECISIONS.md#adr-0057) — the `internal/breaker` lift.** The state machine moved out of
   `internal/servarr/breaker.go`, and `internal/kavita`'s deliberate copy collapsed onto it. What
   remains in both packages is a **thin wrapper, not a re-export**, and the distinction is the whole
   design: each `Allow()` must return **its own package's** `ErrBreakerOpen`, because
@@ -1116,14 +1126,18 @@ not what went wrong.
   `breaker.New` instead of a reason to keep a second state machine. The lift's own trigger was
   written into the copy in advance — *"worth taking the first time a THIRD client needs one"* — and
   `internal/bookorbit` is that third client.
-- **ADR-0058 — the credential-scope grading**, which `internal/bookorbit/scope.go` implements (the
-  slice-0 record above), and which **[ADR-0052](./DECISIONS.md#adr-0052)'s §14 scope gate is to cite
-  in a dated inline discharge note.**
-- ⚠️ **Neither ADR is written, and that note is not there yet.** Fired at the baseline above:
-  `grep -n '^## ADR-005[5-8]' docs/DECISIONS.md` returns **nothing**, and
-  `grep -n 'ADR-0058' docs/DECISIONS.md` returns nothing either. Both allocations are **relayed from
-  other lanes**; this file records the claim on the number and says nothing about the number's
-  availability.
+- **[ADR-0058](./DECISIONS.md#adr-0058) — the credential-scope grading**, which
+  `internal/bookorbit/scope.go` implements (the slice-0 record above), and which
+  **[ADR-0052](./DECISIONS.md#adr-0052)'s §14 scope gate cites in a dated inline discharge note.**
+- ⚠️ **THIS SUBSECTION WAS WRITTEN AS *"~~allocated … neither ADR is written, and that note is not
+  there yet~~"*, AND WAS FALSE BEFORE IT WAS PUSHED.** It was fired at the baseline above, where
+  `grep -n '^## ADR-005[5-8]' docs/DECISIONS.md` returned nothing — and `24c4a4d`
+  (*"docs: ADR-0057 and ADR-0058 record what slice 0 decided"*) landed in the same window. **Both
+  ADRs are written**, and **ADR-0052 carries its dated inline discharge note pointing at ADR-0058**,
+  which states in terms that *"a discharge is not an amendment"* and strikes nothing in the gate's
+  own paragraph. **This is the THIRD instance today of this file being correct when written and
+  stale within the hour** — see the two on §2's Libraries-row link and facet items. The correction
+  is recorded rather than the claim quietly swapped, because the pattern is the finding.
 
 ---
 
