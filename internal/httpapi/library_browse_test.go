@@ -239,6 +239,105 @@ func TestBrowseEndpointSortVocabularyIsTheSchemasOwn(t *testing.T) {
 	}
 }
 
+// The unservable-sort refusal is addressed to the caller who hit it.
+//
+// ⚠️ THIS PINS THE SPLIT, NOT THE PROSE. `store.ErrUnservableSort` states ONE
+// property — this (sort, media type) pair has no index — and two different
+// requests reach it: an all-types alphabetical sort (six kinds) and an
+// alphabetical sort over `music` (artists AND albums). A single shared action
+// answering both told an all-types caller about `music`, which they had not
+// chosen, and about `year`, which they had not asked for and — see below —
+// cannot even reach that arm. The assertions below are about WHO each sentence
+// is addressed to: they require the two to differ, require each to name a way
+// forward, and forbid each from naming the cause the caller did not hit.
+func TestBrowseUnservableSortActionIsAddressedToTheCaller(t *testing.T) {
+	s := newTestServer(t, nil)
+	seedLibraryCorpus(t, s)
+
+	action := func(t *testing.T, query string) string {
+		t.Helper()
+		code, body := callBrowseWorks(t, s, query)
+		if code != http.StatusBadRequest {
+			t.Fatalf("%s returned %d, want 400: %s", query, code, body)
+		}
+		var got struct {
+			Action string `json:"action"`
+		}
+		if err := json.Unmarshal([]byte(body), &got); err != nil {
+			t.Fatalf("%s: decode: %v\n%s", query, err, body)
+		}
+		if got.Action == "" {
+			t.Fatalf("%s: the refusal carries no action: %s", query, body)
+		}
+		return got.Action
+	}
+
+	allTypes := action(t, "?sort=sort_title")
+	music := action(t, "?sort=sort_title&media_type=music")
+
+	if allTypes == music {
+		t.Errorf("both unservable sorts answer with one shared action, so each caller is "+
+			"told about the other's refusal:\n  %s", allTypes)
+	}
+
+	// A caller who chose no media type is not told about `music`, and neither
+	// caller is told about `year`: it is refused at the `?sort=` parse and never
+	// reaches this arm at all. See browseUnservableSortAction.
+	if strings.Contains(strings.ToLower(allTypes), "music") {
+		t.Errorf("the all-types refusal names music, which this caller did not choose: %s", allTypes)
+	}
+	for name, got := range map[string]string{"all-types": allTypes, "music": music} {
+		if strings.Contains(strings.ToLower(got), "year") {
+			t.Errorf("the %s refusal names year, which no caller of this arm asked for "+
+				"and which cannot reach it: %s", name, got)
+		}
+	}
+
+	// EVERY BRANCH STAYS ACTIONABLE. That is what the shared string got right,
+	// and splitting it is not a licence to lose it: each sentence has to name an
+	// order the caller can actually use instead.
+	for name, got := range map[string]string{"all-types": allTypes, "music": music} {
+		if !strings.Contains(got, "added_at") || !strings.Contains(got, "popularity") {
+			t.Errorf("the %s refusal names no order that would work: %s", name, got)
+		}
+	}
+	// The all-types caller is offered the narrowing that makes A-Z servable,
+	// which is the thing they are one parameter away from.
+	if !strings.Contains(allTypes, "media_type") {
+		t.Errorf("the all-types refusal does not mention the parameter that would fix it: %s", allTypes)
+	}
+}
+
+// `sort=year` is refused BEFORE the store is called, which is why the arm above
+// must not mention it.
+//
+// ⚠️ THIS IS THE PREMISE browseUnservableSortAction RESTS ON, so it is executed
+// rather than trusted. `browseSorts` admits only the three servable orders into
+// filter.Sort, so `year` never becomes one and store.ListWorks is never reached
+// with it; the store keeps its own `year` arm as a second line of defence for
+// non-HTTP callers. If a future edit routed `year` through the store instead,
+// this test fails and the action text above would need a third branch.
+func TestBrowseYearIsRefusedBeforeTheStore(t *testing.T) {
+	s := newTestServer(t, nil)
+	seedLibraryCorpus(t, s)
+
+	for _, q := range []string{"?sort=year", "?sort=year&media_type=music", "?sort=year&lib=manga"} {
+		code, body := callBrowseWorks(t, s, q)
+		if code != http.StatusBadRequest {
+			t.Fatalf("%s returned %d, want 400: %s", q, code, body)
+		}
+		// The year refusal is its own sentence, naming the missing index. The
+		// shared arm's message is the one thing it must not be.
+		if strings.Contains(body, "cannot be sorted that way") {
+			t.Errorf("%s was answered by the ErrUnservableSort arm, which is meant to be "+
+				"unreachable for year: %s", q, body)
+		}
+		if !strings.Contains(body, "no index") {
+			t.Errorf("%s does not say why year is refused: %s", q, body)
+		}
+	}
+}
+
 // Paging walks every page through the server's own cursor, and the cursor is
 // refused when replayed under a different order — which is a state a client
 // reaches by changing the sort chip without clearing the cursor.

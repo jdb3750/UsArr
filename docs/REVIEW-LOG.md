@@ -21745,3 +21745,114 @@ once the file was removed.
 next person who runs one. A planted `AKIAIOSFODNN7EXAMPLE` — AWS's own documentation key — scanned
 **clean**: gitleaks allowlists it. A drill using a well-known example credential proves the guard is
 *off*, not that it is on. The successful drill used non-example values.
+
+# SD-09 — documents that cited a CI this repo has never had
+
+**Applied**, in three commits: `cb1e195` (the phantom-automation pass), `751c9a9` (`http-api.md`
+§6.6's ranking, and a duplicated preamble paragraph) and `0bb711e` (`internal/httpapi/library.go`
+said Home draws no Block B). One bounded pass over the phantom-automation class across `docs/`:
+documents claimed CI asserted, enforced and checked things in a repo with **no CI and no git hooks**.
+
+⚠️ **This entry was prepared as a table row and is filed as a section**, matching the shape `SD-08`
+and `SD-10` already use in this file. The words are the deliverable; the formatting is the file's.
+The number was allocated by the coordinator — `SD-10` records the gap at `SD-09` as *"deliberate: it
+belongs to that other lane and is not free"*, and this is that lane.
+
+## The premise was checked before anything was rewritten
+
+There is no `.github/` directory and no non-sample hook in `.git/hooks`. That is the whole basis of
+the class, so it was measured rather than assumed, and it is measured again here at the tip: both
+still hold. `DEVELOPMENT.md` §8 owns the fact and is untouched.
+
+Each named assertion was then checked **for existence**, which split the class three ways rather
+than two — the split is the finding, because "the doc says CI" turned out to cover both a guard that
+exists under the wrong name and a guard nobody ever wrote.
+
+**22 sites where the guard exists** and only the venue was wrong now name `make check` and, where
+the guard is not obvious from context, the test itself: `TestPeopleNeverEnterTheSearchCorpus`,
+`TestScopedSearchIsASeekNotAScan`, `assertCorpusInvariants`, `TestRRFFusesOnRowidAndTheRowidsAgree`,
+`TestLibraryScopedKeysetIsASeek`, `TestLibraryMemberEditionsBelongToTheirWork`,
+`TestWriteQueueRunnableNeedsTheVerbatimINList`, `internal/db/migrate_test.go`. All eight were
+re-confirmed to exist in the tree at the time of writing this entry.
+
+**4 sites were guards nobody wrote**, and there the claim is **deleted rather than hedged**,
+replaced by what is owed and where it lands:
+
+* `ARCHITECTURE.md` §4.3's poster-contrast check — nothing emits `dominant_color`, and `check.mjs`'s
+  contrast rule is over token pairs, not poster fills.
+* `ARCHITECTURE.md` §6.5 rule 2 and `ADR-0026`'s identity-path assertion — there is no identity
+  cascade and no correction applier. `schema.md` §13.5 already said so; the other two now agree.
+* `schema.md` §1.1 invariant 3 — `work_track` is in no migration, and
+  `internal/db/queryplan_test.go` already explains why at length.
+
+`schema.md` §7's *"Six invariants, all CI-asserted"* was **doubly wrong** — the venue did not exist
+and the count was not six — and now reads *"Five are asserted by `make check`"* with the sixth
+recorded as owed.
+
+## Phrasing was the point, not just accuracy
+
+**Every fix is phrased as what the gate IS** — `make check`, the query-plan assertion, `check.mjs`
+under `make design` — and **never as "there is no CI"**. A sweep that wrote the absence into the
+documents would have to be re-run the day a CI is added, which is how this class regenerates.
+
+Pre-existing sentences that already scope a rule to a *future* CI correctly — *"never in CI"*, *"a
+CI added later inherits this"* — are untouched, because they were never the defect.
+
+**Left deliberately:** `DECISIONS.md`'s *"CI has no network"*, which sits inside an ADR body as part
+of a rejected-alternative argument, and this file's convention annotates ADR bodies rather than
+rewriting them; and hits that are about other projects' CI, which are not claims about this repo.
+
+## ⚠️ The follow-up this entry named has since landed, and the note is updated rather than left
+
+The prepared text recorded `internal/db/queryplan_test.go`'s *"the §1.1 CI assertion"* as **the same
+class in code rather than docs**, outside that pass's `docs/` scope, and **noted it as a follow-up**.
+It is no longer outstanding: it was fixed in `cd38422`, together with **twelve more Go comments in
+`internal/`** carrying the same claim, under the same two rules this sweep used. The venue there is
+now *"a test in this file, which `make check` runs"*, and the surrounding explanation — that the
+invariant **cannot** be asserted yet, because `work_track` is in no migration — was correct and is
+kept, since what was wrong was the venue it promised and the tense, not the reasoning.
+
+One mention survives in `internal/store/catalogue_test.go` on purpose: it **quotes** migration
+0005's own *"asserted in CI rather than pretended away"*, and a merged migration is never edited. The
+quotation stands as a quotation, with the venue it names now identified as one that never existed
+and the real one named beside it.
+
+## Two findings from the same sweep that are not the CI class
+
+**`http-api.md` §6.6 described the search re-rank without its heaviest term.** It called the score
+*"Jaro-Winkler similarity with a mild recency tiebreak"*, omitting the fused-retrieval term that
+carries the largest weight — the same divergence `search.md` §4 had, one level down, recorded as
+`LS-191`. Fixed the same way: all three terms named, RRF identified as leading and why, and
+`internal/store/searchlibrary.go`'s `rerankWeightRRF` / `rerankWeightJW` / `rerankWeightRecency`
+const block named authoritative, so the API doc does not become a third copy of the numbers. The
+const block still reads `0.55` / `0.35` / `0.10` at this tip.
+
+**A paragraph was duplicated in `http-api.md`'s preamble.** The ignore-unknown-parameters pin was
+stated twice; the fuller first statement is kept as the home and the second points at it.
+
+**`internal/httpapi/library.go` said Home draws no Block B.** It listed *"No Block A and no Block B"*
+under WHAT IS GENUINELY NOT BUILT ANYWHERE. **Block B is drawn** — it is the attention block,
+computed in `web/src/lib/home.ts` from `GET /api/v1/services/health` and rendered by
+`web/src/routes/+page.svelte`, which marks it `DRAWN`. It hangs off service state rather than a
+catalogue route, which is why nothing in `library.go` serves it and why the bullet was easy to
+believe. **Corrected, not annotated.**
+
+⚠️ **That bullet now says more than `0bb711e` made it say, and the difference is not this lane's.**
+It also records that Block A's per-type COUNT *is* routed, through `facets.go` and
+`GET /api/v1/library/facets`. That half arrived in `2711926` (*"feat: the per-media-type facet count,
+and what it counts"*), a different lane's feature commit, and is **not** credited to this sweep.
+
+## What a green gate is worth on this entry
+
+The three commits this entry records are **docs-only except `0bb711e`**, which changes one Go comment
+and no code, so most of the gate attests nothing about them: `gofumpt`, `golangci-lint`,
+`build-tagged`, `modverify`, the Go and web suites and `govulncheck` all measured a tree these
+changes do not alter the behaviour of.
+
+🔍 **The claims in this entry are not gate-checkable at all, and that is the honest statement.**
+Nothing in `make check` verifies that a document's citation of a test is true — that is exactly the
+gap the finding is about, and the sweep closed instances of it rather than the class. The
+re-verification behind this entry is therefore manual and is listed above so it can be repeated:
+the absence of `.github/` and of non-sample hooks, the existence of all eight named guards, the
+`0.55` / `0.35` / `0.10` const block, `schema.md` §7's corrected count, and the three commits being
+merged ancestors of `main`.

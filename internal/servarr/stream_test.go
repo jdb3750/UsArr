@@ -634,8 +634,8 @@ func measure(f func()) (peak, churn uint64) {
 //	go test ./internal/servarr -run '^$' -bench BenchmarkListRead -benchmem
 //
 // It is a benchmark and not a test on purpose: `go test ./...` compiles it but
-// does not run it, so the CI gate pays nothing, and a memory ratio asserted on a
-// shared runner is a flake generator (docs/DEVELOPMENT.md §5).
+// does not run it, so the gate — `make check` — pays nothing, and a memory ratio
+// asserted on a shared runner is a flake generator (docs/DEVELOPMENT.md §5).
 //
 // Both arms are the REAL code paths — c.do and StreamList — over the same
 // generated body at 24 MB, which is the largest size the 32 MB buffered cap can

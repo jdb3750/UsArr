@@ -122,7 +122,7 @@ func everyKavitaPersonRoleIsAccountedFor(t *testing.T, file string) {
 //
 // Without this the adapter and the database can disagree, and the disagreement
 // surfaces as CreditResult.CreditsRejected on a user's real library rather than
-// in CI.
+// in `make check`.
 func TestCreditRolesAreMembersOfTheSchemaVocabulary(t *testing.T) {
 	raw, err := os.ReadFile(filepath.Join("..", "db", "migrations", "00007_work_credit.sql"))
 	if err != nil {

@@ -424,11 +424,16 @@ func TestBookOrbitOverScopedAccountIsWarnedAboutAndStillStored(t *testing.T) {
 // TestBookOrbitRefusedBearerFailsTheTestWithoutBlamingTheToken is the honesty
 // requirement at its sharpest.
 //
-// A magic-link token can be perfectly valid and the account behind it still
-// unable to make one ordinary call: JwtAuthGuard 403s every route that is not
-// @AllowDefaultPassword when user.isDefaultPassword, and the login route is
-// @Public() so the guard never ran there. A connection test that stopped at the
-// successful mint would show a green tick over an adapter that can do nothing.
+// A magic-link token can be perfectly valid and the bearer it mints still be
+// refused on the next call: the login route is @Public(), so JwtAuthGuard never
+// ran at the mint. A link revoked, deactivated or expired since then 401s on a
+// guarded route, and an account refused reach 403s there. A connection test that
+// stopped at the successful mint would show a green tick over an adapter that
+// can do nothing.
+//
+// The stimulus below is the password-change 403 because it is the refusal
+// easiest to misreport as a bad token; internal/bookorbit's
+// ErrPasswordChangeRequired records why the mint path cannot produce it.
 //
 // So it FAILS — and it still reports key_proven_valid, because the stored token
 // is not the thing that is wrong and telling the user to re-paste it would send

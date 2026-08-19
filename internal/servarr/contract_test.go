@@ -19,9 +19,10 @@ import (
 //
 // They are vendored rather than fetched because *Arr apps guard
 // app.UseSwagger() behind `if (BuildInfo.IsDebug)`, so a production instance does
-// not serve /docs/v1/openapi.json — and because CI has no network. Drift
-// detection is `make spec-drift`, which is allowed the network and is NOT in the
-// gate; it is not this file.
+// not serve /docs/v1/openapi.json — and because the gate makes no network call
+// for it: `make check`'s only two are the vulnerability scans. Drift detection is
+// `make spec-drift`, which is allowed the network and is NOT in the gate; it is
+// not this file.
 //
 // What these assert is narrow and on purpose: that the Go structs cover every
 // property the spec declares for the resources UsArr consumes, that the enums

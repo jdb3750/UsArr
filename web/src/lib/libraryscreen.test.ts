@@ -455,12 +455,12 @@ describe('A to Z is stated as unavailable, in UsArr own words', () => {
 
 	/*
 	 * ⚠️ THE SERVER'S 400 TEXT MUST NOT BE THE THING THE READER SEES.
-	 * `handleBrowseWorks` answers an unservable sort with ONE shared sentence for
-	 * TWO different refusals: "sort_title needs a media_type of one kind — not
-	 * music — and there is no index behind year at all; added_at and popularity
-	 * work everywhere". It names a wire parameter, a media type nobody asked
-	 * about and a column with no index, to a reader who asked for none of the
-	 * three. Correct for a wire consumer, wrong for this audience.
+	 * `handleBrowseWorks` answers an unservable all-types alphabetical sort with
+	 * "add a media_type — movies, tv, ebooks, audiobooks or comics — to sort by
+	 * title, or sort by added_at or popularity, which work across every type at
+	 * once". It names wire parameters and sort keys to a reader who is choosing
+	 * from a control, not writing a query string. Correct for a wire consumer,
+	 * wrong for this audience.
 	 *
 	 * ⚠️ AND THE ABSENCE ASSERTION IS PRECEDED BY A PRESENCE ONE, because an
 	 * absence assertion over an empty string passes and proves nothing: the note
@@ -492,8 +492,8 @@ describe('A to Z is stated as unavailable, in UsArr own words', () => {
 			expect(
 				BROWSE_AZ_UNAVAILABLE.toLowerCase(),
 				`the A to Z note contains "${leak}", which is the server's own 400 wording ` +
-					'reaching a reader. That sentence answers two refusals at once and names a ' +
-					'wire parameter, music and year to somebody who asked about none of them.'
+					'reaching a reader. That sentence is addressed to whoever built the query ' +
+					'string and names wire parameters and sort keys, not anything on screen.'
 			).not.toContain(leak);
 		}
 	});

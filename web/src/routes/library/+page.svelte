@@ -44,8 +44,9 @@
 	 * is the store's own `len(kinds) != 1`, and `browseSortNote` is the sentence
 	 * that says so. Neither is keyed on the library scope: a scope narrows rows
 	 * and changes no index. The server's own 400 text never reaches this screen —
-	 * it is one shared sentence for two refusals and it talks about `media_type`,
-	 * about music and about `year` to a reader who asked about none of them.
+	 * it is addressed to whoever built the query string, and it answers with
+	 * `media_type`, `added_at` and `popularity` rather than with anything the
+	 * reader can see or click.
 	 *
 	 * COVERS ARE ABSENT AND THAT HAS NOT CHANGED: there is no image endpoint
 	 * anywhere in `internal/httpapi/server.go`'s route table, so a poster view
@@ -495,9 +496,9 @@
 				option is absent from the control above rather than present and
 				answered with a banner, because the refusal is knowable before the
 				request is sent. The sentence is `$lib/librarygrid`'s so a test can
-				read it; the server's own 400 text is deliberately not used, being one
-				shared sentence for two refusals that names a parameter, music and
-				`year` to a reader who asked about none of them.
+				read it; the server's own 400 text is deliberately not used, being
+				addressed to whoever built the query string and naming wire
+				parameters and sort keys rather than anything on screen.
 			-->
 			<p class="toolbar__note toolbar__label">{sortNote}</p>
 		{/if}

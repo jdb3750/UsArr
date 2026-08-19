@@ -17,7 +17,7 @@ import (
 // not be pasted into an ADR as "peak".
 //
 // Every query shape below is one the code really issues — they are the shapes
-// pinned by internal/db/queryplan_test.go, which is the CI gate on this
+// pinned by internal/db/queryplan_test.go, which is `make check`'s gate on this
 // schema's indexes — plus the keyset pagination ARCHITECTURE §13 mandates for
 // every list. Nothing here is a synthetic table scan invented to move memory.
 //

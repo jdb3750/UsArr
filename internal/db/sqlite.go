@@ -267,9 +267,9 @@ func isIdentifier(s string) bool {
 
 // QueryPlan returns EXPLAIN QUERY PLAN output for a query, one line per step.
 //
-// This exists for the CI assertions in docs/DEVELOPMENT.md §5: plan strings are
-// deterministic and hardware-independent, so an index regression is caught
-// forever by ~30 lines of test. Wall-clock budgets are not enforced here.
+// This exists for the query-plan assertions docs/DEVELOPMENT.md §5 puts in the
+// gate: plan strings are deterministic and hardware-independent, so an index
+// regression is caught forever by ~30 lines of test that `make check` runs. Wall-clock budgets are not enforced here.
 func QueryPlan(ctx context.Context, q *sql.DB, query string, args ...any) ([]string, error) {
 	rows, err := q.QueryContext(ctx, "EXPLAIN QUERY PLAN "+query, args...)
 	if err != nil {

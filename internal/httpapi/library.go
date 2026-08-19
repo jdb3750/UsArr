@@ -525,10 +525,13 @@ var browseMediaTypes = map[string]bool{
 //
 // ⚠️ 'year' IS DELIBERATELY ABSENT. It is legal in the column and unservable by
 // this read — `work.year` has no index, so the order would be a temp b-tree over
-// the whole filtered corpus on every page. store.ListWorks returns
-// ErrUnservableSort for it and this handler renders that as a 400 that names the
-// missing index, rather than a 500 or a silently slow page. See §7.2 of
-// docs/reference/http-api.md.
+// the whole filtered corpus on every page. It is refused HERE, at the `?sort=`
+// parse, by the browseUnservableSort arm below — a 400 that names the missing
+// index rather than a 500 or a silently slow page. store.ListWorks would also
+// return ErrUnservableSort for it, but that is a second line of defence for
+// non-HTTP callers which this handler never reaches: `year` is not in this map,
+// so it never becomes a filter.Sort. See browseUnservableSortAction, which
+// depends on exactly that. See §7.2 of docs/reference/http-api.md.
 // browseUnservableSort is the fourth member of `library.default_sort`'s CHECK,
 // named so the refusal above can be specific. It is a legal column value and an
 // unservable order, and those are different failures.
@@ -641,14 +644,12 @@ func (s *Server) handleBrowseWorks(w http.ResponseWriter, r *http.Request) error
 			withAction("drop the cursor to start this order from the beginning").
 			wrapping(err)
 	case errors.Is(err, store.ErrUnservableSort):
-		// The two reachable causes, both named in the action because the caller
-		// can act on either: sort=year has no index at all, and sort_title needs
-		// a media type that is exactly one work.kind — which `music`, being
-		// artists AND albums, is not.
+		// The action is chosen from the request that caused it, never shared
+		// across causes — see browseUnservableSortAction for why this is the
+		// only place that can tell them apart.
 		return errStatus(http.StatusBadRequest, CodeBadRequest,
 			"this library cannot be sorted that way").
-			withAction("sort_title needs a media_type of one kind — not music — and there is " +
-				"no index behind year at all; added_at and popularity work everywhere").
+			withAction(browseUnservableSortAction(filter)).
 			wrapping(err)
 	case err != nil:
 		return errStatus(http.StatusInternalServerError, CodeInternal,
@@ -672,6 +673,56 @@ func (s *Server) handleBrowseWorks(w http.ResponseWriter, r *http.Request) error
 	}
 	writeJSON(w, http.StatusOK, out)
 	return nil
+}
+
+// browseUnservableSortAction picks the action for a store.ErrUnservableSort out
+// of the request that raised it, so the caller is told about the refusal they
+// actually hit and not about one they did not.
+//
+// ⚠️ THE STORE RAISES ONE ERROR FOR TWO CAUSES, AND ONLY ONE OF THEM CAN REACH
+// THIS HANDLER. internal/store/browse.go returns ErrUnservableSort both for
+// `sort=year`, which has no index at all, and for `sort_title` over a media type
+// that is not exactly one work.kind. `year` never gets that far from here:
+// browseSorts admits only the three servable orders into filter.Sort, and the
+// browseUnservableSort arm of the `?sort=` parse answers `year` above with its
+// own 400 naming the missing index. So every error arriving here is the
+// sort_title one, and an action mentioning `year` would be describing a refusal
+// this caller cannot have hit. (The previous single string named both, plus
+// `music`, whichever of the two the caller asked for.)
+//
+// WHY THE SPLIT IS HERE AND NOT IN THE STORE'S ERROR TAXONOMY. ErrUnservableSort
+// states one property — this (sort, media type) pair has no index behind it —
+// and that property is what the store knows. Which WORDS help depends on what
+// the request asked for, and the request is only in scope at this boundary;
+// growing a second store error per phrasing would put HTTP copy in the store and
+// leave the next phrasing needing a third. One error, discriminated by its
+// caller, is the same shape resolveBrowseLibraries uses for slug resolution.
+//
+// EVERY BRANCH NAMES SOMETHING THE CALLER CAN DO INSTEAD. That is the one thing
+// the shared string got right and it is not worth losing to make a point.
+func browseUnservableSortAction(f store.WorksFilter) string {
+	if f.Sort != store.WorksSortTitle {
+		// Defensive, and deliberately not an unreachable-panic: if a fourth
+		// order ever joins browseSorts and the store refuses some pairing of
+		// it, this still answers with an order that works rather than with
+		// sort_title advice that does not apply.
+		return "sort by added_at or popularity instead — both work for every media type"
+	}
+	if f.MediaType == "" {
+		// The all-types grid: six kinds, and ix_work_kind_sort is
+		// (kind, sort_title, id), so there is no single kind to anchor it on.
+		// The caller asked for alphabetical across everything, so the first
+		// thing offered is the narrowing that makes alphabetical work.
+		return "add a media_type — movies, tv, ebooks, audiobooks or comics — to sort by " +
+			"title, or sort by added_at or popularity, which work across every type at once"
+	}
+	// A media type that covers more than one work.kind, which today is `music`
+	// alone: it is artists AND albums. Named by shape rather than by literal so
+	// the sentence stays true if a second multi-kind type is ever added, and so
+	// it never tells a caller about a media type they did not choose.
+	return "this media type covers more than one kind of work, so it has no single " +
+		"alphabetical order — sort by added_at or popularity instead, or pick a " +
+		"media_type that is one kind (movies, tv, ebooks, audiobooks, comics) to sort by title"
 }
 
 // resolveBrowseLibraries turns `?lib=` slugs into the library ids the filter

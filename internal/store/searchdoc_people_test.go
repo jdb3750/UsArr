@@ -398,8 +398,8 @@ func TestTheCreditPassRebuildKeepsEveryOtherColumn(t *testing.T) {
 // refusal.
 //
 // search.md §2 excludes five kinds from the corpus, and until now the rule lived
-// only in a CI query (TestPeopleNeverEnterTheSearchCorpus). That query can only
-// report a corpus that has ALREADY been corrupted, and the FTS tables carry no
+// only in an after-the-fact assertion (TestPeopleNeverEnterTheSearchCorpus).
+// That query can only report a corpus that has ALREADY been corrupted, and the FTS tables carry no
 // foreign key, so nothing cascades the bad rows away afterwards. The refusal
 // moves the rule to the writer.
 //

@@ -206,11 +206,12 @@ describe('the absence of A to Z is stated on this screen too, in UsArr own words
 
 	/*
 	 * ⚠️ THE SERVER'S 400 TEXT MUST NOT BE THE THING THE READER SEES, here for the
-	 * same reason as on the all-types screen. `handleBrowseWorks` answers an
-	 * unservable sort with ONE shared sentence for TWO refusals: "sort_title needs
-	 * a media_type of one kind — not music — and there is no index behind year at
-	 * all; added_at and popularity work everywhere". It names a wire parameter and
-	 * a column with no index to a reader who asked about neither.
+	 * same reason as on the all-types screen. `handleBrowseWorks` answers a
+	 * multi-kind alphabetical sort by telling the caller the media type "covers
+	 * more than one kind of work" and offering added_at, popularity, or a
+	 * one-kind media_type instead. It is addressed to whoever built the query
+	 * string, and it names wire parameters and sort keys to a reader who asked
+	 * about none of them.
 	 *
 	 * ⚠️ THE ABSENCE ASSERTIONS ARE PRECEDED BY A PRESENCE ONE, because an absence
 	 * assertion over an empty string passes and proves nothing.
@@ -235,8 +236,8 @@ describe('the absence of A to Z is stated on this screen too, in UsArr own words
 			expect(
 				BROWSE_AZ_UNAVAILABLE_MULTI_KIND.toLowerCase(),
 				`the music A to Z note contains "${leak}", which is the server's own 400 wording ` +
-					'reaching a reader. That sentence answers two refusals at once and names a wire ' +
-					'parameter, a media type and a column to somebody who asked about none of them.'
+					'reaching a reader. That sentence is addressed to whoever built the query ' +
+					'string and names wire parameters and sort keys, not anything on screen.'
 			).not.toContain(leak);
 		}
 	});
