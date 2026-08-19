@@ -652,10 +652,14 @@ func TestTheSeriesFieldsCrossAndCostNoExtraRequest(t *testing.T) {
 			"seriesName":  "  Saga  ",
 			"seriesIndex": 2.5,
 			"seriesMemberships": []map[string]any{
-				{"seriesId": 5, "seriesName": "Saga", "seriesIndex": 2.5,
-					"displayOrder": 0, "expectedBookCount": 11},
-				{"seriesId": 9, "seriesName": "Image Firsts", "seriesIndex": nil,
-					"displayOrder": 1, "expectedBookCount": nil},
+				{
+					"seriesId": 5, "seriesName": "Saga", "seriesIndex": 2.5,
+					"displayOrder": 0, "expectedBookCount": 11,
+				},
+				{
+					"seriesId": 9, "seriesName": "Image Firsts", "seriesIndex": nil,
+					"displayOrder": 1, "expectedBookCount": nil,
+				},
 			},
 		}),
 	}}

@@ -150,13 +150,6 @@ func TestIssuesAreMintedUnderOneSeriesAndTheSeriesIsNotPerRow(t *testing.T) {
 func TestReimportingIssuesDoesNotMintASecondSeries(t *testing.T) {
 	s := newTestStore(t)
 	inst := fixtureInstance(t, s, "bookorbit")
-	binds, _, err := s.BindContainers(t.Context(), inst, SystemUserID, []CatalogueContainer{
-		{RemoteID: "1", Name: "Shelf", Kind: "book"},
-	})
-	if err != nil {
-		t.Fatalf("BindContainers: %v", err)
-	}
-
 	oneshot := issue("101", "1", "Endless Nights", "oneshot:101", "Endless Nights")
 	oneshot.Parent.Synthesized = true
 	oneshot.IsOneshot = true
@@ -165,7 +158,7 @@ func TestReimportingIssuesDoesNotMintASecondSeries(t *testing.T) {
 		// REBOUND EVERY ROUND, exactly as a second import does. The bind pass is
 		// where the kind-aware library_source lookup earns its keep: without it
 		// the prose container's second bind can match the COMIC library instead.
-		binds, _, err = s.BindContainers(t.Context(), inst, SystemUserID, []CatalogueContainer{
+		binds, _, err := s.BindContainers(t.Context(), inst, SystemUserID, []CatalogueContainer{
 			{RemoteID: "1", Name: "Shelf", Kind: "book"},
 		})
 		if err != nil {

@@ -68,8 +68,10 @@ func TestAddingABookOrbitProducesACatalogue(t *testing.T) {
 				"seriesName":  "Saga",
 				"seriesIndex": 1,
 				"seriesMemberships": []map[string]any{
-					{"seriesId": 5, "seriesName": "Saga", "seriesIndex": 1,
-						"displayOrder": 0, "expectedBookCount": 11},
+					{
+						"seriesId": 5, "seriesName": "Saga", "seriesIndex": 1,
+						"displayOrder": 0, "expectedBookCount": 11,
+					},
 				},
 			}),
 			boBook(106, "Saga, Vol. 2", map[string]any{
@@ -78,10 +80,14 @@ func TestAddingABookOrbitProducesACatalogue(t *testing.T) {
 				"seriesName":  "Saga",
 				"seriesIndex": 2,
 				"seriesMemberships": []map[string]any{
-					{"seriesId": 5, "seriesName": "Saga", "seriesIndex": 2,
-						"displayOrder": 0, "expectedBookCount": 11},
-					{"seriesId": 9, "seriesName": "Image Firsts", "seriesIndex": nil,
-						"displayOrder": 1, "expectedBookCount": nil},
+					{
+						"seriesId": 5, "seriesName": "Saga", "seriesIndex": 2,
+						"displayOrder": 0, "expectedBookCount": 11,
+					},
+					{
+						"seriesId": 9, "seriesName": "Image Firsts", "seriesIndex": nil,
+						"displayOrder": 1, "expectedBookCount": nil,
+					},
 				},
 			}),
 			// A book whose file has no format at all. BookOrbit's own

@@ -99,7 +99,8 @@ describe('left_out says the number and the why, on the row', () => {
 		});
 		expect(marks(l)).toContainEqual({
 			word: 'Some items were left out',
-			detail: '42 items were read and not mapped; a file BookOrbit itself cannot classify has no row'
+			detail:
+				'42 items were read and not mapped; a file BookOrbit itself cannot classify has no row'
 		});
 	});
 
