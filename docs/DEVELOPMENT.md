@@ -643,12 +643,31 @@ The rule fires on the adjacent `apiKey=` keyword, not on the credential, so the 
 a bare path segment scans clean. Generate a fresh random GUID if you re-run this: a recognisable
 sample value may be allowlisted upstream, and would report a false negative.
 
-So: **do not record a cassette against a live instance until a `BeforeSave` scrubber strips
-credentials from the URL — path as well as query — and that scrubber has been fired against a
-known-bad recording.** An unfired scrubber is indistinguishable from no scrubber (§11), and this
-failure is silent and permanent rather than a red gate. `internal/kavita/vcr_test.go` is the worked
-example: it redacts the URL on both sides of the matcher, because a cassette that could only match
-by storing the credential is precisely what the hook exists to prevent.
+So: **recording against a live instance was frozen until a `BeforeSave` scrubber stripped
+credentials from the URL — path as well as query — and had been fired against a known-bad recording.
+Both conditions are discharged and the freeze is LIFTED**, by the scrubber that landed at `36d7f71`.
+Why it existed has not stopped being true, which is why the rule it left behind is that cassettes are
+opened through `vcrscrub.New` and nowhere else: a cassette records the request URL VERBATIM, so once
+committed the credential is in git history permanently, and an unfired scrubber is indistinguishable
+from no scrubber (§11) — a silent, permanent failure rather than a red gate.
+
+What discharged each half:
+
+* **Path as well as query.** `vcrscrub.RedactURL` runs `redactGUIDSegments` *before*
+  `ssrf.RedactRawURL`: it splits the raw string on `/` and replaces any whole segment that is a
+  canonical GUID. That is the `…/api/Opds/<guid>/series` row in the table above — the one `make
+  secrets` scans clean. `internal/ssrf`'s own path heuristic does not catch it and is right not to,
+  because ssrf writes immutable provenance rows and is biased towards missing a key rather than
+  eating a real path segment; the opposite bias belongs here, where an over-redaction shows up in a
+  diff before the commit.
+* **Fired.** `TestScrubDrillArmed` records against a local fake and asserts the cassette holds
+  `/api/Opds/REDACTED/series`; `TestScrubDrillNeutered` records the SAME interaction with the hook
+  removed and asserts the key DOES land, so the drill shows the hook is what did the work rather than
+  the client happening not to send the key. `TestRedactURLHandlesAPathSegmentGUID` pins the unit, and
+  `TestCassettesOnDiskCarryNoCredential` re-scans every committed cassette on every `make check`.
+
+`vcrscrub.New` redacts the URL on **both** sides of the matcher, because a cassette that could only
+match by having stored the credential is precisely what the hook exists to prevent.
 
 Kavita's image endpoints produced this rule; it generalises to any API that takes a key in a URL. On
 `api/specs/kavita-v0.9.0.2.json` — the release the owner runs — `GET /api/Image/series-cover`
