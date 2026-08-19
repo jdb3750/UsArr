@@ -53,12 +53,67 @@
 > **one item that pass added** · §3's **BookOrbit adapter** item and the ADR subsection it added at
 > the end of §3. **No other line moved, no sweep happened, and every other line citation
 > in this file is still unvetted.**
+>
+> **Extended 2026-08-19 by the facet / image / BookOrbit catch-up pass, to exactly the items it
+> touched and to NOTHING ELSE:** §2's **facet-read** item, rewritten whole, and the
+> `ErrUnservableSort` rider carried on it · §2's **image-pipeline** item, its headline and its three
+> done-when legs **only** — the rest of that long item, including every LS-260 paragraph, was **not
+> re-read** · §2's **`search.md` §4 re-rank** item · §2's **Docker / backup** item, the observation
+> appended under it **only** · §3's **BookOrbit adapter** box. **No other line moved, no sweep
+> happened, and every other line citation in this file is still unvetted.**
 
-**Last re-derived against:** `origin/main` `0085676` (2026-08-19).
-⚠️ **Advanced from `13878f2` by the shipped-state batch pass, which re-derived SEVEN things and
-NOTHING ELSE**, and **the range is not documentation-only** — it carries `web/src/`, `internal/` and
-a whole new package — so **read every box this pass does not name as attested at `13878f2`**, not at
-the baseline line above.
+**Last re-derived against:** `origin/main` `a51d3c3` (2026-08-19).
+⚠️ **Advanced from `0085676` by the facet / image / BookOrbit catch-up pass, which re-derived SEVEN
+things and NOTHING ELSE**, and **the range is large and is emphatically not documentation-only** —
+it carries a migration, `internal/`, `cmd/` and `web/src/` — so **read every box this pass does not
+name as attested at `0085676`**, not at the baseline line above.
+
+**FIRED at `a51d3c3` by this pass, and this is the whole list:**
+- **The facet read:** `internal/httpapi/facets.go` and its registration in
+  `internal/httpapi/server.go`; `TYPE_NAV` in `web/src/routes/+layout.svelte`; every `facet` mention
+  under `web/src/`; [ADR-0059](./DECISIONS.md#adr-0059), read directly in `DECISIONS.md`.
+- **The unservable-sort action:** `browseUnservableSortAction` and the `store.ErrUnservableSort` arm
+  that calls it, in `internal/httpapi/library.go`.
+- **The re-rank prose:** `reference/search.md` §4's signal table and the paragraph above it.
+- **The image pipeline's three legs, and only those:** the `GET /img/{key}` registration in
+  `internal/httpapi/server.go`, and `INSERT INTO image_asset` across all Go outside `_test.go`.
+- **The completeness work:** [ADR-0061](./DECISIONS.md#adr-0061), read directly, and
+  `internal/db/migrations/00011_sync_report_container_latest_index.sql`, read whole.
+- **BookOrbit's real state:** `internal/bookorbit/`'s file list; `BookOrbitSource`'s method set and
+  `StreamItems` in `internal/libsync/bookorbit.go`; the `FileSource` type assertion in
+  `internal/libsync/importer.go`; `mediaTypeOf` (`internal/store/recent.go`) and
+  `browseAudiobookPredicate` (`internal/store/browse.go`); the `bookorbit` arms of `serviceKinds`
+  (`internal/httpapi/services.go`), `cmd/usarr/services.go` and `SERVICE_KINDS`
+  (`web/src/lib/api.ts`).
+- **The `deploy/` stall:** the newest **non-merge** commit touching `deploy/`, measured against the
+  newest touching each of `internal/`, `cmd/`, `docs/` and `web/src/`.
+
+**NOT fired by this pass, and therefore inherited:** no `ARCHITECTURE.md` read · no `REVIEW-LOG.md`
+read · **no migration read except `00011`** · no Go outside the files named above · **no §2 box this
+pass does not name, and no part of the image item beyond its headline and its legs** · **no
+line-citation sweep, again.**
+
+⚠️ **A METHOD NOTE THAT COST THIS PASS REAL TIME, RECORDED BECAUSE THE NEXT PASS WILL HIT IT.** The
+working checkout was **shallow**, and in a shallow clone `git log -- deploy/` answers with a **merge**
+at the graft boundary — a date nobody should trust, and a SHA the citation rule below forbids citing
+anyway. The non-merge answer only appeared after `git fetch --deepen`. **The general rule, which is
+the header's absence rule in a second costume: a history search in a shallow clone can report a
+confident FALSE ABSENCE.** Decide whether something exists from **current file content**, never from
+`git log -S`.
+
+**COMMITS LANDED MID-PASS, and the baseline is deliberately NOT advanced past what was read.**
+`a51d3c3..f33639f` is two commits — `476e0e8` (`docs/FUTURE.md`, `docs/REVIEW-LOG.md`,
+`reference/sync.md`) and `f33639f` (`cmd/usarr/main.go`, `internal/config/`) — and **it touches no
+file any of the seven checks above fired on**: no `internal/httpapi`, no `internal/store`, no
+`internal/libsync`, no `internal/bookorbit`, no migration, no `web/src/`, no `deploy/`, no
+`reference/search.md` and no `DECISIONS.md`. **So none of the seven is stale by it.** Neither commit
+was read for anything else.
+
+**INHERITED from the `0085676` baseline. Its own attestation follows, unchanged and NOT re-fired:**
+⚠️ **That baseline advanced from `13878f2` by the shipped-state batch pass, which re-derived SEVEN
+things and NOTHING ELSE**, and **the range is not documentation-only** — it carries `web/src/`,
+`internal/` and a whole new package — so read every box that pass does not name as attested at
+`13878f2`, not at its baseline line.
 
 **FIRED at `0085676` by this pass, and this is the whole list:**
 - **The Libraries-row link:** `libraryScopeHref` and the row anchor it feeds in
@@ -276,8 +331,16 @@ Items marked 🛑 **STOPPED** are the different case: those are stopped by the d
       *Done when:* the state is rendered in `web/src/routes` off a column that exists in
       `internal/db/migrations`.
 
-- [ ] **The image pipeline, including the §4.4.1 cold-start plan.** `image_asset` is in the schema;
-      nothing in `internal/` or `cmd/` writes or serves it.
+- [ ] **The image pipeline's FETCH HALF, including the §4.4.1 cold-start plan — and this item is
+      SMALLER than it was, because the serving half landed as its own line.**
+      ⚠️ **THE HEADLINE USED TO READ *"~~`image_asset` is in the schema; nothing in `internal/` or
+      `cmd/` writes or serves it~~"*, AND THE *SERVES* CLAUSE IS NOW FALSE.** `GET /img/{key}` is
+      registered in `internal/httpapi/server.go` and handled by `internal/httpapi/images.go`
+      (`34a277f`), and `ffebec7` puts `poster_key` on **every response that renders a work row**.
+      **The *writes* clause still holds, re-fired at the baseline above, and it is now the WHOLE of
+      this item:** nothing outside `_test.go` writes an `image_asset` row, so nothing fetches,
+      decodes or stores a cover — **every `/img` request answers `not_cached` and every row's
+      `poster_key` is absent on every real install.**
       ⚠️ **§16 puts this and the library grid in ONE line item** — the sentence in **§16's v0.1
       entry** reading *"Library grid with "Load more" + `content-visibility` on grid rows carrying
       explicit ARIA roles (§4.5), keyset pagination, image pipeline **including the §4.4.1
@@ -357,24 +420,35 @@ Items marked 🛑 **STOPPED** are the different case: those are stopped by the d
       *Authority:* §4.4, §16's v0.1 entry.
 
       *Done when — **ALL THREE** legs. The first two run from a clean checkout:*
-      1. **A registered image route exists.** ✅ **DISCHARGED 2026-08-19** by the serving-half item
-         below, which is a separate line and is now closed.
+      1. **A registered image route exists.** ✅ **DISCHARGED 2026-08-19** by `34a277f`, and recorded
+         on the serving-half item below, which is a separate line and is now closed.
          `grep -nE 'mux\.Handle(Func)?\("[A-Z]+ /(api/v1/)?(img|image|cover)' internal/httpapi/server.go`
          returns `mux.Handle("GET /img/{key}", …)`. ⚠️ **This leg used to read "Fired on the
-         baseline tree: exit 1, no output — RED today", and that is no longer the tree.** The other
-         two legs are untouched and are what still holds this item open — which is exactly what the
-         three-leg split was written for: a route that serves nothing satisfies leg 1 alone, and
-         legs 2 and 3 are what refuse it.
+         baseline tree: exit 1, no output — RED today", and that is no longer the tree.**
       2. **A non-test writer stores a REAL format, not NULL.**
          `grep -rn 'INSERT INTO image_asset' --include=*.go internal/ cmd/ | grep -v _test.go`
          returns a hit, **and that same file references** `store.ValidImageFormat` or
-         `store.ImageFormatJPEG`. **Fired: exit 1 on the first half — RED today**; the only non-test
-         references to the format vocabulary anywhere in the tree are its own declarations in
+         `store.ImageFormatJPEG`. 🔴 **RE-FIRED at the baseline above: exit 1 on the first half —
+         STILL RED.** Every file in the tree matching `INSERT INTO image_asset` is a `_test.go`
+         (`internal/db/migrate_test.go`, `internal/httpapi/images_test.go`,
+         `internal/httpapi/library_test.go`, `internal/httpapi/librarysearch_test.go`,
+         `internal/store/imageassets_test.go`, `internal/store/imagelint_test.go`), and the only
+         non-test references to the format vocabulary anywhere are its own declarations in
          `internal/store/images.go`.
       3. **Bytes actually come back.** Against a running instance,
          `curl -sS -o /dev/null -w '%{http_code} %{content_type} %{size_download}\n' '<base>/img/<key>?w=342'`
          answers `200`, an `image/*` content type and a **non-zero** size. (This container has no
          `sqlite3` CLI, so this leg is deliberately a request rather than a query.)
+         🔴 **RED — AND RED FOR LEG 2'S REASON RATHER THAN FOR ONE OF ITS OWN.** The route is in the
+         mux and the handler is written; **there is no `<key>` to put in that URL**, because nothing
+         writes a row for one to name. This leg **cannot** go green before leg 2 does. **It is kept
+         separate anyway**, for the reason the split was written: a writer that stores a row the
+         serving path cannot turn back into bytes satisfies leg 2 alone, and leg 3 is what refuses
+         it.
+
+      ✅ **SO THE THREE-LEG SPLIT NOW READS ONE GREEN, TWO RED — AND IT EARNED THE SPLIT.** Leg 1
+      went green on a commit that **fetches nothing**; had this item carried a single done-check, that
+      commit would have closed it. Legs 2 and 3 are what hold it open.
 
       **The clause that stops this being weakened back:** the three legs exist because **a writer
       that fetches nothing, decodes nothing and serves nothing satisfies a bare SQL grep exactly** —
@@ -589,50 +663,95 @@ Items marked 🛑 **STOPPED** are the different case: those are stopped by the d
       bytes** — the **all-types scoped view** a Libraries row should open, the **link** from a
       Libraries row into it, and the **`?lib=` chip** that writes scope.
 
-- [ ] **A facet read — until there is one, per-type hiding cannot come back and Home's Block A has
-      no source.** `reference/http-api.md` §7.1 closes the wire question: *"There are **no facet
-      counts** beside the chips; each is its own aggregate and its own read."*
-      ⚠️ **THE SIDEBAR CLAIM ON THIS ITEM WAS STALE AND IS CORRECTED. It used to read *"~~the
-      frontend's interim answer is to ship NO media-type entries — not six placeholders — and that is
-      DELIBERATE~~"*.** That was true when it was written and is not now: the grid work at `ad821a0`
-      ships **all six, unconditionally**. `TYPE_NAV` in `web/src/routes/+layout.svelte` is a
-      `MEDIA_TYPES.map` with **no predicate** over the six-member `as const` in
-      `web/src/lib/library.ts`, and every entry resolves to `/library/[type]`.
-      [ADR-0053](./DECISIONS.md#adr-0053) (Accepted 2026-08-19) is the decision behind it: it amends
-      [ADR-0027](./DECISIONS.md#adr-0027)'s *"a type with zero items is not rendered anywhere"*
-      consequence **for the sidebar and for nothing else**, leaving it intact for Block A and for
-      search groups. **The honesty the sidebar can no longer carry moved to the empty state** —
-      `browseEmptyState` (`web/src/lib/librarygrid.ts`) separates *no library-bearing service is
-      connected* from *this type has no rows yet* from *the scope excludes everything*.
-      **SO WHAT IS OWED IS NOT A SIDEBAR — IT IS THE READ THAT LETS PER-TYPE HIDING RETURN.** Hiding
-      is **closed, not abandoned**, on one named reopening condition: a documented read that answers
-      **which of the six types have rows under the current scope, in one statement**. **No read on
-      the wire answers per-type presence or per-type count today** — `GET /api/v1/library` answers
-      only for the one `media_type` asked and only by fetching its rows, `GET /api/v1/library/recent`
-      carries no facet at all, and `GET /api/v1/services/health` carries a `role`, not a media-kind
-      array. Block A above is blocked on this same missing read.
-      🔍 Inference, unchanged by ADR-0053: §13 already budgets **"1 keyset page + 6 sidebar
-      `COUNT(*)`"** at < 15 ms p50, so the cost is priced — but nothing decides whether the counts
-      ride the browse response or take their own endpoint. ADR-0053 leaves that to the facet read
-      rather than pre-empting it, and it closes off an alternative, so it needs an ADR.
-      ⚠️ **A RIDER, MOVED HERE FROM THE ALL-TYPES ITEM BELOW BECAUSE IT IS SERVER-SIDE TEXT AND
-      THIS IS THE SERVER-SIDE ITEM — and it sits BEHIND the facet counts, not beside them.**
-      `internal/httpapi/library.go` maps `store.ErrUnservableSort` to **one shared action string** —
-      *"sort_title needs a media_type of one kind — not music — and there is no index behind year at
-      all; added_at and popularity work everywhere"* — so **one action string answers two different
-      refusals**, and a caller who asked about neither music nor `year` is told about both.
-      ⚠️ **It is NOT urgent for the SCREENS, and saying so is the point of moving it.**
-      `BROWSE_AZ_UNAVAILABLE` and `BROWSE_AZ_UNAVAILABLE_MULTI_KIND` (`web/src/lib/librarygrid.ts`)
-      keep the option off the control entirely and state the absence in UsArr's own words, so **no
-      reader meets that sentence today**; what is owed is owed to the **wire**, where a consumer
-      still meets it. Whoever is next in `internal/httpapi/library.go` for the facet read is the
-      cheapest person to split it in two.
-      *Authority:* `reference/http-api.md` §7.1, [ADR-0053](./DECISIONS.md#adr-0053),
+- [ ] **The facet read SHIPPED. What is owed is a CONSUMER — and a sidebar predicate these counts
+      CANNOT supply.**
+      ⚠️ **THIS ITEM'S HEADLINE USED TO READ *"~~A facet read — until there is one, per-type hiding
+      cannot come back and Home's Block A has no source~~"*, AND IT IS FALSE.**
+      `GET /api/v1/library/facets` is registered in `internal/httpapi/server.go` and handled by
+      `internal/httpapi/facets.go` (landed `2711926`). It answers all six of §17.2's navigation types
+      with a count each, from **two local SQLite statements** with plans pinned in
+      `internal/store/facets_test.go` — six equality seeks on `ix_work_kind_sort`, no sort, and a
+      covering probe on `ix_edition_format` for the book split — so principle 1 holds: no \*Arr call,
+      no metadata provider, no image fetch. It reads **no query parameter at all**, deliberately: no
+      `?lib=`, no `?media_type=`, no paging. The wire contract is `reference/http-api.md` §8.
+
+      ⚠️ **DO NOT TICK THIS BOX. Its *Done when* has two legs and exactly ONE is met.**
+      - ✅ **A documented read exists**, and it is its own endpoint rather than a rider on the browse
+        response.
+      - 🔴 **NOTHING UNDER `web/src` READS IT.** Fired at the baseline: every `facet` mention in
+        `web/src` is a **comment asserting the opposite** — `web/src/lib/home.ts`,
+        `web/src/routes/+layout.svelte`, `web/src/routes/library/[type]/+page.svelte` and
+        `web/src/lib/librarygrid.test.ts` all still cite `http-api.md` §7.1's *"no facet counts
+        beside the chips"*. So §17.2's **Block A** is sourceless in the only sense a user meets: the
+        numbers exist and no screen fetches them. 🔍 Inference, labelled: those four comments are now
+        stale in exactly the way this item's own headline was, and they sit in another lane's files.
+      - 🔴 **`TYPE_NAV` still has no predicate.** `web/src/routes/+layout.svelte`'s `TYPE_NAV` is a
+        bare `MEDIA_TYPES.map` over the six-member `as const` in `web/src/lib/library.ts`, with no
+        filter, every entry resolving to `/library/[type]`.
+
+      ⚠️ **AND THE SIDEBAR LEG IS NOT WAITING ON A CONSUMER. IT IS WAITING ON A DIFFERENT READ —
+      READING THIS RESIDUE AS AN OVERSIGHT IS THE MISTAKE THIS PARAGRAPH EXISTS TO PREVENT.** The PM
+      ruled that **[ADR-0053](./DECISIONS.md#adr-0053) is NOT to be amended**, and the ground is
+      arithmetic rather than caution.
+      [ADR-0059](./DECISIONS.md#adr-0059)'s counting semantics make the Ebooks/Audiobooks split an
+      **ASSIGNMENT, not two independent tests**: every `book` work lands in **exactly one** bucket,
+      and **a book held as both an EPUB and an M4B counts under Ebooks only** — reached by calling
+      `mediaTypeOf`, the same function that renders every Type cell, rather than by restating its
+      rule. A count has to do that to stay a count: overlap stops the column summing to the library,
+      and *"a number that double-counts is not a smaller error than a number that under-counts; it is
+      a different kind of object."*
+      **ADR-0053's reopening condition asks a different question** — *does this type have content* —
+      which is §17.2 rows 4–5's **independent `EXISTS` over `edition.format`**, and **presence is
+      monotone and may legitimately overlap**, because two true answers about one work are not in
+      conflict.
+      **So hiding a type on these counts would hide a type the user HAS content in.** A library whose
+      only audiobooks are second editions of ebooks reports `audiobooks: 0` while row 5 says that
+      type has content — ADR-0059 states that consequence in terms and names the shape: *"the failure
+      mode this project keeps refusing: hiding Audiobooks from someone who has audiobooks."* Worse
+      than the version ADR-0053 already rejected, because it would arrive through **a count somebody
+      did measure**, and would therefore have looked like compliance.
+      ✅ **What was done instead: ADR-0053's condition is REFINED, NOT DISCHARGED.** It now names the
+      existence predicate over `edition.format` — which `ix_edition_format` (migration `00009`)
+      already serves — **precisely so these counts cannot be re-read as satisfying it on a later
+      pass. This box is a later pass, and it does not.** The amendment was **considered and
+      declined**; the nav stays all-six-always for v0.1. **What is owed is one more predicate, not
+      one more argument.**
+
+      **Where the honesty lives meanwhile, unchanged by any of the above:** the sidebar cannot carry
+      it, so the empty state does. `browseEmptyState` (`web/src/lib/librarygrid.ts`) separates *no
+      library-bearing service is connected* from *this type has no rows yet* from *the scope excludes
+      everything*. ADR-0053 amends [ADR-0027](./DECISIONS.md#adr-0027)'s *"a type with zero items is
+      not rendered anywhere"* **for the sidebar and for nothing else**, leaving it intact for Block A
+      and for search groups.
+      🔍 **Inference, and NARROWED by what shipped.** §13 budgets *"1 keyset page + 6 sidebar
+      `COUNT(*)`"* at < 15 ms p50, so the cost was priced — and the open half of that inference,
+      *"nothing decides whether the counts ride the browse response or take their own endpoint"*, is
+      **settled: they took their own endpoint.** What is **not** settled is the shape of the
+      *presence* read, and ADR-0059 says explicitly that the decision about what eventually hides an
+      empty type **is not taken there**.
+
+      ✅ **THE SHARED-ACTION-STRING RIDER CARRIED ON THIS ITEM IS DISCHARGED — and it was never part
+      of this item's done-when, so closing it closes nothing else.** `internal/httpapi/library.go`
+      used to map `store.ErrUnservableSort` to **one shared action string** naming both the music
+      refusal and the missing `year` index, so a caller who asked about neither was told about both.
+      `d9812da` (*"fix(httpapi): address the unservable-sort 400 to the caller who hit it"*) replaced
+      it with **`browseUnservableSortAction(filter)`**, which picks per request: a non-`sort_title`
+      order gets a **defensive** *added_at-or-popularity* answer rather than an unreachable-panic;
+      the all-types grid is told to **add a `media_type`**, the narrowing that makes alphabetical
+      work; and a multi-kind media type is told **by shape rather than by literal** — *"this media
+      type covers more than one kind of work"* — so the sentence stays true if a second multi-kind
+      type is ever added, **and it never names a media type the caller did not choose.** The old
+      rider's own framing was that this was owed **to the wire, not to the screens**, since
+      `BROWSE_AZ_UNAVAILABLE` / `BROWSE_AZ_UNAVAILABLE_MULTI_KIND` keep the option off the control
+      entirely; the wire is where it was paid.
+
+      *Authority:* `reference/http-api.md` §8 (the read that shipped) and §7.1 (no counts beside the
+      chips), [ADR-0059](./DECISIONS.md#adr-0059), [ADR-0053](./DECISIONS.md#adr-0053),
       `design/DESIGN-DIRECTION.md` §8.1, §17.2, §13.
-      *Done when:* per-media-type presence reaches the client from a documented read **and**
-      `TYPE_NAV` grows the predicate ADR-0053 calls one line wide — **or** an ADR records the
-      alternative. **The rider above is not part of that condition** — it is carried here, not
-      gated on.
+      *Done when:* a `web/src` consumer renders §17.2's Block A off `GET /api/v1/library/facets`,
+      **and** `TYPE_NAV` grows a predicate fed by an **existence** read over `edition.format` — not
+      by these counts. **An ADR recording a different answer also closes it. Amending ADR-0053 to
+      accept the counts does NOT, and that is the PM's ruling rather than this file's inference.**
 
 - [x] **SHIPPED 2026-08-19 — ~~The ALL-TYPES scoped view a Libraries row opens — DECIDED, MEASURED
       ON THE WIRE, unbuilt~~.** `web/src/routes/library/+page.svelte` is it, at `d0215fb`: the screen
@@ -792,27 +911,34 @@ Items marked 🛑 **STOPPED** are the different case: those are stopped by the d
       `work_relation`, which v0.3 owns and no migration creates. **Unblocked is not built.**
       *Authority:* §17.4 rule 2, `reference/http-api.md` §6.2, §6.2.1 and §6.6, §16 v0.1 entry.
 
-- [ ] **`reference/search.md` §4 never absorbed LS-191's re-rank divergence.** **RECORDED HERE, NOT
-      FIXED, AND NOT FIXED BY THIS FILE** — the backend thread is correcting it in-tree and its
-      `REVIEW-LOG.md` entry sits behind other writers in the queue, so this box stays open and claims
-      nothing about a fix. It is one of two findings from a search-docs review round; **the round's
-      own label is not in the tree** (`grep -rn 'SD-08' docs/` → no hits), which is why this item
-      cites the evidence rather than a finding id.
-      §4's re-rank table still marks **Jaro-Winkler on `norm_title`** as *"primary"* and tabulates
-      **five** signals with prose weights and no numbers. The shipped re-rank disagrees on both
-      counts: `internal/store/searchlibrary.go` defines `rerankWeightRRF = 0.55`,
-      `rerankWeightJW = 0.35`, `rerankWeightRecency = 0.10`, and `rerank` sums exactly those three —
-      **fused retrieval leads, Jaro-Winkler discriminates among what it found.** The other three of
-      §4's five are dead constants, guarded by `TestTheThreeDeadSignalsAreStillDead`.
-      The divergence is **argued and deliberate**, not a drift: [`REVIEW-LOG.md`](./REVIEW-LOG.md)
-      **LS-191** gives the reason — Jaro-Winkler sees `norm_title` only, so a primary weight buries
-      every hit retrieved through `people`, the column LS-100 added *after* §4 was written — and
-      **LS-192** records the three dead signals. `reference/http-api.md` §6.2.1 already prints the
-      real formula. **§4 is now the one place a reader meets the weights first and is told the wrong
-      signal leads.**
-      *Authority:* `REVIEW-LOG.md` LS-191 and LS-192, `reference/http-api.md` §6.2.1.
-      *Done when:* `search.md` §4's table stops marking Jaro-Winkler *"primary"* and names the three
-      live weights.
+- [x] **FIXED 2026-08-19 — ~~`reference/search.md` §4 never absorbed LS-191's re-rank
+      divergence~~.** The fix is `f2548ea` (*"docs: search.md §4 carries the re-rank the code
+      actually runs"*), and the primary half of the done-when is discharged **as written**: §4's
+      signal table now marks **Jaro-Winkler on `norm_title`** as *"live"* — never *"primary"* — and a
+      paragraph above it states the correction in terms, *"Jaro-Winkler is not the primary signal,
+      and this table used to say it was"*, with LS-191's reason attached: JW sees `norm_title` and
+      nothing else, so a primary weight buries every hit retrieved through `people`, `alt_titles` or
+      `original_title` — *"a search for 'Susanna Clarke' scores JW ≈ 0 against Piranesi."* The table
+      now reads **RRF ratio live and heaviest, JW live, recency live and smallest**, with the other
+      three rows marked **dead** and each carrying why.
+      ⚠️ **THE SECOND HALF OF THE DONE-WHEN — *"names the three live weights"* — WAS ANSWERED BY
+      REFUSING IT, AND THAT IS THE FIX RATHER THAN A SHORTFALL IN IT.** §4 deliberately prints **no
+      numbers**: *"The weights are in the code, and this document does not keep a second copy of
+      them … `internal/store/searchlibrary.go`'s `rerankWeightRRF` / `rerankWeightJW` /
+      `rerankWeightRecency` const block is authoritative; when it and any prose disagree, **it wins
+      and the prose is stale**."* **A second copy of a number is a third place for it to go stale**,
+      which is the failure this whole round was about — so the done-when as this file wrote it was
+      the weaker instruction, and the tree took the stronger one. What §4 keeps is the **ordering**
+      those weights encode — *retrieval evidence above string shape above recency* — plus the
+      statement that they are **chosen, not tuned**, there being no relevance-judgement set behind
+      them. `reference/http-api.md` §6.2.1 still prints the formula.
+      **This item's own record of its provenance stands and is not re-fired:** it was one of two
+      findings from a search-docs review round whose label `SD-08` was not in the tree, which is why
+      it cited evidence rather than a finding id. **The sibling finding — the source comment citing
+      `TestSearchOrderIsTheServersAndIsNotScoreOrder`, which is defined nowhere — is a SEPARATE box
+      below and is NOT closed by this commit.**
+      *Authority:* `REVIEW-LOG.md` LS-191 and LS-192, `reference/http-api.md` §6.2.1,
+      `reference/search.md` §4.
 
 - [ ] **A source comment cites a test that exists nowhere in the tree.** **RECORDED HERE, NOT FIXED**,
       same round and same queue as the item above. `internal/httpapi/librarysearch.go`'s store-order
@@ -902,6 +1028,23 @@ Items marked 🛑 **STOPPED** are the different case: those are stopped by the d
       there is no `Dockerfile` anywhere in the tree.
       *Authority:* §15, §16 v0.1 entry.
       *Done when:* a `Dockerfile` exists.
+      📉 **AN OBSERVATION ABOUT THIS AREA — NOT A ROUTED ITEM, AND NOT A BLOCKER ON ANYTHING.**
+      **`deploy/` has not moved since 2026-08-17.** The newest commit whose diff **contains** a
+      `deploy/` change is `3b951cf` (*"fix(deploy): status.sh said UNVERIFIED on healthy long-running
+      hosts"*, 20:18Z) — cited rather than the merge that carried it, per this file's standing rule.
+      At the baseline above, `internal/`, `cmd/` and `docs/` had each moved **within minutes** of it
+      and `web/src/` within about an hour, so the gap is **close to two days against an otherwise
+      hourly tree.**
+      `deploy/` holds two files, `update.sh` and `status.sh`, and **this item and the `VACUUM INTO`
+      backup path are what would land there next.**
+      ⚠️ **NOTHING IS BLOCKED ON IT, and that framing is the whole reason this is an observation
+      rather than an item.** No box in this file waits on `deploy/`, and §4's *"Run
+      `deploy/update.sh`"* step works today. It is recorded as a **stall signal for whoever allocates
+      attention**, never as a dependency, and it routes nowhere by itself.
+      🔍 Inference, labelled: a directory sitting still for two days while every neighbouring area
+      moves hourly is more likely **unallocated** than **finished**. This pass measured commit dates
+      and nothing else — it read no `deploy/` file and formed no view on whether the two scripts are
+      complete.
 
 - [ ] **The arm64 RSS spike.** §16 calls it a day-one spike. `internal/db/spike/` exists; whether the
       arm64 measurement was taken is not readable from the tree.
@@ -1064,17 +1207,125 @@ Tier 0 adapter, and ADR-0052 backs it.
       missing and why"* survives an over-scoped credential instead of being replaced by a silent
       refusal to connect. **What slice 0 does NOT ship is any catalogue read** — no `StreamItems`, no
       `internal/libsync` path, nothing against `POST /books/query`.
-      ⚠️ **SLICE 1'S OPENING MOVE, RECORDED HERE RATHER THAN AS AN ITEM OF ITS OWN: THERE IS NO
-      `bookorbit` SERVICE KIND ANYWHERE, so no BookOrbit credential can be stored yet.** Fired at the
-      baseline above: `grep -rn '"bookorbit"' --include=*.go --include=*.ts --include=*.svelte
-      --include=*.sql internal/ cmd/ web/src/` returns **nothing**, and each of the three registries
-      that would have to carry it reads `prowlarr` + `kavita` and no more — `serviceKinds`
-      (`internal/httpapi/services.go`), the per-instance client switch in `cmd/usarr/services.go`
-      (`case "prowlarr"` / `case "kavita"`), and `SERVICE_KINDS` (`web/src/lib/api.ts`). **A slice-0
-      client with nowhere to store a credential is the expected state of a slice, not a defect in
-      it** — which is why this is the first move of the next slice and not a box beside this one.
-      ⚠️ **One of the three is `web/`, which is ANOTHER LANE'S TERRITORY — announce it before
-      touching it.** Registering the kind is not a backend-only edit.
+      ✅ **THE SERVICE KIND IS REGISTERED — THIS PARAGRAPH'S PREMISE IS FALSIFIED.** It used to
+      read *"~~SLICE 1'S OPENING MOVE … THERE IS NO `bookorbit` SERVICE KIND ANYWHERE, so no
+      BookOrbit credential can be stored yet~~"*, fired on a grep that returned nothing. `e1a3837`
+      (*"feat(bookorbit): register the kind, so a credential can actually be stored"*) landed it in
+      **all three** registries that old text named: `serviceKinds` (`internal/httpapi/services.go`,
+      where `"bookorbit"` maps to the `library` role), the per-instance client switch in
+      `cmd/usarr/services.go`, and `SERVICE_KINDS` (`web/src/lib/api.ts`, now
+      `['prowlarr', 'kavita', 'bookorbit']`). ⚠️ **The old text warned that one of the three is
+      `web/`, ANOTHER LANE'S TERRITORY; the edit crossed it, as that warning said it would have to.**
+
+      ✅ **SLICE 1 SHIPPED — PROSE BOOKS, END TO END. STILL NOT A TICK.** `862a0ca`
+      (*"feat(bookorbit): slice 1 — one library's prose books, end to end"*) adds
+      `internal/libsync/bookorbit.go`: `BookOrbitSource` with `Containers`, `StreamItems`, a `gate`
+      that runs the §14 scope verdict **before any read**, and per-container `Skipped` tallies. It
+      feeds **the same channel-1 importer the Kavita adapter feeds**, so it is a translation rather
+      than a second write path — its own file says *"read `kavita.go` first; this then reads as a
+      translation rather than an invention."*
+      ⚠️ **THE COMMIT SUBJECT SAYS *"one library's"* AND THE CODE WALKS EVERY LIBRARY. Recorded
+      rather than smoothed over, because this file's job is to be right about the tree.**
+      `StreamItems` loops over everything `Containers` returned and walks each one's books page by
+      page, so the shipped scope is **every library the credential can see**. **Cite the behaviour,
+      not the subject line.**
+      **What slice 1 deliberately does NOT do, in its own words:** **comics are SKIPPED AND COUNTED,
+      never guessed at** — the unit-of-work question for comics is open, BookOrbit series have no
+      library and a book can belong to several, and *"a wrong `work.kind` is written once at ingest
+      and can never be merged away"*; **no `CreditSource` and no `FileSource`**; **no `work.year`**,
+      because `store.CatalogueItem` has no `Year` field even though BookOrbit puts `publishedYear`
+      right on the card; and **no channel 3b, no channel 4, no cover fetch, and no migration.**
+
+      ✅ **THE COMPLETENESS DETECTION SHIPPED — ITS OWN ADR, AND ITS OWN MIGRATION.** `1bc400a`
+      (*"feat: detect and surface a BookOrbit content-filter shortfall"*) is the code;
+      [ADR-0061](./DECISIONS.md#adr-0061) (Accepted 2026-08-19) is the decision.
+      **The defect it answers is UPSTREAM'S, and it is the nastiest shape a replica can have.** A
+      BookOrbit account's `contentFilters` land in the books `LEFT JOIN … ON` condition rather than
+      in a `WHERE`, so a filter **shorts each library's `bookCount` without dropping a library row**:
+      the library appears, the counts look plausible, and a slice of the books is simply absent with
+      nothing anywhere saying so. UsArr subtracts the listing's `bookCount` from
+      `GET /api/v1/libraries/{id}/stats`'s `totalBooks` — **one request per library per import**,
+      pinned by `TestTheStatsProbeIsMadeOncePerLibraryAndNotPerBook`.
+      **The verdict is THREE-VALUED and `unverified` is a first-class member:** `complete` ·
+      `shortfall` · `unverified`, with `Total = -1` rather than `0` under `unverified`, **because `0`
+      is a legal total for an empty container.** ⚠️ **A boolean is rejected explicitly**, and the
+      ground is that the stats route is **unguarded upstream and nobody promised it would stay that
+      way** — collapsing *"no shortfall"* into *"not checked"* would report every library complete on
+      the day UsArr stopped being able to tell, which is the original defect rebuilt inside its own
+      fix. It **never blocks or refuses a sync** (*"a partial replica that says it is partial beats no
+      replica"*), **every container gets a row** — `sync_report.kind = 'content_completeness'`,
+      because an absent skip row means nothing was skipped while an absent completeness row means
+      nothing was **asked** — and each row carries `covers` / `does_not_cover`, since whether **whole
+      libraries** are hidden from UsArr's account is **unanswerable from a read-only account**: the
+      upstream guard throws a byte-identical refusal for *"no access"* and *"no such library"*. So
+      `complete` is **not** a claim that UsArr can see everything, and the row says so to anyone
+      reading it out of the database.
+      ⚠️ **ADR-0061's Consequences say *"No migration"* AND A MIGRATION LANDED. BOTH ARE TRUE, AND
+      THE DISTINCTION IS THE POINT.** The ADR means no **schema** change — `sync_report` carries no
+      `CHECK` over `kind` (migration `00005`), so the vocabulary grew without DDL and `detail` was
+      already JSON. What landed is an **index**:
+      **`internal/db/migrations/00011_sync_report_container_latest_index.sql`** adds
+      `ix_sync_report_container_latest` on
+      `(service_instance_id, kind, remote_kind, remote_id, id)` — **exactly one index and nothing
+      else, the third index-only migration in a row after `00009` and `00010`.**
+      **Why the read needs it:** `internal/store/libraries.go`'s `libraryCompletenessSQL` picks the
+      newest verdict per `(instance, container_ref)` with a correlated subquery carrying **four
+      equalities and a descending `id` pick**, and `00005`'s `ix_sync_report_instance` —
+      `(service_instance_id, created_at DESC)` — serves the first predicate, none of the other three,
+      and sorts on the wrong column. Measured before: `USE TEMP B-TREE FOR ORDER BY`, **per
+      `library_source` row**. After: a four-column `COVERING` seek with **no row fetch and the sort
+      gone**. `sync_report` is append-only and this kind writes one row per container per import, so
+      **the walked-and-sorted set grew with IMPORT COUNT, forever, on a render path** — principle 1
+      says every user-facing read renders from local SQLite and says nothing about that read being
+      allowed to get slower every time an import runs.
+      ⚠️ **Dropping `ix_sync_report_instance` is NOT the alternative, and that was measured too**:
+      with it gone the subquery plans as a bare `SCAN` and the temp b-tree **disappears**, because a
+      scan visits rows in rowid order — trading a bounded walk for a full scan, and **neither shape
+      is what the read wants.** **Both indexes stay**; they serve different reads and neither
+      subsumes the other, and `TestLibraryCompletenessPlanGuardFires` **drops this one and watches
+      the sort come back**, so at least that half is executed rather than asserted.
+      **It is surfaced on the Libraries screen from local SQLite** — the comparison is at import, the
+      render is a `SELECT` — and **`complete` renders nothing**, which keeps that screen's standing
+      invariant that nothing on it renders a positive health claim, and is why `unverified` has to be
+      loud. **The Kavita adapter is untouched and serves no verdict**, which renders as an absent
+      key: that is the seam, not an omission.
+
+      🔴 **OPEN DEFECT — EVERY BOOKORBIT BOOK RENDERS AS AN EBOOK, AND `/library/audiobooks` RETURNS
+      NONE OF THEM. Verified against the tree at the baseline above.** This is a **user-visible wrong
+      answer**, not a missing feature, and it is recorded here because slice 1's *"does not"* list
+      makes it read as a scoped omission.
+      **The cause is one missing interface, and it is a three-hop chain:**
+      1. **`BookOrbitSource` implements no `FileSource`.** `internal/libsync/importer.go` asserts
+         `src, ok := im.Source.(FileSource)` and treats a failed assertion as **not an error** —
+         by design, per its own comment — so the assertion **silently returns false** and nothing
+         anywhere reports it.
+      2. **So no `edition` row is ever written for a BookOrbit book.** `internal/libsync/files.go`'s
+         `FileSource` is the only thing that produces them, and slice 1's file says so in terms:
+         *"CREDITS AND EDITIONS … authors, narrators and `files[]` all ride the card this walk
+         already reads"*, costing **zero extra HTTP** — which is precisely why it was held back as a
+         slice of its own rather than taken for free.
+      3. **And both sides of the media-type answer read `edition.format`.** `mediaTypeOf`
+         (`internal/store/recent.go`) returns `MediaTypeAudiobooks` for `kind = 'book'` **only** when
+         the `allAudiobook` aggregate is `1`, and its own comment states the fallback: *"A book with
+         NO editions is Ebooks … an absent edition is not evidence of an audiobook."* The grid filter
+         agrees by construction — `browseAudiobookPredicate` (`internal/store/browse.go`) opens with
+         `EXISTS (SELECT 1 FROM edition ea WHERE ea.format = ? AND ea.work_id = w.id)`, which
+         **cannot be satisfied by a work with no edition rows at all.**
+      **So a BookOrbit audiobook is filed under Ebooks in its Type cell AND excluded from the
+      Audiobooks grid — consistently.** ⚠️ **The consistency is NOT a mitigation.** `mediaTypeOf` and
+      the predicate agreeing is exactly what `TestBrowseFilterAgreesWithMediaTypeOf` exists to hold,
+      and here **they agree on the wrong answer, because both are reading an absence.** A guard that
+      pins two readers to one rule cannot notice that the rule's input is missing.
+      ⚠️ **BookOrbit'S OWN `MediaKind()` ALREADY DISTINGUISHES THEM, AND THE INFORMATION IS DISCARDED
+      ONE LAYER UP.** `StreamItems` switches on `bookorbit.MediaKindEbook` and
+      `bookorbit.MediaKindAudiobook` — it can already tell an M4B from an EPUB — and maps **both**
+      through the same `mapBook`, because `store.CatalogueItem` has no format field to carry it on.
+      **The fix is the deferred `FileSource` slice, not a new signal:** the adapter already knows.
+      🔍 **Inference, labelled, and NOT separately measured by this pass:** the same absence should
+      also zero the `audiobooks` **facet count** for a BookOrbit-only install, since ADR-0059's split
+      binds this same `browseAudiobookPredicate`. If so it is §2's facet consequence arriving from the
+      other direction — there a count under-reports a type whose content is real, here the
+      **editions themselves** are absent, so nothing downstream has anything to under-report from.
       **Verified facts, read off BookOrbit's own source at HEAD `73b7877`, release `v2.6.0`** — carry
       these into the ADR rather than re-deriving them:
       - ✅ **§14 IS SATISFIED, and this falsifies the *"no inbound API key"* finding above.**
@@ -1123,6 +1374,12 @@ Tier 0 adapter, and ADR-0052 backs it.
       work in progress~~"*. **It is work now.**
       *Done when:* `internal/libsync` carries a BookOrbit adapter whose channel-1 import has been run
       against the owner's own instance — the rule in §1, which naming a source does not satisfy.
+      ⚠️ **ITS FIRST HALF IS NOW MET AND THE SECOND IS THE WHOLE CONDITION.**
+      `internal/libsync/bookorbit.go` exists (slices 1 and the completeness detection, above), so
+      *"`internal/libsync` carries a BookOrbit adapter"* is no longer outstanding. **What remains is
+      THE RUN, against the owner's own instance**, and it is §4's rather than this file's — **no
+      commit can discharge it**, which is exactly why §1 states the rule as *one source, proven on
+      real data* rather than *one source, written*.
 
 **The importer, stream and UI plumbing is source-agnostic, and the Kavita adapter stays either way** —
 see the blocked table above, where that is now its own row.
