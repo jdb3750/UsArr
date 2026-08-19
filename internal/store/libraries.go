@@ -529,6 +529,15 @@ func scanLibraries(rows *sql.Rows) ([]Library, error) {
 // instance the caller cannot see would leak the topology the scope hides.
 // `si.deleted_at IS NULL` matches that read too — a soft-deleted instance is not
 // a service any more, and its last verdict is not news about a live library.
+//
+// ⚠️ THE PLAN IS MEASURED, AND IT CARRIES A SORT INSIDE THE CORRELATED SUBQUERY.
+// ix_sync_report_instance is (service_instance_id, created_at DESC), so the
+// `ORDER BY r2.id DESC LIMIT 1` above cannot come off it: per library_source
+// row, SQLite seeks the instance, filters kind/remote_kind/remote_id unindexed,
+// and sorts the survivors. The measured plan, both scopes, and the reasoning
+// about what it costs are in TestLibraryCompletenessPlanIsSeeksAndTwoSorts —
+// which EXPLAINs THIS function rather than a copy of its text, and is fired by
+// TestLibraryCompletenessPlanGuardFires.
 func libraryCompletenessSQL(scope Scope, libraryIDs []int64) (string, []any) {
 	// ⚠️ THE KIND IS BOUND FIRST, BECAUSE `?` IS POSITIONAL AND THE CORRELATED
 	// SUBQUERY IS EARLIER IN THE TEXT THAN THE `IN` LIST. The other statements in
