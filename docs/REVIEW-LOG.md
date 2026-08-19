@@ -23179,3 +23179,151 @@ for the two arms and the contrast between them;
 `packages/types` is vendored and the server source is not; and
 `git grep -n 'loginWithToken' -- cmd/ web/src/ internal/` for the four claim sites plus `doc.go`'s
 citation. ⚠️ **Any commit sha reported for this entry is a content sha, never a merge.**
+
+---
+
+## LS-384 — three `internal/web` sites carried the same `ADR-0024 §6` mis-citation LS-380 closed under `web/`; LS-380's closure check was TRUE, and narrower than the claim it stood under
+
+**`LS-384`, allocated by the coordinator, and re-checked rather than taken on report.** Re-run at this
+lane's own tip (`83449b1`): `git grep -n 'LS-384' origin/main` returns nothing, `grep -rn 'LS-384' .`
+over the working tree returns nothing, and `git log --all --grep='LS-384'` returns no commit.
+**`LS-384` was free and is taken; no id was bumped.** Nothing here touches the `SD-`, `DS-`, `RK-` or
+`FI-` series, and no ADR or migration number is allocated by this lane.
+
+ℹ️ **This entry does not cite its own commit sha, deliberately** — the entry lives in the commit it
+would be citing, so any sha written here is either a guess or invalidated by the amend that inserts
+it. The change is identified by its shape instead — **two Go files, comment and failure-message text
+only, with no assertion, no test name and no executable line touched** — and the sha is reported to
+the coordinator, where it can be true.
+
+⚠️ **`LS-380` is CITED, not amended.** Its text, its scope and
+its verification list stand exactly as written. Nothing below is a correction to it, because nothing
+in it is false; the finding is about what a true check does not reach.
+
+### The defect, in one line
+
+Three Go-side sites cited **ADR-0024 §6**. [ADR-0024](./DECISIONS.md#adr-0024) is the AGPL-3.0 licence
+decision and has no numbered sections at all, so `ADR-0024 §6` resolves nowhere; the SPA build-config
+material they mean is decision point **6. Serving, per ADR-0003's embedding story** of
+[ADR-0025](./DECISIONS.md#adr-0025). This is the same defect, in the same class, as LS-380 — three
+days older than LS-380's fix and three directories away from its grep.
+
+### 🔍 The finding is the shape of the check, not a wrong check
+
+LS-380 closed its four sites and recorded the closure this way: *"`grep -rn "ADR-0024" web/` returns
+nothing afterwards; a second lane confirmed that independently, and it was **re-run here at `cf3957f`**
+rather than carried over on report."* Its manual-verification list names the same command again, as
+the check for *"the two emptiness claims"*.
+
+✅ **That check is TRUE.** Re-run at `83449b1` before this lane touched anything, `grep -rn 'ADR-0024'
+web/` returns nothing — it was true when LS-380 wrote it, it was true at `cf3957f`, and it is true now.
+It was also **run twice, by two lanes, independently**, which is more care than most closure claims get.
+
+🚩 **And it reaches three of the six trees the defect was in.** `web/` is the SvelteKit source
+directory. `internal/web/` is a Go package whose name merely begins with the same five letters, and no
+glob rooted at `web/` reaches it. The three sites below sat inside the emptiness the check reported,
+and were invisible to it:
+
+| Site | Before | After |
+|---|---|---|
+| `internal/web/web.go:6` | `// embedding package's own directory. See docs/DEVELOPMENT.md §2 and ADR-0024 §6.` | `… and ADR-0025 §6.` |
+| `internal/web/web_test.go:41` | `// TestEmbeddedFSCarriesAppDir is the regression test for ADR-0024 §6's first` | `… for ADR-0025 §6's first` |
+| `internal/web/web_test.go:77` | `// TestFallbackAssetPathsAreRootAbsolute is the empirical answer to ADR-0024` | `… to ADR-0025` |
+
+📌 **The general rule this entry exists for. A closure check is a claim about a scope, and the scope is
+part of the claim.** `grep … web/` answers *"is it gone from `web/`"*; it was read as answering *"is it
+gone"*. Nothing warns you, because the check passes — a narrow check and a complete one are the same
+green. The tell is available and cheap: **an emptiness claim should be run at the widest scope the
+defect could occupy, and narrowed only on purpose.** `git grep -n 'ADR-0024'` with no path argument, at
+`cf3957f`, would have returned all three of these.
+
+### The three sites entered in the SAME commit as LS-380's five, and LS-380's own history table counts five of eight
+
+This is the part that settles it as scope rather than as later drift. LS-380's commit table records
+`a279517` (2026-08-16 06:35), *"feat: land the v0.1 core packages and embedded web shell"*, as *"the
+web shell lands carrying `ADR-0024 §6` three times in `svelte.config.js`, once in `+layout.ts`, and a
+fifth bare `ADR-0024` in `app.css`"*. Measured rather than taken on report —
+`git grep -n 'ADR-0024' a279517`, excluding `docs/`, `README.md` and `CLAUDE.md`, which mean the
+licence and are correct — that commit landed **eight** code-side sites, not five:
+
+| Site at `a279517` | Form |
+|---|---|
+| `web/svelte.config.js:9`, `:22`, `:38` | `ADR-0024 §6` ×2 and a bare `ADR-0024` |
+| `web/src/routes/+layout.ts:2` | `ADR-0003 / ADR-0024 §6` |
+| `web/src/app.css:4` | bare `ADR-0024` — later deleted by `b6a6d37`, per LS-380 |
+| **`internal/web/web.go:6`** | **`ADR-0024 §6`** |
+| **`internal/web/web_test.go:26`** | **`ADR-0024 §6`** *(line `:41` today)* |
+| **`internal/web/web_test.go:62`** | **`ADR-0024`** *(line `:77` today)* |
+
+⚠️ **The row's count is a claim about a commit, and a commit has no directory.** *"The web shell
+lands …"* is the right subject — `internal/web` **is** the web shell, it is the package that serves
+the thing `web/` builds — and the enumeration beneath it was drawn from the `web/` grep rather than
+from the commit. So the under-coverage was not only in the closure check at the end; it was already
+in the evidence table in the middle, where a count of five stood for a commit that carried eight.
+`git log -S 'ADR-0024' -- internal/web/web.go internal/web/web_test.go` returns exactly one commit,
+`a279517`, and nothing since: these three have never been touched on this axis, by any sweep, until now.
+
+### The inference the citations taught is corrected in the same pass, because repointing made it readable
+
+`web_test.go:77`'s comment and the failure message beneath it both encoded the inference that ADR-0025
+§6's fourth trap records and that `web/svelte.config.js` already corrects at length: that
+`paths.relative: false` is what makes deep-route assets work. **It is not**, and the comment sat
+directly above the test that disproves it.
+
+✅ **Verified in this tree, not carried over from `svelte.config.js`'s account of it:**
+`web/node_modules/@sveltejs/kit/package.json` reports `2.70.2`, and
+`src/runtime/server/page/render.js:120-122` reads `// if appropriate, use relative paths for greater
+portability` / `if (paths.relative) {` / `if (!state.prerendering?.fallback) {` — the relative-path
+rewrite is skipped for the fallback document. `internal/web/spa/index.html`, built with `relative:
+false` in force, emits `"/_app/immutable/entry/start.…js"` and four more root-absolute references, and
+`go test ./internal/web/ -run TestFallbackAssetPathsAreRootAbsolute` passes. The setting is
+belt-and-braces — explicit beats relying on a special case — not load-bearing.
+
+⏭️ **ADR-0025 §6's fourth trap is still uncorrected, and is still not corrected here**, for the reason
+LS-380 gave: it is a change to an accepted ADR in a file this lane does not hold. **Routed, not assumed
+done** — this is the third entry to route it.
+
+### The asserted property is byte-identical, and the test name is unchanged
+
+🚩 **A comment fix that moves an assertion is not a comment fix.** The `for _, bad := range []string{…}`
+list, the `strings.Contains` calls and the `t.Fatalf` on the positive check are untouched — verified by
+filtering the diff for those lines, which returns nothing. `TestFallbackAssetPathsAreRootAbsolute` and
+`TestEmbeddedFSCarriesAppDir` **keep their names**, because ADR-0025 §6's rider and `svelte.config.js`
+both cite the first of them by name and a rename would break two citations to fix none.
+
+Only the human-readable half moved. The failure message read *"… and 404. Set kit.paths.relative =
+false."* — an instruction that is both already satisfied and, per the paragraph above, not the remedy —
+and now reads *"… and 404. kit.paths.relative does not govern this — SvelteKit skips the relative
+rewrite for the fallback document — so check kit.paths.base and whether the toolchain still
+special-cases that fallback."* 📌 **This is LS-380's own rule applied to itself**: a citation sitting
+inside an *instruction* inherits responsibility for whether the instruction is still wanted. It was not.
+
+✅ **The guard was fired deliberately rather than trusted.** With the `bad` list temporarily set to
+`` `"/_app/` `` — a string `index.html` certainly contains — the test fails at `web_test.go:98` and
+prints the new message in full; the file was then restored from a byte-identical backup (`diff -q`
+clean) and passes again. A failure message that has never been rendered is a guess about what the next
+reader will see.
+
+### What a green gate is worth on this entry
+
+⚠️ **`make check` compiled and ran the two Go files this entry changed, and attests nothing about the
+prose above.** The Go arms are real here in a way they are not for a docs-only entry —
+`golangci-lint`, `build-tagged` and `go test -race -shuffle=on` all read `internal/web`, and the two
+tests named above execute — so the gate does establish that **the comment edits did not disturb the
+package or its assertions**. That is the whole of it. This section of `docs/REVIEW-LOG.md` reaches the
+gate through `gitleaks` alone: `fmt-check`'s prettier half runs `--dir web`, so no Markdown outside
+`web/` is formatter-gated. Nothing in the gate opens `docs/DECISIONS.md` to check that ADR-0025 has a
+§6 or that ADR-0024 does not.
+
+🔍 **The verification is therefore manual, and is listed so it can be repeated at any tip:**
+`git grep -n 'ADR-0024' internal/` for the three sites and, afterwards, for the empty result;
+`git grep -n 'ADR-0025' internal/` for the corrected ones;
+`grep -rn 'ADR-0024' web/` for the true-and-narrow check this entry is about;
+`git grep -n 'ADR-0024' a279517` for the eight-site count, remembering that the `docs/`, `README.md`
+and `CLAUDE.md` hits there are the licence and are correct;
+`git log -S 'ADR-0024' -- internal/web/web.go internal/web/web_test.go` for the single-commit history;
+`grep -n 'prerendering?.fallback' web/node_modules/@sveltejs/kit/src/runtime/server/page/render.js`
+and that package's `version` for the SvelteKit special case;
+`go test ./internal/web/ -run 'TestFallbackAssetPathsAreRootAbsolute|TestEmbeddedFSCarriesAppDir' -v`
+for the two passes; and **ADR-0024 and ADR-0025 §6 read in `docs/DECISIONS.md`** rather than taken on
+report. ⚠️ **Any commit sha reported for this entry is a content sha, never a merge.**
