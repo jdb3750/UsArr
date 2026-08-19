@@ -104,6 +104,7 @@ because no ADR ever decided it. Annotating leaves that failure mode nowhere to h
 | [0050](#adr-0050) | The image pipeline's base output format is **stdlib JPEG**; **AVIF is deferred** with its seam kept | **Accepted** — 2026-08-19; **amends** ARCHITECTURE §4.4 and §4.4.1, which named AVIF as the only output codec and named **no base format at all** — a spec missing its base case, which is why this ADR was owed; the reason for stdlib is **zero new dependencies in a static binary** (UsArr has **five** direct dependencies; `image/jpeg` adds none), **not** "JPEG is good enough" — the ADR records the ledger it is traded against, roughly **2–3× larger** than AVIF on photographic content, so a future reader can weigh it; **AVIF is buildable here** (`gen2brain/avif` v0.6.0, MIT, cgo-free, libaom-as-WASM) and is deferred on a **measured trade with a named reopening condition**, not rejected — one MIT dependency plus a **second** WASM runtime, since `wazero` is **verified absent** from this module graph after `ncruces/go-sqlite3` moved to `wasm2go`, and the **binary-size delta is recorded as UNMEASURED rather than estimated**; **reopens when** someone measures the binary delta and the per-width encode cost and decides the bytes are worth it (an ADR amendment plus one map entry, **no migration**), or when an upstream is found serving a format the stdlib cannot decode — ⚠️ **measured, not assumed, and the first draft's assumption was wrong: Kavita is v0.1's catalogue source and its *Save Media As* setting writes covers as PNG (default), WebP or AVIF**, so one admin checkbox on the owner's own server produces input this binary cannot decode (`x/image/webp` is decode-only; there is no pure-Go AVIF decoder in `x/image`), which relocates the likeliest revisit from output size to **input decode**; **one codec per row is an explicit invariant** — clause 1 puts `orig` inside UsArr's encoder rather than leaving it a passthrough, because §4.4 stores **seven widths per asset** and the column is **one per row**, so per-`role` variation stays expressible and per-**width** variation is foreclosed in writing; the seam is **`image_asset.format`** (migration `00008_image_asset_format.sql`) — nullable `TEXT`, no default, **no `CHECK`** on [ADR-0039](#adr-0039)'s reasoning; ⚠️ **unlike ADR-0039 the Go validation SHIPPED WITH THE COLUMN** (`internal/store/images.go`, plus an AST-walk guard that fails `check` if a writer lands without it), because ADR-0039's promised validator was never written and repeating that would be worse than a `CHECK`; ⚠️ **describes a pipeline that does not exist** — nothing writes `image_asset`, so what ships is the decision, the column and the guard |
 | [0051](#adr-0051) | The library-scoped grid is a **work-driven `EXISTS`**, not a join to `library_member` | **Accepted** — 2026-08-19; **supersedes [ADR-0026](#adr-0026)'s materialisation as read by ARCHITECTURE §6.5 for the `added_at` order ONLY** — §6.5's denormalised `(library_id, sort_title, work_id, edition_id)` key stands, and `TestLibraryScopedKeysetIsASeek` still pins it, but it serves the **`sort_title`** order and **only** that one: measured on the real schema (`ncruces/go-sqlite3`, SQLite 3.53.4), a library-scoped page ordered by `added_at` gets `USE TEMP B-TREE FOR ORDER BY` in **both** topologies §6.5 names, **with and without `ANALYZE`**; the work-driven `EXISTS` over `ix_libmem_work` keeps `SEARCH w USING INDEX ix_work_added (added_at<?)` in **every** configuration measured, **including the multi-value `?lib=a,b` case** — which was a hypothesis until the plan was read, because an `IN` on the leading key column destroys the ordered index in every *member-driven* shape; it is also **the only shape that cannot return one work twice**, since a work filed in two of the named libraries carries **one membership row per library** and a browse row is work-keyed — ⚠️ per-**library**, not per-edition: `library_member`'s key carries `edition_id`, but the only production writer hardcodes the `0` sentinel, so membership is **not** edition-grained in the tree today (`REVIEW-LOG.md` LS-213), and the ADR body's argument, which is about two libraries over one work, is unaffected; **costs one migration** — `00009_edition_format_index.sql`, `ix_edition_format ON edition(format, work_id)`, for the Audiobooks filter and not for the scope; **`ix_libmem_added` is explicitly NOT owed** and must not be added on this ADR's authority; ⚠️ **reopens on `make bench` over a NARROW library** — the `EXISTS` walks the *global* `added_at` order and discards non-members, which suits a broad library and not a narrow one, so a 1%-selective library over a 25k-row kind is the measurement that would send this back to a member-driven shape with a new index; ⚠️ **amended 2026-08-19** — the *"says nothing about `year`"* non-decision gains the shape of the gap it leaves: `default_sort`'s CHECK admits four orders and this read serves three, `?sort=year` is **refused and never substituted**, the endpoint never reads `default_sort` at all, and nothing in the tree writes the column yet — so the trap arms the day §17.8's DETAIL view offers the choice. The decision is untouched |
 | [0052](#adr-0052) | v0.1's catalogue source is **BookOrbit**; **Kavita is sunset** and its adapter **stays in the tree** | **Accepted** — **owner-decided 2026-08-19**; **amends [ADR-0041](#adr-0041)** clause 1 (*"v0.1's catalogue source is **Kavita**"*) — ADR-0041's clauses 2 and 3 are **confirmed**, and its clause 4 (channels **1, 3b and 4**) is **REOPENED as an open question, not re-answered**, because BookOrbit has had no equivalent of [ADR-0035](#adr-0035) §2a's live probe; **amends ARCHITECTURE §16.1's v0.1 entry**, edited in the same change because §16 is scope authority; the decision is **the owner's, not an agent's** — he is sunsetting Kavita entirely, BookOrbit takes everything, his word is **"phenomenal"**, and the repo's own one-day-older record of the same direction is `ROADMAP.md` §3's *"in my heart i kind of want to migrate to book orbit"*; ⚠️ **it REVERSES `ROADMAP.md` §3's standing recommendation** *"do NOT switch UsArr's first adapter off Kavita"*, because **two of the three findings that produced it were re-measured on 2026-08-19 against BookOrbit `main` and are FALSE** — headless auth needs **no password** (`server/src/modules/auth/magic-link.service.ts`; SHA-256-hashed token, `loginWithToken()` validates no password), and **comics ARE covered** (a shipped ComicVine provider), leaving only **manga and anime** identifiers absent (zero hits for `mangabaka`/`anilist`/`myanimelist` repo-wide); 🚩 **and a third claim reached the ADR in relay and was REFUSED on primary source** — *"no watermark, so full resync with no delta channel"* is **false in its strong form**, since `packages/types/src/query.ts` admits `"updatedAt"` as a sort key with page/size paging, which is exactly channel 3b's shape, so writing it in would have foreclosed v0.1 work on a premise the source refutes; what is **genuinely unsettled** is whether that timestamp moves on tag, genre and author edits, since `$onUpdateFn` is **application-level, not a DB trigger** and those live off the book row — §7.1a's **reconciliation-only** fallback is the named failure branch, **not** this ADR's decision; **"sunset" explicitly does NOT mean delete** — `internal/kavita`, `internal/libsync/kavita.go`, both vendored specs and [ADR-0046](#adr-0046)'s contract guard stay and stay green, investment stops, and **no milestone for further Kavita work is invented**, on [ADR-0042](#adr-0042)'s refusal-to-number precedent; **MangaBaka is NOT a dependency** — the owner's *"in the near future"* is **his expectation, nobody's commitment**, native support is an **open PR with no maintainer signoff**, and the adapter is designed against what BookOrbit ships **today**; ⚠️ **MangaBaka data may be fetched at runtime and NEVER vendored, shipped or cached as a dump** — **CC BY-NC-SA 4.0**, verified at `mangabaka.org/data/database`, is **not AGPL-3.0-compatible**, and the dump additionally carries third-party terms it does not license; ✅ **identity needs NO migration and NO new mechanism, which INVERTS this ADR's own first draft** — the draft called BookOrbit's series-level identity a structural degradation and warned of a migration, and a schema check against the tree falsified it: `external_id`'s `source` is plain `TEXT` with **no `CHECK`** and it carries `confidence` (`00005_library_sync.sql:444`), a series **IS a work row** (`work.kind` admits `'series'` and `'comic'`, `:242`) so `work_id` **already is** the series-level column, and `kavitaExternalIDs` **already writes seven series-level ids** including **`mangabaka` at 0.90** (`internal/libsync/kavita.go`, `weblinkid.go:111,162`) — because Kavita's own series ids are **weblink-parsed from what the user tagged**, exactly as BookOrbit's would come from a user-populated custom field, so the two are **the same arrangement** and 0.90 is already the right grade; the one recorded wrinkle is that BookOrbit's custom fields are **book-scoped** (`custom-metadata.ts`, `bookId` FK, no series variant) so the id needs a hoist — **which Kavita also needs and does lossily**; 🚫 **`work_relation` is cited nowhere and must not be added** — it is **absent from the tree** and `internal/db/migrate_test.go` fails if it appears; ⚠️ **ships NO code by design** — it gates the adapter |
+| [0053](#adr-0053) | All six media types are **always** in the sidebar; per-type hiding is closed until a facet read exists | **Accepted** — 2026-08-19; **amends [ADR-0027](#adr-0027)** for its sidebar clause **only** — that ADR's *"a type with zero items is not rendered anywhere"* stands for Block A and for search groups, both of which are unaffected — and amends ARCHITECTURE §17.2 and `design/DESIGN-DIRECTION.md` §8.1 to match the shipped shell; the data-driven sidebar those two specified **cannot be built over the wire UsArr serves**, because `reference/http-api.md` §7.1 states there are *"no facet counts beside the chips; each is its own aggregate and its own read"* and no read answers per-type presence at all; so **all six render unconditionally, no row carries a count**, and the honesty moves to the per-type screen, where `browseEmptyState` names which of three reasons the grid is empty; ⚠️ **the rejected alternative that looks like compliance is hiding a type on a count nobody measured** — it fails silently and removes the very row that would have explained the absence; **adds no endpoint, no migration and no backend change**; ⚠️ **reopens on exactly one condition** — a read answering which of the six types have rows under the current scope, in one statement — at which point the seam is one predicate on `TYPE_NAV`, and §13 has already priced the shape at *"1 keyset page + 6 sidebar `COUNT(*)`"* < 15 ms p50 without deciding whether it rides the browse response or its own endpoint |
 
 ---
 
@@ -7214,3 +7215,98 @@ which §7.1a says is a **surfaced** state rather than a blocking one, so this ba
 alongside one, so that the decision is reviewable before an implementation makes it expensive to
 revisit. What lands with it is this record and the §16.1 edit that keeps scope authority consistent
 with it.
+
+---
+
+<a id="adr-0053"></a>
+## ADR-0053 — All six media types are always in the sidebar; per-type hiding is closed until a facet read exists
+
+**Status:** Accepted · **2026-08-19** · **Amends [ADR-0027](#adr-0027)** — its final consequence,
+*"A type with zero items is not rendered anywhere — sidebar, home, or search group"* — **for the
+sidebar and for nothing else** · **Amends [`ARCHITECTURE.md`](./ARCHITECTURE.md) §17.2** and
+`design/DESIGN-DIRECTION.md` §8.1 · **Adds no endpoint, no migration, no column and no backend
+change** · **Reopens on exactly one condition: a per-type facet read on
+[`reference/http-api.md`](./reference/http-api.md)**
+
+### Context
+
+ADR-0027 made media type the navigation axis and specified the entries as **data-driven**. §17.2's
+axis table says *"one sidebar entry per type **that has content**"*; its hard rule says a type the
+user does not have is *"**not shown at all** — not in Block A, not in the sidebar, not as a search
+group"*; and `design/DESIGN-DIRECTION.md` §8.1 repeated both, drew a sidebar mock with a per-type
+count beside every row, and added *"Nothing hard-codes a type"*.
+
+**Nothing UsArr serves can answer "which types have content".** `reference/http-api.md` §7.1 is
+explicit — *"There are **no facet counts** beside the chips; each is its own aggregate and its own
+read"*. `GET /api/v1/library` takes a `media_type` and returns a keyset page, which answers the
+question only for the one type asked and only by fetching rows; `GET /api/v1/library/recent` returns
+`{items, limit, next_cursor}` and carries no per-type facet; `GET /api/v1/services/health` carries a
+`role` whose CHECK admits four values — `library|acquisition|indexer|download_client` — and no
+media-kind array. There is no read that answers presence, and none that answers a count.
+
+So the rule as written specifies a screen the wire cannot serve — and the sidebar still has to render
+something on every install today.
+
+### Decision
+
+> **All six media-type entries render in the sidebar, unconditionally, in one fixed order, on every
+> install — including the types this install has nothing in. No sidebar row carries a count. A type
+> that is empty says so on its own screen, in words that name which of the reasons it is.**
+>
+> **Per-type hiding is closed, not abandoned, and it reopens on one named condition: a read that
+> answers which of the six types have rows — under the current scope — in one statement.** Until such
+> a read exists on `reference/http-api.md`, re-specifying *"one entry per type that has content"* is
+> specifying a screen the wire cannot serve, and this ADR is the reason a future pass should not
+> "restore" it as though it had been dropped by accident.
+
+### Alternatives rejected
+
+- **Probe six counts on every navigation.** Six aggregates on the render path is what principle 1
+  exists to refuse. ⚠️ It is **not** rejected as unaffordable: §13 already prices this shape, budgeting
+  a scope-chip toggle of *"1 keyset page + 6 sidebar `COUNT(*)` over `library_member ⋈ work`"* at
+  **< 15 ms p50**. It is rejected as **premature** — the budget prices a read nobody has designed, and
+  nothing yet decides whether the counts ride the browse response or take their own endpoint. That is
+  the decision the facet read will have to make, and it is deliberately left to it rather than
+  pre-empted here.
+- **Hide a type on a count nobody measured** — let the sidebar infer presence from whatever rows it
+  happens to have loaded. This is the worst of the four, and it is worth naming because it is the one
+  that looks like compliance. Its failure is **silent**, and it lands in exactly the place a user
+  looks for the missing thing: a library that is really there becomes unreachable from the nav, with
+  no empty state to explain it, because the row that would have carried the explanation is the row
+  that was removed. A wrong row costs one click; a missing row is not visible at all.
+- **Ship no media-type entries until the read exists** — the tree's own earlier answer, still
+  recorded in `web/src/lib/home.ts`'s header. It honours the letter of the hard rule, since nothing
+  hidden is wrongly shown, at the cost of §16's entire v0.1 navigation: six real routes exist under
+  `/library/[type]` and nothing in the shell links to them. *"Not shown at all"* was written to stop
+  an empty row promising content it does not have. It was not written to stop the application having
+  navigation.
+- **Keep the count column and fill it in lazily.** A column blank on first paint that fills per row is
+  the six aggregates again, with layout shift added.
+
+### Consequences
+
+- **The empty state carries the honesty the sidebar can no longer carry**, and it is a real state
+  rather than a blank table. `browseEmptyState` (`web/src/lib/librarygrid.ts`) words it from the
+  services read, separating *"no library-bearing service is connected"* from *"this type has no rows
+  yet"* from *"the library scope excludes everything"* — so the user who clicks an empty type is told
+  which of those is true, which is strictly more than a hidden row tells them.
+- **The hard rule survives untouched for Block A and for search groups.** Neither is contradicted:
+  Block A's per-type rollup is not built at all, and is blocked on this same missing read; a search
+  group's row count is a property of the response the screen already has, so §17.4 rule 1 stays
+  buildable. This ADR amends the sidebar clause and no other.
+- **§17.2's scope-vs-shape paragraph keeps its answer and loses its mechanism.** Scoping to Comics
+  still does not remove the `Movies` row — but *"only the counts narrow"* no longer describes how,
+  because there are no counts. The shape half is now unconditional, which is the simpler half of what
+  it said.
+- **The seam is one line wide.** `TYPE_NAV` in `web/src/routes/+layout.svelte` is a `MEDIA_TYPES.map`
+  with no predicate; the day a facet read lands, adding the predicate is that one line. The order,
+  the labels and the six routes all stay. Reversing this decision is cheap **by construction**, which
+  is why closing it now costs little.
+
+### What is built
+
+`web/src/routes/+layout.svelte`: `TYPE_NAV` maps `$lib/library`'s `MEDIA_TYPES` — the six-member
+`as const` that is §17.2's own order — with no predicate, and the file header carries this argument
+where an implementer meets it rather than only here. The empty states are `browseEmptyState` in
+`web/src/lib/librarygrid.ts`, rendered by `web/src/routes/library/[type]/+page.svelte`. **There is no
+backend half:** this ADR removes a requirement from the wire, and adds none.
