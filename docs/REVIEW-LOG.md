@@ -170,6 +170,8 @@ evidence for each, so the next reader does not "simplify" it back to 1.25.
 **1.25.13+**. It is **left for the owner** rather than changed here: `CLAUDE.md` is the project's
 instruction file and is not mine to edit on an agent's say-so. Flagging it so it is not lost.
 
+✅ **Closed 2026-08-19 — the flag worked and the owner took it up.** [`86337a7`](https://github.com/jdb3750/UsArr/commit/86337a7), *"fix: correct the minimum Go version to 1.25.13"*, corrected **both** documents at once: its message records that *"the stated floor was wrong in both directions: CLAUDE.md said 1.24+ and docs/DEVELOPMENT.md said 1.25+, each justified by a dependency's `go` directive. No dependency is the binding constraint. govulncheck is"* — 15 called stdlib vulnerabilities at 1.25.7, 5 at 1.25.12, clean at 1.25.13. `CLAUDE.md`'s stack line on `main` today reads *"Go 1.25.13+, `CGO_ENABLED=0`, single static binary. The floor is set by govulncheck, not by a dependency"*. **The paragraph above stands as written**; it is the record of the routing, and the routing is the reason the fix happened. ℹ️ **On the sha.** `86337a7` is the commit that made the edit and carries the reasoning; it is **not itself reachable from `origin/main`**, because everything before the 2026-08-17 import was folded into `3c9797c` (346 files, 228,481 insertions). `git merge-base --is-ancestor 86337a7 origin/main` therefore exits 1. **What was verified is the live text on `main`, quoted above** — the sha is cited for its record, not as a reachability claim.
+
 ### 2.3 SSRF-03 — deferred, not applied, with the argument written into the code
 
 The finding is correct on the facts: `stripCredentials` shares its deny-list with the redactor, so
@@ -273,6 +275,7 @@ clean.
   `ARCHITECTURE.md` (§14.5), `DEVELOPMENT.md` (the Go floor).
 - **Left for the owner:** `CLAUDE.md`'s *Go 1.24+* stack line → 1.25.13+ (§2.2). ADR-0024 §6's
   `paths.relative` bullet, which lives on another branch (B-01).
+  ✅ **The first half is closed, 2026-08-19** — the stack line was corrected to **1.25.13+** by [`86337a7`](https://github.com/jdb3750/UsArr/commit/86337a7) and reads that way on `main`; see §2.2's appended note. The ADR-0024 §6 half is **not** re-verdicted here, because this pass did not measure it. **The bullet stands as the round's record**; this line is the flip beside it.
 
 ---
 
@@ -2879,7 +2882,7 @@ new ids take the next free number in their own prefix — **FI-14**, **FI-15**.
 
 | # | Finding | Disposition |
 |---|---|---|
-| **FI-14** (Low) | **`make check` makes TWO network calls and was documented as making one, in three places simultaneously** — `Makefile`'s honesty notice, `DEVELOPMENT.md` §4 and §8, and `CLAUDE.md`. The `vuln` target runs `govulncheck` against `vuln.go.dev` **and** `pnpm audit` against the npm registry; it has done both since `pnpm audit` was added, and the target's own help text read *"THE ONE NETWORK STEP"* while listing two commands one line below | **Applied in the Makefile and `DEVELOPMENT.md`**, corrected to *two network calls, both to vulnerability databases*, with `check-offline` documented as dropping both. **`CLAUDE.md` is NOT amended** — the documentation thread does not edit `CLAUDE.md` on another agent's instruction; the one-line correction is handed to Joe for his own sign-off. **Why it survived:** nobody counted, everybody copied. The sentence was true when written and became false one commit later, and three copies of a claim are three chances to notice and, in practice, none |
+| **FI-14** (Low) | **`make check` makes TWO network calls and was documented as making one, in three places simultaneously** — `Makefile`'s honesty notice, `DEVELOPMENT.md` §4 and §8, and `CLAUDE.md`. The `vuln` target runs `govulncheck` against `vuln.go.dev` **and** `pnpm audit` against the npm registry; it has done both since `pnpm audit` was added, and the target's own help text read *"THE ONE NETWORK STEP"* while listing two commands one line below | **Applied in the Makefile and `DEVELOPMENT.md`**, corrected to *two network calls, both to vulnerability databases*, with `check-offline` documented as dropping both. **`CLAUDE.md` is NOT amended** — the documentation thread does not edit `CLAUDE.md` on another agent's instruction; the one-line correction is handed to Joe for his own sign-off. ✅ **Closed 2026-08-19 — Joe gave the sign-off and it was applied on the 16th in [`e5f07fa`](https://github.com/jdb3750/UsArr/commit/e5f07fa), *"docs: extend verify-don't-assert to gates, fix network-call count"*, whose message records the approval in its own words: *"Two owner-approved edits to CLAUDE.md. Joe was asked directly and approved both; an earlier agent correctly declined to make them on an agent's instruction alone."* `CLAUDE.md`'s Quality-gate bullet now reads *"makes exactly two network calls, both to vulnerability databases — govulncheck's to `vuln.go.dev` and `pnpm audit`'s to the npm registry. `make check-offline` drops both"*, read on `main` today. **The withholding above was correct when written and stays as history** — declining to edit the owner's file on an agent's instruction is the right default, and the record of it is what made the ask possible. ℹ️ **On the sha.** `e5f07fa` is the commit that made the edit and carries the reasoning; it is **not itself reachable from `origin/main`**, because everything before the 2026-08-17 import was folded into `3c9797c` (346 files, 228,481 insertions). `git merge-base --is-ancestor e5f07fa origin/main` therefore exits 1. **What was verified is the live text on `main`, quoted above** — the sha is cited for its record, not as a reachability claim. **Why it survived:** nobody counted, everybody copied. The sentence was true when written and became false one commit later, and three copies of a claim are three chances to notice and, in practice, none |
 | **FI-15** (Medium) | **An invented API vocabulary in a reference doc reached the UI. One error, two files.** `docs/reference/tags.md:54` listed the `flag:` namespace as `freeleech \| internal \| scene \| proper \| repack \| nuked`. **`proper`, `repack` and `nuked` are not Prowlarr indexer flags and never have been** — grepping a `develop` checkout at `1f7db1e` for `IndexerFlag` alongside those three returns nothing. Four real values were missing: `exclusive`, `neutralleech`, `halfleech`, `doubleupload`. **The downstream consequence is the finding, not a second one:** the same three invented names had already propagated into the design mockups, which rendered a `repack` chip in the indexer-flags position — a value that field cannot produce. The design thread is removing it and rendering only the real set | **Applied in `tags.md`**; the mockup fix is the design thread's and is recorded here as the *consequence* rather than a separate row, because splitting them loses the point. **The cost of an invented value in a reference doc is never the wrong line — it is the UI built on it, found later and further away, by someone who reasonably treated the doc as authoritative.** `tags.md` now states the source (`src/NzbDrone.Core/Indexers/IndexerFlag.cs`), the re-check command, and the torrents-only caveat below |
 
 **A correction to the report that raised FI-15, and it is the same lesson one level up.** The finding
@@ -5955,6 +5958,7 @@ else's file.
 * **`CLAUDE.md`'s one-line description of `make check` now under-counts the gate** — it lists five
   offline steps and there are six. Left for the owner: it is the project instruction file, and this
   entry does not edit it on its own initiative.
+  ✅ **Closed 2026-08-19 — the owner took it up in [`15f5c4e`](https://github.com/jdb3750/UsArr/commit/15f5c4e)**, *"docs: the quality-gate bullet lists six check-offline steps, not five"*, whose message names the omitted step and how it was counted: *"the Makefile's check-offline target is `fmt-check lint build-tagged modverify secrets test`; CLAUDE.md named five of those and omitted build-tagged … Counted off the Makefile target rather than taken on report."* `CLAUDE.md` on `main` today reads *"`make check` (`fmt-check` + `lint` + `build-tagged` + `modverify` + `secrets` + `test`, then `vuln`)"* — six offline steps plus `vuln`. **The withholding above stands as written.** ℹ️ **On the sha.** `15f5c4e` is the commit that made the edit and carries the reasoning; it is **not itself reachable from `origin/main`**, because everything before the 2026-08-17 import was folded into `3c9797c` (346 files, 228,481 insertions). `git merge-base --is-ancestor 15f5c4e origin/main` therefore exits 1. **What was verified is the live text on `main`, quoted above** — the sha is cited for its record, not as a reachability claim.
 
 ---
 
@@ -6402,6 +6406,8 @@ that one step"*, which is exactly the misreading this entry is about. **Fix shap
 these are aspirational or descriptive, and mark them accordingly — an instance of `SD-01`'s class,
 routed rather than swept, since `CLAUDE.md` is the owner's file and this thread does not edit it on
 another agent's instruction (`FI-14`'s precedent).
+
+✅ **Closed 2026-08-19 — the routing was taken up and the fix landed, and this was RE-VERIFIED by reading rather than inherited from the claim.** [`NOCI-01`](#noci-01--the-repo-named-a-ci-as-an-actor-in-nine-places-and-has-never-had-one-applied-the-constraints-are-kept-the-actor-is-not) took the hand-off *with the owner's instruction attached* — its own words — and applied it across three files as [`2d3138a`](https://github.com/jdb3750/UsArr/commit/2d3138a), *"docs: nine sites named a CI as an actor and there is no CI — NOCI-01"*. **What was read on `main` today, not taken on report:** `CLAUDE.md`'s Tests bullet now reads *"**There is no CI**, so `make check` is the whole gate, and nothing mechanises it either: `CLAUDE.md` requires it before a commit, a person or an agent has to type it, and `make design` is required by no document at all"*, its environment claim is re-pinned to the true one (*"the agent container the build runs in has no Docker daemon and no ffmpeg"*), and its query-plan sentence is re-tensed to *"belong in a CI if one is ever added"*. `docs/DEVELOPMENT.md` §8 is retitled *"The unattended environment: no Docker daemon, no FFmpeg, two network calls"*. So the *marking* this Fix shape asked for is done. 🚩 **What is NOT closed by it, and is a different claim:** `NOCI.5`'s third bullet — *"the decision `OPTIN-01` says the repo owes is still owed"* — **still holds**, because nothing here wires anything to anything. The repo now *describes* its automation correctly; it still has none. **The paragraph above stands as written.** ℹ️ **On the sha.** `2d3138a` is the commit that made the edit and carries the reasoning; it is **not itself reachable from `origin/main`**, because everything before the 2026-08-17 import was folded into `3c9797c` (346 files, 228,481 insertions). `git merge-base --is-ancestor 2d3138a origin/main` therefore exits 1. **What was verified is the live text on `main`, quoted above** — the sha is cited for its record, not as a reachability claim.
 
 ## The irony, stated plainly
 
@@ -14754,6 +14760,7 @@ wrongly.**
   and the orphaned Ongoing comics survive into v0.1), **3** Block B items, and **5** search results.
 - **The switcher label and the notice strings**, quoted to match `index.html` exactly:
   `v0.1: Kavita, Prowlarr`, and *"Drawn over the two services v0.1 connects"*.
+  ⚠️ **The label quoted here was an exact quote of `index.html` when this was written and stopped being one on 2026-08-19**, when [`a1995f9`](https://github.com/jdb3750/UsArr/commit/a1995f9) — *"docs: the mockup switcher still named Kavita as v0.1's catalogue source"* — flipped it to **`v0.1: BookOrbit, Prowlarr`** across `index.html`, `libraries.html`, `requests.html`, `search.html`, `services.html` and the generated `prototype.html`, following ADR-0052. **The quote is left standing rather than re-keyed**: it is a dated record of what the screen said, and `DEVELOPMENT.md` §11 is explicit that a citation inside a dated record is history rather than staleness. The flag is here so a reader landing mid-document does not take it as live. ℹ️ **The v0.1 figures in the bullets around it are NOT re-keyed either, and deliberately** — `a1995f9`'s message says so: they are arithmetically derived from the Kavita-era install, and the mockups' own README now states that provenance where a reader meets the numbers. The inconsistency is stated, not hidden and not resolved.
 - **The milestone argument behind the labels was re-derived, not re-pointed.** It rested on
   ADR-0035's amendment — *"v0.1 ships no catalogue source at all"* — which ADR-0041 falsified. The
   two labels are now argued as **asymmetric on purpose**: v0.1's names its services outright because
@@ -19753,6 +19760,10 @@ the same list): `README.md` (generated from §16), `ROADMAP.md` §1/§3/§4, `FU
 mockups**, a design-asset change rather than a prose one. **Claiming they were fixed would be exactly
 the invented status `CLAUDE.md` forbids.**
 
+⚠️ **Amended 2026-08-19 — the mockup half of that sentence is now done, and only the mockup half.** [`a1995f9`](https://github.com/jdb3750/UsArr/commit/a1995f9), *"docs: the mockup switcher still named Kavita as v0.1's catalogue source"*, flipped the rendered option label to **`v0.1: BookOrbit, Prowlarr`** in `index.html`, `libraries.html`, `requests.html`, `search.html` and `services.html`, with `prototype.html` **regenerated by `build_prototype.py` rather than hand-edited**; `design/mockups/README.md` carries the new label too. The guard was fired in both directions rather than trusted: `check.mjs` §8b asserts each option label matches `/v0\.1|milestone/i`, so rewriting the label to *"BookOrbit and Prowlarr"* fails it with *"1 option label(s) name a stack without naming a milestone"* and it passes with the milestone restored — a milestone check, not a service-name check. 🚩 **`design/DESIGN-DIRECTION.md` §9.6 is STILL STALE and is another lane's**, which `a1995f9`'s own message records as owed: *"DESIGN-DIRECTION §9.6 quotes the old label deliberately, as the assets rendered it, and that quotation is now the stale one."* It is **not touched here**, and neither is ADR-0052's stale sentence. **The list above stands as written** — it was true when taken, and this note is the flip beside it, not a rewrite of it.
+
+✅ **Both were closed by their own lane within the hour, 2026-08-19, and this note catches up rather than being rewritten.** [`a6bf6c1`](https://github.com/jdb3750/UsArr/commit/a6bf6c1), *"docs: §9.6's switcher quotation catches up with the asset it tracks"*, moved §9.6's quotation to `v0.1: BookOrbit, Prowlarr` **behind the asset, which is the direction its own rule requires**, and kept the rationale so the next reader does not "fix" a quotation ahead of what it quotes. [`cad0563`](https://github.com/jdb3750/UsArr/commit/cad0563), *"docs: ADR-0052's mockup re-draw is discharged by a1995f9, dated in place"*, flagged ADR-0052's list sentence in place, unstruck, *"because nothing it claims is falsified — it was true the day it was written; only its status moved, from owed to done"*. **The rest of that list stays owed.** ℹ️ `cad0563` is also independent corroboration of the marks correction recorded in `SD-04`'s second amendment: it judged the marks rather than performing them, reasoning that `DECISIONS.md` *"owes three always and a fourth where needed"* and that here **only mark 4 was owed**, since no claim of ADR-0052 stopped holding and no ADR supersedes it. Two lanes reached the same reading of that section on the same day, from opposite ends.
+
 ## LS-359 — what `make check` green is worth on this change, stated honestly
 
 **Very little about the decision, and the change is a decision.** This is a docs-only diff: three
@@ -20327,7 +20338,9 @@ counts and the symbol-level citations are the evidence — cited by file and sym
 line, per `DEVELOPMENT.md` §11, because `docs/` has several lanes pushing to it concurrently. They
 were counted at `794b1a4` and are re-countable by anyone.
 
-## SD-04 — §8.1 and §17.2 specified a sidebar rule the wire cannot serve, and drew a count column to match. **Applied.**
+---
+
+# SD-04 — §8.1 and §17.2 specified a sidebar rule the wire cannot serve, and drew a count column to match. **Applied.**
 
 **Another instance of `SD-01`, and a different failure from `SD-02`'s and `SD-03`'s.** `SD-02`'s rows
 restate a status they do not own; `SD-03`'s claim was false when measured. This one was **never
@@ -20345,11 +20358,11 @@ the hour, and three of the sites here are lines this entry's own commits move.
 | `design/DESIGN-DIRECTION.md` §8.1, the *"decision, in two halves"* blockquote | *"one sidebar entry per type **that has content**"* | ✅ **Applied.** Amended in place, quoting what it used to say |
 | §8.1, the paragraph introducing the sidebar mock | *"Type entries are **data-driven**, not markup … **a type the user does not have is not shown at all**, so a movies-only install renders two content nouns"* | ✅ **Applied.** Replaced by the shipped decision, its reason, and the one reopening condition |
 | §8.1, the ASCII sidebar mock | a **count column** (`Movies 1,204`) beside each type, annotated *"present media types only … counts respect the scope chip"* | ✅ **Applied.** Column deleted; the annotation now names why there is none |
-| §12, the *"More media types are here, not deferred"* bullet | *"§17.2's rule — a type the user does not have is not shown at all"* | ⚠️ **Re-verdicted on rescue, 2026-08-19 — it says ✅ Applied and that is false of `main`.** The second copy of the falsified rule is still standing in §12; only the §8.1 copies were replaced. ⏭️ **Open** — see the amendment below |
+| §12, the *"More media types are here, not deferred"* bullet | *"§17.2's rule — a type the user does not have is not shown at all"* | ⚠️ **Re-verdicted on rescue, 2026-08-19 — it says ✅ Applied and that is false of `main`.** The second copy of the falsified rule is still standing in §12; only the §8.1 copies were replaced. ⏭️ **Open** — see the amendment below. ✅ **Closed 2026-08-19 by [`fb58790`](https://github.com/jdb3750/UsArr/commit/fb58790)**, *"docs: §12's media-type seam still cited the un-narrowed §17.2 rule (ADR-0053)"* — fourteen added lines, nothing deleted: the bullet's original sentence is left standing and a dated ⚠️ block is added beside it naming ADR-0053, quoting `reference/http-api.md` §7.1's *"no facet counts"*, and recording that **the seam itself survives** because hard-coding a type list is still forbidden. Annotation, not rewrite — which is what made it correct to close here. 📌 **The rescue re-verdict above stands as history** |
 | `ARCHITECTURE.md` §17.2, the two-axes table, `Media type` row | *"**navigation**: one sidebar entry per type *that has content*"* | ✅ **Applied.** §17 is the authoritative screen spec, so this is where the narrowed rule has to live |
 | §17.2, the closing *"hard rule everywhere"* paragraph | *"a type the user does not have is **not shown at all** — not in Block A, not in the sidebar, not as a search group"* | ✅ **Applied.** Narrowed to search groups, with both carve-outs and their two separate reasons |
 | §17.2, *"Where the two axes meet"* | *"§17.2's hard rule (below) removes a type …; §8.1 says the sidebar counts respect the scope chip"* | ✅ **Applied.** Both premises moved under this pass; the paragraph's conclusion (*the shape never moves*) is untouched and is now unconditional |
-| `DECISIONS.md` [ADR-0027](./DECISIONS.md#adr-0027), its Decision blockquote and its Consequences list | *"showing only types that have content"* and *"A type with zero items is not rendered anywhere — sidebar, home, or search group"* | ⚠️ **Re-verdicted on rescue, 2026-08-19 — it says ✅ Applied and that is false of `main`.** It was true of the branch this entry was written on, whose ADR commit carried the four marks; the commit that actually landed did not. ⏭️ **Open** — see the amendment below |
+| `DECISIONS.md` [ADR-0027](./DECISIONS.md#adr-0027), its Decision blockquote and its Consequences list | *"showing only types that have content"* and *"A type with zero items is not rendered anywhere — sidebar, home, or search group"* | ⚠️ **Re-verdicted on rescue, 2026-08-19 — it says ✅ Applied and that is false of `main`.** It was true of the branch this entry was written on, whose ADR commit carried the four marks; the commit that actually landed did not. ⏭️ **Open** — see the amendment below. ✅ **Closed 2026-08-19 by [`6283585`](https://github.com/jdb3750/UsArr/commit/6283585)**, *"docs: ADR-0027 never received the marks ADR-0053 owes it"* — read on `main` rather than taken on report: the index row now ends *"⚠️ **amended 2026-08-19 by [ADR-0053](#adr-0053)**"*, the `Status:` line carries the same flag, a `> ⚠️ **AMENDED 2026-08-19 by [ADR-0053](#adr-0053)…**` blockquote sits directly under it, and both falsified clauses are struck **in place** — the Decision reads *"~~showing only types that have content~~"* and the consequence *"~~sidebar,~~ home, or search group"*, each with the correction beside it. 📌 **The rescue re-verdict above stands as history and is not overwritten**: it was true of `main` on the day it was written, and a verdict that was right then is not deleted because it is wrong now |
 | §17.2, Block A's bullet, *"The sidebar counts follow the same rule"* | the unit-labelling rule for a mixed-unit count column | ⏭️ **Open, deliberately.** It is a rule about how a count is *rendered*, correct whenever one exists, and it is not contradicted by there being none today. Recorded so the next reader knows it was looked at and left |
 
 **The wire fact, quoted rather than summarised.** `docs/reference/http-api.md` **§7.1**, the paragraph
@@ -20381,7 +20394,7 @@ which of the six types have rows under the current scope, in one statement** —
 *with* its data source rather than on its own. ⚠️ **Both halves of that sentence are corrected on
 rescue, 2026-08-19** — the number was `0052` when written, and the condition was narrowed to
 `GET /api/v1/library`, which is the one thing the ADR as merged declines to decide. See the
-amendment below. ADR-0027 is amended by the four marks its own file requires and is not rewritten.
+amendment below. ADR-0027 is amended by the four marks its own file requires and is not rewritten. ⚠️ **Corrected 2026-08-19 — "the four marks its own file requires" states as a standing rule what is actually a consequence of this ADR's text.** `DECISIONS.md`'s *How an ADR is amended when the world moves under it* section owes **three marks always** — the index row, the `Status:` line, and a dated block directly under it — **and a fourth only where a falsified sentence a reader could otherwise take as live exists**, in its own words *"wherever a reader could otherwise take it as live, since anchors and search land people mid-document"*. ADR-0027 met that condition twice over, since the rule it lost is written twice, so all four were owed here and all four landed in `6283585`. **Four is what ADR-0027's text produced, not what the section requires.**
 
 **`SD-03`'s `DESIGN-DIRECTION.md` row was closed by this pass** and its three facts were re-measured
 here rather than inherited: no DDL in any migration (two comment lines, in `00005_library_sync.sql`'s
@@ -20402,7 +20415,7 @@ What a reader can re-run is above: the §7.1 quote, the `+layout.svelte` symbols
 **`SD-04` is the next free top-level id after `SD-03`.** The `LS-`/`RK-` series run on their own
 threads; a gap in any of them is fine and nobody closes one.
 
-### ⚠️ Amendment, 2026-08-19 — this entry was rescued off an abandoned branch, and two of its verdicts did not survive the move
+## ⚠️ Amendment, 2026-08-19 — this entry was rescued off an abandoned branch, and two of its verdicts did not survive the move
 
 **What happened, because the provenance is the point.** Everything above this heading was written on
 `docs/dd-8.1-sidebar-facets` and committed there as `a91d9eb`. That branch was abandoned with the
@@ -20426,10 +20439,10 @@ narrower than the work it replaced, and neither gap is visible from the ADR.
 
 | Row | Why it went false | Measured |
 |---|---|---|
-| `DECISIONS.md` ADR-0027, its Decision blockquote and Consequences list | The abandoned `d16d1e7` amended ADR-0027 in four places — the index row, the `Status:` line, the Decision blockquote and the Consequences bullet. The landed `92eff15` has **two** hunks, and neither is one of them: an index row for `0053` and the `ADR-0053` body. So ADR-0053 amends ADR-0027 **from its own side only** | ADR-0027's index row still reads *"**Accepted** — settles §17.2's open question"* with no `⚠️ amended` flag; its Decision blockquote still says *"showing only types that have content"*; its Consequences still say *"A type with zero items is not rendered anywhere — sidebar, home, or search group"*, unflagged. **Three of the three marks `DECISIONS.md`'s *How an ADR is amended* section calls always owed are absent, and so is the fourth** |
-| `DESIGN-DIRECTION.md` §12, the *"More media types are here, not deferred"* bullet | `3192d06`'s four `DESIGN-DIRECTION.md` hunks all sit in §8.1's range. §12 is ~1,340 lines further down and was not reached | The bullet still reads *"§17.2's rule — a type the user does not have is not shown at all"*, which is the sentence `ADR-0053` narrowed |
+| `DECISIONS.md` ADR-0027, its Decision blockquote and Consequences list | The abandoned `d16d1e7` amended ADR-0027 in four places — the index row, the `Status:` line, the Decision blockquote and the Consequences bullet. The landed `92eff15` has **two** hunks, and neither is one of them: an index row for `0053` and the `ADR-0053` body. So ADR-0053 amends ADR-0027 **from its own side only** | ADR-0027's index row still reads *"**Accepted** — settles §17.2's open question"* with no `⚠️ amended` flag; its Decision blockquote still says *"showing only types that have content"*; its Consequences still say *"A type with zero items is not rendered anywhere — sidebar, home, or search group"*, unflagged. **Three of the three marks `DECISIONS.md`'s *How an ADR is amended* section calls always owed are absent, and so is the fourth** — ✅ **no longer true of `main`, 2026-08-19, [`6283585`](https://github.com/jdb3750/UsArr/commit/6283585)**: all four are present, and the three quoted-as-still-standing sentences above have all moved. The index row gains *"⚠️ **amended 2026-08-19 by [ADR-0053](#adr-0053)**"*; the `Status:` line gains the same flag; a dated `> ⚠️ **AMENDED…**` blockquote sits under it naming what no longer holds and what survives; and each falsified clause carries a struck-in-place inline flag. 📌 **The measurement above is left exactly as taken** — it was a true reading of `main` at `794b1a4` and re-dating it would turn a measurement into a claim nobody ran |
+| `DESIGN-DIRECTION.md` §12, the *"More media types are here, not deferred"* bullet | `3192d06`'s four `DESIGN-DIRECTION.md` hunks all sit in §8.1's range. §12 is ~1,340 lines further down and was not reached | The bullet still reads *"§17.2's rule — a type the user does not have is not shown at all"*, which is the sentence `ADR-0053` narrowed — ✅ **closed 2026-08-19 by [`fb58790`](https://github.com/jdb3750/UsArr/commit/fb58790)**. The quoted sentence is **still there**, and that is the fix rather than a shortfall in it: `fb58790` adds fourteen lines and deletes none, flagging the sentence in place with ADR-0053, the §7.1 wire fact, and the note that the seam the bullet exists to protect is untouched. 📌 **The measurement above stands as taken at `794b1a4`** |
 
-**Neither is fixed here, and the reason is scope rather than judgement.** `docs/DECISIONS.md` and
+✅ **Both are now fixed — amended 2026-08-19: `docs/DECISIONS.md` by [`6283585`](https://github.com/jdb3750/UsArr/commit/6283585) and `docs/design/DESIGN-DIRECTION.md` §12 by [`fb58790`](https://github.com/jdb3750/UsArr/commit/fb58790), each by the thread that owns the file, exactly as the routing intended.** The paragraph below is left standing as the record of why they were routed rather than swept, because the routing is the part worth keeping. **Neither is fixed here, and the reason is scope rather than judgement.** `docs/DECISIONS.md` and
 `docs/design/` are held by other threads tonight; `docs/REVIEW-LOG.md` is this pass's only write
 target. Both are **routed, not dropped** — recorded with the exact sentence, the exact document and
 the exact absent marks, so the thread that owns each can act without re-deriving anything.
@@ -20463,7 +20476,63 @@ both and nothing about whether any of the prose is true. What is re-runnable is 
 `@@ -2088`, `@@ -2118` and `@@ -2153`; `git show 92eff15 --unified=0 -- docs/DECISIONS.md` returns
 two, `@@ -106,0 +107` and `@@ -7216,0 +7218,95`. That difference is the whole finding.
 
-## SD-05 — `Caps` "already carries" a capability split that exists only as a design, and the **shipped column** that makes it not `SD-03`. **Applied at `703db64`; this entry is the record that was owed.**
+## ⚠️ Second amendment, 2026-08-19 — both routed halves are closed, and the marks rule is restated as a rule rather than a count
+
+📎 **A pure append, and every flip above is an append too.** Nothing in `SD-04` or in its first
+amendment is renumbered, reworded or deleted. Two verdicts and two Measured cells gain a **third**
+dated line each; the rescue re-verdicts stay standing beside them. **A verdict that turned out wrong
+is history with a newer verdict next to it, not an edit** — which is the same rule
+[`DEVELOPMENT.md`](./DEVELOPMENT.md) §11 states for this file and `DECISIONS.md` states for an ADR.
+
+**Both halves the first amendment routed are now closed, each by the thread that owned the file.**
+
+| Routed half | Closed by | What was read on `main` |
+|---|---|---|
+| `docs/DECISIONS.md` ADR-0027 — the four marks | [`6283585`](https://github.com/jdb3750/UsArr/commit/6283585), *"docs: ADR-0027 never received the marks ADR-0053 owes it"* — one file, `+36 −4` | The index row ends *"⚠️ **amended 2026-08-19 by [ADR-0053](#adr-0053)**"*; the `Status:` line ends *"⚠️ **Amended 2026-08-19 by [ADR-0053](#adr-0053)** — the data-driven **sidebar** clause only; see the block below"*; a `> ⚠️ **AMENDED 2026-08-19 …**` blockquote sits directly under it; the Decision reads *"~~showing only types that have content~~"* and the consequence *"A type with zero items is not rendered anywhere — ~~sidebar,~~ home, or search group"*, each struck **in place** with the correction beside it |
+| `docs/design/DESIGN-DIRECTION.md` §12 — the un-narrowed rule | [`fb58790`](https://github.com/jdb3750/UsArr/commit/fb58790), *"docs: §12's media-type seam still cited the un-narrowed §17.2 rule (ADR-0053)"* — one file, **+14 −0** | The bullet's original sentence is **still there** and that is the fix: fourteen added lines, nothing deleted, carrying a dated ⚠️ block that names ADR-0053, quotes `reference/http-api.md` §7.1's *"no facet counts"*, and records that the seam survives because hard-coding a type list is still forbidden |
+
+🚩 **`ARCHITECTURE.md` §17.2's *"The sidebar counts follow the same rule"* row is STILL ⏭️ Open, and
+closing it would be the defect this pass exists to prevent.** It is a rule about how a count is
+*rendered* — the unit-labelling of a mixed-unit column — and it will be correct on the day such a
+count exists. **It is not contradicted by there being none today**, so there is nothing to flip. A
+tidy pass that swept it closed alongside the two above would be trading a true ⏭️ for a false ✅, and
+the row's own note already says it was looked at and left. **Left open on purpose, for the second
+time, and this is the second record saying so.**
+
+⚠️ **One correction to this entry's own prose, and it is a correction about a rule rather than about
+a fact.** The body above says ADR-0027 *"is amended by the four marks its own file requires"*, and
+the first amendment's Measured cell counts *"three of the three marks … and so is the fourth"*.
+**`DECISIONS.md` does not require four.** Its *How an ADR is amended when the world moves under it*
+section owes **three marks always** — the index row, the `Status:` line, and a dated block directly
+under it — **and a fourth only where a falsified sentence a reader could otherwise take as live
+exists**, in its own words: *"wherever a reader could otherwise take it as live, since anchors and
+search land people mid-document."* **Both conditions were met for ADR-0027**, whose lost rule is
+written twice — once in the Decision blockquote and once in the Consequences — so all four were owed
+here and all four landed. **Four is a consequence of ADR-0027's text, not a standing count**, and
+`6283585`'s own commit message states the rule correctly (*"owes three marks always and a fourth
+where it is needed"*). An entry that quotes the count instead of the rule teaches the next reader to
+look for four marks on an ADR that only ever owed three.
+
+ℹ️ **Measured at `c7d9ed3`, in this pass's own worktree off the fetched `origin/main`; the batch was then merged forward over `adf8960` and `cad0563` and re-gated on each.** Every claim
+above was read out of the tree rather than taken on report — that check was the point of the pass.
+The same batch flipped four stale *"still owed by the owner"* dispositions elsewhere in this file
+(`FI-14`, the Go-floor line, the six-step gate count and `OPTIN-01`'s routing to `NOCI-01`), and
+each of those was read on `main` before it was flipped rather than taken from the report that
+raised it.
+`6283585` was confirmed to be an ancestor of `origin/main` (`git merge-base --is-ancestor`, exit 0)
+**before** anything here was re-verdicted; had it not carried the marks, the rescue re-verdict would
+have been left exactly as it stood.
+
+**What a green gate is worth on this amendment.** The same as on everything else in `SD-04`, and it
+bears repeating because this amendment's whole subject is a claim that was believed without being
+read: `make check` reaches `docs/*.md` through **`gitleaks` alone** — `fmt-check`'s prettier half
+runs inside `web/`, so no Markdown at the repo root or under `docs/` is formatter-gated — so a green
+attests *"no credential-shaped string was added"* and **nothing whatever** about whether any sentence
+here is true. The evidence is the quoted text above, re-readable by anyone.
+
+---
+
+# SD-05 — `Caps` "already carries" a capability split that exists only as a design, and the **shipped column** that makes it not `SD-03`. **Applied at `703db64`; this entry is the record that was owed.**
 
 **The finding was applied without an entry, which is the process defect underneath the prose one.**
 The working practice is that every finding is *applied or rebutted **in writing***. `703db64` applied
@@ -20571,7 +20640,7 @@ Go commits merged as `dd88a67` — so the two claims that could have gone stale 
 that tree rather than assumed**: `git grep -n Caps -- . ':!docs/' ':!*.md'` still returns the same
 six lines, and `git grep -n capabilities -- internal/store/` still returns **nothing**. Both hold.
 
-### SD-03 — amended dispositions: all four sites left ⏭️ Open are **closed**, and by commits that logged nothing here
+## SD-03 — amended dispositions: all four sites left ⏭️ Open are **closed**, and by commits that logged nothing here
 
 **Read this before routing anything off `SD-03`'s table.** `SD-03`'s table was accurate when written
 and is now stale in four of its seven rows. Later commits swept the sites it left open and **none
@@ -20901,7 +20970,9 @@ fires nothing by construction; `LS-372` and `LS-373` cite guards that already ex
 not run against a planted failure. Where an entry names a test, it names the file and line so the
 next reader can fire it themselves.
 
-## SD-06 — `accessToken` was not on the ONE list, and the lookup folds case and nothing else
+---
+
+# SD-06 — `accessToken` was not on the ONE list, and the lookup folds case and nothing else
 
 **Found by reading source, not by a drill — and then confirmed by a drill fired in both directions.**
 That order is the point of the entry. `internal/ssrf`'s `isCredentialParam` lowercases the incoming
@@ -20928,7 +20999,7 @@ all resolve to one of them.
 **before** the adapter moved off Kavita, so it is not a defect introduced by ADR-0052; it is one
 ADR-0052 made more likely to be hit.
 
-### The drill, both directions, run before it was trusted
+## The drill, both directions, run before it was trusted
 
 `LS-345` established that a guard is kept as standing tests rather than as a commit message, and
 `LS-348` that the probe is generated rather than written down. Both are honoured. The probe is a
@@ -20968,7 +21039,7 @@ Three things keep that pass from being worth less than it looks:
    "access_token" but not "accesstoken"`*. It was restored immediately. A guard that has never been
    triggered is indistinguishable from no guard.
 
-### Applied by extending the one list, and by pinning the class rather than the name
+## Applied by extending the one list, and by pinning the class rather than the name
 
 **`accesstoken`, `authtoken` and `secretkey` added to `ssrf.credentialParams`** — the precedent
 `W-01` set and `LS-347` followed, extending the ONE list and never starting a second. No new list
@@ -20993,7 +21064,7 @@ separator-insensitive matching that nobody wrote down, and `credentialParams` is
 fetched. The twins cost one line each and leave every widening visible in the diff. The reasoning is
 in the code comment, not only here.
 
-### The maintenance contract was honoured, and one document was deliberately left alone
+## The maintenance contract was honoured, and one document was deliberately left alone
 
 `internal/ssrf/redact.go`'s comment names two mirrors that must move with the list, and **both were
 updated in the same commit**: `ARCHITECTURE.md` §14 item 5 and `reference/security.md` §5, each of
@@ -21030,7 +21101,7 @@ into a pointer, and its illustrative names carry no count and claim no completen
 **correct as it stands and adding the three names would undo `DS-06`**. This is recorded because the
 obvious reflex — "update every place the names appear" — is exactly the bug `DS-06` closed.
 
-### Residual, recorded rather than fixed
+## Residual, recorded rather than fixed
 
 **A camelCase name whose lowercased form is not a concatenation of an existing entry is still
 missed**, because the deny-list is a deny-list. `tokenHash` and `passwordHash` appear in BookOrbit's
