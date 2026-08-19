@@ -614,12 +614,18 @@ func TestRecentWorksPlanGuardFires(t *testing.T) {
 	t.Run("index dropped", func(t *testing.T) {
 		s := newTestStore(t)
 		seedRecentCorpus(t, s)
-		if err := s.DB().Write(t.Context(), func(ctx context.Context, tx *sql.Tx) error {
-			_, err := tx.ExecContext(ctx, `DROP INDEX ix_work_added`)
-			return err
-		}); err != nil {
-			t.Fatalf("drop index: %v", err)
-		}
+		// ⚠️ dropIndexesAndConfirm, never a bare DROP: recentWorksPlan below
+		// EXPLAINs on the READ pool, and MEASURED on this tree, a read-pool
+		// connection that has already planned this statement keeps answering
+		// with the PRE-DROP plan indefinitely — repeating the EXPLAIN does not
+		// shake it loose. This arm survives a bare drop today only because
+		// nothing plans before it; that is an accident of ordering, and one seed
+		// refactor that plans on its way past turns this arm into a measurement
+		// of a schema that no longer exists. The confirming read inside is both
+		// the proof and the cure. Undocumented behaviour, characterised
+		// empirically — the helper in store_test.go carries the measurement and
+		// its caveats.
+		dropIndexesAndConfirm(t, s, "ix_work_added")
 
 		joined := recentWorksPlan(t, s, OwnerScope(1), RecentWorksCursor{
 			AddedAt: sql.NullString{String: "2026-08-07 10:00:00", Valid: true}, ID: 4,

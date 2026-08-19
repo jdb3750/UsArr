@@ -640,11 +640,11 @@ func TestLibraryIDsBySlug(t *testing.T) {
 // Every arm below builds a fresh store, breaks something, and only then
 // EXPLAINs, and that order is load-bearing rather than stylistic. EXPLAIN the
 // same statement twice with a DDL change in between and the second answer is
-// the FIRST plan: measured here at 64 of 64 repeats, a plan taken before
-// `dropIndex(t, s, "ix_work_added")` and taken again after it said
+// the FIRST plan: measured here at 64 of 64 repeats, a plan taken before a
+// `DROP INDEX ix_work_added` and taken again after it said
 // `SEARCH w USING INDEX ix_work_added` both times, naming an index that no
-// longer exists. (browseWorksPlan reads through the read pool while dropIndex
-// writes on the single writer, so the connection answering holds a statement
+// longer exists. (browseWorksPlan reads through the read pool while the drop
+// goes to the single writer, so the connection answering holds a statement
 // compiled against the pre-DDL schema; the exact layer that caches it does not
 // matter, the observable does.)
 //
@@ -657,6 +657,15 @@ func TestLibraryIDsBySlug(t *testing.T) {
 // construction and pins nothing, because it re-reads its own first answer.
 // Every arm here is already on the safe side; this note is so the next one is
 // too. Measure once, on a store that is already in the state under test.
+//
+// ⚠️ ORDERING IS NO LONGER THE ONLY DEFENCE, AND MUST NOT BE. Every drop below
+// goes through dropIndexesAndConfirm (store_test.go), which proves ON THE READ
+// POOL that the drop landed before any EXPLAIN runs. Ordering alone is what made
+// these arms correct by ACCIDENT: measured, a pool that has never planned the
+// statement sees the drop immediately, so it is PRIMING that arms the trap — and
+// any refactor that plans the shipped statement before the drop, a seed helper
+// that grows an assertion say, re-breaks all of them at once without touching
+// this file.
 // ─────────────────────────────────────────────────────────────────────────────
 
 // browseWorksPlanFaults is the guard, factored out so the tests that fire it
@@ -957,7 +966,15 @@ func TestBrowseWorksPlanGuardFires(t *testing.T) {
 	t.Run("ordering index dropped", func(t *testing.T) {
 		s := newTestStore(t)
 		seedBrowseCorpus(t, s)
-		dropIndex(t, s, "ix_work_added")
+		// ⚠️ dropIndexesAndConfirm, never a bare DROP: browseWorksPlan below
+		// EXPLAINs on the READ pool, and MEASURED on this tree, a read-pool
+		// connection that has already planned this statement keeps answering with
+		// the PRE-DROP plan indefinitely — repeating the EXPLAIN does not shake it
+		// loose, though sqlite_master on that same connection is correct
+		// throughout. The confirming read inside is therefore both the proof and
+		// the cure. Undocumented behaviour, characterised empirically — the helper
+		// in store_test.go carries the measurement and its caveats.
+		dropIndexesAndConfirm(t, s, "ix_work_added")
 
 		joined := browseWorksPlan(t, s, OwnerScope(1), WorksFilter{LibraryIDs: []int64{2, 3}}, dated)
 		faults := browseWorksPlanFaults("ix_work_added", joined)
@@ -972,7 +989,12 @@ func TestBrowseWorksPlanGuardFires(t *testing.T) {
 	t.Run("membership index dropped", func(t *testing.T) {
 		s := newTestStore(t)
 		seedBrowseCorpus(t, s)
-		dropIndex(t, s, "ix_libmem_work")
+		// ⚠️ dropIndexesAndConfirm, never a bare DROP — MEASURED, the read pool
+		// this arm EXPLAINs on goes on serving the stale PRE-DROP plan once it has
+		// planned the statement, so the confirming read inside is the arm's
+		// correctness and not tidiness. Undocumented behaviour, characterised
+		// empirically; store_test.go carries the measurement.
+		dropIndexesAndConfirm(t, s, "ix_libmem_work")
 
 		joined := browseWorksPlan(t, s, OwnerScope(1), WorksFilter{LibraryIDs: []int64{2, 3}}, dated)
 		// ⚠️ browseWorksPlanFaults does NOT fire here, and that is measured
@@ -1024,7 +1046,12 @@ func TestBrowseWorksPlanGuardFires(t *testing.T) {
 	t.Run("ix_edition_format dropped", func(t *testing.T) {
 		s := newTestStore(t)
 		seedBrowseCorpus(t, s)
-		dropIndex(t, s, "ix_edition_format")
+		// ⚠️ dropIndexesAndConfirm, never a bare DROP — MEASURED, the read pool
+		// this arm EXPLAINs on goes on serving the stale PRE-DROP plan once it has
+		// planned the statement, so the confirming read inside is the arm's
+		// correctness and not tidiness. Undocumented behaviour, characterised
+		// empirically; store_test.go carries the measurement.
+		dropIndexesAndConfirm(t, s, "ix_edition_format")
 
 		joined := browseWorksPlan(t, s, OwnerScope(1), WorksFilter{MediaType: MediaTypeAudiobooks}, dated)
 		if strings.Contains(joined, "ix_edition_format") {
@@ -1036,16 +1063,6 @@ func TestBrowseWorksPlanGuardFires(t *testing.T) {
 		}
 		t.Logf("guard fired with ix_edition_format dropped:\n  plan: %s", joined)
 	})
-}
-
-func dropIndex(t *testing.T, s *Store, name string) {
-	t.Helper()
-	if err := s.DB().Write(t.Context(), func(ctx context.Context, tx *sql.Tx) error {
-		_, err := tx.ExecContext(ctx, `DROP INDEX `+name)
-		return err
-	}); err != nil {
-		t.Fatalf("drop %s: %v", name, err)
-	}
 }
 
 // browseKinds and mediaTypeOf are inverses, asserted directly as well as by
