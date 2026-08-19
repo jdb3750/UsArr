@@ -165,17 +165,36 @@ func catalogueSource(entry *registryEntry, log *slog.Logger) (libsync.Source, er
 		entry.instance.Name, entry.instance.Kind)
 }
 
-// syncReportItemsSkipped is sync_report.kind for items an adapter read and
-// deliberately did not map.
+// skipCovers and skipDoesNotCover are written into EVERY skip row, on
+// completenessCovers's reasoning and for a sharper version of the same hazard.
 //
-// It is a NEW member of a vocabulary sync_report.kind holds no CHECK over
-// (migration 00005), on the pattern the existing members set: the subject is
-// named by remote_kind/remote_id and the reason lives in `detail`. It is
-// distinct from `container_declined`, which is a whole container UsArr has no
-// kind for, and from `container_bind_failed`, which is a container that had a
-// kind and lost a uniqueness race. This one is about ITEMS INSIDE a container
-// that bound fine.
-const syncReportItemsSkipped = "items_skipped"
+// ⚠️ A SKIP COUNT IS NOT A COMPLETENESS VERDICT. It says how many items the walk
+// read and did not map, and it says nothing at all about whether the items it
+// DID map are all the items there are — that is the other axis, measured by a
+// different check with a different failure mode. A row carrying one clean number
+// and no scope invites exactly the reading ADR-0061 exists to prevent.
+const (
+	skipCovers = "how many items this container's walk read and deliberately " +
+		"did not map, and why"
+	skipDoesNotCover = "whether the items that WERE mapped are all of them — a " +
+		"skip count is not a completeness verdict, and the two are measured " +
+		"separately (sync_report kind 'content_completeness')"
+)
+
+// skipReason is the short clause a §17.8 row renders, and skipEffect is the long
+// form that stays in the database.
+//
+// ⚠️ THE SPLIT IS §9.1's, not tidiness. The reason reaches a browser and lands in
+// a table cell whose overflow policy is a wrap, so it is one clause — the same
+// constraint completenessReason is written against. Everything the operator
+// needs and the cell cannot hold is in the effect, which does not travel.
+const (
+	skipReason = "UsArr maps prose books only; a comic or an unclassified file has no row"
+	skipEffect = "those books have no work row, and this library's item count is short by " +
+		"that many; every other book in the library was imported. A comic-format book has " +
+		"no settled unit of work in UsArr, and a book whose primary file has no format is " +
+		"one BookOrbit itself classifies as 'unknown'"
+)
 
 // recordSkippedItems writes the durable half of "UsArr did not take all of your
 // books".
@@ -196,21 +215,22 @@ func (g *registry) recordSkippedItems(
 	ctx context.Context, instanceID int64, skips []libsync.ContainerSkips, log *slog.Logger,
 ) {
 	for _, s := range skips {
-		detail, err := json.Marshal(map[string]any{
-			"name":            s.Name,
-			"skipped_comics":  s.Comics,
-			"skipped_unknown": s.Unknown,
-			"reason": "this slice of the BookOrbit adapter maps prose only: a comic-format book " +
-				"has no settled unit of work in UsArr, and a book whose primary file has no format " +
-				"is one BookOrbit itself classifies as 'unknown'",
-			"effect": "those books have no work row; every other book in this library was imported",
-		})
+		note := store.SkipNote{
+			Name:         s.Name,
+			Comics:       int64(s.Comics),
+			Unknown:      int64(s.Unknown),
+			Reason:       skipReason,
+			Effect:       skipEffect,
+			Covers:       skipCovers,
+			DoesNotCover: skipDoesNotCover,
+		}
+		detail, err := json.Marshal(note)
 		if err != nil {
 			log.Warn("cannot encode the skipped-item note", "library_id", s.RemoteID, "err", err)
 			continue
 		}
 		if err := g.st.RecordSyncReport(ctx, instanceID,
-			syncReportItemsSkipped, "library", s.RemoteID, string(detail)); err != nil {
+			store.SyncReportItemsSkipped, "library", s.RemoteID, string(detail)); err != nil {
 			log.Warn("cannot record how many books were skipped; the import itself stands",
 				"library_id", s.RemoteID, "err", err)
 		}
@@ -250,6 +270,15 @@ const (
 // probes all started failing would read as an instance with nothing wrong. That
 // is the defect this feature exists to close, and writing rows only for
 // shortfalls would have recreated it inside the fix.
+//
+// ⚠️ AND THE ROW WRITTEN HERE IS LOAD-BEARING FOR THE NEIGHBOUR, WHICH IT WAS
+// NOT WHEN THIS COMMENT WAS FIRST WRITTEN. "An absent skip row means nothing was
+// skipped" is only true of a container something actually walked, and this row
+// is the only per-container record in the schema that an import went near one —
+// so store.LibrarySkips reads the pair, and a container with a completeness
+// verdict and no skip row is the one that reads as "observed, nothing left out".
+// Stop writing a row for the clean containers and every one of those collapses
+// back into silence.
 //
 // A FAILURE TO RECORD DOES NOT FAIL THE IMPORT, on recordSkippedItems's
 // reasoning: the catalogue rows are already committed and correct, and losing

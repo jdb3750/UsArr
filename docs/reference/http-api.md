@@ -363,6 +363,15 @@ express. There is nothing to clamp, so unlike §1 there is no `400` path at all.
         "visible_items": 389,
         "hidden_items": 23,
         "checked_at": "2026-08-19T10:24:00Z"
+      },
+      // What that import READ in those containers and deliberately did not map.
+      // ⚠️ A DIFFERENT AXIS FROM `completeness`, NOT ITS INVERSE, and ABSENT
+      // means nothing observed this library — never "nothing was skipped". §2.6a.
+      "skipped": {
+        "state": "left_out",
+        "items": 42,
+        "reason": "UsArr maps prose books only; a comic or an unclassified file has no row",
+        "recorded_at": "2026-08-19T10:24:00Z"
       }
     },
     {
@@ -400,6 +409,7 @@ from a failure.
 | `items[].item_count` | yes | `library_member` rows in this library **that the caller's access scope admits**. Edition-grained by the table's key; equal to a count of distinct works today, because the only writer files every work under the `edition_id = 0` "whole work" sentinel. |
 | `items[].orphaned_at` | **no** | RFC 3339 UTC. §6.5 rule 5's retained-with-a-reason state, set when the last source goes away. ⚠️ **Nothing writes it** — see §2.4. |
 | `items[].completeness` | **no** | What the last import measured about how much of this library's upstream containers UsArr's credential could see. ⚠️ **Absent means nothing was measured, never "complete"** — see §2.7. |
+| `items[].skipped` | **no** | What the last import **read and did not map** in this library's containers. A different axis from `completeness`, not its inverse. ⚠️ **Absent means nothing observed this library, never "nothing was skipped"** — see §2.6a. |
 | `items[].sources` | yes | Possibly `[]`. Never absent: an absent key reads as *"unknown"*, and *"this library has no sources"* is precisely what §17.8's orphaned state renders. |
 | `sources[].id` | yes | `library_source.id`. |
 | `sources[].service_instance_id` | yes | What §17.8's cross-link needs: *"a degraded source on a library row links to that instance's Services row"*. |
@@ -527,6 +537,64 @@ BookOrbit's `LibraryAccessGuard` throws an identical `ForbiddenException('No lib
 `total_items` counts what the upstream said it holds. The two differ for reasons that have nothing
 to do with a filter — an adapter that deliberately skips part of a container is one — so **do not
 subtract one from the other**.
+
+### 2.6a `skipped` — what the import read and did not map
+
+`completeness` above asks whether UsArr's credential **saw** the whole container. This asks the
+question one step later: of what it saw, how much did UsArr **read and deliberately not map**. The
+two are independent — a library can be fully visible and still be short, because the adapter has no
+unit of work for part of it — and **neither is evidence for the other**. Like its neighbour it is a
+**local read of a stored record**; the counting happens during the import.
+
+```jsonc
+"skipped": { "state": "left_out", "items": 42,
+             "reason": "UsArr maps prose books only; a comic or an unclassified file has no row",
+             "recorded_at": "2026-08-19T10:24:00Z" }
+```
+
+| Field | Always present? | Meaning |
+| --- | --- | --- |
+| `state` | yes | `left_out` or `none`. There is no third member; a client that meets one must render **nothing**. |
+| `items` | **no** | How many items were read and not mapped. ⚠️ **Absent under `none`** — there is nothing to count there, and a `0` under that label is a claim the label does not make. |
+| `reason` | **no** | UsArr's own short sentence about why, present only with `left_out`. ⚠️ **Never upstream text** — reference/security.md §5 — and short, because it renders in a table cell. |
+| `recorded_at` | **no** | RFC 3339 UTC. Under `none` it is the stamp of the observation the state rests on. |
+
+**Two states on the wire, three readings, and the third is the absent key.**
+
+| Value | Means |
+| --- | --- |
+| `state: "left_out"` | An import read items in this library's containers and mapped none of them. |
+| `state: "none"` | An import **observed** this library's containers and recorded nothing left out. A measured negative. |
+| key absent | **Nothing observed this library at all** — no import has run, or the adapter that ran records neither skips nor completeness. |
+
+⚠️ **The last two are different values because in the database they are the same silence.** A skip
+row is written to `sync_report` only when something was skipped ([ADR-0061](../DECISIONS.md#adr-0061)
+§5), so "the walk left nothing out" and "nothing has ever counted" are both an absent row. The
+server separates them by pairing the absence with the **completeness** row, which is written for
+every container an import observed including the clean ones. Collapse the two and an absent record
+starts reading as an all-clear, which is the defect ADR-0061 exists to prevent, one axis over.
+
+⚠️ **`none` IS NOT A COMPLETENESS CLAIM.** It says the adapter recorded no unmapped items. It says
+nothing about whether the credential saw the whole container — that is §2.6, a different
+measurement with a different failure mode — and no client may render it as a statement that the
+library is complete.
+
+⚠️ **One known imprecision, in the safe direction, stated rather than hidden.** The completeness row
+is recorded before the walk, so an import that dies part-way leaves the containers it never reached
+carrying `none` where the truth is "not observed". The compensating fact is on the same screen and
+is not this field's: an instance whose import did not finish renders *"An import did not finish ·
+this count may be short"* on every one of its libraries. `none` also renders nothing, so the cost is
+a sentence that was not shown rather than a claim that was made.
+
+**The adapter's per-reason vocabulary does not cross.** `sync_report.detail` carries
+`skipped_comics` and `skipped_unknown`; the wire carries the **total** and UsArr's sentence, because
+a second adapter will decline items for reasons that are neither and a field named `comics` would
+have to be lied to. The operator-facing keys — `effect`, `covers`, `does_not_cover` — stay in the
+row.
+
+**`items` is not `item_count` minus anything.** §2.6's closing rule applies here in the direction it
+was written for: an adapter that deliberately skips part of a container is exactly why the upstream's
+count and `item_count` differ, so do not subtract one from the other to derive this.
 
 ### 2.7 Errors
 

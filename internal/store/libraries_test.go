@@ -1256,3 +1256,245 @@ func TestLibraryCompletenessPlanGuardFires(t *testing.T) {
 			strings.Join(plan, "\n          "), faults)
 	})
 }
+
+// ─── THE SIBLING AXIS: what the import read and did not map ──────────────────
+
+// seedSkipReports puts skip rows on Manga's container and completeness verdicts
+// on Manga's and on both of Books' — which is the exact corpus the three
+// readings need, because Films gets neither and Loose Ends has no source at all.
+//
+// TWO IMPORTS DEEP ON THE SKIP ROW, so the newest-row pick is doing work: if the
+// correlated subquery stopped ordering by id the older tally would win and the
+// count would be wrong rather than absent, which is the failure that looks like
+// data.
+func seedSkipReports(t *testing.T, s *Store) {
+	t.Helper()
+	type row struct {
+		instance int
+		kind     string
+		ref      string
+		detail   string
+		at       string
+	}
+	rows := []row{
+		// Manga, first import: a bigger tally that must LOSE to the newer one.
+		{
+			1, SyncReportItemsSkipped, "11",
+			`{"name":"Manga","skipped_comics":90,"skipped_unknown":9,"reason":"stale"}`,
+			"2026-08-01 00:00:00",
+		},
+		{
+			1, SyncReportItemsSkipped, "11",
+			`{"name":"Manga","skipped_comics":2,"skipped_unknown":1,` +
+				`"reason":"UsArr maps prose books only","effect":"no work row"}`,
+			"2026-08-02 00:00:00",
+		},
+		// Every container that was OBSERVED, including the ones with no skip.
+		{1, SyncReportContentCompleteness, "11", `{"state":"complete"}`, "2026-08-02 00:00:00"},
+		{1, SyncReportContentCompleteness, "12", `{"state":"complete"}`, "2026-08-02 00:00:00"},
+		{2, SyncReportContentCompleteness, "21", `{"state":"complete"}`, "2026-08-03 00:00:00"},
+	}
+	if err := s.DB().Write(t.Context(), func(ctx context.Context, tx *sql.Tx) error {
+		for _, r := range rows {
+			if _, err := tx.ExecContext(ctx,
+				`INSERT INTO sync_report
+				   (service_instance_id, kind, remote_kind, remote_id, detail, created_at)
+				 VALUES (?, ?, 'library', ?, ?, ?)`,
+				r.instance, r.kind, r.ref, r.detail, r.at); err != nil {
+				return err
+			}
+		}
+		return nil
+	}); err != nil {
+		t.Fatalf("seed skip reports: %v", err)
+	}
+}
+
+// THE ASSERTION THE WHOLE FEATURE TURNS ON: "nothing was skipped" and "nothing
+// observed this library" are DIFFERENT STORED VALUES, not one absence with two
+// meanings.
+//
+// A skip row is written only when something was skipped (ADR-0061 §5), so the
+// items_skipped table alone cannot tell the two apart — which is why this read
+// pairs it with the completeness row, and why breaking that pairing has to go
+// red here rather than quietly turning every measured negative back into
+// silence. Films is the control: it is observed by nothing, and it must stay
+// nil while Books goes to `none`.
+func TestLibrarySkipsTellsNothingSkippedFromNothingObserved(t *testing.T) {
+	s := newTestStore(t)
+	seedLibrariesCorpus(t, s)
+	seedSkipReports(t, s)
+
+	got, err := s.ListLibraries(t.Context(), OwnerScope(0))
+	if err != nil {
+		t.Fatalf("ListLibraries: %v", err)
+	}
+
+	manga := libraryByName(t, got, "Manga").Skips
+	if manga == nil || manga.State != SkipsLeftOut {
+		t.Fatalf("Manga's skip verdict = %+v, want a left_out verdict", manga)
+	}
+	if manga.Items != 3 {
+		t.Errorf("Manga left out %d items, want 3 (2 comics + 1 unknown, from the NEWEST "+
+			"row — 99 means the older import's tally won and the newest-row pick is broken)",
+			manga.Items)
+	}
+	if manga.Reason != "UsArr maps prose books only" {
+		t.Errorf("Manga's reason = %q, want the newest row's own words", manga.Reason)
+	}
+	if manga.RecordedAt == "" {
+		t.Error("Manga's verdict carries no timestamp, so a reader cannot tell how old it is")
+	}
+
+	books := libraryByName(t, got, "Books").Skips
+	if books == nil || books.State != SkipsNone {
+		t.Fatalf("Books' skip verdict = %+v, want `none` — both of its containers were "+
+			"observed and neither recorded a skip, which is a MEASURED negative and must "+
+			"not read as the same thing as nobody having looked", books)
+	}
+	if books.Items != 0 || books.Reason != "" {
+		t.Errorf("the `none` verdict published a count or a reason: %+v — there is nothing "+
+			"to count there, and a zero under that label is a claim the label does not make",
+			books)
+	}
+	if books.Containers != 2 {
+		t.Errorf("Books folded %d container observations, want 2", books.Containers)
+	}
+
+	// ⚠️ THE CONTROLS. Films' container has no row of either kind, and Loose Ends
+	// has no source at all. Both must stay nil: reading either as "nothing was
+	// skipped" would be the defect this test exists to catch, told the other way
+	// round.
+	if films := libraryByName(t, got, "Films").Skips; films != nil {
+		t.Errorf("Films carries %+v — nothing has ever observed its container, and "+
+			"publishing a verdict for it reports silence as a measurement", films)
+	}
+	if loose := libraryByName(t, got, "Loose Ends").Skips; loose != nil {
+		t.Errorf("Loose Ends has no source and carries %+v", loose)
+	}
+}
+
+// A detail blob that will not decode is DROPPED, and the library falls through
+// to whatever the observation says — which is the honest answer, because the
+// container WAS observed and what could not be read is what it recorded.
+func TestAnUnreadableSkipRowFallsBackToTheObservation(t *testing.T) {
+	s := newTestStore(t)
+	seedLibrariesCorpus(t, s)
+	seedSkipReports(t, s)
+
+	if err := s.DB().Write(t.Context(), func(ctx context.Context, tx *sql.Tx) error {
+		_, err := tx.ExecContext(ctx,
+			`INSERT INTO sync_report (service_instance_id, kind, remote_kind, remote_id, detail, created_at)
+			 VALUES (1, ?, 'library', '11', 'not json at all', '2026-08-09 00:00:00')`,
+			SyncReportItemsSkipped)
+		return err
+	}); err != nil {
+		t.Fatalf("seed the unreadable row: %v", err)
+	}
+
+	got, err := s.ListLibraries(t.Context(), OwnerScope(0))
+	if err != nil {
+		t.Fatalf("ListLibraries: %v", err)
+	}
+	manga := libraryByName(t, got, "Manga").Skips
+	if manga == nil || manga.State != SkipsNone {
+		t.Fatalf("Manga's verdict = %+v, want `none`: the newest skip row is unreadable, so "+
+			"nothing is known to have been left out, but the container was still observed",
+			manga)
+	}
+	if manga.Items != 0 {
+		t.Errorf("an unreadable row contributed %d items", manga.Items)
+	}
+}
+
+// THE PLAN GUARD IS SHARED, AND THIS IS THE ASSERTION THAT KEEPS IT SHARED.
+//
+// librarySkipsSQL and libraryCompletenessSQL both delegate to
+// containerReportSQL, so the two statements are the same text with a different
+// bound kind. That is what lets TestLibraryCompletenessPlanIsSeeksAndOneSort and
+// its four firing arms cover this read without a second copy of any of it — and
+// the day somebody hand-writes a second statement, this goes red and says which
+// coverage just lapsed.
+func TestTheSkipStatementIsTheCompletenessStatement(t *testing.T) {
+	skipSQL, skipArgs := librarySkipsSQL(OwnerScope(0), []int64{1, 2, 3})
+	compSQL, compArgs := libraryCompletenessSQL(OwnerScope(0), []int64{1, 2, 3})
+
+	if skipSQL != compSQL {
+		t.Fatalf("the two statements have diverged, so the completeness plan guard no "+
+			"longer covers the skip read and this read has NO plan assertion at all:\n"+
+			"skips:\n%s\ncompleteness:\n%s", skipSQL, compSQL)
+	}
+	if len(skipArgs) != len(compArgs) {
+		t.Fatalf("skip args %v, completeness args %v", skipArgs, compArgs)
+	}
+	if skipArgs[0] != SyncReportItemsSkipped {
+		t.Errorf("the skip statement binds kind %v, want %q — the kind is the FIRST "+
+			"parameter because the correlated subquery is earlier in the text than the "+
+			"IN list", skipArgs[0], SyncReportItemsSkipped)
+	}
+	if compArgs[0] != SyncReportContentCompleteness {
+		t.Errorf("the completeness statement binds kind %v", compArgs[0])
+	}
+}
+
+// librarySkipsPlan renders the SHIPPED statement through librarySkipsSQL — the
+// same function attachLibrarySkips calls, per docs/DEVELOPMENT.md §11 rule 1.
+func librarySkipsPlan(t *testing.T, s *Store, scope Scope) []string {
+	t.Helper()
+	query, args := librarySkipsSQL(scope, []int64{1, 2, 3})
+	return planStepsOf(t, s, query, args)
+}
+
+// The skip read plans exactly as the completeness read does, and it is MEASURED
+// rather than inferred from the shared text.
+//
+// The two statements are byte-identical, but they bind different kinds, and a
+// bound value is something the planner can in principle take an interest in. It
+// does not here — with no sqlite_stat1 the planner chooses from the schema —
+// and that null result is worth executing rather than assuming, because the
+// whole claim that migration 0011's index serves this read rests on it.
+func TestLibrarySkipsPlanIsSeeksAndOneSort(t *testing.T) {
+	s := newTestStore(t)
+	seedLibrariesCorpus(t, s)
+	seedCompletenessReports(t, s)
+
+	for _, tc := range []struct {
+		name  string
+		scope Scope
+	}{
+		{"owner", OwnerScope(0)},
+		{"instance", Scope{UserID: 0, InstanceIDs: []int64{1, 2}}},
+	} {
+		plan := librarySkipsPlan(t, s, tc.scope)
+		if faults := libraryCompletenessPlanFaults(plan); len(faults) > 0 {
+			t.Errorf("the %s skip plan is wrong:\n  plan: %s\n  %s",
+				tc.name, strings.Join(plan, "\n        "), strings.Join(faults, "\n  "))
+		}
+	}
+}
+
+// FIRING THAT GUARD ON THE SKIP STATEMENT SPECIFICALLY.
+//
+// ⚠️ THE DROP GOES THROUGH dropIndexesAndConfirm, NEVER A BARE DROP. A read-pool
+// connection that has already planned a statement keeps serving the pre-drop
+// plan indefinitely, so a bare drop can make this arm measure nothing at all
+// while looking green — the hazard store_test.go's helper exists for.
+func TestLibrarySkipsPlanGuardFires(t *testing.T) {
+	s := newTestStore(t)
+	seedLibrariesCorpus(t, s)
+	seedCompletenessReports(t, s)
+	dropIndexesAndConfirm(t, s, "ix_sync_report_container_latest")
+
+	plan := librarySkipsPlan(t, s, OwnerScope(0))
+	faults := libraryCompletenessPlanFaults(plan)
+	if len(faults) == 0 {
+		t.Fatalf("the guard passed a skip plan with ix_sync_report_container_latest "+
+			"dropped:\n  %s", strings.Join(plan, "\n  "))
+	}
+	if n := strings.Count(strings.Join(plan, " | "), "USE TEMP B-TREE"); n != 2 {
+		t.Errorf("dropping 0011's index produced %d temp b-trees in the skip plan, want "+
+			"the 2 of the pre-0011 shape:\n  %s", n, strings.Join(plan, "\n  "))
+	}
+	t.Logf("skip guard fired with ix_sync_report_container_latest dropped:\n"+
+		"  plan:   %s\n  faults: %v", strings.Join(plan, "\n          "), faults)
+}

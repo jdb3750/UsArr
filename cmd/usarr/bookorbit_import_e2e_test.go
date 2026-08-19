@@ -334,7 +334,77 @@ func TestAddingABookOrbitProducesACatalogue(t *testing.T) {
 		`SELECT COUNT(*) FROM sync_report WHERE kind = 'items_skipped' AND remote_id = '2'`); n != 0 {
 		t.Errorf("library 2 skipped nothing and still got %d notes", n)
 	}
-	t.Logf("bookorbit import: 5 books read, 3 mapped, 1 comic and 1 unknown skipped; note = %s", detail)
+	// The row also carries the SCOPE of what it claims, on the completeness
+	// row's pattern (ADR-0061 §6): a count with no scope invites being read as
+	// "and the rest is complete", which is a claim nothing here measured.
+	var scope struct {
+		Covers       string `json:"covers"`
+		DoesNotCover string `json:"does_not_cover"`
+	}
+	if err := json.Unmarshal([]byte(detail), &scope); err != nil {
+		t.Fatalf("decode the skip scope %q: %v", detail, err)
+	}
+	if scope.Covers == "" || !strings.Contains(scope.DoesNotCover, "completeness") {
+		t.Errorf("the row does not say what it does not cover: %+v — an operator reading "+
+			"this out of the database has only the row, not the doc comment", scope)
+	}
+
+	// ── AND IT IS VISIBLE WITHOUT DATABASE ACCESS, which is the whole point ──
+	//
+	// Everything above proves the number was RECORDED. This proves it can be
+	// READ: the Libraries screen's own endpoint, over the same rows, with no
+	// upstream call on the path (principle 1).
+	//
+	// ⚠️ THE TWO SILENCES ARE ASSERTED APART HERE TOO. Library 2 skipped nothing
+	// and gets `none`; a library nothing observed would get no key at all, and if
+	// those collapsed, an absent verdict would start reading as an all-clear.
+	var libs struct {
+		Items []struct {
+			Name    string `json:"name"`
+			Skipped *struct {
+				State  string `json:"state"`
+				Items  int64  `json:"items"`
+				Reason string `json:"reason"`
+			} `json:"skipped"`
+		} `json:"items"`
+	}
+	env.do(t, "GET", "/api/v1/libraries", nil, &libs)
+	if len(libs.Items) != 2 {
+		t.Fatalf("GET /api/v1/libraries returned %d rows, want the 2 the import created: %+v",
+			len(libs.Items), libs.Items)
+	}
+	byName := map[string]string{}
+	for _, l := range libs.Items {
+		if l.Skipped == nil {
+			byName[l.Name] = "<absent>"
+			continue
+		}
+		byName[l.Name] = l.Skipped.State
+		if l.Skipped.State == "left_out" {
+			if l.Skipped.Items != 2 {
+				t.Errorf("%s reports %d items left out on the wire, want 2 (1 comic + 1 "+
+					"unknown)", l.Name, l.Skipped.Items)
+			}
+			if l.Skipped.Reason == "" {
+				t.Errorf("%s says items were left out and does not say why", l.Name)
+			}
+		} else if l.Skipped.Items != 0 || l.Skipped.Reason != "" {
+			t.Errorf("%s serves a count or a reason under state %q: %+v",
+				l.Name, l.Skipped.State, l.Skipped)
+		}
+	}
+	if byName["Fiction"] != "left_out" {
+		t.Errorf("Fiction's skip state on the wire = %q, want left_out — the comic it "+
+			"skipped is invisible to anyone without database access", byName["Fiction"])
+	}
+	if byName["Audio"] != "none" {
+		t.Errorf("Audio's skip state on the wire = %q, want `none`: it was observed by "+
+			"the same import and left nothing out, which is a MEASURED negative and must "+
+			"not look like the absence that means nobody counted. Every row: %v",
+			byName["Audio"], byName)
+	}
+	t.Logf("bookorbit import: 5 books read, 3 mapped, 1 comic and 1 unknown skipped; "+
+		"note = %s; wire states = %v", detail, byName)
 }
 
 // TestABookOrbitWalkAsksForBooksPerLibraryAndNeverCollapsesSeries pins the two

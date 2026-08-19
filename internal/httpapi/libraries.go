@@ -194,6 +194,51 @@ type libraryResponse struct {
 	// zero-valued struct: an object with `state: ""` would be a fourth state
 	// nobody defined.
 	Completeness *libraryCompletenessResponse `json:"completeness,omitempty"`
+
+	// Skipped is what the last import recorded about items it READ in this
+	// library's containers and deliberately did not map.
+	//
+	// ⚠️ IT IS NOT `completeness` AND IT IS NOT ITS INVERSE. That key answers
+	// whether the credential SAW the whole container; this one answers whether
+	// UsArr MAPPED what it saw, and the two are independent measurements with
+	// independent failure modes. In particular `state: "none"` here is not a
+	// statement that the library is complete.
+	//
+	// ⚠️ ABSENT MEANS NOTHING OBSERVED THIS LIBRARY, never "nothing was
+	// skipped" — the two are separate wire values precisely so a client cannot
+	// conflate them. See store.LibrarySkips.
+	Skipped *librarySkipsResponse `json:"skipped,omitempty"`
+}
+
+// librarySkipsResponse is one library's skip verdict on the wire.
+//
+// A FIELD-BY-FIELD ALLOWLIST like every other struct in this file, and the
+// per-reason tallies are DELIBERATELY NOT ON IT. `skipped_comics` and
+// `skipped_unknown` are the BookOrbit adapter's vocabulary; a second adapter
+// will decline items for reasons that are neither, and an API field named
+// `comics` would then have to be lied to or left at zero. What generalises is
+// the total and UsArr's own sentence, so that is what crosses. The split stays
+// in sync_report.detail for whoever is reading the database.
+type librarySkipsResponse struct {
+	// State is `left_out` or `none`. There is no third member: "nothing observed
+	// this library" is the ABSENCE of this object, exactly as "nothing was
+	// measured" is the absence of `completeness`.
+	State string `json:"state"`
+
+	// Items is how many items were read and not mapped. ⚠️ ABSENT UNDER `none`,
+	// where there is no count to serve rather than a count of zero — the same
+	// treatment `completeness` gives its three numbers under `unverified`.
+	Items int64 `json:"items,omitempty"`
+
+	// Reason is UsArr's own short sentence about why, present only with
+	// `left_out`. ⚠️ NEVER UPSTREAM TEXT (reference/security.md §5), and short
+	// because it renders in a table cell.
+	Reason string `json:"reason,omitempty"`
+
+	// RecordedAt is when the verdict was recorded. Under `none` it is the stamp
+	// of the observation the state rests on, which is what lets a client render
+	// either state as a measurement with an age rather than as a live fact.
+	RecordedAt *time.Time `json:"recorded_at,omitempty"`
 }
 
 // libraryCompletenessResponse is one library's completeness verdict on the wire.
@@ -292,6 +337,7 @@ func (s *Server) toLibraryResponse(l store.Library) libraryResponse {
 	out.Formats = s.libraryFormatsFor(l)
 	out.OrphanedAt = libraryTime(l.OrphanedAt)
 	out.Completeness = libraryCompletenessFor(l)
+	out.Skipped = librarySkipsFor(l)
 	for _, src := range l.Sources {
 		out.Sources = append(out.Sources, librarySourceResponse{
 			ID:                  src.ID,
@@ -329,6 +375,40 @@ func libraryCompletenessFor(l store.Library) *libraryCompletenessResponse {
 	}
 	if at, err := store.ParseTime(c.CheckedAt); err == nil {
 		out.CheckedAt = &at
+	}
+	return out
+}
+
+// librarySkipsFor renders the skip verdict, or nothing at all.
+//
+// NOTHING IS INVENTED AND NOTHING IS DEFAULTED, on libraryCompletenessFor's
+// reasoning. A nil verdict means nothing observed this library's containers —
+// no import has run, or the adapter that ran records neither skips nor
+// completeness — and the key is simply absent.
+//
+// ⚠️ THE STATE IS RE-CHECKED ON THE WAY OUT rather than trusted. The store reads
+// its state out of a JSON blob no constraint governs, so a member this build
+// does not know renders as NO VERDICT — the only reading of an unreadable record
+// that cannot overstate — instead of reaching a browser as an unknown string.
+//
+// The numeric and prose suppression under `none` is explicit rather than left to
+// `omitempty`, so a later edit that put a non-zero default on the struct could
+// not quietly publish a count nobody recorded.
+func librarySkipsFor(l store.Library) *librarySkipsResponse {
+	s := l.Skips
+	if s == nil {
+		return nil
+	}
+	state, ok := store.SkipStateOf(string(s.State))
+	if !ok {
+		return nil
+	}
+	out := &librarySkipsResponse{State: string(state)}
+	if state == store.SkipsLeftOut {
+		out.Items, out.Reason = s.Items, s.Reason
+	}
+	if at, err := store.ParseTime(s.RecordedAt); err == nil {
+		out.RecordedAt = &at
 	}
 	return out
 }

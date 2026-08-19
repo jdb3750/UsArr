@@ -136,6 +136,86 @@ type Library struct {
 	// be reporting the absence of a check as a pass. That is the same defect
 	// this field exists to close, one level up. See completeness.go.
 	Completeness *LibraryCompleteness
+
+	// Skips is what the last import recorded about items it READ in this
+	// library's containers and deliberately did not map. It is the sibling axis
+	// to Completeness and is independent of it: a library can be fully visible
+	// and still be short.
+	//
+	// ⚠️ NIL IS "NOTHING OBSERVED THIS LIBRARY", NEVER "NOTHING WAS SKIPPED".
+	// The two are different facts and skips.go explains why the table alone
+	// cannot separate them. See LibrarySkips.
+	Skips *LibrarySkips
+}
+
+// LibrarySkips is one library's skip verdict, folded from its containers'.
+//
+// # The three states, and where the third one comes from
+//
+// A skip row is written only when something was skipped (ADR-0061 §5), so the
+// table on its own answers "was anything left out" with *yes* or with *silence*
+// — and silence covers both "the walk left nothing out" and "nothing has ever
+// counted". Publishing that silence as a single absent key would be the defect
+// ADR-0061 exists to prevent, one axis over.
+//
+// The separator is the COMPLETENESS ROW, which is written for EVERY container
+// the import observed including the clean ones. So:
+//
+//	a skip row exists                    → SkipsLeftOut
+//	no skip row, a completeness verdict  → SkipsNone   ("observed, none recorded")
+//	no skip row, no completeness verdict → nil         ("nothing observed it")
+//
+// ⚠️ THE COUPLING IS REAL AND IT IS NAMED RATHER THAN HIDDEN. It holds because
+// cmd/usarr writes both, from the same adapter, in the same import, at the same
+// two adjacent statements — there is no other per-container record in the schema
+// that an import went near a container. An adapter that starts tallying skips
+// without also recording completeness will read as nil here, which UNDERSTATES
+// what is known and never overstates it. That is the safe direction and it is
+// the one this design picks on purpose.
+//
+// ⚠️ ONE KNOWN IMPRECISION, IN THE SAME SAFE-ISH SHAPE, WRITTEN DOWN BECAUSE IT
+// IS REAL. The completeness verdict is recorded from Containers(), which runs
+// BEFORE the walk, so an import that dies part-way leaves the containers it
+// never reached with a completeness row and no skip row — and they read
+// SkipsNone when the truth is "not observed". The compensating control is on the
+// same screen and is not this feature's: an instance whose import did not finish
+// renders *"An import did not finish · this count may be short"* on every one of
+// its libraries (web/src/lib/libraries.ts), so a stale SkipsNone never appears as
+// the only thing the row has to say. SkipsNone also renders NOTHING, so the cost
+// of the imprecision is a sentence that was not shown rather than a claim that
+// was made.
+//
+// # What it does not say
+//
+// ⚠️ SkipsNone IS NOT A COMPLETENESS CLAIM. It says the adapter recorded no
+// unmapped items. It says nothing about whether the credential saw the whole
+// container — that is Completeness, and it is a different measurement with a
+// different failure mode.
+type LibrarySkips struct {
+	// State is SkipsLeftOut or SkipsNone. A library with neither has a nil
+	// *LibrarySkips rather than a third member.
+	State SkipState
+
+	// Items is how many items were read and not mapped, summed over the
+	// containers that recorded a skip. 0 under SkipsNone, where it is a fact
+	// rather than a sentinel: nothing was recorded, so nothing was left out that
+	// anything knows of.
+	Items int64
+
+	// Reason is UsArr's own short sentence about why, taken from the first
+	// container that recorded one. Empty under SkipsNone, and never upstream
+	// text.
+	Reason string
+
+	// RecordedAt is when the newest folded row was written, in the store's own
+	// timestamp layout. It answers "how old is this", which is the question any
+	// stored measurement raises — and under SkipsNone it is the completeness
+	// verdict's stamp, because that row is the observation the state rests on.
+	RecordedAt string
+
+	// Containers is how many container rows were folded in. It is on the struct
+	// because the fold is lossy, exactly as LibraryCompleteness.Containers is.
+	Containers int
 }
 
 // LibraryCompleteness is one library's verdict, folded from the per-container
@@ -467,6 +547,15 @@ func (s *Store) ListLibraries(ctx context.Context, scope Scope) ([]Library, erro
 	if err := s.attachLibraryCompleteness(ctx, scope, ids, index, out); err != nil {
 		return nil, err
 	}
+	// THE FOURTH STATEMENT, AND IT MUST RUN AFTER THE THIRD. It reads the
+	// sibling axis — what an import read and did not map — and its "observed and
+	// nothing recorded" state is derived from the completeness verdict the
+	// statement above attaches. LibrarySkips carries the reasoning for why that
+	// is the separator and what it costs. Reordering these two silently turns
+	// every SkipsNone into a nil.
+	if err := s.attachLibrarySkips(ctx, scope, ids, index, out); err != nil {
+		return nil, err
+	}
 	return out, nil
 }
 
@@ -560,6 +649,30 @@ func scanLibraries(rows *sql.Rows) ([]Library, error) {
 // TestLibraryCompletenessPlanGuardFires, whose arm 1 drops 0011's index and
 // watches the sort come back.
 func libraryCompletenessSQL(scope Scope, libraryIDs []int64) (string, []any) {
+	return containerReportSQL(SyncReportContentCompleteness, scope, libraryIDs)
+}
+
+// librarySkipsSQL renders the newest-skip-row-per-container statement.
+//
+// ⚠️ IT IS THE SAME STATEMENT TEXT AS libraryCompletenessSQL, BY CONSTRUCTION
+// AND NOT BY COINCIDENCE — both delegate to containerReportSQL and differ only
+// in the kind they bind. That is what makes the plan guard above cover this read
+// too without a second copy of it, and TestTheSkipStatementIsTheCompletenessStatement
+// asserts the two texts are byte-identical so the coverage cannot quietly lapse.
+func librarySkipsSQL(scope Scope, libraryIDs []int64) (string, []any) {
+	return containerReportSQL(SyncReportItemsSkipped, scope, libraryIDs)
+}
+
+// containerReportSQL is the shared body: the newest sync_report row of one kind
+// per (instance, container_ref) pair, joined onto the sources of the given
+// libraries and scoped exactly as librarySourcesSQL scopes them.
+//
+// TWO KINDS, ONE STATEMENT, and the reason is the paragraph above about
+// migration 0011's index: the index is shaped for the four equalities and the
+// ordering column this text uses, so a second hand-written copy would be a
+// second thing that can drift off it. The kind is a bound parameter rather than
+// interpolated text, so the two callers produce the same prepared statement.
+func containerReportSQL(kind string, scope Scope, libraryIDs []int64) (string, []any) {
 	// ⚠️ THE KIND IS BOUND FIRST, BECAUSE `?` IS POSITIONAL AND THE CORRELATED
 	// SUBQUERY IS EARLIER IN THE TEXT THAN THE `IN` LIST. The other statements in
 	// this file happen to build their arguments in the same order their
@@ -567,7 +680,7 @@ func libraryCompletenessSQL(scope Scope, libraryIDs []int64) (string, []any) {
 	// that leads the SQL is the one that trails the logic, and getting it wrong
 	// produces an empty join rather than an error.
 	args := make([]any, 0, len(libraryIDs)+len(scope.InstanceIDs)+1)
-	args = append(args, SyncReportContentCompleteness)
+	args = append(args, kind)
 	for _, id := range libraryIDs {
 		args = append(args, id)
 	}
@@ -685,6 +798,96 @@ func foldCompleteness(
 		into.Total += note.Total
 		into.Visible += note.Visible
 		into.Hidden += note.Hidden
+	}
+	return into
+}
+
+// attachLibrarySkips folds the per-container skip rows onto the rows, then
+// fills in the measured negative for the libraries that have none.
+//
+// A ROW THIS CANNOT READ IS DROPPED, NOT DEFAULTED, on
+// attachLibraryCompleteness's reasoning: an undecodable detail blob renders as
+// "nothing was recorded", the only reading of an unreadable record that cannot
+// overstate. ⚠️ A DROPPED ROW THEREFORE FALLS THROUGH TO THE SkipsNone PASS
+// BELOW IF THE LIBRARY HAS A COMPLETENESS VERDICT, which is correct: the
+// container WAS observed, and what could not be read is what it recorded.
+//
+// ⚠️ IT MUST RUN AFTER attachLibraryCompleteness. See ListLibraries.
+func (s *Store) attachLibrarySkips(
+	ctx context.Context, scope Scope, ids []int64, index map[int64]int, out []Library,
+) error {
+	query, args := librarySkipsSQL(scope, ids)
+	rows, err := s.db.Read().QueryContext(ctx, query, args...)
+	if err != nil {
+		return fmt.Errorf("list library skips: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+
+	for rows.Next() {
+		var libraryID int64
+		var detail sql.NullString
+		var createdAt string
+		if err := rows.Scan(&libraryID, &detail, &createdAt); err != nil {
+			return fmt.Errorf("list library skips: scan: %w", err)
+		}
+		i, ok := index[libraryID]
+		if !ok {
+			return fmt.Errorf(
+				"list library skips: a skip row belongs to library %d, which the library "+
+					"statement did not return", libraryID)
+		}
+		if !detail.Valid {
+			continue
+		}
+		var note SkipNote
+		if err := json.Unmarshal([]byte(detail.String), &note); err != nil {
+			continue
+		}
+		out[i].Skips = foldSkips(out[i].Skips, note, createdAt)
+	}
+	if err := rows.Err(); err != nil {
+		return fmt.Errorf("list library skips: %w", err)
+	}
+
+	// THE SECOND PASS IS THE WHOLE POINT OF THE FEATURE. Without it a library
+	// that was walked clean and a library nothing has ever looked at are the same
+	// nil, and "we left nothing out" would be indistinguishable from "we never
+	// counted". See LibrarySkips for why the completeness verdict is the thing
+	// that separates them and for the one case where it is imprecise.
+	for i := range out {
+		if out[i].Skips != nil || out[i].Completeness == nil {
+			continue
+		}
+		out[i].Skips = &LibrarySkips{
+			State:      SkipsNone,
+			Containers: out[i].Completeness.Containers,
+			RecordedAt: out[i].Completeness.CheckedAt,
+		}
+	}
+	return nil
+}
+
+// foldSkips merges one container's skip row into a library's running verdict.
+//
+// ⚠️ A ROW WITH A ZERO TOTAL STILL COUNTS AS A SKIP, and it is not filtered out
+// here. cmd/usarr writes no such row today, so this arm is unreachable from the
+// shipped writer — but if one ever arrives it means an adapter recorded a skip
+// event, and dropping it would put that adapter's row back in the silence this
+// read exists to break. The state is what it says it is; the number is what it
+// says it is.
+func foldSkips(into *LibrarySkips, note SkipNote, createdAt string) *LibrarySkips {
+	if into == nil {
+		into = &LibrarySkips{State: SkipsLeftOut}
+	}
+	into.Containers++
+	into.Items += note.Total()
+	if into.Reason == "" {
+		into.Reason = note.Reason
+	}
+	// Lexicographic max is chronological max: store.go's timeLayout is ordered
+	// that way on purpose, the same property foldCompleteness relies on.
+	if createdAt > into.RecordedAt {
+		into.RecordedAt = createdAt
 	}
 	return into
 }

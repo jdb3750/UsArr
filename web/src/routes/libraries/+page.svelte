@@ -74,6 +74,7 @@
 		itemCountText,
 		kindLabel,
 		libraryStates,
+		skippedNote,
 		sourceChips,
 		unboundNote,
 		unboundServices,
@@ -253,6 +254,14 @@
 	 * content filter is set on the service account and nothing here can change it.
 	 */
 	const completeness = $derived(completenessNote(libraries));
+	/**
+	 * WHAT THE IMPORT LEFT OUT, STATED ONCE. The counts are per row and live in
+	 * the State cell; what the counts MEAN is identical on every affected row —
+	 * including the boundary, which is the half worth the sentence: a skip count
+	 * is not a completeness check, and the note says so rather than letting a
+	 * clean row read as one.
+	 */
+	const skipped = $derived(skippedNote(libraries));
 </script>
 
 <svelte:head><title>Libraries · UsArr</title></svelte:head>
@@ -369,6 +378,17 @@
 				identical on every affected row.
 			-->
 			<p class="toolbar__note toolbar__label">{completeness}</p>
+		{/if}
+		{#if skipped}
+			<!--
+				⚠️ NOT A BANNER EITHER, AND FOR A STRONGER REASON THAN THE ONE ABOVE.
+				Nothing is degraded and nothing is even misconfigured: UsArr has no
+				unit of work for a comic and left the comics out on purpose. What the
+				user is owed is the number and its boundary, which is a note beside the
+				table, in the same slot as the other facts that hold for every affected
+				row.
+			-->
+			<p class="toolbar__note toolbar__label">{skipped}</p>
 		{/if}
 		{#if unbound}
 			<!--

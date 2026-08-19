@@ -165,6 +165,54 @@ export interface Library {
 	 * reason.
 	 */
 	completeness?: LibraryCompleteness;
+	/**
+	 * What the last import recorded about items it READ in this library's
+	 * containers and deliberately did not map.
+	 *
+	 * ⚠️ IT IS NOT `completeness` AND IT IS NOT ITS INVERSE. That one answers
+	 * whether the credential SAW the whole container; this one answers whether
+	 * UsArr MAPPED what it saw. They are independent, they fail independently,
+	 * and `state: 'none'` here is not a statement that the library is complete.
+	 *
+	 * ⚠️ ABSENT MEANS NOTHING OBSERVED THIS LIBRARY, never "nothing was skipped".
+	 * The server serves those as two different values on purpose, so this module
+	 * must never collapse them.
+	 */
+	skipped?: LibrarySkips;
+}
+
+/**
+ * ONE LIBRARY'S SKIP VERDICT, as `librarySkipsResponse` in
+ * `internal/httpapi/libraries.go` spells it.
+ *
+ * # Why there are three readings and only two members
+ *
+ * A skip row is written upstream only when something was skipped, so the table
+ * alone answers "was anything left out" with *yes* or with *silence* — and
+ * silence covers both "the walk left nothing out" and "nothing has ever
+ * counted". The server separates those with a second record and serves the
+ * difference: `left_out`, `none`, or the key absent. All three read differently
+ * here, which is the whole reason the key exists.
+ *
+ * # And it is not a completeness check
+ *
+ * ⚠️ `none` MEANS THE ADAPTER RECORDED NOTHING LEFT OUT. It does not mean the
+ * library is complete, it does not mean the credential saw the whole container,
+ * and nothing in this module may phrase it as either. That is `completeness`'s
+ * question and it has its own three states.
+ */
+export interface LibrarySkips {
+	state: 'left_out' | 'none';
+	/** ⚠️ ABSENT UNDER `none`: there is no count to serve there rather than a
+	 * count of zero, which is the same treatment `completeness` gives its numbers
+	 * under `unverified`. */
+	items?: number;
+	/** UsArr's own short sentence about why. Present only with `left_out`, and
+	 * never upstream text. */
+	reason?: string;
+	/** RFC 3339 UTC: when the verdict was recorded. Under `none` it is the stamp
+	 * of the observation the state rests on. */
+	recordedAt?: string;
 }
 
 /**
@@ -315,7 +363,41 @@ export function toLibrary(value: unknown): Library | undefined {
 	if (orphanedAt !== '') library.orphanedAt = orphanedAt;
 	const completeness = toCompleteness(value.completeness);
 	if (completeness !== undefined) library.completeness = completeness;
+	const skipped = toSkips(value.skipped);
+	if (skipped !== undefined) library.skipped = skipped;
 	return library;
+}
+
+/**
+ * One skip verdict, or `undefined` for anything this screen must not render.
+ *
+ * ⚠️ AN UNRECOGNISED `state` YIELDS `undefined`, WHICH READS AS "NOTHING WAS
+ * OBSERVED". It is not mapped to the nearest member and it is certainly not
+ * defaulted to `none`: a member written by some later adapter is a verdict this
+ * build cannot read, and the only honest rendering of an unreadable record is no
+ * record. `toCompleteness` refuses the same way and the server refuses on the
+ * way out (`SkipStateOf`), which makes this the second of two arms — deliberate,
+ * because the two sides are deployed independently.
+ *
+ * The count and the reason are read only under `left_out`. Under `none` the
+ * server omits them; if one arrived anyway it is DROPPED rather than rendered,
+ * because a count under that label is a claim the label does not make.
+ */
+export function toSkips(value: unknown): LibrarySkips | undefined {
+	if (!isRecord(value)) return undefined;
+	const state = str(value.state);
+	if (state !== 'left_out' && state !== 'none') return undefined;
+
+	const out: LibrarySkips = { state };
+	if (state === 'left_out') {
+		const items = num(value.items);
+		if (items !== undefined) out.items = items;
+		const reason = str(value.reason);
+		if (reason !== '') out.reason = reason;
+	}
+	const recordedAt = str(value.recorded_at);
+	if (recordedAt !== '') out.recordedAt = recordedAt;
+	return out;
 }
 
 /**
@@ -647,6 +729,50 @@ export function completenessNote(libraries: readonly Library[]): string {
 	if (unknown > 0) {
 		parts.push(
 			`UsArr could not check ${unknown === 1 ? 'one library' : `${unknown} libraries`} for hidden books. ${unknown === 1 ? 'It says so' : 'They say so'} below rather than being counted as complete.`
+		);
+	}
+	return parts.join(' ');
+}
+
+/**
+ * THE SENTENCE ABOVE THE TABLE FOR WHAT THE IMPORT LEFT OUT, and the second half
+ * is the load-bearing one.
+ *
+ * §9.1 again: the per-row mark carries the count, which differs per library;
+ * this carries what the count MEANS, which does not. And what it means has a
+ * boundary — ⚠️ **a skip count is not a completeness check**. It says how many
+ * items were read and not mapped; it says nothing about whether the items that
+ * were mapped are all there are. Letting one clean number read as "this library
+ * is complete" is the exact failure ADR-0061 exists to prevent, and this is its
+ * sibling axis, so the sentence says so out loud rather than leaving it to a doc
+ * comment.
+ *
+ * ⚠️ THE SECOND ARM IS GATED ON THE FIRST, AND THAT IS A DECISION. "N libraries
+ * are not counted this way at all" is true on every Kavita-only install, for
+ * every row, forever — §17.4 rule 5's definition of noise. It becomes news only
+ * once the screen has told the user that items get left out, because then the
+ * scope of that telling matters: the reader needs to know which rows the claim
+ * covers. So it renders beside the first sentence and never alone.
+ */
+export function skippedNote(libraries: readonly Library[]): string {
+	const left = libraries.filter((l) => l.skipped?.state === 'left_out');
+	if (left.length === 0) return '';
+
+	const items = left.reduce((n, l) => n + (l.skipped?.items ?? 0), 0);
+	const parts = [
+		`UsArr read ${COUNT.format(items)} ${items === 1 ? 'item' : 'items'} in ${
+			left.length === 1 ? 'a library' : `${left.length} libraries`
+		} and did not map ${items === 1 ? 'it' : 'them'}, so ${
+			left.length === 1 ? 'that library’s' : 'those libraries’'
+		} count is short by that many. It is not a completeness check: it says what was left out, not that the rest arrived.`
+	];
+
+	const unobserved = libraries.filter((l) => l.skipped === undefined).length;
+	if (unobserved > 0) {
+		parts.push(
+			`Nothing counted this for ${
+				unobserved === 1 ? 'one other library' : `${unobserved} other libraries`
+			}, so ${unobserved === 1 ? 'its row says' : 'their rows say'} nothing either way.`
 		);
 	}
 	return parts.join(' ');
@@ -1062,7 +1188,51 @@ export function libraryStates(library: Library, read: HealthRead): LibraryStateM
 		}
 	}
 
-	return withVisibility(library, completenessMarks(library, marks));
+	return withVisibility(library, skipMarks(library, completenessMarks(library, marks)));
+}
+
+/**
+ * WHAT THE IMPORT READ AND DID NOT MAP, AS A ROW MARK.
+ *
+ * ⚠️ ONE ARM OF THREE READINGS, AND THAT KEEPS THIS FUNCTION'S STANDING
+ * INVARIANT INTACT. `none` emits NOTHING and an absent verdict emits nothing, so
+ * no positive claim is ever painted on this column — the same treatment
+ * `complete` gets in `completenessMarks`, for the same reason. What makes the
+ * two silences honest is that they are DIFFERENT VALUES on the wire and the
+ * sentence above the table names the second one: a row that says nothing has
+ * either nothing to report or nothing to report it with, and `skippedNote` says
+ * which.
+ *
+ * ⚠️ GREY, NOT AMBER, AND IT IS THE OPPOSITE CALL FROM THE SHORTFALL NEXT DOOR.
+ * A content filter hiding books is a misconfiguration the owner can go and fix,
+ * so it is amber. A skip is UsArr doing what it was built to do — it has no unit
+ * of work for a comic — so nothing is broken and there is nothing to go and
+ * change. Painting it amber would make the shortfalls harder to find, which is
+ * `app.css`'s own argument for `.st--none`.
+ *
+ * ⚠️ AND IT IS NOT PHRASED AS A COMPLETENESS STATEMENT. The word is about the
+ * items that were left out and nothing else; whether the rest of the library
+ * arrived is the neighbouring measurement, and the note above the table draws
+ * that boundary in words.
+ */
+function skipMarks(library: Library, marks: LibraryStateMark[]): LibraryStateMark[] {
+	const s = library.skipped;
+	if (s === undefined || s.state !== 'left_out') return marks;
+
+	const items = s.items ?? 0;
+	const mark: LibraryStateMark = {
+		key: 'items-left-out',
+		// The word is the state; the detail is the evidence and the why. §9.1's
+		// split, and the same shape every other mark in this function uses.
+		word: 'Some items were left out',
+		tone: 'none',
+		detail:
+			`${COUNT.format(items)} ${items === 1 ? 'item was' : 'items were'} read and not mapped` +
+			(s.reason !== undefined ? `; ${s.reason}` : '')
+	};
+	if (s.recordedAt !== undefined) mark.at = s.recordedAt;
+	marks.push(mark);
+	return marks;
 }
 
 /**

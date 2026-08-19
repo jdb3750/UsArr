@@ -4495,6 +4495,34 @@ design would have reported every library as complete on the day it stopped being
 the account**, which is a different question and is not answerable from a read-only credential at
 all. §17.8's screen must never render the clean half as completeness.
 
+**A TENTH STATE, added 2026-08-19 and the ninth's sibling rather than its variant: *some items
+were left out*.** The ninth asks whether UsArr's credential **saw** the whole container. This asks
+the question one step later — of what it saw, how much did UsArr **read and deliberately not map**,
+because it has no unit of work for it. BookOrbit's adapter maps prose books only and counts the
+comics and the unclassified files it declines; the row then says *"Some items were left out — 42
+items were read and not mapped; UsArr maps prose books only"*, **grey**, with the age of the record,
+and one sentence above the table carries the total and the boundary. Wire contract:
+[`reference/http-api.md`](./reference/http-api.md) §2.6a.
+
+⚠️ **Grey, and that is the opposite call from the ninth's amber, deliberately.** A content filter
+hiding books is a misconfiguration the owner can go and widen. A skip is UsArr doing exactly what it
+was built to do, so nothing is broken and there is nothing to go and change — and painting it amber
+would make the shortfalls that ARE actionable harder to find.
+
+⚠️ **Two values on the wire, three readings, and the third is an absent key.** `left_out` renders;
+`none` — an import observed this library and recorded nothing left out — renders **nothing**, which
+keeps this column's standing invariant that no positive claim is made on it; and a library nothing
+observed carries no verdict at all. The last two are separate values because in the database they
+are the same silence: a skip is recorded only when something was skipped, so the read pairs that
+absence with the completeness record, which is written for every container an import observed. The
+sentence above the table is where the difference becomes visible — it names the total, and once it
+has made a claim it says how many rows the claim does **not** cover.
+
+⚠️ **And a skip count is not a completeness check.** It says how many items were left out and why. It
+does **not** say the rest of the library arrived, and it does not say the credential saw the whole
+container. The screen's copy states that boundary out loud, because one clean number is exactly the
+shape that gets read as an all-clear.
+
 **The *importing* state does not subscribe to `GET /api/events`. The answer is still "not yet", but
 ⚠️ the reason that used to carry it has been retracted — do not repeat it.** This paragraph
 previously named a reopen trigger: *when the Services screen's own subscription lands and the event

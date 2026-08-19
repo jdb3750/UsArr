@@ -222,7 +222,7 @@ func TestLibrariesResponseKeysAreTheAllowlist(t *testing.T) {
 	if got := keysOf(items[0]); strings.Join(got, ",") != strings.Join(wantRow, ",") {
 		t.Errorf("row keys = %v\n         want %v", got, wantRow)
 	}
-	allowedRow := append(append([]string{}, wantRow...), "orphaned_at", "completeness")
+	allowedRow := append(append([]string{}, wantRow...), "orphaned_at", "completeness", "skipped")
 	for i, item := range items {
 		for key := range item {
 			if !contains(allowedRow, key) {
@@ -534,5 +534,148 @@ func TestAnUnreadableCompletenessRowIsDroppedRatherThanGuessed(t *testing.T) {
 		if l.Name == "" {
 			t.Error("a row was damaged by the drop")
 		}
+	}
+}
+
+// ─── what the import read and did not map ────────────────────────────────────
+
+// seedSkip writes one items_skipped sync_report row against the library_source
+// whose (service_instance_id, container_ref) pair matches, on seedCompleteness's
+// reasoning: what is under test is the read and the wire, and the tally itself
+// is internal/libsync's.
+func seedSkip(t *testing.T, s *Server, instanceID int, ref, detail string) {
+	t.Helper()
+	if err := s.store.DB().Write(t.Context(), func(ctx context.Context, tx *sql.Tx) error {
+		_, err := tx.ExecContext(ctx, `
+			INSERT INTO sync_report (service_instance_id, kind, remote_kind, remote_id, detail)
+			VALUES (?, ?, 'library', ?, ?)`,
+			instanceID, store.SyncReportItemsSkipped, ref, detail)
+		return err
+	}); err != nil {
+		t.Fatalf("seed skip for %d/%s: %v", instanceID, ref, err)
+	}
+}
+
+// THE END OF THE CHAIN THIS FEATURE EXISTS FOR: an adapter reads a comic, has no
+// unit of work for it, counts it, and the Libraries screen can say so without
+// anybody opening the database.
+//
+// ⚠️ AND IT PINS THE THREE READINGS APART ON THE WIRE, WHICH IS THE PART THAT IS
+// EASY TO LOSE. A skip row is written only when something was skipped, so "the
+// walk left nothing out" and "nothing ever counted" are the same absence in the
+// table. They are NOT the same value here: one is `state: "none"` and the other
+// is no `skipped` key at all. Collapse them and an absent row starts reading as
+// an all-clear, which is the defect ADR-0061 exists to prevent one axis over.
+func TestWhatTheImportLeftOutReachesTheLibrariesWire(t *testing.T) {
+	s := newTestServer(t, nil)
+	seedLibrariesScreenCorpus(t, s)
+
+	// Library 1 (Manga) binds instance 1 / container '11': items were left out.
+	seedSkip(t, s, 1, "11", `{"name":"Manga","skipped_comics":2,"skipped_unknown":1,
+		"reason":"UsArr maps prose books only","effect":"e","covers":"c","does_not_cover":"d"}`)
+	seedCompleteness(t, s, 1, "11", `{"state":"complete","total_items":9,"visible_items":9}`)
+	// Library 2 (Ebooks) binds both containers, both OBSERVED, neither skipped.
+	seedCompleteness(t, s, 1, "12", `{"state":"complete","total_items":3,"visible_items":3}`)
+	seedCompleteness(t, s, 2, "21", `{"state":"complete","total_items":1,"visible_items":1}`)
+	// Library 3 (Loose Ends) has no sources at all, so nothing observed it.
+
+	_, body := callListLibraries(t, s, true)
+	var got librariesResponse
+	mustJSON(t, body, &got)
+
+	byName := map[string]libraryResponse{}
+	for _, l := range got.Items {
+		byName[l.Name] = l
+	}
+
+	manga := byName["Manga"].Skipped
+	if manga == nil || manga.State != "left_out" {
+		t.Fatalf("Manga's skipped = %+v, want a left_out verdict: %s", manga, body)
+	}
+	if manga.Items != 3 {
+		t.Errorf("Manga left out %d items, want 3 (2 comics + 1 unknown)", manga.Items)
+	}
+	if manga.Reason != "UsArr maps prose books only" {
+		t.Errorf("Manga's reason = %q, want UsArr's own short sentence", manga.Reason)
+	}
+	if manga.RecordedAt == nil {
+		t.Error("no recorded_at, so a client cannot render the count as a measurement with an age")
+	}
+
+	// ⚠️ THE ADAPTER'S OWN VOCABULARY MUST NOT CROSS. `skipped_comics` and
+	// `skipped_unknown` are BookOrbit's words for BookOrbit's two reasons; a
+	// second adapter declines items for neither, and an API field named `comics`
+	// would then have to be lied to. The split stays in sync_report.detail.
+	if strings.Contains(body, "skipped_comics") || strings.Contains(body, "comics") {
+		t.Errorf("the adapter's per-reason vocabulary reached the wire: %s", body)
+	}
+	// And nothing operator-facing crossed either: `effect`, `covers` and
+	// `does_not_cover` live in the row for whoever reads the database.
+	if strings.Contains(body, "does_not_cover") || strings.Contains(body, `"effect"`) {
+		t.Errorf("an operator-only key reached the wire: %s", body)
+	}
+
+	// ── the two silences, which are NOT one value ──────────────────────────
+	ebooks := byName["Ebooks"].Skipped
+	if ebooks == nil || ebooks.State != "none" {
+		t.Fatalf("Ebooks' skipped = %+v, want `none` — both its containers were observed "+
+			"and neither recorded a skip, which is a MEASURED negative: %s", ebooks, body)
+	}
+	if ebooks.Items != 0 || ebooks.Reason != "" {
+		t.Errorf("the `none` verdict published a count or a reason: %+v", ebooks)
+	}
+	if loose := byName["Loose Ends"].Skipped; loose != nil {
+		t.Errorf("Loose Ends carries %+v — nothing has ever observed it, and a verdict "+
+			"there reports silence as a measurement", loose)
+	}
+
+	// ⚠️ ON THE WIRE, NOT MERELY IN THE STRUCT. `items` and `reason` must be
+	// ABSENT under `none` rather than served as a zero and an empty string: a
+	// count of 0 under that label is a claim the label does not make. The scan
+	// below is over the raw body because that is what a client parses.
+	var raw struct {
+		Items []map[string]json.RawMessage `json:"items"`
+	}
+	mustJSON(t, body, &raw)
+	for i, l := range raw.Items {
+		blob, ok := l["skipped"]
+		if !ok {
+			continue
+		}
+		var fields map[string]json.RawMessage
+		mustJSON(t, string(blob), &fields)
+		if string(fields["state"]) != `"none"` {
+			continue
+		}
+		for _, key := range []string{"items", "reason"} {
+			if _, present := fields[key]; present {
+				t.Errorf("row %d serves %q under state `none`: %s", i, key, blob)
+			}
+		}
+	}
+}
+
+// A skip verdict whose state this build does not know is DROPPED, not rendered
+// and not guessed at.
+//
+// The store reads its state out of a JSON blob no constraint governs — sync_report
+// carries no CHECK over `kind` and `detail` is untyped — so the vocabulary can
+// grow underneath a running binary. The only honest rendering of a verdict this
+// build cannot read is NO verdict, which is what an unobserved library gets, and
+// it is the one reading that cannot overstate.
+func TestAnUnknownSkipStateIsNotPublished(t *testing.T) {
+	s := newTestServer(t, nil)
+	seedLibrariesScreenCorpus(t, s)
+	seedCompleteness(t, s, 1, "11", `{"state":"complete","total_items":9,"visible_items":9}`)
+
+	// Straight past the store's own decode, to prove the handler refuses too:
+	// the two sides deploy independently.
+	rows := []store.Library{{
+		ID:    1,
+		Name:  "Manga",
+		Skips: &store.LibrarySkips{State: store.SkipState("mostly"), Items: 40},
+	}}
+	if got := librarySkipsFor(rows[0]); got != nil {
+		t.Errorf("librarySkipsFor published %+v for a state no member matches", got)
 	}
 }
