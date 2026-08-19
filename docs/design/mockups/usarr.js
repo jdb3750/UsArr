@@ -67,17 +67,30 @@
        full  Sonarr, Radarr, Prowlarr, Navidrome, Audiobookshelf and Kavita.
              All six media types have a catalogue source. This is the DEFAULT,
              because six populated types is what the layout has to survive.
-       v01   Kavita and Prowlarr, which is every service v0.1 connects
-             (ADR-0041, ARCHITECTURE 16.1). Ebooks and comics have a source;
-             movies, TV, music and audiobooks do not, and each says which
-             service will populate it and when -- Radarr and Sonarr at v0.2
-             (ADR-0045), Navidrome and Audiobookshelf after v0.1.
+       v01   Kavita and Prowlarr, which is what this install DRAWS. It was
+             drawn as every service v0.1 connects (ADR-0041); ADR-0052 has
+             since made v0.1's catalogue source BOOKORBIT, on the owner's
+             decision to sunset Kavita, so the name here is one milestone
+             stale and the re-draw is owed. What it changes is the name and
+             not the shape: ARCHITECTURE 16.1 gives BookOrbit the same three
+             media types Kavita had -- books, comics and manga -- so ebooks
+             and comics still have a source; movies, TV, music and audiobooks
+             still do not, and each still says which service will populate it
+             and when -- Radarr and Sonarr at v0.2 (ADR-0045), Navidrome and
+             Audiobookshelf after v0.1.
 
      The two installs also demonstrate the OPPOSITE identity tiers, and that is
-     the sharpest thing the switcher shows. v0.1's one source is a free Kavita,
-     which returns null aniListId, malId and comicVineId, so "matched by title"
-     is the ordinary case there rather than an exception. The *Arrs that carry
-     TMDB and TVDB ids are on the full stack and arrive in v0.2.
+     the sharpest thing the switcher shows. The v0.1 install's one source as
+     drawn is a free Kavita, which returns null aniListId, malId and
+     comicVineId, so "matched by title" is the ordinary case there rather than
+     an exception. That is MEASURED for free Kavita (ADR-0035 section 1) and
+     it is why the null-identifier screens exist; it is NOT re-measured for
+     BookOrbit, whose own tier ADR-0052 read off source as mixed -- ComicVine
+     ships as a metadata provider, and mangabaka/anilist/myanimelist return
+     zero hits repo-wide. So read this as the reason the tier is drawn at all,
+     not as a claim about what v0.1 will return once its adapter exists. The
+     *Arrs that carry TMDB and TVDB ids are on the full stack and arrive in
+     v0.2.
 
      The v0.1 numbers are DERIVED from the full-stack ones by removing what
      the absent services contributed -- they are not a second invented data
