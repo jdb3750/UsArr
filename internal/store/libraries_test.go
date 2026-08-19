@@ -627,8 +627,13 @@ func TestListLibrariesPlanIsSeeks(t *testing.T) {
 	if faults := listLibrariesPlanFaults(scoped); len(faults) > 0 {
 		t.Errorf("the scoped plan is wrong:\n  plan: %s\n  %s", scoped, strings.Join(faults, "\n  "))
 	}
-	if !strings.Contains(scoped, "SEARCH sil EXISTS USING INDEX ix_sil_work") {
-		t.Errorf("the count's scope EXISTS is not a seek on ix_sil_work: %s", scoped)
+	// The alias is DERIVED from the correlated column (scopeLinkAlias, LS-379),
+	// so the assertion derives it too rather than hard-coding a name that a
+	// literal `sil` would go on matching by prefix while covering nothing.
+	wantSil := "SEARCH " + scopeLinkAlias("m.work_id") + " EXISTS USING INDEX ix_sil_work"
+	if !strings.Contains(scoped, wantSil) {
+		t.Errorf("the count's scope EXISTS is not a seek on ix_sil_work.\n  got:  %s\n  want: %s",
+			scoped, wantSil)
 	}
 	if strings.Contains(scoped, "SCAN ls") {
 		t.Errorf("the library visibility EXISTS degraded to a scan of library_source: %s", scoped)
