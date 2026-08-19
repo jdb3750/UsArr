@@ -7095,6 +7095,53 @@ re-measured from source in the table below rather than inherited.
 | *"**no manga or comic external ids**"* | 🚩 **HALF FALSIFIED, and the surviving half is the narrower one.** **Comics are covered:** ComicVine ships as a metadata provider — `server/src/modules/metadata-fetch/providers/comicvine/` holds `.client.ts`, `.mapper.ts`, `.provider.ts` and `.types.ts`, and the README names *"ComicVine for comics"* among fourteen providers. **Manga and anime are not:** a repository-wide code search for `mangabaka`, `anilist` and `myanimelist` returns **zero hits**. | `bookorbit/bookorbit@main` README and `server/src/modules/metadata-fetch/providers/` |
 | *"an `updatedAt` watermark that **misses tag, genre and author edits**"* | 🚩 **CONFIRMED, and it is worse than the finding says — measured from source on 2026-08-19, not deferred to a probe.** The sort key is real but it is **book-scoped**: the type carrying it is named `BookQuery` (`packages/types/src/query.ts:380`), served by `POST /books/query`, and `SORT_FIELD_MAP` binds `updatedAt` to **`books.updatedAt`** (`book-sort-builder.service.ts:35`). Tracing the tag path end to end — `POST /books/bulk-update-tags` → `BookService.bulkUpdateTags` (`book.service.ts:2362`) → `MetadataService.replaceTags` → `replaceTagsInExecutor` (`metadata.service.ts:513`) — the executor does `delete(bookTags)` + `insert(bookTags)` **and nothing else**; the follow-up `triggerPostMetadataUpdateEffects` schedules a file write/rename and recomputes the metadata score, and **none of those writes `books.updatedAt`**. `replaceGenresInExecutor` (`:480`) and `replaceAuthorsInExecutor` (`:369`) have the same shape. There is **no SQL trigger anywhere in the repo** (`grep -rli "create trigger" server/ --include=*.sql` → no match), so nothing compensates. **A tag, genre or author edit therefore does not move `books.updated_at`.** ✅ The one thing that *does* hold: core metadata edits are covered by an **explicit** touch — `updateMetadataFields` and `bulkUpdateMetadataFields` end with `update(books).set({updatedAt})` (`book.repository.ts:1960, 2012`). | `bookorbit/bookorbit@main`, `packages/types/src/query.ts:380`, `book-sort-builder.service.ts:35`, `metadata.service.ts:369,480,513`, `book.repository.ts:1960,2012` |
 
+> ⚠️ **Citations pinned and one corrected, 2026-08-19 — the verdict above is untouched.** The row's
+> 🚩 **CONFIRMED**, its end-to-end trace and its ✅ counter-example all stand. What changes is where a
+> later reader is sent, and two of the additions make the verdict **harder** to argue with, not softer.
+>
+> **The source is pinned.** The Primary-source cell cites `bookorbit/bookorbit@main`, a moving ref that
+> names a different tree every time upstream merges. The read was taken at **`73b7877`**
+> (`73b7877d2fede2221b0ca360af9bfced7c3797f3`), `main`'s tip at the time. That commit is corroborated
+> inside this repository — [`api/specs/SOURCES.md`](../api/specs/SOURCES.md)'s BookOrbit provenance
+> table carries it, dated **2026-08-19**, with the 68-file `packages/types` tree `4cb990a3…` beside it
+> — so the **ref** is pinned here even though the line numbers below are not.
+>
+> **One correction.** `replaceAuthorsInExecutor` is at
+> `server/src/modules/metadata/metadata.service.ts:370`, not `:369`. The wrong number appears twice in
+> the row, once in the prose and once in the Primary-source cell, and both mean `:370`. Nothing else in
+> the trace moves: the executor's shape, `replaceGenresInExecutor`, `replaceTagsInExecutor` and the
+> absence of any SQL trigger are all as written.
+>
+> **Strengthener 1 — the three executors are outliers, not house style.** `replaceCommunityRatings`
+> (`book.repository.ts:1996`) is a delete-and-insert over a child table of exactly the same shape, and
+> it **does** bump the parent's `updatedAt`. That closes off the charitable reading the row leaves
+> open — that a delete-and-insert simply cannot carry a parent touch, making the gap a property of the
+> write shape and expensive upstream to fix. It is not: an identically shaped write in the same
+> codebase carries it. The missed touch is a **per-call-site omission**, and on balance that is worse
+> for UsArr rather than better. It can be closed upstream in three lines with no type, route or
+> `packages/types` file moving, so [ADR-0064](#adr-0064)'s drift check would not see it either way;
+> and by the same token it can spread to the next relation somebody adds.
+>
+> **Strengthener 2 — the guard that lets a tags-only edit reach the gap.** The ✅ half of the row is
+> narrower than it reads. The explicit `update(books).set({updatedAt})` touch sits behind
+> `book.service.ts:1743`'s **`if (scalarFieldCount > 0)`**, and the relation calls sit *after* that
+> guard, at `:1769`, `:1783` and `:1788`. So an edit changing no scalar field — a tags-only edit, the
+> exact case the finding names — does not merely miss a touch inside an executor, it **skips the only
+> touch on the path**. The honest boundary is therefore: core metadata edits are covered when at least
+> one scalar field changed, and not otherwise.
+>
+> **Provenance, stated plainly because it is unusual.** All four pins above were measured **first-hand
+> by the BookOrbit report-drafting lane on 2026-08-19**, in its own clone of `bookorbit/bookorbit` at
+> `73b7877`, `main`'s tip when it cloned. The measurement and its date are the citation; there is no
+> filed artefact to point at, and none is claimed. ⚠️ **No falsifier for them exists in this
+> repository, and none ever will.** BookOrbit's server source is not vendored — `api/specs/bookorbit-types/`
+> is `packages/types` and nothing else, 68 files — and `SOURCES.md` states the consequence in its own
+> words: *"the server's own DTOs are not in `packages/types` … the controller, service and repository
+> citations in `internal/bookorbit` are **unpinned by anything**. That is the largest uncovered
+> surface."* Neither `make check` nor `make spec-drift` has ever read `book.repository.ts`,
+> `book.service.ts` or `metadata.service.ts`, and neither ever will. A later reader wanting these four
+> numbers re-checked has exactly one route, and it is a fresh clone at `73b7877`.
+
 🚩 **One claim reached this ADR in relay and is REFUSED, because the primary source contradicts it.**
 The drafting brief stated that BookOrbit has *"no watermark — no reliable 'changed since' signal — so
 the sync design is full resync, with no delta channel."* **The strong form of that is false.**
