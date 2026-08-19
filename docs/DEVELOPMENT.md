@@ -1266,6 +1266,48 @@ prose is true, current, or even well formed. Quote it at that size. The measured
 fired in both directions, is in `docs/REVIEW-LOG.md` under *"What a `make check` green on a
 docs-only commit does and does not attest"*.
 
+**Two counts that read as facts about the repository and are facts about the observer.** Each
+under-reports without saying so, and neither can tell you whether what it did not count was absent
+or merely invisible from where it was standing.
+
+* **`lint-go`'s banner counts different packages than the linter opens.** The recipe derives it from
+  `@n=$$($(GO) list ./... | wc -l);` — untagged — while `golangci-lint run` reads `.golangci.yml`,
+  whose `run.build-tags` is `[upstream, bench]`. Measured on `a2cbee3`: `go list ./...` gives **13**
+  packages, `go list -tags upstream,bench ./...` gives **14**, and diffing the two lists puts the
+  whole delta on one package, `internal/db/spike`. So the banner under-reports, and it is doing
+  rule 4's job — refusing to pass while it sees nothing — rather than describing the run. **A
+  package count cannot distinguish a package that was opened from one that was skipped**, which is
+  the same shape as a check whose success condition is an absence: both report the same number
+  whether the work happened or not. Quote it as a floor guard, never as the scope of a lint run.
+* **`git rev-list --count` measures the clone's visible depth, not the commit.** One tip, `2ce8ed9`,
+  counted in three containers on one night: **811** in a clone that is not shallow, **366** in one
+  reported shallow with two graft points, and **146** in one reported shallow with four. Only the
+  first is measured here — `git rev-parse --is-shallow-repository` is `false`, there is no `shallow`
+  and no `info/grafts` under `git rev-parse --git-common-dir`, and `git replace -l` is empty; the
+  other two figures and their graft counts are **reported, not measured here**. Every reading was
+  correct about its own tree and none was about the repository. Three things follow, and the last
+  two cost more than the count did:
+
+  * **Quote a commit count across containers with the clone's shallow status beside it, or not at
+    all.** An unqualified count was broadcast as a general warning that other threads' gate greens
+    were weaker than they thought, and it took a read-only agent in another container to disprove
+    the general form of it. The local number was real; the generalisation was not.
+  * **An unresolvable SHA in an agent container is evidence of a shallow cut, not evidence the SHA
+    is wrong.** `git cat-file -t 9eec372` is reported to return *"fatal: Not a valid object name"*
+    in the four-graft clone; here the same command returns `commit`, and
+    `git merge-base --is-ancestor` puts that commit on `origin/main`. SHAs near the tip resolve
+    and anything past the frontier is absent, so absence there is a fact about the clone rather
+    than about the SHA. Before disbelieving a SHA an agent reports it cannot confirm, run
+    `git rev-parse --is-shallow-repository`; drawing the other conclusion has already cost hours.
+  * **The count is not stable even within one container.** That clone is reported to have read 103
+    earlier the same night and 146 later, because a shallow fetch appends grafts and the frontier
+    moves. A count therefore carries an argument neither between containers nor across time inside
+    one.
+
+  What does travel, stated positively: **ahead/behind against your own `origin/…`**, and
+  **file-level diffs between two commits both ends can resolve**. Each is measured against something
+  the other side also holds, which is precisely why it survives the trip.
+
 ### Consistency is a property of the read, not only of the write
 
 **A writer's transaction guarantees only what a reader takes in one statement, or in one
@@ -1381,6 +1423,22 @@ paragraph describing a repo that no longer exists.
   measured here**: one worker's `git add` swept the other's files into its commit, and both appended
   to `docs/REVIEW-LOG.md` at EOF and collided on merge. **Read-only agents are safe alongside
   anything** — the hazard is writers, and specifically writers sharing an index and a branch ref.
+* **A worktree you lint and then delete leaves its findings in the cache your next run reads.**
+  `GOLANGCI_LINT_CACHE` — `/root/.cache/golangci-lint` by default — is shared by every worktree in
+  one session's container, and the key is the package's import path plus its files' *content*, with
+  the module directory stripped out of each filename, while the cached diagnostics themselves still
+  carry the absolute paths they were recorded at (read in golangci-lint v2.12.2,
+  `internal/cache/cache.go`, `computePkgHash`; that is the pinned gate binary at
+  `/root/go/bin/golangci-lint`). So a dead tree's findings are a cache *hit* for the identical files
+  in the live one: on 2026-08-19 two of one session's own deleted scratch worktrees replayed into
+  **11 phantom issues and a red `lint-go`** on an otherwise unmodified tree, cleared only by removing
+  23 cache entries — and sibling agents linting at the same time write that one cache too. This is a
+  hazard inside your own session, not one another thread can inflict on you; threads share `origin`,
+  not a filesystem. So: if you run a lint gate inside a throwaway worktree, point
+  `GOLANGCI_LINT_CACHE` at a directory inside that worktree or do not run the gate there at all, and
+  end the worktree with `git worktree remove` rather than deleting the directory, so nothing is left
+  registered or half-referenced. **The symptom is `lint-go` reporting issues at paths that do not
+  exist**, on a tree where those same files lint clean.
 * **A sequential id read out of a file is a race, not a lookup.** `M5-NN` entry ids, `M5.N` subsection
   numbers, ADR numbers and migration numbers are all allocated by reading the highest one already
   present, and **two agents that read at the same moment both get the right answer and both are wrong

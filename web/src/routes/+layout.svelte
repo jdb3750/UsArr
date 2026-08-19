@@ -3,26 +3,35 @@
 	 * The application shell: sidebar · toolbar · content, and nothing else
 	 * (DESIGN-DIRECTION §8.3).
 	 *
-	 * TWO AXES, HELD APART (ADR-0027). Media type is the NAVIGATION axis — one
-	 * sidebar entry per type that has content, bounded at six by construction.
-	 * A library is a SCOPE, not a place: a multi-select chip above the nav,
-	 * carried in the URL as `?lib=`, never a nav list. Neither is rendered yet
-	 * and both are deliberately absent rather than faked:
+	 * TWO AXES, HELD APART (ADR-0027). Media type is the NAVIGATION axis — six
+	 * entries, bounded at six by construction, each one a real place at
+	 * `/library/{type}`. A library is a SCOPE, not a place: carried in the URL as
+	 * `?lib=` on the routes that already exist, never a nav list.
 	 *
-	 *   - Media-type rows are data-driven and there is no library data to drive
-	 *     them. ARCHITECTURE §17.2's hard rule is that a type the user does not
-	 *     have is not shown AT ALL, so six placeholder rows would break that rule
-	 *     in the one place it is most visible.
-	 *   - The scope chip renders nothing at 0 or 1 library, exactly as
-	 *     Navidrome's LibrarySelector returns null. At zero libraries the correct
-	 *     rendering is no control, so the seam is here and the widget is not.
+	 * ⚠️ ALL SIX TYPES ARE SHOWN, INCLUDING THE ONES THIS INSTALL HAS NOTHING IN,
+	 * AND THAT IS A DELIBERATE DEPARTURE FROM §17.2'S DATA-DRIVEN RULE RATHER
+	 * THAN AN OVERSIGHT. §17.2 and DESIGN-DIRECTION §8.1 both want a type the
+	 * user does not have hidden entirely, and doing that honestly needs a per-type
+	 * COUNT. There is none on the wire: `docs/reference/http-api.md` §7.1 states
+	 * that there are *"no facet counts beside the chips; each is its own aggregate
+	 * and its own read"*, and this header used to say the rows were absent because
+	 * nothing could drive them. Six one-row probes on every navigation is exactly
+	 * the render-path cost principle 1 exists to refuse, and hiding a type on a
+	 * count nobody measured would hide a library that is really there — the worse
+	 * of the two failures, because it is silent. So all six ship and an empty type
+	 * says so on its own screen, where the words can be true. The rule comes back
+	 * the day a facet count does.
 	 *
-	 * What ships is the fixed entry set — Home · Recently added · Search ·
-	 * Requests · Services · Libraries · Settings — grouped as the mockup groups
-	 * them: content nouns first, configuration last. `Recently added` sits at the
-	 * head of the content group, which is the slot the media-type rows are
-	 * reserved for: it is the catalogue entry point, and it keeps that slot until
-	 * there is per-type data to drive rows of their own.
+	 * THE SCOPE CHIP IS STILL NOT HERE. It renders nothing at 0 or 1 library,
+	 * exactly as Navidrome's LibrarySelector returns null, so at zero libraries
+	 * the correct rendering is no control. `?lib=` is honoured by the screens that
+	 * read it; the chip that WRITES it is a separate commit and is not faked here.
+	 *
+	 * The entry set is Home · the six types · Recently added · Search · Requests ·
+	 * Services · Libraries · Settings, grouped as the mockup groups them: content
+	 * nouns first, configuration last. `Recently added` heads the second content
+	 * group because it is the one view that is not per-type — one unified
+	 * newest-first table across all six (ADR-0028).
 	 *
 	 * THE SESSION GUARD IS UNCHANGED. Every /api/v1 route except the auth
 	 * bootstrap sits behind `authenticated` (internal/httpapi/server.go), so the
@@ -46,7 +55,9 @@
 	import { afterNavigate, beforeNavigate, goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import { page } from '$app/state';
+	import type { ResolvedPathname } from '$app/types';
 	import { ApiError, logout, onUnauthorized } from '$lib/api';
+	import { MEDIA_TYPES, mediaTypeLabel } from '$lib/library';
 	import { session } from '$lib/session.svelte';
 	import { createScrollMemory, forwardScrollKey, type ScrollMemory } from '$lib/shellscroll';
 
@@ -86,38 +97,58 @@
 	const onLoginRoute = $derived(page.url.pathname === loginPath);
 
 	/**
-	 * The fixed sidebar entries, in three groups. The media types belong between
-	 * groups one and two once there is anything to count. Settings is last,
-	 * which is the shape Sonarr, Radarr and Prowlarr already trained
-	 * self-hosters on.
+	 * The sidebar entries, in four groups. Settings is last, which is the shape
+	 * Sonarr, Radarr and Prowlarr already trained self-hosters on.
+	 *
+	 * `id` is the route id and `href` is the resolved path. They are two fields
+	 * because the media-type rows are SIX entries over ONE route — `/library/
+	 * [type]` — so the route id no longer identifies the row, and `resolve` needs
+	 * the parameter to build a real link. Every entry keeps a real `href`, which
+	 * is what makes middle-click, Ctrl-click and "copy link address" work; a
+	 * click handler that called `goto` would look identical and break all three.
+	 *
+	 * `href` is typed `ResolvedPathname` rather than `string`, and that is what
+	 * keeps `svelte/no-navigation-without-resolve` live over these links. The rule
+	 * cannot see a `resolve()` call through an array literal, so a `string` here
+	 * would need the rule suppressed at the one `<a>` that draws every entry —
+	 * which would suppress it for the whole sidebar. The type is only inhabited by
+	 * `resolve()`'s own return, so it holds the same property the rule does.
 	 */
-	type NavRoute =
-		'/' | '/library' | '/search' | '/requests' | '/services' | '/libraries' | '/settings';
+	type NavItem = { id: string; label: string; href: ResolvedPathname };
 
-	const NAV_GROUPS: { id: NavRoute; label: string }[][] = [
-		[{ id: '/', label: 'Home' }],
+	/** ⚠️ ALL SIX, NOT THE ONES THIS INSTALL HAS. The header carries the whole
+	 * argument: there is no facet count on the wire (http-api.md §7.1), and
+	 * hiding a type on a count nobody measured hides a library that is really
+	 * there. The order is `$lib/library`'s `MEDIA_TYPES`, which is §17.2's own. */
+	const TYPE_NAV: NavItem[] = MEDIA_TYPES.map((type) => ({
+		id: `/library/${type}`,
+		label: mediaTypeLabel(type),
+		href: resolve('/library/[type]', { type })
+	}));
+
+	const NAV_GROUPS: NavItem[][] = [
+		[{ id: '/', label: 'Home', href: resolve('/') }],
+		TYPE_NAV,
 		[
 			/**
 			 * ⚠️ `Recently added`, NOT `Library`, AND THE LABEL IS WHAT THE SCREEN IS
 			 * RATHER THAN WHAT THE ROUTE IS CALLED. `/library` renders one unified
-			 * newest-first table over the whole catalogue and nothing else: no
-			 * per-type grid, no covers, no filter and no sort, because every one of
-			 * those needs a browse read the API has not got (the route's own header
-			 * names the four handlers). A row labelled `Library` would promise the
-			 * screen §16 specifies and open the screen that exists, and it would sit
-			 * two rows above `Libraries`, which is a different noun entirely: a
-			 * library is a SCOPE the user defines over a service's containers
-			 * (ADR-0027), not this catalogue. The label becomes `Library` when the
-			 * screen becomes one.
+			 * newest-first table across every media type and nothing else — that is
+			 * ADR-0028's Block C at full length, not a half-built grid — while the
+			 * per-type grid §16 specifies is the six rows above, one place per type.
+			 * A row labelled `Library` would name neither, and it would sit two rows
+			 * above `Libraries`, which is a different noun entirely: a library is a
+			 * SCOPE the user defines over a service's containers (ADR-0027), not this
+			 * catalogue.
 			 */
-			{ id: '/library', label: 'Recently added' },
-			{ id: '/search', label: 'Search' },
-			{ id: '/requests', label: 'Requests' }
+			{ id: '/library', label: 'Recently added', href: resolve('/library') },
+			{ id: '/search', label: 'Search', href: resolve('/search') },
+			{ id: '/requests', label: 'Requests', href: resolve('/requests') }
 		],
 		[
-			{ id: '/services', label: 'Services' },
-			{ id: '/libraries', label: 'Libraries' },
-			{ id: '/settings', label: 'Settings' }
+			{ id: '/services', label: 'Services', href: resolve('/services') },
+			{ id: '/libraries', label: 'Libraries', href: resolve('/libraries') },
+			{ id: '/settings', label: 'Settings', href: resolve('/settings') }
 		]
 	];
 
@@ -125,11 +156,14 @@
 	 * One string per route, read by the toolbar title, the h1 and the live
 	 * region alike, so the three cannot disagree.
 	 *
-	 * /login is deliberately absent: it is two screens on one path and its name
-	 * is state, not a constant. See `loginTitle` below.
+	 * The six type screens take their entry from the same list the nav does, so a
+	 * seventh type could not arrive with a link and no title. `/login` is
+	 * deliberately absent: it is two screens on one path and its name is state,
+	 * not a constant. See `loginTitle` below.
 	 */
 	const TITLES = new Map<string, string>([
 		[resolve('/'), 'Home'],
+		...TYPE_NAV.map((item): [string, string] => [item.href, item.label]),
 		[resolve('/library'), 'Recently added'],
 		[resolve('/search'), 'Search'],
 		[resolve('/requests'), 'Requests'],
@@ -528,8 +562,8 @@
 						<li>
 							<a
 								class="nav__link"
-								href={resolve(item.id)}
-								aria-current={page.url.pathname === resolve(item.id) ? 'page' : undefined}
+								href={item.href}
+								aria-current={page.url.pathname === item.href ? 'page' : undefined}
 							>
 								{item.label}
 							</a>

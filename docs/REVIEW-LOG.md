@@ -19247,6 +19247,33 @@ is a worse falsehood than the silence this change removes. **The seam if it ever
 batched writer in `internal/store`** — one transaction, N inserts — which keeps every row and costs
 nothing at the call site.
 
+## LS-320 — §3's and §3.4's "nothing reads this field" went false an hour after they were written
+
+**Applied.** `docs/reference/http-api.md` said in two places that `file_read_failures` was on the
+wire with no consumer: §3's preamble (*"has **no consumer yet** — it is on the wire and nothing reads
+it"*) and §3.4's closing paragraph (*"Nothing reads this field today — `web/src/lib/services.ts`
+models `last_full_sync_at` and `work_count` and stops there"*). Both were true when written and
+neither survived `885dac0`, which is reachable from `origin/main` and carries `6e5918b`'s Items-cell
+consumer. Verified in the tree rather than from the commit: `web/src/lib/api.ts`'s `ServiceHealth`
+mapper holds `fileReadFailures: num(value.file_read_failures) ?? 0`, and
+`web/src/lib/services.ts`'s `fileReadNote` returns `File list not read for N items` for a non-zero
+value and `''` for zero.
+
+**Named by anchor, not by line.** Both replacements point at the function and the file plus what it
+renders — `fileReadNote`, the `Items` cell's muted second line — because this document has just
+spent a pass moving off citations that rot, and a line number would be the same defect in a new
+place. The §3.4 paragraph keeps its *what a consumer has to do* job: the three obligations still
+stand for the next consumer, they are simply no longer addressed to a first one.
+
+**The rest of §3.4 was checked for the same rot and holds.** The producer (`internal/libsync`'s
+`StreamFiles`), the `file_walk_failed` kind, the *"this field is that table's only reader"* claim
+(`store.FileWalkFailuresByInstance` is still `sync_report`'s only read — `internal/httpapi/library.go`
+says in its own comment why it writes a log instead), the window (`created_at >= last_full_sync_at`,
+matching that function's doc), the distinctness rule, the `libsync.Report.FileReadFailures`
+collision, and the `ssrf.RedactText` quotation — which is verbatim against `internal/ssrf/redact.go`,
+not a paraphrase — are all still accurate. §1.4.1's *"not counted yet"* rendering, which §3.4 calls
+its missing half, is also unchanged.
+
 # Cassette credential scrubber — `internal/vcrscrub`, and both directions of the drill
 
 Trigger: a live probe against the owner's Kavita established that the `/api/Image/*` routes **refuse
