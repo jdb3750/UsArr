@@ -75,11 +75,23 @@ func seedSearchCorpus(t *testing.T, s *Server) {
 	// will produce (schema.md §1, "count" discriminator), applied after the
 	// fact so the response has something to omit or carry.
 	//
-	// The poster is here for the same reason and with the same consequence:
-	// nothing writes `image_asset`, so without it `poster_key` is absent from
-	// every row and every assertion about it is vacuous. ⚠️ The INSERT is
-	// test-only — internal/store's format lint exempts `_test.go` and stays
-	// vacuous, and the writer obligations attach to the fetch half.
+	// The poster is here for the same reason, and its justification has since
+	// dated. ⚠️ THIS USED TO READ "nothing writes `image_asset`, so without
+	// it `poster_key` is absent from every row and every assertion about it is
+	// vacuous", FALSIFIED 2026-08-19 BY `7e5934d` — read at this tip rather than
+	// taken on report: that commit landed internal/store/imagewrite.go, whose
+	// PutPosterAsset INSERTs the image_asset row, plus internal/imagepipeline to
+	// produce the bytes. The fixture still earns its place, but for a NARROWER
+	// reason: no production writer runs inside THIS test, so without the INSERT
+	// below `poster_key` would still be absent from every row here and the
+	// field-selection assertions would still pass vacuously. What changed is that
+	// the absence is now a fact about this test's isolation, not about the tree.
+	// ⚠️ The INSERT is test-only — internal/store's format lint exempts
+	// `_test.go`. This comment used to add "and stays vacuous"; that half is
+	// false too, and by the same commit — imagewrite.go gives the lint a real
+	// writer to walk, so it now runs its load-bearing branch on every `make
+	// check` (see internal/store/imagelint_test.go). The writer obligations
+	// attach to the fetch half.
 	if err := s.store.DB().Write(ctx, func(ctx context.Context, tx *sql.Tx) error {
 		for _, q := range []string{
 			`UPDATE work SET year = 2020,

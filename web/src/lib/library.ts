@@ -27,11 +27,16 @@
  *
  * ⚠️ COVER ART USED TO BE ON THAT LIST AND IS NOT ANY MORE. This endpoint
  * serves `poster_key` — `image_asset.cache_key`, the key `GET /img/{key}`
- * addresses — and `posterUrl` below builds the URL. What is still absent is the
- * BYTES: the fetch half of the image pipeline is not built, nothing writes
- * `image_asset`, so the key is omitted on every row of every real install.
- * A renderer must handle the absent case first, because today it is the only
- * case.
+ * addresses — and `posterUrl` below builds the URL. ⚠️ AND THE BYTES USED TO BE
+ * ON IT TOO. This said the fetch half of the image pipeline was not built and
+ * nothing wrote `image_asset`, so the key was omitted on every row of every real
+ * install; that is false now. `internal/imagepipeline` fetches and renders a
+ * poster, `internal/store`'s `PutPosterAsset` records the row, and
+ * `internal/libsync`'s phase D (`covers.go`) calls it once per imported book on
+ * a BookOrbit import. A renderer must STILL handle the absent case first,
+ * because absence stays ordinary rather than exceptional: no other adapter
+ * fetches a cover, nothing backfills a work imported before that pass existed,
+ * and a cover the credential got a 404 for is deliberately not recorded.
  */
 
 import { ApiError, getJson } from './api';
@@ -318,11 +323,15 @@ export interface RecentItem {
 	 * `image_asset.cache_key` for the work's poster: the key `GET /img/{key}`
 	 * addresses. `posterUrl` turns it into a URL; nothing else may.
 	 *
-	 * ⚠️ GENUINELY OPTIONAL, and today it is absent on EVERY row of every real
-	 * install: the fetch half of the image pipeline is not built, so nothing
-	 * writes `image_asset`. A renderer treats absence as "this work has no
-	 * artwork" and draws whatever it draws for that — it must never substitute
-	 * an empty string and build `/img/` from it.
+	 * ⚠️ GENUINELY OPTIONAL, AND THE REASON HAS CHANGED. This used to say it was
+	 * absent on EVERY row of every real install because nothing wrote
+	 * `image_asset`; `internal/store`'s `PutPosterAsset` writes it, called once
+	 * per imported book by `internal/libsync`'s phase D on a BookOrbit import, so
+	 * the key is populated for works that pass got a cover for. Absence is still
+	 * ORDINARY — any other adapter, any work imported before that pass, any cover
+	 * that 404'd — rather than evidence of a broken route. A renderer treats
+	 * absence as "this work has no artwork" and draws whatever it draws for that
+	 * — it must never substitute an empty string and build `/img/` from it.
 	 */
 	posterKey?: string;
 }

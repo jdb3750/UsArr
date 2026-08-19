@@ -6709,6 +6709,12 @@ the part that is easy to get wrong.**
   `image_asset` today, so the column is a one-line `ALTER` now; after a populated image cache it is
   a 12-step rebuild of a table that `work.poster_asset_id` and `work.backdrop_asset_id` both
   reference. **The seam ships, the feature does not** — which is exactly `CLAUDE.md`'s rule.
+  🔻 **The premise dated 2026-08-19; the rejection is not weakened by it but vindicated.**
+  *"Nothing writes `image_asset` today"* was true when written and was falsified by `7e5934d` —
+  the same falsifier the Consequences rider below records, and the whole correction lives there
+  rather than being restated here. The encoder arrived **after** this ADR, exactly as this bullet
+  assumed it would, so the cheap `ALTER` was taken at the only moment it was cheap and the 12-step
+  rebuild was never owed. The argument is unchanged and the alternative stays rejected.
 - **Name the format only in Go and leave the schema alone.** Rejected — ⚠️ **but not on the
   grounds an earlier draft gave.** That draft said the encoding of a stored row would be
   "unrecoverable"; under clause 1's one-codec-per-row invariant it is perfectly recoverable, because

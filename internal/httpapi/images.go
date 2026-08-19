@@ -14,14 +14,25 @@ import (
 // the route a browser puts in an <img src>, and the only way artwork reaches a
 // client.
 //
-// ⚠️ THE OTHER HALF IS BUILT AND IS NOT CALLED, AND THIS FILE DOES NOT PRETEND
+// ⚠️ THE OTHER HALF IS BUILT AND IS NOW CALLED, AND THIS FILE DOES NOT PRETEND
 // EITHER WAY. This paragraph used to say "nothing in the tree fetches an image,
 // encodes one, or writes an `image_asset` row"; internal/imagepipeline does all
-// three and internal/store's PutPosterAsset records the row. What no code does
-// is CALL it during an import, and it has never been run against a cover from a
-// running service — only against images its own tests fabricated. So on a real
-// install every request here still resolves to a not-cached answer, and that is
-// still an honest empty cache rather than a bug.
+// three and internal/store's PutPosterAsset records the row. It then said "what
+// no code does is CALL it during an import" — ⚠️ FALSIFIED 2026-08-19 BY
+// `c4a3277`, which landed the cover pass: internal/libsync's full import calls
+// fetchCovers as its phase D (covers.go), once per imported book on a BookOrbit
+// import, so an import is now precisely what calls it. Both claims are left
+// legible rather than deleted because each was true when written — the second
+// at `7e5934d` — and a reader who meets only the correction cannot tell which
+// half moved. internal/httpapi/library.go's two bullets record the same shift.
+//
+// ⚠️ WHAT IS STILL TRUE IS THE NEIGHBOURING SENTENCE, and it is a DIFFERENT
+// claim rather than a survivor of the one above: the pipeline has never been run
+// against a cover from a running service — only against images its own tests
+// fabricated. So an absent poster and a not-cached answer remain ordinary here —
+// a work from an adapter with no cover pass, a work imported before that pass
+// existed, or a cover the credential got a 404 for — and that is still an honest
+// empty cache rather than a bug.
 //
 // THREE RULES THAT ARE NOT OBVIOUS, each of them from reference/security.md §4:
 //

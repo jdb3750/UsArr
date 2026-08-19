@@ -20,8 +20,11 @@
 // something writes now. What is still true is the shape — this package owns the
 // layout and the allowlist and nothing else — and one thing that is NOT about
 // the tree at all: internal/imagepipeline has been exercised only against
-// fabricated images, never against a cover from a running service, so an empty
-// cache remains the state of every real install until an import wires it up.
+// fabricated images, never against a cover from a running service. ⚠️ THE
+// TRAILING CLAUSE — "so an empty cache remains the state of every real install
+// until an import wires it up" — WAS FALSIFIED 2026-08-19 BY `c4a3277`: an
+// import wires it up now, in internal/libsync's phase D (covers.go). An empty
+// cache is still ordinary, but it is no longer the only state.
 package imagecache
 
 import (
