@@ -130,13 +130,28 @@ created at startup and stays empty — nothing writes into it. Collect logs from
 remain the intended end state, and are why `USARR_LOG_MAX_SIZE_MB` / `_MAX_FILES` are not
 configuration variables (§2.6), but no milestone has shipped them yet.
 
-🚩 **`trace` is not an exemption from redaction.** A fixed deny-list of query parameters (`apiKey`,
-`api_key`, `apikey`, `token`, `access_token`, `sig`, `p`, `t`, `s`) plus the `Authorization` and
-`X-Api-Key` headers is replaced with `<redacted>` by middleware **before** any log line, audit row,
-error string or support bundle exists — at every level. Middleware, not a convention a contributor
+🚩 **`trace` is not an exemption from redaction.** Credential-bearing query parameters and headers
+are replaced by middleware **before** any log line, audit row, error string, SSE payload or support
+bundle exists — at every level, `trace` included. Middleware, not a convention a contributor
 can forget: northbound OpenSubsonic credentials travel in the query string *by specification*
 ([apiKeyAuthentication](https://opensubsonic.netlify.app/docs/extensions/apikeyauth/)), so an
 unredacted access log *is* a credential file.
+
+**The deny-list is deliberately not reproduced here.** It lives in exactly one place —
+`credentialParams` in `internal/ssrf/redact.go`, reached from other packages through
+`ssrf.IsCredentialParam` — and every copy of it is a copy that goes stale. This paragraph carried
+one that had, which is what `DS-06` in `REVIEW-LOG.md` records. **Read the list in the code.**
+Illustratively, and **not** exhaustively, it covers provider names such as `apiKey` and
+`access_token`, the OpenSubsonic `p`/`t`/`s` triple, and private-tracker passkey names such as
+`passkey` and `rsskey`; matching is case-insensitive. The prose rationale — why each group is on the
+list, and why widening it has a cost — is `ARCHITECTURE.md` §14 item 5 and `reference/security.md`
+§5, the two mirrors that `internal/ssrf/redact.go` names as having to be updated alongside the code.
+Header names are a **separate and shorter** list, in `internal/httpapi/redact.go`: `ssrf` redacts
+URLs and has no concept of a header.
+
+⚠️ **Two placeholders, not one, and the difference tells you which layer redacted.** A redacted
+query-parameter value becomes `REDACTED` (`internal/ssrf`); a redacted header value becomes
+`<redacted>` (`internal/httpapi`).
 
 ### 2.2 Security
 

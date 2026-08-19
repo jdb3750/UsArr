@@ -2021,7 +2021,7 @@ drwx------ 3 root root 4096 … logs
 | **DL-07** | **`docs/reference/schema.md` §13 and `ARCHITECTURE.md` §6.5 both assert the four library tables are "all in migration 0001". They are not** — `schema.md:1071`, `:1074` (*"**All four tables are in migration 0001**, which `CLAUDE.md` says can never be edited"*), `:1148` (*"Reserved row: `library.id = 0`, Unfiled. Inserted by migration 0001"*), `ARCHITECTURE.md:1007` (*"**Four tables, all in migration 0001.**"*). The live schema after `d.Migrate(ctx)` has no `library`, `library_source`, `library_member` or `library_override`. `schema.md:3-8`'s own status header lists the correct ten tables, **so the document contradicts itself.** Worse: `internal/db/migrations/00001_initial.sql:11-14` enumerates what is "deliberately absent" and **omits all four**, so a reader working from the migration header would conclude they exist | **Open — recorded here rather than applied.** **Fix shape:** correct §13 and §6.5, and add the four to the migration header's deferred list — the header is the artefact an implementer actually reads. Two riders in the same edit: **(a)** `ARCHITECTURE.md:798`, `:903`, `:2349` and `schema.md:191,222,284,305` all argue "do X in migration 0001 because doing it later is a backfill" — 0001 shipped without any of them, so those cost arguments are now moot and everything lands in 0002+ regardless; the docs should say so rather than keep arguing about a moment that has passed. **(b)** `ARCHITECTURE.md:1310` §7.7 items **3** ("a priority scheduler in front of the single writer" — `db.Write`, `internal/db/sqlite.go:171`, is a plain `BeginTx` on a 1-connection pool, FIFO by `database/sql`'s waiter queue) and **5** (`ANALYZE` after bulk import — appears only in `internal/db/spike/fixture.go:267`, never on a production path) are unimplemented; both belong to sync, which has not shipped, so this is a "§16 wins" note rather than a defect |
 | **DL-08** | **`VerifyAuditChain` is an unbounded full-table read, and nothing prunes `audit_log`.** `internal/store/audit.go:156` issues `SELECT … FROM audit_log ORDER BY id ASC` with no `LIMIT`, no cursor, no checkpointing — `VerifyAuditChain audit.go:159 → SCAN audit_log`, O(n) forever, on a table that is append-only by trigger (`trg_audit_no_delete`) and has no retention job. Every login writes a row | **Open — recorded here rather than applied.** **Fix shape, and the sequencing is the point:** the index a retention sweep needs already exists (`audit retention sweep → SEARCH audit_log USING COVERING INDEX ix_audit_ts (ts<?)`), but the `BEFORE DELETE` trigger at `internal/db/migrations/00001_initial.sql:119` will `RAISE(ABORT)` on it — so any pruning needs a **new migration** replacing the trigger with one that permits a bounded, audited prune. Worth deciding now, while `audit_log` is empty everywhere. Verification itself wants a cursor or a checkpoint independently |
 | **DS-05** | **§3.5's key-loss recovery procedure describes a state the schema and code do not have.** `docs/CONFIGURATION.md:307-308` — *"UsArr marks every instance whose credential fails to open as `needs_credential`. Open each in the UI and paste the key again."* Repeated at `:615` for Navidrome. `grep -rn "needs_credential" --include=*.go --include=*.svelte --include=*.ts .` → **no matches anywhere**. `internal/httpapi/services.go:540-546` enumerates the five states the API can return: `healthy`, `degraded`, `down`, `needs re-identification`, `unknown`; the real behaviour, reproduced by two passes, is `state: "down"` with `action: "Update API key"` | **Open — recorded here rather than applied.** The behaviour is close enough to be usable — the doc names a **token that does not exist**. **Fix shape:** replace the token with what the API returns, or mark §3.5 the way §3.4 (`:274`) already marks the surrounding recovery flow, *"(proposed CLI, v0.1)"*. §3.5 carries no marker at all. Routes with DS-01, whose reproduction runs through this same code path |
-| **DS-06** | **§2.1's redaction deny-list is a stale subset of the one deny-list.** `docs/CONFIGURATION.md:128-131` lists nine names (`apiKey`, `api_key`, `apikey`, `token`, `access_token`, `sig`, `p`, `t`, `s`) plus `Authorization` and `X-Api-Key`. `internal/ssrf/redact.go:39-64` has **nineteen** — adding `auth_token`, `signature`, `secret`, `secret_key` and the seven private-tracker names `passkey`, `torrent_pass`, `torrentpass`, `rsskey`, `authkey`, `apipasskey`, `cookie`. `internal/httpapi/redact.go:29` redacts **four** headers, not two (adds `Cookie`, `X-CSRF-Token`) | **Open — recorded here rather than applied.** This is the drift `internal/ssrf/redact.go:21-22` explicitly warns about — *"ARCHITECTURE.md §14.5 item 5 and security.md §5 document it and must be updated together with it"* — and it is Round 2's W-01 leaving one copy behind: `docs/ARCHITECTURE.md:1984-1993` and `docs/reference/security.md:314-317` both carry the **complete** list, and CONFIGURATION.md §2.1 is a **fourth copy nobody registered as one**. **Fix shape:** update §2.1, and add it by name to `redact.go:21-22`'s maintenance contract so the next W-01 updates three files and not two. Also `:131` — the doc says values are *"replaced with `<redacted>`"*; `<redacted>` is the **header** placeholder (`internal/httpapi/redact.go:32`), query-parameter values become `REDACTED` (`internal/ssrf/redact.go:70`) |
+| **DS-06** | **§2.1's redaction deny-list is a stale subset of the one deny-list.** `docs/CONFIGURATION.md:128-131` lists nine names (`apiKey`, `api_key`, `apikey`, `token`, `access_token`, `sig`, `p`, `t`, `s`) plus `Authorization` and `X-Api-Key`. `internal/ssrf/redact.go:39-64` has **nineteen** — adding `auth_token`, `signature`, `secret`, `secret_key` and the seven private-tracker names `passkey`, `torrent_pass`, `torrentpass`, `rsskey`, `authkey`, `apipasskey`, `cookie`. `internal/httpapi/redact.go:29` redacts **four** headers, not two (adds `Cookie`, `X-CSRF-Token`) | **Open — recorded here rather than applied.** This is the drift `internal/ssrf/redact.go:21-22` explicitly warns about — *"ARCHITECTURE.md §14.5 item 5 and security.md §5 document it and must be updated together with it"* — and it is Round 2's W-01 leaving one copy behind: `docs/ARCHITECTURE.md:1984-1993` and `docs/reference/security.md:314-317` both carry the **complete** list, and CONFIGURATION.md §2.1 is a **fourth copy nobody registered as one**. **Fix shape:** update §2.1, and add it by name to `redact.go:21-22`'s maintenance contract so the next W-01 updates three files and not two. Also `:131` — the doc says values are *"replaced with `<redacted>`"*; `<redacted>` is the **header** placeholder (`internal/httpapi/redact.go:32`), query-parameter values become `REDACTED` (`internal/ssrf/redact.go:70`). ✅ **Closed 2026-08-19 — see the dated DS-06 closure at the end of this file.** §2.1 now **points at** `internal/ssrf`'s `credentialParams` instead of restating it, with five names marked illustrative and both placeholders named; the *"add it to `redact.go`'s maintenance contract"* half of the fix shape is deliberately **declined**, because a pointer has nothing to maintain. `ARCHITECTURE.md` §14 item 5 and `reference/security.md` §5 were re-counted and are both current at 21 names — `LS-347`'s *"twenty-three"* is itself a miscount, corrected in the closure; the header half (two documented, four in code) is left open for their owners |
 | **DS-07** | **§16 says the Services UI does not exist; a 677-line Services screen ships.** `docs/ARCHITECTURE.md:2203` — *"the Services health **screen** (its endpoint exists, the UI does not)"*; `README.md:70` — `\| **Services health screen** … \| 📋 Planned — v0.1 \|` with no partial marker, though the README uses `🚧 Partial` elsewhere (`:66`). `web/src/routes/services/+page.svelte` is 677 lines: it lists instances, renders `state` + verbatim `problem` from `GET /api/v1/services/health`, adds, edits, re-tests, removes, and handles the sudo re-prompt. `web/src/routes/+page.svelte:39` tells a fresh user *"Start on Services"* — because without it there is no way to add a Prowlarr instance at all | **Open — recorded here rather than applied.** The file's own header (`:3-15`) is precise and honest about what it is — *"the SCAFFOLDING version… deliberately NOT the screen §17.3 specifies… Delete this file wholesale when §17.3 lands"* — §16 and the README simply have not absorbed it. **Fix shape:** §16 gains a partial/scaffolding row and the README's row moves to `🚧 Partial`. This is the rare direction where §16 **understates**, and it understates by exactly the amount that matters to a first-time user: whether the install is usable without `curl`. Corroborated by the fresh-install pass, which drove the whole add-a-service flow through the shipped screen |
 | **DS-08** | **`HttpOnly; Secure; SameSite=Lax` is stated unconditionally in two docs; `Secure` is conditional in code.** `docs/ARCHITECTURE.md:1786` and `docs/reference/security.md:378`, identical wording. `internal/httpapi/auth.go:306-308` — `secureCookies` returns `clientOf(r.Context()).scheme == "https"`, so `Secure` is omitted on plain HTTP | **Split. The code half is already dispositioned; the doc half is Open.** The reviewer states plainly that **the code is right and the docs are wrong**, and the argument at `auth.go:293-305` is the same one Round 2 accepted at **W-02**: `CONFIGURATION.md:630` (§8.1) makes plain HTTP on a trusted LAN the documented v0.1 default, browsers discard `Secure` cookies over http, so an unconditional `Secure` means nobody can log in on the default deployment. **Recorded as a deliberate decision rather than a defect**, cross-referenced to W-02. What is **still open** is exactly what W-02 did not do: the carve-out exists only as a Go comment, and neither of the two documents a reviewer actually reads records it. **Fix shape:** one sentence in each of `ARCHITECTURE.md:1786` and `security.md:378`. Independently corroborated by the security pass, which verified by execution that both cookies carry `Secure=true` over HTTPS |
 | **DS-09** | **§17.3's state vocabulary and the code's disagree in both directions.** `docs/ARCHITECTURE.md:2489` names four states (`healthy` / `degraded` / `down` / `needs re-identification`); `:2493` asserts *"`not configured` is already a first-class state with its own token"*. `internal/httpapi/services.go:540-546` defines **five** — the four plus `unknown`, returned for a disabled instance (`:679`) and as the fallback (`:694`) — and `not configured` **exists nowhere in the codebase**. The function's own doc comment at `:668` says *"derives the four states"* while its body returns five | **Open — recorded here rather than applied.** Both directions are wrong, which is why it is one entry and not two. **Fix shape:** §17.3 gains `unknown` and drops the `not configured` claim; `services.go:668`'s doc comment says five. **Low-severity rider, flagged as INFERENCE by the reviewer:** §17.3's plain-language amendment (`:2503-2509`) requires `paused — 7 failed attempts, retrying 14:19` rather than `degraded / breaker open`, and `this may be a different Sonarr` rather than `needs re-identification`, while the API returns the raw tokens. That is *plausibly* intended as a UI-layer rendering concern and the §17.3 screen is not built — but **nothing in the code or docs says which layer owns it**, and that is the part worth settling |
@@ -19477,6 +19477,31 @@ them while this change was in a rebase. They are named by heading and bullet abo
 the same correction LS-320 made to `http-api.md` one commit earlier. The `00005:221` and
 `testdata/schema.sql:292` line numbers are kept, because neither file is edited.
 
+⚠️ **Amendment, 2026-08-19 — the note above names the wrong commit. It stands as written, and the
+correction is here rather than in it.** `bf66828` did not rewrite `docs/reference/security.md`. It
+does not touch that file at all. Measured at `794b1a4`, the `origin/main` this amendment was written
+against, `git show --stat bf66828` reports *"docs: the lint banner is a mislabel, and a compile count
+is not lint coverage"* and one file — `docs/DEVELOPMENT.md | 30 ++++++++++++++++++++++--------`,
+`1 file changed, 22 insertions(+), 8 deletions(-)`. The rewrite the note describes is **`0ca1be6`**,
+*"docs: security.md's present tense claimed guards nothing reaches"* —
+`docs/reference/security.md | 282 +++++++++++++++++++++++++++++++--------------`, `1 file changed,
+193 insertions(+), 89 deletions(-)`, and `security.md` is the only file in it.
+
+**How the two were transposed, since the mechanism is the reusable part.** `0ca1be6` is committed at
+`05:03:47` and reaches `main` through the merge `b2221df` at `05:04:05`; `bf66828` is the very next
+commit on `main`, at `05:04:36`. So the SHA that lands *after* the rewrite arrives was read as the
+SHA that *is* the rewrite — thirty-one seconds and one merge commit apart. A `git log --oneline`
+taken in that window shows `bf66828` on top and the rewrite two rows down behind a merge, which is
+exactly the reading that produces this error.
+
+**Only the attribution changes; the note's remedy was and is correct.** The line numbers were stale,
+a `security.md` rewrite is what staled them, and the heading-and-bullet citations this entry now uses
+are unaffected by which SHA did it. `LS-320`'s parallel holds too — it re-anchored `http-api.md` by
+symbol against the same class of rot — and it is worth saying that a citation naming the wrong SHA is
+the same defect as a citation naming a moved line: both look precise and both send a reader somewhere
+that does not carry what they were promised. The remedy is the same in both directions, which is to
+name the thing by something that does not move and to quote what was actually measured.
+
 **And the test's own doc comment names this exact case** — *"This catches … drift: **a migration
 edited after it shipped**"* (`migrate_test.go:25-27`). The rule has a mechanism here, not just a
 convention.
@@ -20200,3 +20225,99 @@ a ≥32-character hex run. A credential that is base64, base32, hyphen-free-but-
 non-canonical GUID spelling still passes both the gate and the guard. That is the same residual
 `SR-13` records for `ssrf`'s path heuristic, and the durable close is the same: an explicit
 declaration of which positions in which upstream's URLs are secret.
+
+# DS-06 — closed 2026-08-19: §2.1 stops restating the deny-list and points at it
+
+## DS-06 — the fourth copy is deleted rather than refreshed, because a refreshed copy is the same bug on a timer
+
+**What was wrong.** `docs/CONFIGURATION.md` §2.1's redaction flag carried its own inventory of the
+credential-parameter deny-list: **nine** parameter names (`apiKey`, `api_key`, `apikey`, `token`,
+`access_token`, `sig`, `p`, `t`, `s`) plus **two** header names (`Authorization`, `X-Api-Key`).
+The authoritative list — `credentialParams` in `internal/ssrf/redact.go` — holds **twenty-one**
+parameter names, and `internal/httpapi/redact.go`'s `redactedHeaders` holds **four** headers
+(`Cookie` and `X-CSRF-Token` were missing from the doc). The doc's nine are only **eight distinct**
+names, because matching is case-insensitive and `apiKey`/`apikey` are the same entry — so §2.1 was
+short by **thirteen** parameter names and two headers, missing every private-tracker passkey name
+and the whole `auth_token` / `refresh_token` / `refreshtoken` / `signature` / `secret` /
+`secret_key` group.
+
+It also stated a single placeholder — *"replaced with `<redacted>`"*. `<redacted>` is the **header** placeholder
+(`internal/httpapi/redact.go`), while a redacted query-parameter value is `REDACTED`
+(`internal/ssrf/redact.go`).
+
+**Why now.** LS-340…LS-349 — the cassette credential scrubber, merged at `36d7f71` — established the
+rule this closure follows: **extend the one list, never start a second.** That work found the drift
+was already real rather than prospective (five names in three copied test scrubbers against
+`internal/ssrf`'s twenty-one), collapsed the copies into `internal/vcrscrub` with **no
+name list in it**, and exported `ssrf.IsCredentialParam` so a caller that cannot go through
+`RedactURL` still consults the one list. LS-347 then extended that list by two (`refresh_token`,
+`refreshtoken`), updated the two registered mirrors in the same commit, and recorded explicitly that
+`CONFIGURATION.md` §2.1 remained stale because DS-06 owned it. This is DS-06 being paid.
+
+**What changed.** §2.1 now **points at** the list instead of restating it. Three paragraphs where
+there was one:
+
+1. The semantic the section actually owes a reader is preserved and unchanged in substance —
+   `USARR_LOG_LEVEL=trace` **is not an exemption from redaction**, because redaction is middleware
+   that runs before any log line, audit row, error string, SSE payload or support bundle exists, and
+   the northbound OpenSubsonic credential rides in the query string by specification. That is a
+   configuration-key semantic, not an inventory, and a pointer could not have carried it.
+2. The inventory is replaced by a pointer naming `credentialParams` in `internal/ssrf/redact.go` and
+   the exported `ssrf.IsCredentialParam`, with **five illustrative names marked as illustrative and
+   explicitly not exhaustive** (`apiKey`, `access_token`, the `p`/`t`/`s` triple, `passkey`,
+   `rsskey`), a note that matching is case-insensitive, and a pointer onward to
+   `ARCHITECTURE.md` §14 item 5 and `reference/security.md` §5 for the prose rationale. Header names
+   are named as a **separate and shorter** list in `internal/httpapi/redact.go`, which is the
+   distinction LS-340 made in `vcrscrub`: `ssrf` redacts URLs and has no concept of a header.
+3. The placeholder error is fixed by stating **both** placeholders and which layer produces each.
+
+**The fix shape DS-06 proposed is deliberately half-declined, and that is the point.** DS-06 said
+*"update §2.1, and add it by name to `redact.go`'s maintenance contract so the next W-01 updates
+three files and not two."* The first half is done; the second is **not**, and should not be. A
+pointer has nothing to maintain — registering it as a third file to update in lockstep would
+re-create the coupling this closure removes. The contract in `internal/ssrf/redact.go` stays at two
+documents, and it stays at two because those two carry the list on purpose.
+
+**The other three copies, verified rather than assumed, and re-verified at `794b1a4` after
+`origin/main` moved under this change:**
+
+| Site | Names carried | State |
+|---|---|---|
+| `internal/ssrf/redact.go` `credentialParams` | 21 | ✅ **Authoritative.** The ONE list |
+| `docs/ARCHITECTURE.md` §14 item 5 | 21 | ✅ **Current**, and a registered mirror — updated in the scrubber's own commit per LS-347. Not touched here |
+| `docs/reference/security.md` §5 | 21 | ✅ **Current**, and a registered mirror — same commit. Not touched here |
+| `docs/CONFIGURATION.md` §2.1 | ~~9 written, 8 distinct, + 2 headers~~ | ✅ **Closed by this change.** Now a pointer, carrying five names marked illustrative |
+
+Both registered mirrors were read in full and counted, not taken on the scrubber report's word —
+and counting is what caught the next item. Both are complete and both already say the list lives
+once in `internal/ssrf`, so neither is a defect, and `ARCHITECTURE.md` was not edited.
+
+🔍 **`LS-347` states the wrong number, and this closure would have inherited it.** Its ⚠️ note reads
+*"it lists nine names against the code's **twenty-three**"*. `credentialParams` holds **twenty-one**
+— the nineteen `DS-06` counted plus `refresh_token` and `refreshtoken`, which is `LS-347`'s own
+addition — and `LS-340`, in the same merged work, says twenty-one correctly. Counted from the source
+rather than relayed: 11 provider/generic names, the 3-name OpenSubsonic triple, 7 private-tracker
+passkey names. Both mirrors carry all 21, so nothing downstream of the miscount is wrong; only the
+sentence is. `LS-347`'s text is **left standing** under the dated-record rule (`DEVELOPMENT.md` §11),
+and this is the correction pointer.
+
+⚠️ **A residual, recorded rather than swept:** both mirrors
+still name **two** headers (`Authorization`, `X-Api-Key`) where `internal/httpapi/redact.go` has
+**four**. That is the header half of DS-06's finding text surviving in the two documents DS-06 did
+not scope, and `ARCHITECTURE.md` has named section owners. It is left open here deliberately, for
+whoever owns those sections, rather than fixed by a thread that was not asked to touch them.
+
+⚠️ **A fifth restatement exists and is out of DS-06's scope.** `docs/CONFIGURATION.md` §4.1's last
+bullet describes an ingest-time assertion rejecting any URL containing *"`api_key`, `apikey`,
+`key=`, `token` or `access_token`"*. That is a narrower and differently-shaped claim than §2.1's —
+it describes an assertion, not the logging deny-list, and it includes `key=` which is **not** on
+`credentialParams` — so refreshing it against `internal/ssrf` would be wrong, not merely
+out of scope. It is flagged here so the next reader does not mistake silence for a clean sweep.
+
+**What `make check` green is worth on this change: almost nothing, and stating that is the honest
+part.** This is `docs/` prose only. Of the gate's stages, `gitleaks` is the only one that reads a
+`.md` diff at all, and a green from it attests exactly *"no credential-shaped string was added"* —
+not that the pointer resolves, not that the counts above are right, not that §2.1 is now true. The
+counts and the symbol-level citations are the evidence — cited by file and symbol rather than by
+line, per `DEVELOPMENT.md` §11, because `docs/` has several lanes pushing to it concurrently. They
+were counted at `794b1a4` and are re-countable by anyone.

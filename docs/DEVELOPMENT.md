@@ -100,11 +100,15 @@ UsArr/
 │   ├── requests/               # v0.2 — request → route to the right *Arr by media type
 │   ├── crossmedia/             # v0.3 — Wikidata edge resolution
 │   ├── metadata/               # v0.2+ — tmdb, tvmaze, musicbrainz, openlibrary, wikidata
+│   ├── bookorbit/                  # v0.1's catalogue source as of ADR-0052
 │   ├── navidrome/ audiobookshelf/ kavita/ komga/  # catalogue adapters. This read "one milestone
 │   │                               #   each after v0.1, in that order subject to the §16.1 probe";
-│   │                               #   ADR-0041 moved kavita/ INTO v0.1 and the probe is discharged,
-│   │                               #   so only the other three are after it. The adapter that drives
-│   │                               #   a client like kavita/ lives in libsync/, not beside it.
+│   │                               #   ADR-0041 moved kavita/ INTO v0.1, then ADR-0052 moved v0.1 off
+│   │                               #   it onto bookorbit/. kavita/ is SUNSET, NOT DELETED — it stays
+│   │                               #   here and stays green — and it is not added back to the
+│   │                               #   after-v0.1 sequence, which is navidrome/, audiobookshelf/,
+│   │                               #   komga/ in that order. The adapter that drives a client like
+│   │                               #   kavita/ lives in libsync/, not beside it.
 │   ├── jellyfin/                # v1.0 southbound adapter
 │   ├── lazylibrarian/          # v0.3 as a Tier 1 YAML manifest (ARCHITECTURE §16); Go code only
 │   │                           #   if the manifest ceiling is hit — cmd= RPC, HTTP 200 + Success:false
@@ -643,12 +647,31 @@ The rule fires on the adjacent `apiKey=` keyword, not on the credential, so the 
 a bare path segment scans clean. Generate a fresh random GUID if you re-run this: a recognisable
 sample value may be allowlisted upstream, and would report a false negative.
 
-So: **do not record a cassette against a live instance until a `BeforeSave` scrubber strips
-credentials from the URL — path as well as query — and that scrubber has been fired against a
-known-bad recording.** An unfired scrubber is indistinguishable from no scrubber (§11), and this
-failure is silent and permanent rather than a red gate. `internal/kavita/vcr_test.go` is the worked
-example: it redacts the URL on both sides of the matcher, because a cassette that could only match
-by storing the credential is precisely what the hook exists to prevent.
+So: **recording against a live instance was frozen until a `BeforeSave` scrubber stripped
+credentials from the URL — path as well as query — and had been fired against a known-bad recording.
+Both conditions are discharged and the freeze is LIFTED**, by the scrubber that landed at `36d7f71`.
+Why it existed has not stopped being true, which is why the rule it left behind is that cassettes are
+opened through `vcrscrub.New` and nowhere else: a cassette records the request URL VERBATIM, so once
+committed the credential is in git history permanently, and an unfired scrubber is indistinguishable
+from no scrubber (§11) — a silent, permanent failure rather than a red gate.
+
+What discharged each half:
+
+* **Path as well as query.** `vcrscrub.RedactURL` runs `redactGUIDSegments` *before*
+  `ssrf.RedactRawURL`: it splits the raw string on `/` and replaces any whole segment that is a
+  canonical GUID. That is the `…/api/Opds/<guid>/series` row in the table above — the one `make
+  secrets` scans clean. `internal/ssrf`'s own path heuristic does not catch it and is right not to,
+  because ssrf writes immutable provenance rows and is biased towards missing a key rather than
+  eating a real path segment; the opposite bias belongs here, where an over-redaction shows up in a
+  diff before the commit.
+* **Fired.** `TestScrubDrillArmed` records against a local fake and asserts the cassette holds
+  `/api/Opds/REDACTED/series`; `TestScrubDrillNeutered` records the SAME interaction with the hook
+  removed and asserts the key DOES land, so the drill shows the hook is what did the work rather than
+  the client happening not to send the key. `TestRedactURLHandlesAPathSegmentGUID` pins the unit, and
+  `TestCassettesOnDiskCarryNoCredential` re-scans every committed cassette on every `make check`.
+
+`vcrscrub.New` redacts the URL on **both** sides of the matcher, because a cassette that could only
+match by having stored the credential is precisely what the hook exists to prevent.
 
 Kavita's image endpoints produced this rule; it generalises to any API that takes a key in a URL. On
 `api/specs/kavita-v0.9.0.2.json` — the release the owner runs — `GET /api/Image/series-cover`
@@ -1267,32 +1290,49 @@ fired in both directions, is in `docs/REVIEW-LOG.md` under *"What a `make check`
 docs-only commit does and does not attest"*.
 
 **Two counts that read as facts about the repository and are facts about the observer.** Each
-under-reports without saying so, and neither can tell you whether what it did not count was absent
-or merely invisible from where it was standing.
+under-reported without saying so, and neither could tell you whether what it did not count was
+absent or merely invisible from where it was standing. The first has since been fixed; the lesson
+underneath it has not been retired, which is why it is still written down.
 
-* **`lint-go`'s banner counts different packages than the linter opens.** The recipe derives it from
-  `@n=$$($(GO) list ./... | wc -l);` (`Makefile:786`) — untagged — and then runs `$(GOLANGCI_LINT)
-  run` (`Makefile:790`) **with no path arguments**, so golangci-lint resolves its own package set
-  from `.golangci.yml`, whose `run.build-tags` is `[upstream, bench]`. The count is echoed; it is
-  never passed to the linter. Measured on `a2cbee3`: `go list ./...` gives **13** packages, `go list
-  -tags upstream,bench ./...` gives **14**, and diffing the two lists puts the whole delta on one
-  package, `internal/db/spike`. So the banner under-reports, and it is doing rule 4's job — refusing
-  to pass while it sees nothing — rather than describing the run. **The gate does nevertheless lint
-  the tagged package: this is a mislabel, not a coverage hole.** Reported from another lane and
-  **not re-measured here**, because reproducing it means writing defects into a source file: two
-  real defects planted in `internal/db/spike/workload.go` — a bare `defer stmt.Close()` in place of
-  the checked form, and an unused package-level var — were both reported **by name**, `errcheck` and
-  `unused`, and the run exited **2**. That file is plain `//go:build bench`, so it is reachable
-  under the configured tags. **And a compile count is never evidence of lint coverage.** With both
-  defects still planted, `make build-tagged` was **green, exit 0**: `go build -tags=bench ./...` and
-  `go vet -tags=upstream ./...` (`Makefile:862-868`) pass over an unchecked error return and an
-  unused variable alike, while that step prints `build-tagged: compiling 14 Go packages with
-  -tags=bench` (`Makefile:865`). Two steps in `check` print package counts, only one of them lints,
-  and the one that lints prints the **smaller** number — so a tree where `lint-go` had genuinely
-  skipped a package would still print `14` here and look covered. **A package count cannot
-  distinguish a package that was opened from one that was skipped**, which is the same shape as a
-  check whose success condition is an absence: both report the same number whether the work happened
-  or not. Quote either count as a floor guard, never as the scope of a lint run.
+* **✅ Resolved — `lint-go`'s banner counted different packages than the linter opened.** Fixed in
+  `eb92062`, *"chore: lint-go's banner counted 13 packages while the linter opened 14"*, which reached
+  `main` as merge `7bd45e9`. **Recorded for the lesson, not as an open defect — do not re-open it.**
+  The recipe used to derive its count from an untagged `go list ./...` and then run `golangci-lint
+  run` **with no path arguments**, so golangci-lint resolved its own package set from `.golangci.yml`,
+  whose `run.build-tags` is `[upstream, bench]`. The count was echoed and never passed to the linter,
+  so the banner under-reported. **Both figures move as packages land, so read them as dated
+  observations and not as constants** — at `a2cbee3`, where the defect was measured, `go list ./...`
+  gave **13** and `go list -tags upstream,bench ./...` gave **14**; at `36d7f71` the same two commands
+  give **14** and **15**. What does not move is the delta: it is one package, `internal/db/spike`, in
+  both readings. **The gate did lint the tagged package throughout — it was a mislabel, not a coverage
+  hole.** The banner now prints both figures and names the gap. At `36d7f71` it says:
+
+  ```
+  lint-go: linting 15 Go packages — 14 untagged, plus 1 behind .golangci.yml's build-tags (upstream,bench)
+  ```
+
+  The tag list in that line is **read out of `.golangci.yml` by `awk`**, not copied into the Makefile —
+  the `lint-go` recipe's leading `tags=$(awk …)` scans for the `build-tags:` key and `paste`s the
+  entries it finds — so adding a tag to the config widens the count with no Makefile edit, and the two
+  cannot silently drift apart again. An empty extraction is not an error: it means the config sets no
+  tags, and the two figures then coincide and the banner prints the short form.
+* **A compile count is never evidence of lint coverage, and that half stands whatever either banner
+  prints.** Reproducing it means writing defects into a source file, so it was measured once and is
+  reported rather than re-measured here: two real defects planted in `internal/db/spike/workload.go` —
+  a bare `defer stmt.Close()` in place of the checked form, and an unused package-level var — were
+  both reported **by name**, `errcheck` and `unused`, and `lint-go` exited **2**. That file is plain
+  `//go:build bench`, so it is reachable under the configured tags. With both defects still planted,
+  `make build-tagged` was **green, exit 0**: `go build -tags=bench ./...` and `go vet -tags=upstream
+  ./...` pass over an unchecked error return and an unused variable alike, while that step prints
+  its own `build-tagged: compiling N Go packages with -tags=bench` banner. **Compilation is not a
+  fallback for linting.** Two steps in `check` print package counts, only one of them lints, and a
+  tree where `lint-go` had genuinely skipped a package would still print the full count under
+  `build-tagged` and look covered.
+* **The lesson the fix does not retire: a package count cannot distinguish a package that was opened
+  from one that was skipped.** Only a planted defect can. A count is the same shape as any check whose
+  success condition is an absence — it reports the same number whether the work happened or not — and
+  a corrected banner is a better *label*, not a coverage *proof*. Quote either count as a floor guard,
+  never as the scope of a lint run.
 * **`git rev-list --count` measures the clone's visible depth, not the commit.** One tip, `2ce8ed9`,
   counted in three containers on one night: **811** in a clone that is not shallow, **366** in one
   reported shallow with two graft points, and **146** in one reported shallow with four. Only the
@@ -1416,6 +1456,75 @@ paragraph describing a repo that no longer exists.
   with the new date and the new tree, leaving the original standing (`docs/REVIEW-LOG.md` §6.1
   *Amended dispositions*, whose closing line is *"No existing entry's id, text or severity
   changed"*).
+* **Cross-reference another repo document by heading or anchor, never by line number.** The two
+  bullets above are the code half and the dated-record carve-out; this is the prose half, and it
+  decays faster, because several lanes push `docs/` concurrently and a rotted line number **does not
+  announce itself** — it keeps resolving, just to the wrong place. Two `docs/REVIEW-LOG.md` entries
+  from 2026-08-19 are the evidence, and both are worth reading over this summary of them. `LS-320`
+  corrected two `docs/reference/http-api.md` claims and deliberately wrote the replacements as
+  *"Named by anchor, not by line … because this document has just spent a pass moving off citations
+  that rot, and a line number would be the same defect in a new place"*, pointing at the `fileReadNote`
+  helper and the `Items` cell's muted second line rather than at offsets. `LS-321`, one commit later,
+  had its own citations rot **inside the pass that wrote them**: *"This entry's `security.md`
+  citations were section names and line numbers when written, and the line numbers were stale within
+  the hour"*, because `docs/reference/security.md` was rewritten wholesale while that change sat in a
+  rebase. It re-verified against the pushed tree and re-cited by heading and bullet instead — §5,
+  *"Redaction is middleware, not a convention"*, under *"URLs stored in the database are in scope
+  too"*.
+  * ⚠️ **A line number is correct, and preferred, where the file is never edited.** `LS-321` kept
+    `internal/db/migrations/00005_library_sync.sql:221` and `internal/db/testdata/schema.sql:292` as
+    line cites for exactly that reason — *"because neither file is edited"* — a merged migration, and
+    the checked-in schema snapshot `TestMigrationRoundTrip` compares against byte-for-byte. Where
+    nothing can move the line, the line is the most precise anchor there is; everywhere else it is a
+    claim with a shelf life.
+  * 🔍 **`LS-321` names the wrong commit for the rewrite that rotted it**, which is the rule failing
+    on its own evidence. Its ⚠️ note attributes the `security.md` rewrite to `bf66828`; at `36d7f71`
+    that commit touches `docs/DEVELOPMENT.md` and nothing else. The rewrite is `0ca1be6`, *"docs:
+    security.md's present tense claimed guards nothing reaches"*, 193 insertions and 89 deletions in
+    `docs/reference/security.md`. Cite `0ca1be6` when repeating this, and leave the entry's own text
+    standing — it is a dated record, and the bullet above governs how it gets corrected.
+* **ADR and migration numbers are allocated by the coordinator at dispatch, never discovered by
+  reading the highest number in a merged file.** Write a placeholder — `ADR-XXXX`, `000NN_` — and ask
+  for the id. **The reason is not bookkeeping, and without it this reads as bureaucracy:** an id read
+  from a merged file is not free, because the number that invalidates it may be sitting on a branch
+  the reader cannot see, and no amount of care with `git log` on your own checkout will surface it.
+  The highest merged number is evidence about what has landed, never about what has been *claimed*.
+  Measured at `36d7f71`, where the highest ADR in `docs/DECISIONS.md` on `main` was **0051**: **two
+  unmerged branches had each independently allocated `ADR-0052`** off that reading —
+  `docs/dd-8.1-sidebar-facets` as *"All six media types are always in the sidebar; per-type hiding is
+  closed until a facet read exists"*, and `docs/adr0052-bookorbit-20260819` as *"v0.1's catalogue
+  source is **BookOrbit**; Kavita is sunset"*. Both threads read `main` correctly and neither could
+  see the other. **The race resolved while this bullet was being written**: `840233d` merged the
+  BookOrbit ADR as 0052, so at that tip the sidebar branch still carries a second, conflicting
+  `ADR-0052` and now has to renumber a merged-and-cited id out of its own history. The cost lands on
+  whoever merges second, and it is not paid by the thread that caused it.
+  * ⚠️ **A gap in either sequence is correct, and nobody renumbers to close one.** Closing a gap
+    rewrites ids that other documents, commit messages and code comments already cite, and it is
+    exactly the shared-counter operation this rule exists to avoid — the cure is the disease.
+    `docs/REVIEW-LOG.md` already says so of its own ids: *"a gap in either is fine and nobody closes
+    one"*.
+  * 🔍 **The migrations half now has its instance, and it is recorded in two halves on purpose,
+    because neither account alone was sufficient and collapsing them would misrepresent both.**
+    **Stated by the participating lane — the only source for the trigger and the timing, and not
+    independently checkable from here:** an agent was briefed to create migration `00008`; a collision
+    warning reached it mid-run, because another decision had taken that slot; it verified against a
+    fresh `origin/main`, wrote `00009_edition_format_index.sql` instead, and regenerated the golden
+    dump after rebasing. The correction happened **inside a working tree, before anything landed** —
+    and that lane explicitly **cannot** attest whether a `00008`-named file ever existed in a commit.
+    **Measured — the only source for what pushed history contains, and it settles a different
+    question:** `git log --all --diff-filter=R --summary -- internal/db/migrations` is **empty**, and
+    `00008_image_asset_format.sql` and `00009_edition_format_index.sql` are two separate files, each
+    added exactly once. **Pushed history carries no rename, which is consistent with the correction
+    landing before the first commit** — and is why reading that same absence as *"the reported
+    renumber does not reproduce"* proved too strong: an in-tree correction leaves `--diff-filter=R`
+    nothing to find, so the empty result never was evidence against it. ⚠️ **The extension is the part
+    worth carrying, and it makes the rule stronger than *"your read may be stale"*.** That agent
+    **had** checked the number against `main`, and **its read was correct at the moment it was made**.
+    The slot was taken underneath it *afterwards*, by a lane it could not see. So re-reading the
+    highest number — more carefully, later, or against a fresher fetch — **is not a fix**: there is no
+    moment at which such a read is safe, because it is only ever true of the tree as it was, and any
+    concurrent lane can invalidate it before you land. **Only allocation fixes it**, because only the
+    dispatcher sees every lane at once.
 * **Key the worktree decision to the operation, not to the size of your change.** Any *whole-tree*
   git operation — `git add -A`, a `git commit` of an index somebody else may have added to,
   `git checkout <branch>` — belongs in a detached worktree of your own. Targeted single-path
