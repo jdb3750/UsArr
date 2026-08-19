@@ -1643,6 +1643,25 @@ paragraph describing a repo that no longer exists.
   it on `main`. Branches here are also pushed straight to `main` as often as they are merged, so
   plenty of commits are both — which is exactly why the one you cite has to be the one you looked
   at (`git log --first-parent` and `git log -1 --format=%p` settle it in two commands).
+* **A SHA read off a log is positional, and position is not authorship.** The bullet above says
+  which commit to cite; this says why the log will not hand it to you, in two shapes. **A merge
+  wears the change it landed**: `git show --stat` renders a merge against its *first* parent, so the
+  merge `7bd45e9` prints `Makefile | 26 ++…`, *1 file changed, 24 insertions(+), 2 deletions(-)* —
+  byte for byte the stat of `eb92062`, the commit that did the work. The `Merge:` header line is the
+  only tell and `git log --oneline` does not carry it. **A neighbour wears it too, with no merge in
+  the citation at all**: `0ca1be6` (05:03:47) reached `main` under merge `b2221df` (05:04:05), and
+  `bf66828` landed 31 seconds after that at 05:04:36, so a `git log --oneline` taken in that minute
+  showed `bf66828` on top with the rewrite two rows down behind a merge — and the SHA that arrived
+  *after* the change was read as the SHA that *was* it. The 🔍 note above carries that case and its
+  correction; do not re-derive it. Either citation is true in the reachability sense and false in
+  the this-commit-contains-it sense. **The discriminator is the path, and it is the actionable
+  half.** `git log --no-merges -- <path>` names the commit that contains the change and nothing
+  else; plain `git log -- <path>` is usually enough, because history simplification drops a merge
+  that is TREESAME to a parent for that path — it does prune `7bd45e9` from `git log -- Makefile` —
+  but it is **not** airtight: `cb0e37f` differs from *both* its parents in
+  `docs/reference/security.md` (`+10` against one, `+2/-1` against the other), so simplification
+  keeps it and it appears in that log looking exactly like an author. For one hunk rather than one
+  file, `git log -L 806,812:Makefile` answers `eb92062` on its own.
 
 Who leads which area, roughly. **The map is keyed by area of the repo, not by thread name**, and
 deliberately so: thread names churn — the three this table first named are now five, spread across
