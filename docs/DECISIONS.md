@@ -102,6 +102,7 @@ because no ADR ever decided it. Annotating leaves that failure mode nowhere to h
 | [0048](#adr-0048) | A library **proposal** is not a row in `library`; a row is created only on Accept | **Accepted** — 2026-08-17; **refines [ADR-0026](#adr-0026)** (its binding model, four verbs, single-kind rule and four tables are untouched — what is decided is *when a `library` row comes into existence*, which ADR-0026 did not say); **applies [ADR-0004](#adr-0004)** rather than excepting it — the connect probe is a **setup** action, not a render path; **answers the open decision `web/src/routes/libraries/+page.svelte` records at `78660a4`**, which named three candidates and picked none — this takes the first, *a proposal stops being a row until it is accepted*, and **rejects the other two in writing**; **closes off a third `managed_by` state and any `proposed` flag on `library`**; **costs no migration, no data change and no new state** — ⚠️ **and not for the reason it first appears**: `managed_by` **cannot** express "proposed" and never could, which is a fact *for* this decision rather than against it, because after it the unaccepted state has no persistent representation to record; existing `managed_by = 'auto'` rows are **declared** accepted on upgrade rather than read as accepted, since the column cannot tell an accepted library from one the user has never been shown; states plainly that **it describes unbuilt behaviour on two counts** — `'user'` has never been written by any code path, so §17.8's one-way door is specified and unimplemented, and today's import **creates rows unconditionally**, so implementing Accept **removes** creation from the import path rather than adding a screen to it; **that removal is not done here** — it belongs to the library thread that builds §17.8 |
 | [0049](#adr-0049) | Key ids are **derived from the key material**; there is no counter and no settings row | **Accepted** — 2026-08-19; **enables `usarr key rotate`** rather than being asked for by it; `crypto.KeyID(kek)` is the first four bytes big-endian of `sha256("usarr/kek-id/v1" || kek)`, forced nonzero, so **a key file names its own id** and no second artifact has to stay consistent with the key material across a crash — which is exactly the window rotation exists to survive, since the SQLite transaction and the key-file write are not one atomic unit; **closes off a monotonic counter and a `key_id` row in a settings table**, both of which reintroduce that window (and the settings row puts key identity *inside* the thing being rotated); startup registers the live key under both `KeyID(kek)` and the legacy id `1`, so **every existing row keeps opening with no migration** and the first rotation retires `1`; **costs no migration** — `service_instance.kek_id` is already `INTEGER`; **adds no HKDF label** and does not touch `derive.go`'s five frozen ones; ⚠️ **publishes a 32-bit hash of the KEK in every stored row**, accepted in writing because RFC 3394 key-wrap **already** gives an offline attacker an *exact* per-row oracle for the same question, so a 32-bit filter grants no capability the ciphertext did not |
 | [0050](#adr-0050) | The image pipeline's base output format is **stdlib JPEG**; **AVIF is deferred** with its seam kept | **Accepted** — 2026-08-19; **amends** ARCHITECTURE §4.4 and §4.4.1, which named AVIF as the only output codec and named **no base format at all** — a spec missing its base case, which is why this ADR was owed; the reason for stdlib is **zero new dependencies in a static binary** (UsArr has **five** direct dependencies; `image/jpeg` adds none), **not** "JPEG is good enough" — the ADR records the ledger it is traded against, roughly **2–3× larger** than AVIF on photographic content, so a future reader can weigh it; **AVIF is buildable here** (`gen2brain/avif` v0.6.0, MIT, cgo-free, libaom-as-WASM) and is deferred on a **measured trade with a named reopening condition**, not rejected — one MIT dependency plus a **second** WASM runtime, since `wazero` is **verified absent** from this module graph after `ncruces/go-sqlite3` moved to `wasm2go`, and the **binary-size delta is recorded as UNMEASURED rather than estimated**; **reopens when** someone measures the binary delta and the per-width encode cost and decides the bytes are worth it (an ADR amendment plus one map entry, **no migration**), or when an upstream is found serving a format the stdlib cannot decode — ⚠️ **measured, not assumed, and the first draft's assumption was wrong: Kavita is v0.1's catalogue source and its *Save Media As* setting writes covers as PNG (default), WebP or AVIF**, so one admin checkbox on the owner's own server produces input this binary cannot decode (`x/image/webp` is decode-only; there is no pure-Go AVIF decoder in `x/image`), which relocates the likeliest revisit from output size to **input decode**; **one codec per row is an explicit invariant** — clause 1 puts `orig` inside UsArr's encoder rather than leaving it a passthrough, because §4.4 stores **seven widths per asset** and the column is **one per row**, so per-`role` variation stays expressible and per-**width** variation is foreclosed in writing; the seam is **`image_asset.format`** (migration `00008_image_asset_format.sql`) — nullable `TEXT`, no default, **no `CHECK`** on [ADR-0039](#adr-0039)'s reasoning; ⚠️ **unlike ADR-0039 the Go validation SHIPPED WITH THE COLUMN** (`internal/store/images.go`, plus an AST-walk guard that fails `check` if a writer lands without it), because ADR-0039's promised validator was never written and repeating that would be worse than a `CHECK`; ⚠️ **describes a pipeline that does not exist** — nothing writes `image_asset`, so what ships is the decision, the column and the guard |
+| [0051](#adr-0051) | The library-scoped grid is a **work-driven `EXISTS`**, not a join to `library_member` | **Accepted** — 2026-08-19; **supersedes [ADR-0026](#adr-0026)'s materialisation as read by ARCHITECTURE §6.5 for the `added_at` order ONLY** — §6.5's denormalised `(library_id, sort_title, work_id, edition_id)` key stands, and `TestLibraryScopedKeysetIsASeek` still pins it, but it serves the **`sort_title`** order and **only** that one: measured on the real schema (`ncruces/go-sqlite3`, SQLite 3.53.4), a library-scoped page ordered by `added_at` gets `USE TEMP B-TREE FOR ORDER BY` in **both** topologies §6.5 names, **with and without `ANALYZE`**; the work-driven `EXISTS` over `ix_libmem_work` keeps `SEARCH w USING INDEX ix_work_added (added_at<?)` in **every** configuration measured, **including the multi-value `?lib=a,b` case** — which was a hypothesis until the plan was read, because an `IN` on the leading key column destroys the ordered index in every *member-driven* shape; it is also **the only shape that cannot return one work twice**, since a work filed in two of the named libraries carries **one membership row per library** and a browse row is work-keyed — ⚠️ per-**library**, not per-edition: `library_member`'s key carries `edition_id`, but the only production writer hardcodes the `0` sentinel, so membership is **not** edition-grained in the tree today (`REVIEW-LOG.md` LS-213), and the ADR body's argument, which is about two libraries over one work, is unaffected; **costs one migration** — `00009_edition_format_index.sql`, `ix_edition_format ON edition(format, work_id)`, for the Audiobooks filter and not for the scope; **`ix_libmem_added` is explicitly NOT owed** and must not be added on this ADR's authority; ⚠️ **reopens on `make bench` over a NARROW library** — the `EXISTS` walks the *global* `added_at` order and discards non-members, which suits a broad library and not a narrow one, so a 1%-selective library over a 25k-row kind is the measurement that would send this back to a member-driven shape with a new index |
 
 ---
 
@@ -6511,3 +6512,187 @@ the part that is easy to get wrong.**
   and the vocabulary guard — not the image pipeline. Stating that is required by `CLAUDE.md`'s "no
   invented status", and it is also the honest scope: the reopening condition above is written for
   whoever builds the pipeline, who will be better placed to measure than this thread was.
+
+---
+
+<a id="adr-0051"></a>
+## ADR-0051 — The library-scoped grid is a work-driven `EXISTS`, not a join to `library_member`
+
+**Status:** Accepted · **2026-08-19** · **Supersedes [ADR-0026](#adr-0026)'s materialisation as
+[`ARCHITECTURE.md`](./ARCHITECTURE.md) §6.5 reads it — for the `added_at` order and no other** ·
+**Costs one migration**, `00009_edition_format_index.sql`, which is for the *media-type* filter and
+not for the scope · **Adds no column, no table and no rewrite of `library_member`** · **Explicitly
+does NOT add `ix_libmem_added`** · **Reopens on a `make bench` measurement over a narrow library**
+
+### Context
+
+`GET /api/v1/library` is §17.2's per-type grid and §17.8's library scope chip. Its default order is
+`added_at DESC, id DESC` — the same order Home's Block C walks — and its scope is a multi-select over
+user-defined libraries, so the query is "the newest works that are members of any of these
+libraries".
+
+§6.5 had already answered how a library-scoped page is served, and answered it well for the question
+it asked. Its ⚠️ block records that the naive shape "either probes membership per candidate (≈18
+index rows scanned per row returned, so ~1,800 probes for a 100-row page) or fetches every member and
+sorts before the window can be cut", and concludes that **the denormalisation that was the fallback
+is now the default**: `library_member`'s primary key becomes
+`(library_id, sort_title, work_id, edition_id)` `WITHOUT ROWID`, "which makes the scoped keyset a
+single covered seek at any selectivity".
+
+**That sentence is true and it is about `sort_title`.** The key leads with `sort_title` immediately
+after `library_id`, so it supplies the alphabetical order and nothing else. §6.5 does not say which
+order it means, because at the time it was written the grid had one order in mind. The grid that
+actually shipped has three, and its default is not that one.
+
+### The measurement
+
+Taken on the real migrated schema with this repo's own engine — `github.com/ncruces/go-sqlite3` with
+`ext/fts5` registered, reporting **SQLite 3.53.4** — over §17.8's flagship topology, in both of the
+two library shapes §6.5 asks for by name.
+
+> ⚠️ **The system `sqlite3` CLI cannot build this schema at all**, so a plan measured by piping the
+> migrations into it is a plan for whatever subset loaded before the error: migration 0005 contains
+> `RAISE(ABORT, 'a' || 'b')` and the CLI rejects it. `internal/store/browse_test.go` carries this
+> note where someone doing plan work will meet it.
+
+**The member-driven shape, `added_at` order, one library and two libraries over one kind:**
+
+```
+SEARCH lm USING COVERING INDEX ux_libmem_identity (library_id=?)
+  | SEARCH w USING INTEGER PRIMARY KEY (rowid=?)
+  | USE TEMP B-TREE FOR ORDER BY
+```
+
+Identical in both topologies, **with and without `ANALYZE`**. The temp b-tree is the whole point: the
+membership key orders by `sort_title`, the query orders by `added_at`, and there is no index that
+holds both. A 1%-selective library is not a mitigation — the sort is over the *members*, so it grows
+with the library, and it is paid on **every** page rather than once.
+
+**The work-driven `EXISTS`, same order, same two topologies, all three page shapes:**
+
+```
+SEARCH w USING INDEX ix_work_added (added_at<?)
+  | SEARCH lm EXISTS USING COVERING INDEX ix_libmem_work (work_id=? AND library_id=?)
+```
+
+with `SCAN w USING INDEX ix_work_added` on the first page (an ordered walk, no sort) and
+`SEARCH w USING INDEX ix_work_added (added_at=? AND id<?)` in the undated tail. **No temp b-tree in
+any of them, and none in the scoped-install variant either**, where the access-scope `EXISTS` over
+`service_item_link` joins the plan as a third seek on `ix_sil_work`.
+
+**The multi-value case was a hypothesis and is now a measurement.** `?lib=a,b` puts an `IN` on
+`library_member.library_id`, which is that table's *leading* key column — and an `IN` on a leading
+column is exactly what stops SQLite supplying `ORDER BY` from an index (the property
+`store.Scope.userPredicate` already records for `ix_prov_user_grabbed`). In every **member-driven**
+shape that is fatal. Under the `EXISTS` the ordering comes off `work` and the `IN` lands on a probe,
+so the plan above is unchanged from the single-library one. That is what the plan output says, and it
+is asserted in both topologies rather than argued.
+
+**The probe is covering for free.** `library_member` is `WITHOUT ROWID`, so a secondary index carries
+the primary key in its own entries — `ix_libmem_work(work_id)` is really `(work_id, library_id,
+sort_title, edition_id)`. The membership test therefore constrains both columns and reads no table
+row at all.
+
+⚠️ **What `ANALYZE` DOES move, reported because it was measured and is not being claimed as a
+win.** With `sqlite_stat1` present on the *fixture*, the two correlated subqueries over `edition` —
+the media-type `MIN()` in the `SELECT` list and the Audiobooks `NOT EXISTS` — reshuffle among
+`ix_edition_work` and `ix_edition_format`, and a `BLOOM FILTER` appears on the Audiobooks probe. That
+is a **small-corpus artifact**: the fixture has single-digit `edition` rows, so a covering index scan
+really is cheaper there than a seek, and nothing follows from it about 58,500 rows. **The half that
+is stable across both planners is the half this ADR is about** — the driving table, the ordering
+index, and the absence of a temp b-tree are identical with statistics and without, in both
+topologies, for all three orders.
+
+### The decision
+
+**A library-scoped page in the `added_at` or `popularity` order is work-driven, with an `EXISTS` over
+`library_member`. The member-driven shape is the right one for `sort_title` and keeps it.**
+
+Three consequences, in the order they matter:
+
+1. **The ordering index is never displaced.** `ix_work_added` and `ix_work_pop` are both
+   `WHERE deleted_at IS NULL` partial indexes on `work`, and the scope becomes a filter *inside* the
+   walk rather than a different driving table. Adding a library chip therefore cannot change which
+   index the page comes off, which is the property that keeps §13's `< 8 ms` budget a budget about
+   one thing.
+2. **A work cannot come back twice, and no `DISTINCT` is needed to promise it.** §17.8's flagship
+   case is one Audiobookshelf library offered as Ebooks *and* Audiobooks, so a book with an EPUB and
+   an M4B is **one `work` row with two membership rows**. Under a join, `?lib=ebooks,audiobooks`
+   returns it once per matching membership row — and both copies are *correct rows*, so the
+   duplicate is silent. Under the `EXISTS` it is returned once by construction. A `DISTINCT` would
+   fix the count and reintroduce a sort.
+3. **`ix_libmem_added` is not owed, and must not be added on this ADR's authority.** The obvious
+   reflex on reading "the added_at order needs an index" is
+   `library_member(library_id, added_at)`. It would serve the *member-driven* shape this ADR is
+   choosing against, so under the chosen shape it is an index with no reader — and
+   `library_member.added_at` is the date the work joined the LIBRARY, which is not `work.added_at`
+   and is not what the grid orders by. Two dates that look alike is a worse trap than a missing
+   index.
+
+### What this ADR does **not** decide
+
+- **It does not touch `library_member`'s key or the denormalised `sort_title`.** §6.5's argument for
+  that column is untouched and `TestLibraryScopedKeysetIsASeek` still pins it, in both topologies.
+- **It does not change Block C.** `GET /api/v1/library/recent` has no scope and gets none here.
+- **It says nothing about `year`.** `library.default_sort` legally takes `'year'` and `work.year` has
+  **no index at all** — six indexes on `work` and not one leads with it — so a year-ordered page is a
+  temp b-tree over the whole filtered corpus, which is the failure this ADR exists to refuse. The
+  read returns `ErrUnservableSort` and the endpoint renders a `400` naming the missing index.
+  Serving it is a new migration and a decision §17.2 owns; **it is not fixed here and it is not
+  forgotten.**
+- **It says nothing about `sort_title` over more than one kind.** `ix_work_kind_sort` is
+  `(kind, sort_title, id)` and `media_type=music` is two kinds, so that combination is refused for
+  the same reason `year` is. The two honest fixes — an index that does not lead with `kind`, or
+  splitting the Music grid into Artists and Albums — are §17.2's.
+
+### The alternatives, and why they lose
+
+**The member-driven join with the denormalised key (§6.5's default).** The incumbent, and it loses on
+one measured fact rather than on taste: it sorts, in both topologies, with and without statistics,
+for the order the grid actually defaults to. Its own justification is explicitly about making "the
+scoped keyset a single covered seek", and it still is — for `sort_title`, which is why it is kept
+there rather than replaced.
+
+**The join plus `ix_libmem_added` on `(library_id, added_at, work_id)`.** This *would* order without
+a sort, for one library. It fails on three counts. The `IN` for `?lib=a,b` puts the multi-select back
+into a temp b-tree, and the multi-select is the chip's normal state. It orders by the wrong date —
+`library_member.added_at` is when membership was materialised, `work.added_at` is when the item
+arrived — so it answers a different question that would render identically and be wrong. And it costs
+a second date column on the hot membership table for a shape the `EXISTS` already serves.
+
+**The join with `DISTINCT` or `GROUP BY w.id`.** Fixes clause 2's duplicate and reintroduces a sort
+to do it, which is the cost the whole exercise is about.
+
+**A materialised per-(library, order) view.** Rejected as "and also": it is a fourth table and a
+fourth writer for a query that already plans as a single ordered walk.
+
+### The reopening condition
+
+**`make bench`, over a NARROW library, on the `added_at` order.** This is not a formality and the
+mechanism is worth stating plainly: the `EXISTS` walks the **global** `added_at` order and **discards
+non-members as it goes**. That is excellent when the scope is most of the catalogue and it degrades
+linearly as the scope narrows — a library holding 1% of a 25k-row kind means roughly 100 candidate
+works read and rejected for every row returned, and §13's own budget row is written for exactly that
+shape (*"1%-selective library over a 25k-row kind"*). A plan assertion cannot see this: `EXPLAIN
+QUERY PLAN` chooses from the schema and not from the data, which is the same limitation
+`TestLibraryScopedKeysetIsASeek` already records about itself. **So the plan guards are not evidence
+that this is fast on a narrow library, and they are not offered as such** — they are evidence that it
+does not sort. The wall clock belongs to `make bench`, which is not and must not become a merge gate.
+
+If that measurement comes back badly, the fix is a member-driven shape with an ordering index on
+`library_member` — the one clause 3 declines to add today — plus a plan for the multi-library `IN`,
+and this ADR is superseded rather than amended.
+
+### What is built
+
+`internal/store/browse.go` (`ListWorks`, `browseWorksSQL`), the route in
+`internal/httpapi/server.go`, `handleBrowseWorks` in `internal/httpapi/library.go`, and migration
+`00009_edition_format_index.sql`. The plan assertions are in `internal/store/browse_test.go` — both
+topologies, all three page shapes, all three orders, the scoped install, and four guard-firing arms.
+
+⚠️ **Every plan guard in that file pins the NO-`ANALYZE` planner**, which is the one the test suite
+sees and **not** the one the binary usually runs: a test database is fresh and has no `sqlite_stat1`,
+while a production database has one because the importer runs `ANALYZE` after a full import. The
+difference is not cosmetic — the unary `+` on `+w.kind` changes the plan **only** when statistics are
+absent. A plan that holds without statistics holds with them, so the guards are conservative and
+correct; they are simply not a measurement of production, and each one says so where it is written.

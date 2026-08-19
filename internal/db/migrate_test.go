@@ -59,7 +59,7 @@ func TestMigrationRoundTrip(t *testing.T) {
 // asserted rather than derived so that adding a migration is a deliberate edit
 // here too — a version the tests do not know about is a migration nobody
 // round-tripped.
-const latestSchemaVersion int64 = 8
+const latestSchemaVersion int64 = 9
 
 // Down is not a supported user path, but it must work, because it is the
 // cheapest way to test a migration locally. A Down that leaves objects behind
@@ -2315,29 +2315,23 @@ func TestMigrate0006DownAndUp(t *testing.T) {
 
 	created := []string{"work_book", "work_comic", "work_comic_issue"}
 
-	// 0007 and 0008 now sit on top of 0006, and MigrateDown rolls back exactly
-	// one migration, so this walks past both first and back up past both at the
-	// end. Every assertion below is still about 0006's own block.
+	// Later migrations sit on top of 0006, and MigrateDown rolls back exactly
+	// one migration, so this walks down to 0006 first and back up past it at
+	// the end. Every assertion below is still about 0006's own block.
 	//
-	// Each new migration adds one step here. That is the maintenance a migration
-	// on top of this one owes, and 0008 pays it the same way 0007 did.
-	if err := d.MigrateDown(ctx); err != nil {
-		t.Fatalf("MigrateDown 8→7: %v", err)
-	}
-	if err := d.MigrateDown(ctx); err != nil {
-		t.Fatalf("MigrateDown 7→6: %v", err)
-	}
+	// ⚠️ IT IS migrateDownTo AND NOT A HAND-COUNTED RUN OF MigrateDown CALLS.
+	// This used to be one explicit step per migration stacked above, with a
+	// comment saying "each new migration adds one step here. That is the
+	// maintenance a migration on top of this one owes". 0008 and 0009 landed in
+	// the same week and both paid it; the loop retires the bill instead, and
+	// migrateDownTo has been in this file since 0006 for exactly this reason.
+	migrateDownTo(t, ctx, d, 6)
 	at6, err := dumpSchema(ctx, d.Read())
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	if err := d.MigrateDown(ctx); err != nil {
-		t.Fatalf("MigrateDown 6→5: %v", err)
-	}
-	if v, err := d.Version(ctx); err != nil || v != 5 {
-		t.Fatalf("version after Down = %d (err %v), want 5", v, err)
-	}
+	migrateDownTo(t, ctx, d, 5)
 	for _, table := range created {
 		var n int
 		if err := d.Read().QueryRowContext(ctx,
@@ -2384,14 +2378,9 @@ func TestMigrate0006DownAndUp(t *testing.T) {
 	// Migrate goes all the way to head, so come back down to 6 — one step per
 	// migration stacked above this one. Another migration adds another step.
 	if err := d.Migrate(ctx); err != nil {
-		t.Fatalf("Migrate 5→8: %v", err)
+		t.Fatalf("Migrate 5 to latest: %v", err)
 	}
-	if err := d.MigrateDown(ctx); err != nil {
-		t.Fatalf("MigrateDown 8→7: %v", err)
-	}
-	if err := d.MigrateDown(ctx); err != nil {
-		t.Fatalf("MigrateDown 7→6: %v", err)
-	}
+	migrateDownTo(t, ctx, d, 6)
 	again, err := dumpSchema(ctx, d.Read())
 	if err != nil {
 		t.Fatal(err)
@@ -2768,23 +2757,16 @@ func TestMigrate0007DownAndUp(t *testing.T) {
 	ctx := t.Context()
 	d := openTestDB(t)
 
-	// 0008 now sits on top of 0007, so walk past it before capturing the schema
-	// this test is about. MigrateDown rolls back exactly one migration.
-	if err := d.MigrateDown(ctx); err != nil {
-		t.Fatalf("MigrateDown 8→7: %v", err)
-	}
-
+	// Later migrations sit on top of 0007; walk down to it first. See
+	// TestMigrate0006DownAndUp on why this is a loop and not a hand-counted run
+	// of MigrateDown calls.
+	migrateDownTo(t, ctx, d, 7)
 	at7, err := dumpSchema(ctx, d.Read())
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	if err := d.MigrateDown(ctx); err != nil {
-		t.Fatalf("MigrateDown 7→6: %v", err)
-	}
-	if v, err := d.Version(ctx); err != nil || v != 6 {
-		t.Fatalf("version after Down = %d (err %v), want 6", v, err)
-	}
+	migrateDownTo(t, ctx, d, 6)
 	var n int
 	if err := d.Read().QueryRowContext(ctx,
 		`SELECT count(*) FROM pragma_table_list WHERE name = 'work_credit'`).Scan(&n); err != nil {
@@ -2821,11 +2803,9 @@ func TestMigrate0007DownAndUp(t *testing.T) {
 
 	// Migrate goes all the way to head, so come back down to 7.
 	if err := d.Migrate(ctx); err != nil {
-		t.Fatalf("Migrate 6→8: %v", err)
+		t.Fatalf("Migrate 6 to latest: %v", err)
 	}
-	if err := d.MigrateDown(ctx); err != nil {
-		t.Fatalf("MigrateDown 8→7: %v", err)
-	}
+	migrateDownTo(t, ctx, d, 7)
 	again, err := dumpSchema(ctx, d.Read())
 	if err != nil {
 		t.Fatal(err)
@@ -3006,17 +2986,16 @@ func TestMigrate0008DownAndUp(t *testing.T) {
 	ctx := t.Context()
 	d := openTestDB(t)
 
+	// Later migrations sit on top of 0008; walk down to it first. See
+	// TestMigrate0006DownAndUp on why this is a loop and not a hand-counted run
+	// of MigrateDown calls.
+	migrateDownTo(t, ctx, d, 8)
 	at8, err := dumpSchema(ctx, d.Read())
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	if err := d.MigrateDown(ctx); err != nil {
-		t.Fatalf("MigrateDown 8→7: %v", err)
-	}
-	if v, err := d.Version(ctx); err != nil || v != 7 {
-		t.Fatalf("version after Down = %d (err %v), want 7", v, err)
-	}
+	migrateDownTo(t, ctx, d, 7)
 	var n int
 	if err := d.Read().QueryRowContext(ctx,
 		`SELECT count(*) FROM pragma_table_info('image_asset') WHERE name = 'format'`).Scan(&n); err != nil {
@@ -3040,13 +3019,199 @@ func TestMigrate0008DownAndUp(t *testing.T) {
 	}
 
 	if err := d.Migrate(ctx); err != nil {
-		t.Fatalf("Migrate 7→8: %v", err)
+		t.Fatalf("Migrate 7 to latest: %v", err)
 	}
+	migrateDownTo(t, ctx, d, 8)
 	again, err := dumpSchema(ctx, d.Read())
 	if err != nil {
 		t.Fatal(err)
 	}
 	if again != at8 {
 		t.Error("a Down followed by an Up did not reproduce the schema 0008 creates")
+	}
+}
+
+// TestMigrate0009IndexShape pins the index this migration exists to create —
+// its name, its table, its column order and its uniqueness — read back out of
+// SQLite rather than out of the migration file it was written in.
+//
+// THE COLUMN ORDER IS THE WHOLE DECISION and is asserted as an ordered list.
+// (format, work_id) makes the browse read's Audiobooks probe a two-column
+// covered seek; (work_id, format) would duplicate ix_edition_work's leading
+// column and serve the probe no better than ix_edition_work already does. A
+// test that asserted only "an index named ix_edition_format exists on edition"
+// would stay green through exactly that reversal.
+func TestMigrate0009IndexShape(t *testing.T) {
+	ctx := t.Context()
+	d := openTestDB(t)
+
+	var unique int
+	if err := d.Read().QueryRowContext(ctx,
+		`SELECT "unique" FROM pragma_index_list('edition') WHERE name = 'ix_edition_format'`,
+	).Scan(&unique); err != nil {
+		t.Fatalf("ix_edition_format is not an index on edition: %v", err)
+	}
+	if unique != 0 {
+		t.Error("ix_edition_format is UNIQUE. A work may legitimately hold two editions " +
+			"of one format — two ebook releases of the same book — so uniqueness here " +
+			"would reject real rows.")
+	}
+
+	rows, err := d.Read().QueryContext(ctx,
+		`SELECT name FROM pragma_index_info('ix_edition_format') ORDER BY seqno`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = rows.Close() }()
+	var cols []string
+	for rows.Next() {
+		var c string
+		if err := rows.Scan(&c); err != nil {
+			t.Fatal(err)
+		}
+		cols = append(cols, c)
+	}
+	if err := rows.Err(); err != nil {
+		t.Fatal(err)
+	}
+	if got, want := strings.Join(cols, ","), "format,work_id"; got != want {
+		t.Errorf("ix_edition_format is on (%s), want (%s). The order is the decision — see "+
+			"the migration header and ADR-0051.", got, want)
+	}
+
+	// NOT PARTIAL. `edition` has no soft-delete column, so there is no
+	// tombstone predicate to make this partial on — and a partial index would
+	// silently drop the NULL-format rows the Ebooks side of §17.2's split has
+	// to be able to see.
+	var ddl string
+	if err := d.Read().QueryRowContext(ctx,
+		`SELECT sql FROM sqlite_master WHERE type = 'index' AND name = 'ix_edition_format'`,
+	).Scan(&ddl); err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(strings.ToUpper(ddl), " WHERE ") {
+		t.Errorf("ix_edition_format is partial: %s\n"+
+			"It must index every edition row, NULL formats included.", ddl)
+	}
+}
+
+// TestMigrate0009NullFormatsAreIndexed executes the claim above rather than
+// asserting the absence of a WHERE clause and calling it proof. A NULL
+// `edition.format` is a first-class state — migration 0005's CHECK note says so
+// — and `NOT EXISTS (… format IS NOT 'audiobook')`, which is half of the
+// Audiobooks filter, has to see those rows or a book with one unset edition
+// files as an audiobook.
+func TestMigrate0009NullFormatsAreIndexed(t *testing.T) {
+	ctx := t.Context()
+	d := openTestDB(t)
+
+	if err := d.Write(ctx, func(ctx context.Context, tx *sql.Tx) error {
+		for _, s := range []string{
+			`INSERT INTO work (id, kind, title, sort_title, normalized_title)
+			   VALUES (1, 'book', 'Piranesi', 'piranesi', 'piranesi')`,
+			`INSERT INTO edition (id, work_id, format) VALUES (1, 1, 'audiobook')`,
+			`INSERT INTO edition (id, work_id, format) VALUES (2, 1, NULL)`,
+		} {
+			if _, err := tx.ExecContext(ctx, s); err != nil {
+				return fmt.Errorf("%s: %w", s, err)
+			}
+		}
+		return nil
+	}); err != nil {
+		t.Fatalf("fixture: %v", err)
+	}
+
+	var n int
+	if err := d.Read().QueryRowContext(ctx,
+		`SELECT count(*) FROM edition INDEXED BY ix_edition_format WHERE format IS NULL`,
+	).Scan(&n); err != nil {
+		t.Fatalf("reading NULL formats through the index: %v", err)
+	}
+	if n != 1 {
+		t.Errorf("the index reports %d NULL-format editions, want 1", n)
+	}
+}
+
+// TestMigrate0009DownAndUp round-trips the migration.
+//
+// One DROP INDEX, and this checks the header's claim that nothing else is owed:
+// after Down ix_edition_format is gone and NOTHING ELSE changed — asserted over
+// the whole schema dump rather than over the one name, because a Down that also
+// took a table with it would pass a one-name check.
+//
+// ⚠️ An index Down is the one rollback in this directory that cannot lose data,
+// which the migration header states and this test is the execution of: the row
+// count over `edition` is taken before and after, and it does not move.
+func TestMigrate0009DownAndUp(t *testing.T) {
+	ctx := t.Context()
+	d := openTestDB(t)
+
+	if err := d.Write(ctx, func(ctx context.Context, tx *sql.Tx) error {
+		for _, s := range []string{
+			`INSERT INTO work (id, kind, title, sort_title, normalized_title)
+			   VALUES (1, 'book', 'Piranesi', 'piranesi', 'piranesi')`,
+			`INSERT INTO edition (id, work_id, format) VALUES (1, 1, 'ebook')`,
+			`INSERT INTO edition (id, work_id, format) VALUES (2, 1, 'audiobook')`,
+		} {
+			if _, err := tx.ExecContext(ctx, s); err != nil {
+				return fmt.Errorf("%s: %w", s, err)
+			}
+		}
+		return nil
+	}); err != nil {
+		t.Fatalf("fixture: %v", err)
+	}
+
+	at9, err := dumpSchema(ctx, d.Read())
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	migrateDownTo(t, ctx, d, 8)
+	var n int
+	if err := d.Read().QueryRowContext(ctx,
+		`SELECT count(*) FROM sqlite_master WHERE type = 'index' AND name = 'ix_edition_format'`,
+	).Scan(&n); err != nil {
+		t.Fatal(err)
+	}
+	if n != 0 {
+		t.Error("ix_edition_format survived the Down block")
+	}
+	if err := d.Read().QueryRowContext(ctx, `SELECT count(*) FROM edition`).Scan(&n); err != nil {
+		t.Fatal(err)
+	}
+	if n != 2 {
+		t.Errorf("%d edition rows after the Down, want 2 — an index rollback must not "+
+			"touch a row", n)
+	}
+
+	at8, err := dumpSchema(ctx, d.Read())
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, obj := range strings.Split(at9, "\n\n") {
+		if obj == "" || strings.Contains(obj, "ix_edition_format") {
+			continue
+		}
+		if !strings.Contains(at8, obj) {
+			t.Errorf("0009's Down block removed or changed an object it did not create:\n%s", obj)
+		}
+	}
+
+	if err := d.Migrate(ctx); err != nil {
+		t.Fatalf("Migrate 8 to latest: %v", err)
+	}
+	again, err := dumpSchema(ctx, d.Read())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if again != at9 {
+		t.Error("a Down followed by an Up did not reproduce the schema 0009 creates")
+	}
+	if err := d.Read().QueryRowContext(ctx, `SELECT count(*) FROM edition`).Scan(&n); err != nil {
+		t.Fatal(err)
+	}
+	if n != 2 {
+		t.Errorf("%d edition rows after the re-Up, want 2", n)
 	}
 }
