@@ -338,9 +338,15 @@ func browseWorksSQL(scope Scope, f WorksFilter, cur WorksCursor, limit int) (str
 		// ADR-0051: WORK-DRIVEN EXISTS, never a join to library_member. The
 		// ordering comes off `work`, the membership table is only ever probed,
 		// and a work that is a member of two of the named libraries — which is
-		// §17.8's flagship shape, since membership is edition-grained and
-		// recentWorkResponse is work-keyed — comes back ONCE. A join cannot
-		// promise either. See the ADR for the topology that would reopen it.
+		// §17.8's flagship shape, one upstream library offered as Ebooks AND as
+		// Audiobooks, so one work carries ONE MEMBERSHIP ROW PER LIBRARY while
+		// a browse row is work-keyed — comes back ONCE. A join returns it once
+		// per matching membership row. ⚠️ The duplicate is per-LIBRARY, not
+		// per-edition: `library_member`'s key carries `edition_id`, but the only
+		// production writer hardcodes the `0` "whole work" sentinel
+		// (catalogue.go's item pass; REVIEW-LOG.md LS-213), so nothing in the
+		// tree files one work twice in ONE library. A join cannot promise
+		// either. See the ADR for the topology that would reopen it.
 		libPred = "\n\t\t   AND EXISTS (SELECT 1 FROM library_member lm\n" +
 			"\t\t                        WHERE lm.work_id = w.id\n" +
 			"\t\t                          AND lm.library_id IN (" +

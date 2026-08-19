@@ -1259,14 +1259,20 @@ entirely — so a bookmark to a deleted library would answer with the whole cata
 saying the library is gone. `limit` fails in the safe direction; a filter has no safe direction to
 fail in.
 
-**The error says how many slugs did not resolve and never which.** A slug you cannot see is
-deliberately indistinguishable from one that does not exist, so the message cannot be used to probe
-another user's library names. The reserved `Unfiled` library is never offered in the scope chip
+**The error names no slug at all, and does not say how many failed either.** The wire body is the
+same sentence whichever slug failed and however many did — the store's resolver counts the
+unresolved slugs, but that count is wrapped into the logged error and never reaches the response. A
+slug you cannot see is deliberately indistinguishable from one that does not exist, so the message
+cannot be used to probe another user's library names. The reserved `Unfiled` library is never offered in the scope chip
 (migration 0005), so `?lib=unfiled` is refused like any other unknown slug.
 
-**A work in two of the named libraries appears once.** Membership is edition-grained — §17.8's
-Audiobookshelf split is the reason — while a row here is work-keyed, so the scope is an existence
-test rather than a join ([ADR-0051](../DECISIONS.md#adr-0051)).
+**A work in two of the named libraries appears once.** A work carries **one membership row per
+library** it is filed in — §17.8's Audiobookshelf split, one upstream library offered as Ebooks
+*and* as Audiobooks, is what puts one work in two of them — while a row here is work-keyed, so the
+scope is an existence test rather than a join ([ADR-0051](../DECISIONS.md#adr-0051)). The duplicate
+a join would return is per-**library**: `library_member`'s key carries `edition_id`, but the only
+production writer hardcodes the `0` "whole work" sentinel, so membership is not edition-grained in
+the tree today (`REVIEW-LOG.md` LS-213).
 
 ### 7.4 Response
 

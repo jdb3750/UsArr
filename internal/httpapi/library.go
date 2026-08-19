@@ -602,28 +602,38 @@ func (s *Server) handleBrowseWorks(w http.ResponseWriter, r *http.Request) error
 // Dropping it silently widens the page, and dropping every slug removes the
 // scope entirely — so a stale bookmark to a deleted library would answer with
 // the whole catalogue rather than saying the library is gone. The store's
-// resolver reports HOW MANY slugs did not resolve and never WHICH: a caller must
-// not be able to probe another user's library names by watching the message
-// change, and a slug the caller cannot see is deliberately indistinguishable
-// from one that does not exist.
+// resolver reports HOW MANY slugs did not resolve and never WHICH — and that
+// count is wrapped into the LOGGED error, never the response body, so the wire
+// carries one fixed sentence whichever slug failed. A caller must not be able to
+// probe another user's library names by watching the message change, and a slug
+// the caller cannot see is deliberately indistinguishable from one that does not
+// exist.
 func (s *Server) resolveBrowseLibraries(
 	r *http.Request, a authSession, filter *store.WorksFilter,
 ) error {
-	raw := strings.TrimSpace(r.URL.Query().Get("lib"))
-	if raw == "" {
+	// ⚠️ PRESENCE, NOT EMPTINESS, IS WHAT DECIDES "no scope was asked for".
+	// Get returns "" both for a parameter that was never sent and for `?lib=`,
+	// so testing the VALUE here — above the split — would let `?lib=` and
+	// `?lib=%20` fall through as an absent chip and answer 200 with the whole
+	// catalogue, while `?lib=,,` was correctly refused a few lines below. Three
+	// spellings of "a scope was asked for and nothing was named", two answers.
+	// Every empty spelling now reaches the one refusal below.
+	query := r.URL.Query()
+	if !query.Has("lib") {
 		return nil
 	}
 
 	slugs := make([]string, 0, 4)
-	for _, part := range strings.Split(raw, ",") {
+	for _, part := range strings.Split(query.Get("lib"), ",") {
 		if part = strings.TrimSpace(part); part != "" {
 			slugs = append(slugs, part)
 		}
 	}
 	if len(slugs) == 0 {
-		// `?lib=,,` is not "no scope" — the caller asked for a scope and named
-		// nothing. Answering with the whole catalogue would be the silent
-		// widening this function exists to prevent.
+		// `?lib=`, `?lib=%20` and `?lib=,,` are not "no scope" — the caller
+		// asked for a scope and named nothing. Answering with the whole
+		// catalogue would be the silent widening this function exists to
+		// prevent.
 		return errStatus(http.StatusBadRequest, CodeBadRequest,
 			"lib was sent with no library in it").
 			withAction("send lib as one or more library slugs separated by commas, " +

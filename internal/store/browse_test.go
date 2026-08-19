@@ -37,12 +37,18 @@ func seedBrowseCorpus(t *testing.T, s *Store) {
 		// §17.8's flagship topology: two libraries over ONE kind. Library 2 is
 		// the corpus's `book` library; 3 is the second one, and work 3 is in
 		// BOTH. That work is the reason the library scope is an EXISTS rather
-		// than a join — a join returns it once per matching membership row, and
-		// membership is edition-grained while a browse row is work-keyed.
+		// than a join — a join returns it once per matching membership row, one
+		// row per library it is filed in, while a browse row is work-keyed.
+		//
+		// ⚠️ `edition_id` IS THE `0` SENTINEL ON EVERY ROW, because that is the
+		// only value the tree can actually produce: catalogue.go's item pass is
+		// the only production writer and hardcodes it (REVIEW-LOG.md LS-213).
+		// The duplicate this fixture creates is therefore per-LIBRARY and does
+		// not depend on edition grain ever arriving.
 		`INSERT INTO library (id, user_id, name, slug, kind) VALUES (3, 0, 'Audiobooks', 'audiobooks', 'book')`,
-		`INSERT INTO library_member (library_id, sort_title, work_id, edition_id) VALUES (2, 'piranesi', 3, 1)`,
-		`INSERT INTO library_member (library_id, sort_title, work_id, edition_id) VALUES (3, 'piranesi', 3, 1)`,
-		`INSERT INTO library_member (library_id, sort_title, work_id, edition_id) VALUES (3, 'dune', 5, 3)`,
+		`INSERT INTO library_member (library_id, sort_title, work_id, edition_id) VALUES (2, 'piranesi', 3, 0)`,
+		`INSERT INTO library_member (library_id, sort_title, work_id, edition_id) VALUES (3, 'piranesi', 3, 0)`,
+		`INSERT INTO library_member (library_id, sort_title, work_id, edition_id) VALUES (3, 'dune', 5, 0)`,
 
 		// A book with an audiobook edition AND an edition whose format the
 		// upstream did not report. Under `MIN(format = 'audiobook')` — the
@@ -242,10 +248,12 @@ func TestBrowseWorksLibraryScopeSelectsMembersOnly(t *testing.T) {
 }
 
 // ⚠️ THE PROPERTY A JOIN CANNOT PROMISE. Work 3 is a member of library 2 AND of
-// library 3, on two different editions, because §17.8's Ebooks/Audiobooks split
-// makes membership edition-grained. A browse row is work-keyed, so under a join
-// that work comes back TWICE on one page — and the duplicate is silent, because
-// both copies are correct rows. Under the EXISTS it comes back once.
+// library 3 — §17.8's Ebooks/Audiobooks split, one upstream library offered
+// twice — so it carries TWO membership rows, one per library, both at the `0`
+// edition sentinel every production write uses. A browse row is work-keyed, so
+// under a join that work comes back TWICE on one page — and the duplicate is
+// silent, because both copies are correct rows. Under the EXISTS it comes back
+// once.
 func TestBrowseWorksMultiLibraryReturnsAWorkOnce(t *testing.T) {
 	s := newTestStore(t)
 	seedBrowseCorpus(t, s)
@@ -627,6 +635,28 @@ func TestLibraryIDsBySlug(t *testing.T) {
 // assertions are a claim about the conservative planner and never a measurement
 // of production. A plan that holds with no statistics holds with them; the
 // wall clock, with statistics and at real row counts, is `make bench`'s.
+//
+// ⚠️ A GUARD MUST MUTATE BEFORE IT MEASURES, NEVER AFTER — THE PLAN IS CACHED.
+// Every arm below builds a fresh store, breaks something, and only then
+// EXPLAINs, and that order is load-bearing rather than stylistic. EXPLAIN the
+// same statement twice with a DDL change in between and the second answer is
+// the FIRST plan: measured here at 64 of 64 repeats, a plan taken before
+// `dropIndex(t, s, "ix_work_added")` and taken again after it said
+// `SEARCH w USING INDEX ix_work_added` both times, naming an index that no
+// longer exists. (browseWorksPlan reads through the read pool while dropIndex
+// writes on the single writer, so the connection answering holds a statement
+// compiled against the pre-DDL schema; the exact layer that caches it does not
+// matter, the observable does.)
+//
+// So every assertion made after a mutation on an already-measured statement is
+// an assertion about the schema as it was BEFORE the mutation. The loud version
+// of that mistake is a firing arm that reports "the guard passed a plan with
+// ix_work_added dropped" when the guard was never shown the dropped index at
+// all. The quiet version is the one to fear: a POSITIVE assertion — measure,
+// change something, assert the plan still seeks the way it did — is green by
+// construction and pins nothing, because it re-reads its own first answer.
+// Every arm here is already on the safe side; this note is so the next one is
+// too. Measure once, on a store that is already in the state under test.
 // ─────────────────────────────────────────────────────────────────────────────
 
 // browseWorksPlanFaults is the guard, factored out so the tests that fire it

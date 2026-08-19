@@ -162,6 +162,28 @@ func TestBrowseEndpointScopesByLibrarySlug(t *testing.T) {
 		}
 	}
 
+	// ⚠️ AN EMPTY `?lib=` IS THE SAME REFUSAL, and it is the one that is easy to
+	// get wrong: `?lib=,` reaches the split and is refused, while `?lib=` and
+	// `?lib=%20` are refused only if the emptiness test runs BELOW the split.
+	// Above it they read as "the parameter was never sent" and answer 200 with
+	// the WHOLE CATALOGUE — the silent widening the endpoint exists to prevent,
+	// and the worst version of it, because a bookmark to a deleted library
+	// renders every work the caller can see instead of saying it is gone.
+	code, body = callBrowseWorks(t, s, "")
+	if code != http.StatusOK {
+		t.Fatalf("the unscoped browse returned %d: %s", code, body)
+	}
+	everything := len(browseTitles(t, body))
+	for _, q := range []string{"?lib=", "?lib=%20", "?lib=%20%20"} {
+		code, body := callBrowseWorks(t, s, q)
+		if code != http.StatusBadRequest {
+			t.Errorf("%s returned %d, want 400: %s", q, code, body)
+		}
+		if code == http.StatusOK && len(browseTitles(t, body)) == everything {
+			t.Errorf("%s answered with the whole catalogue (%d works)", q, everything)
+		}
+	}
+
 	// The reserved Unfiled library is never offered in the scope chip
 	// (migration 0005), which is why its slug is among the refusals above.
 	_, body = callBrowseWorks(t, s, "?lib=unfiled")
