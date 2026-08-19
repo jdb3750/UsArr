@@ -1552,9 +1552,12 @@
 				<span class="field__help">
 					Which application this is. v0.1 binds <span class="mono">prowlarr</span>, which uses
 					<span class="mono">/api/v1</span> — the API version does not track the application
-					version, and it is probed rather than assumed — and
+					version, and it is probed rather than assumed —
 					<span class="mono">kavita</span>, whose paths carry no version segment at all and whose
-					credential is an Auth Key from User Settings → Manage Auth Keys.
+					credential is an Auth Key from User Settings → Manage Auth Keys, and
+					<span class="mono">bookorbit</span>, whose credential is not a key at all: it is a
+					magic-link token a superuser mints against a shared account, shown once and never readable
+					again.
 				</span>
 			</div>
 

@@ -42,14 +42,29 @@ import (
 //     add/monitor/delete commands — Kavita is read-only and has no command sink
 //     (ADR-0032), so filing it under acquisition would promise a write path that
 //     does not exist. ADR-0041 puts it in v0.1 as the sync core's first adapter.
+//   - bookorbit → `library`, for exactly the same reasons: ADR-0052 makes it
+//     v0.1's catalogue source, and it is read-only with no command sink. The
+//     ROLE IS THE SAME AS KAVITA'S AND THE KIND IS NOT, which is the whole point
+//     of having both columns — the role says what an instance may be asked to
+//     do, the kind says which client opens it.
+//
+// ⚠️ REGISTERING A KIND HERE IS NOT THE SAME AS BEING ABLE TO READ ITS
+// CATALOGUE. This map decides what may be STORED; `cmd/usarr`'s registry decides
+// what each stored kind can then do, and for bookorbit that is currently the
+// credential handshake and the health probe and nothing else — internal/bookorbit
+// is slice 0 and has no catalogue read to call. A bookorbit instance therefore
+// stores, probes and reports honestly, and refuses an import with the reason
+// (runImport in cmd/usarr/import.go). That is the state ADR-0052's slice 1
+// changes; it is not a hole here.
 //
 // The browser's add-form picker (SERVICE_KINDS in web/src/lib/api.ts) must
 // carry the same set, in an order that keeps prowlarr first. That is not left
 // to this comment: service_kinds_web_test.go parses the TypeScript literal and
 // fails the build on either direction of drift.
 var serviceKinds = map[string]string{
-	"prowlarr": "indexer",
-	"kavita":   "library",
+	"prowlarr":  "indexer",
+	"kavita":    "library",
+	"bookorbit": "library",
 }
 
 type serviceResponse struct {
@@ -1008,12 +1023,23 @@ func knownKinds() string {
 }
 
 // credentialAction names WHERE the user finds the credential for a kind. The
-// *Arrs and Kavita keep it in completely different places, and "Paste the key
-// from Settings → General" sends a Kavita user hunting through a screen that does
-// not have it.
+// *Arrs, Kavita and BookOrbit keep it in three completely different places, and
+// "Paste the key from Settings → General" sends a Kavita user hunting through a
+// screen that does not have it.
+//
+// BookOrbit's is not a key at all and the wording says so. It is a MAGIC-LINK
+// TOKEN, minted by a superuser against a shared account, and BookOrbit returns
+// the raw value exactly once — only sha256(raw) is stored upstream
+// (MagicLinkService.createToken). A user who has lost it cannot look it up; they
+// mint a new one. Telling them to "find" it would send them looking for
+// something that no longer exists anywhere.
 func credentialAction(kind string) string {
-	if kind == "kavita" {
+	switch kind {
+	case "kavita":
 		return "Paste the Auth Key from Kavita's User Settings → Manage Auth Keys"
+	case "bookorbit":
+		return "Paste the magic-link token a BookOrbit superuser minted for a shared account. " +
+			"BookOrbit shows it once, when the link is created — if it was not kept, mint a new one"
 	}
 	return "Paste the key from the service's Settings → General"
 }

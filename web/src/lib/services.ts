@@ -263,6 +263,7 @@ const APPLICATION_NAMES: Record<string, string> = {
 	jellyfin: 'Jellyfin',
 	audiobookshelf: 'Audiobookshelf',
 	kavita: 'Kavita',
+	bookorbit: 'BookOrbit',
 	komga: 'Komga',
 	lazylibrarian: 'LazyLibrarian'
 };
@@ -604,6 +605,17 @@ export function likelyCauses(message: string, kind: string): string[] {
 		];
 	}
 	if (/401|unauthorized|forbidden|api key/.test(text)) {
+		if (kind.trim().toLowerCase() === 'bookorbit') {
+			// BookOrbit's credential is a magic-link token, not a key on a
+			// settings page, and it cannot be looked up again — BookOrbit returns
+			// the raw value once and stores only its hash. Sending a user to
+			// `Settings, General, API Key` would send them somewhere that does not
+			// exist, looking for something that no longer does.
+			return [
+				`The magic-link token is revoked, expired or deactivated. It cannot be re-read anywhere: mint a new one.`,
+				`The link was minted against an ordinary account rather than a shared one, so BookOrbit demands a password change before any call succeeds.`
+			];
+		}
 		return [
 			`The API key is wrong or has been regenerated. It is ${app}'s Settings, General, API Key.`,
 			`The key belongs to a different instance. Two ${app} instances have two different keys.`
