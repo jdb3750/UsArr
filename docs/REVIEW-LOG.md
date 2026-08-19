@@ -21598,7 +21598,7 @@ could not reach.
 
 ---
 
-# Batch header, as drafted — ADR-0057 and ADR-0058, the two decisions slice 0 took and did not record
+# ADR-0057 and ADR-0058, the two decisions slice 0 took and did not record
 
 **`LS-376` and `LS-377`, allocated by the coordinator.** ⚠️ The gap either side of them is
 deliberate — `LS-375` is the high-water on `main` and the next lane starts at `LS-378` — so **nobody
