@@ -646,6 +646,16 @@ type serviceHealthResponse struct {
 	// built from a row that also holds an encrypted full-admin credential, and
 	// nothing here is ever derived by widening the row.
 	//
+	// ⚠️ WHICH INSTANT last_full_sync_at IS: the moment the last SUCCESSFULLY
+	// COMPLETED full import BEGAN READING the upstream — the run's START,
+	// stamped only once the run finished. It is NOT the completion instant
+	// (libsync.Report.FinishedAt, persisted nowhere), NOT the instant a row was
+	// written locally (service_item_link.synced_at, per row), NOT `last_ok_at`
+	// or `observed_at` on this same struct, and there is no global equivalent.
+	// This is the number ARCHITECTURE.md §17.7's degraded banner renders, and
+	// the three instants diverge exactly when that banner is on screen.
+	// docs/reference/http-api.md §3.5 is the wire contract.
+	//
 	// ⚠️ NEITHER CARRIES `omitempty`, and that is the whole point of the pair.
 	// `last_full_sync_at: null` is the POSITIVE STATEMENT "this instance has
 	// never completed a full catalogue import" — an absent key would leave the

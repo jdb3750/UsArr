@@ -923,3 +923,109 @@ func TestTheAdapterCountOfAReadWinsOverTheHandOverCount(t *testing.T) {
 			last, handedOver+extraItems)
 	}
 }
+
+// TestLastFullSyncAtIsTheRunStartNotItsFinishOrTheRowWrite pins the VALUE of
+// the column the degraded banner renders, not merely its presence.
+//
+// WHY A SEPARATE TEST, when TestFullImportFromTheCassettesEndToEnd already
+// reads the column. That one asserts `at.Valid` — presence — and every other
+// test in this package builds its Importer through newImporter, whose clock
+// returns the constant testNow. Under a constant clock the run's start, the
+// run's finish and each batch's write instant are the SAME instant, so
+// swapping `rep.StartedAt` for `rep.FinishedAt` or for `time.Now()` at the
+// StampFullSync call site leaves the entire suite green. The column is a
+// freshness claim a user reads off a banner (ARCHITECTURE.md §17.7), and an
+// unpinned freshness claim is the defect this test exists to make loud.
+//
+// THE CLOCK TICKS ONCE, on purpose. It returns `base` to the first caller and
+// `base + 1h` to every caller after, which separates the three instants
+// http-api.md §3.5 distinguishes while leaving the batch-window arithmetic
+// untouched: every batch read of the clock returns the same value, so
+// `im.now().Sub(batchStarted)` is 0 and no batch closes early on a timer.
+func TestLastFullSyncAtIsTheRunStartNotItsFinishOrTheRowWrite(t *testing.T) {
+	s := newTestStore(t)
+	inst := fixtureInstance(t, s)
+	src := NewKavitaSource(newCassetteClient(t, "kavita_libraries.yaml",
+		"kavita_series_all_v2.yaml", "kavita_series_metadata.yaml", "kavita_series_volumes.yaml"))
+
+	base := time.Date(2026, 8, 17, 14, 2, 0, 0, time.UTC)
+	finish := base.Add(time.Hour)
+	var ticks int
+	im := newImporter(t, s, src)
+	im.Now = func() time.Time {
+		ticks++
+		if ticks == 1 {
+			return base
+		}
+		return finish
+	}
+
+	rep, err := im.FullImport(t.Context(), inst)
+	if err != nil {
+		t.Fatalf("FullImport: %v", err)
+	}
+	if !rep.Completed {
+		t.Fatal("the import did not report itself complete")
+	}
+	// The premise of the whole test: the run really did span two instants.
+	//
+	// ⚠️ ASSERTED ON THE CLOCK AND ON rep.StartedAt, NEVER ON rep.FinishedAt,
+	// and that is not a stylistic choice. FullImport's returns are UNNAMED, so
+	// its `defer func() { rep.FinishedAt = im.now() }()` writes a local that the
+	// return value was already copied from: rep.FinishedAt is the ZERO TIME in
+	// every caller, and rep.Duration() is therefore always 0. That is a real
+	// defect and it is reported rather than repaired here — repairing it changes
+	// what the import's success log prints, which is outside this commit. A
+	// premise that read rep.FinishedAt would fail for that reason instead of for
+	// the reason this test is about.
+	if !rep.StartedAt.Equal(base) {
+		t.Fatalf("StartedAt = %v, want %v", rep.StartedAt, base)
+	}
+	if ticks < 2 {
+		t.Fatalf("the clock was read %d times; the run must span two instants for "+
+			"this test to distinguish them", ticks)
+	}
+
+	at, err := s.LastFullSyncAt(t.Context(), inst)
+	if err != nil {
+		t.Fatalf("LastFullSyncAt: %v", err)
+	}
+	if !at.Valid {
+		t.Fatal("a completed import left last_full_sync_at unset")
+	}
+	got, err := store.ParseTime(at.String)
+	if err != nil {
+		t.Fatalf("parse last_full_sync_at %q: %v", at.String, err)
+	}
+	if !got.Equal(base) {
+		t.Errorf("last_full_sync_at = %v, want the run's START %v", got, base)
+	}
+	// Named separately so a regression says WHICH wrong instant was written.
+	if got.Equal(finish) {
+		t.Error("last_full_sync_at is the run's FINISH; http-api.md §3.5 puts the " +
+			"START on the wire, because it is the only lower bound on the freshness " +
+			"of every row the run wrote")
+	}
+
+	// The third instant, and the reason the second is not a rounding detail:
+	// service_item_link.synced_at is when the batch was WRITTEN LOCALLY, and it
+	// is a different number on the same successful run.
+	var syncedAt string
+	if err := s.DB().Read().QueryRowContext(t.Context(),
+		`SELECT MIN(synced_at) FROM service_item_link WHERE service_instance_id = ?`,
+		inst).Scan(&syncedAt); err != nil {
+		t.Fatalf("read service_item_link.synced_at: %v", err)
+	}
+	rowWrite, err := store.ParseTime(syncedAt)
+	if err != nil {
+		t.Fatalf("parse synced_at %q: %v", syncedAt, err)
+	}
+	if !rowWrite.Equal(finish) {
+		t.Fatalf("synced_at = %v, want %v — the fixture no longer separates the "+
+			"row write from the run start, so this test proves nothing", rowWrite, finish)
+	}
+	if got.Equal(rowWrite) {
+		t.Error("last_full_sync_at equals service_item_link.synced_at; the wire field is " +
+			"the RUN's start, never the row's local write instant")
+	}
+}

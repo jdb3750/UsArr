@@ -91,11 +91,23 @@
 	 *                    Block C is drawn off. See $lib/home, whose own note
 	 *                    records the day this stopped being hypothetical.
 	 *
-	 * AND THE FOUR THAT ARE NOT, each for the same reason. `partial` (an import
-	 * in progress) and `stale` (an instance degraded, "showing cached data from
-	 * 11:47") are both claims about a catalogue and a per-instance sync clock,
-	 * and neither exists: §17.7's degraded banner is a sentence about how old
-	 * the cached data is, and there is no cached data for it to be about. The
+	 * AND THE FOUR THAT ARE NOT. `partial` (an import in progress) and `stale`
+	 * (an instance degraded, "showing cached data from 11:47") are both claims
+	 * about a catalogue and a per-instance sync clock.
+	 *
+	 * ⚠️ THIS USED TO READ "and neither exists". THE CLOCK HALF IS NO LONGER
+	 * TRUE, and the note is corrected rather than deleted because it is the
+	 * record of why the banner was not built. The per-instance clock is
+	 * `ServiceHealth.lastFullSyncAt` off GET /api/v1/services/health — which
+	 * this screen already fetches for Block B — and it is a specified instant
+	 * rather than a plausible one: the run's START, never its finish and never a
+	 * row's local write time (docs/reference/http-api.md §3.5). `null` is
+	 * "never synced" and must not be rendered as a time. What is still not
+	 * decided here is the banner itself: §17.7 wants it non-modal, naming the
+	 * instance by the user's own name, linking to Services, and NOT greying the
+	 * catalogue. Read the field off the same row as the name that goes in the
+	 * sentence — the number is per instance and there is deliberately no global
+	 * one. The
 	 * unreachable-instance FACT is real and is reported, in Block B, where it
 	 * has a source. `scope-empty` is unreachable — ⚠️ but NOT because there is
 	 * no `library` table, which is what this said until migration 00005 created

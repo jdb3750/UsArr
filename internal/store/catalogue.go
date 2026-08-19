@@ -1297,7 +1297,20 @@ func nullTime(t time.Time) any {
 	return FormatTime(t)
 }
 
-// StampFullSync records that a full import COMPLETED.
+// StampFullSync records that a full import COMPLETED, using the instant that
+// import STARTED.
+//
+// ⚠️ THE TWO HALVES OF THAT SENTENCE ARE DIFFERENT INSTANTS AND BOTH ARE
+// DELIBERATE. `at` is the run's START (libsync's FullImport passes
+// rep.StartedAt), and the call happens only after the run finished. So the
+// column means "the replica is no staler than `at`", which is the only reading
+// a freshness banner can safely render: a full import re-reads every item
+// between its start and its finish, so the START is the lower bound on every
+// row it wrote and the finish is not a bound at all. Passing the finish here
+// would overstate freshness by the run's duration, on the one screen —
+// ARCHITECTURE.md §17.7's degraded banner — whose whole job is that number.
+// docs/reference/http-api.md §3.5 is the wire contract, and it names the three
+// instants this is NOT.
 //
 // ON SUCCESS ONLY, and the caller is what enforces that: this function is not
 // called on a failed or partial import. The column is a freshness claim the
@@ -1320,8 +1333,9 @@ func (s *Store) StampFullSync(ctx context.Context, instanceID int64, at time.Tim
 	})
 }
 
-// LastFullSyncAt reports when one instance last COMPLETED a full import, or an
-// invalid NullString for never.
+// LastFullSyncAt reports when one instance's last SUCCESSFULLY COMPLETED full
+// import BEGAN, or an invalid NullString for never. See StampFullSync for why
+// the stored instant is the run's start rather than its finish.
 //
 // It takes no Scope, and that is a deliberate placement rather than an
 // oversight: this is not a user-facing read. It reads ONE named instance's

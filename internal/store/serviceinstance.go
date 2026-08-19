@@ -51,10 +51,19 @@ type ServiceInstance struct {
 	// replica does not have.
 	IndexersFetchedAt sql.NullString
 
-	// LastFullSyncAt is when this instance last COMPLETED a full catalogue
-	// import (migration 0005). INVALID means NEVER, and it is a different fact
-	// from "synced, and the library was empty" — the Services screen says a
-	// different sentence for each, exactly as it does for IndexersFetchedAt.
+	// LastFullSyncAt is when this instance's last SUCCESSFULLY COMPLETED full
+	// catalogue import BEGAN READING the upstream (migration 0005). INVALID
+	// means NEVER, and it is a different fact from "synced, and the library was
+	// empty" — the Services screen says a different sentence for each, exactly
+	// as it does for IndexersFetchedAt.
+	//
+	// ⚠️ IT IS THE RUN'S START, NOT ITS FINISH, and not the instant any row was
+	// written locally — that one is service_item_link.synced_at, which is per
+	// row and moves per batch. The distinction is invisible on a healthy system
+	// and is the whole content of the field on a degraded one, which is the only
+	// time ARCHITECTURE.md §17.7's "showing cached data from 14:02" banner
+	// renders. docs/reference/http-api.md §3.5 is the contract; StampFullSync
+	// carries the argument for the choice.
 	//
 	// It is written ON SUCCESS ONLY, by StampFullSync, so it never claims a
 	// freshness the replica does not have: a partial import leaves its

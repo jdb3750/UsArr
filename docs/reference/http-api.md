@@ -571,7 +571,7 @@ no probe issued on the request path. Requires an authenticated session.
 
 | Field | Always present? | Type | Meaning |
 | --- | --- | --- | --- |
-| `services[].last_full_sync_at` | **yes**, as a value or as an explicit `null` | RFC 3339 UTC, or `null` | When this instance last **completed** a full catalogue import. `null` means **never**. |
+| `services[].last_full_sync_at` | **yes**, as a value or as an explicit `null` | RFC 3339 UTC, or `null` | When this instance's last **successfully completed** full catalogue import **began reading the upstream**. `null` means **never**. ⚠️ It is the run's **start**, not its finish — **§3.5** names the instant and the three it is not. |
 | `services[].work_count` | **yes** | integer | How many **distinct works** this instance contributes to the local catalogue. |
 | `services[].file_read_failures` | **yes** | integer | How many of this instance's items the **file walk could not read** — see §3.4. `0` is a positive statement, not an absence. |
 
@@ -673,6 +673,61 @@ non-zero case only, as a note; and pin both halves the way `services.test.ts` an
 `services-screen.test.ts` pin them — a test that passes on the constant `0` passes on the bug.
 
 ---
+
+### 3.5 Which instant `last_full_sync_at` is — and the three it is not
+
+🚩 **This is the field a "cached as of" banner renders, so the instant it names is the contract.**
+ARCHITECTURE.md §17.7 specifies a non-modal banner for a degraded instance — *"Kavita is
+unreachable — showing cached data from 14:02"* — and that number comes from here. "Cached as of" is
+ambiguous between at least three instants, which **coincide on a healthy system and diverge exactly
+when the service is unreachable**, which is the only time the banner renders. A banner built on the
+wrong one is wrong precisely when it is the only thing on screen.
+
+**It is the moment the last full import that COMPLETED SUCCESSFULLY BEGAN READING the upstream.**
+`internal/libsync`'s `FullImport` takes the instant at entry and stamps *that* value, and only after
+the run has read every item and committed every batch (`StampFullSync(ctx, instanceID,
+rep.StartedAt)`). So the field carries two facts at once: the run **finished**, and the data it
+wrote is **no staler than** this instant.
+
+**It is NOT any of these:**
+
+| Not this | Which is | Where that one actually lives |
+| --- | --- | --- |
+| When the import **finished** | later, by the run's whole duration | `libsync.Report.FinishedAt` — in memory, **persisted nowhere**, on no endpoint |
+| When a **row** was last written locally | later, per batch | `service_item_link.synced_at` — per row, per instance, on no endpoint |
+| When the upstream was last **reachable** | a probe fact, unrelated to the catalogue | `last_ok_at` on this same row |
+| When this **health row** was observed | the probe's own clock | `observed_at` on this same row |
+| A **global** or cross-instance sync clock | — | does not exist, deliberately; see below |
+
+**Why the start and not the finish, given the finish is newer.** A full import re-reads every item
+between its start and its finish, so after a completed run *"no live row on this instance is staler
+than X"* is **true** for X = the start and **false** for X = the finish. The start is the only
+lower bound the field can carry. It overstates staleness by at most the run's duration, and that is
+the safe direction: §17.7 is categorical that **a reassuring wrong number is worse than none**.
+
+**It is per SERVICE INSTANCE, and there is deliberately no global one.** §17.7: *"The timestamp in a
+degraded banner is that instance's own last successful sync, never the global delta time."* A single
+number over a stack where one instance is two hours stale and the others are current overstates
+freshness by exactly the interval that matters. Every consumer must read the number off the same row
+as the `name` it puts in the sentence — which is also why the banner names the instance by the user's
+own name for it (§17.3) rather than by kind.
+
+**Before a first sync it is `null`, and `null` is the whole answer.** Not `0`, not the epoch, not the
+request time. §3.2's table is the required reading: `null` is a *positive* statement — no full import
+has ever completed here — and it does **not** imply an empty catalogue, because a partial import
+leaves its committed batches standing. **A consumer must not render a banner timestamp off a `null`.**
+The honest sentences are *"never synced"* and, for the `null` + `work_count > 0` row, *"a partial
+import's rows stand"*. Substituting *"showing cached data from just now"* for `null` is the exact
+failure this field's non-`omitempty` contract exists to prevent.
+
+⚠️ **The Go and TypeScript doc comments on this field said "when this instance last COMPLETED a full
+catalogue import" until 2026-08-19, and §3.1's own Meaning cell said the same.** The stored *value*
+was never the completion instant — §3.4 has always described it correctly, in passing, as *"stamped
+with the run's start time"* — so this document contradicted itself, with the wire-contract half
+being the wrong half. `TestLastFullSyncAtIsTheRunStartNotItsFinishOrTheRowWrite`
+(`internal/libsync/importer_test.go`) now pins the value under a clock that ticks, because every
+other test in that package runs a **constant** clock, under which all three instants above are the
+same number and a swap is invisible.
 
 ## 4 · `POST /api/v1/services/{id}/sync` — re-run the catalogue import
 

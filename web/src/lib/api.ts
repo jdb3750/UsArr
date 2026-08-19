@@ -964,8 +964,27 @@ export interface ServiceHealth {
 	stale: boolean;
 
 	/**
-	 * When this instance last COMPLETED a full catalogue import, or `null` for
-	 * never (internal/httpapi/services.go:655, `json:"last_full_sync_at"`).
+	 * When this instance's last SUCCESSFULLY COMPLETED full catalogue import
+	 * BEGAN READING the upstream, or `null` for never
+	 * (`json:"last_full_sync_at"` on `serviceHealthResponse`).
+	 *
+	 * ⚠️ THE RUN'S START, NOT ITS FINISH. This is the number §17.7's degraded
+	 * banner renders — "Kavita is unreachable — showing cached data from 14:02"
+	 * — and "cached as of" is ambiguous between three instants that coincide on
+	 * a healthy system and diverge exactly when that banner is on screen. It is
+	 * NOT when the import finished, NOT when any row was written locally, and
+	 * NOT `lastOkAt` or `observedAt` on this same object. The start is the only
+	 * lower bound on the freshness of the rows the run wrote, so it is the only
+	 * one safe to put in that sentence. docs/reference/http-api.md §3.5 is the
+	 * contract and names each instant it is not.
+	 *
+	 * ⚠️ IT IS PER INSTANCE. §17.7: the banner's timestamp is "that instance's
+	 * own last successful sync, never the global delta time". Read it off the
+	 * same object as the `name` that goes in the sentence.
+	 *
+	 * ⚠️ NEVER RENDER A BANNER TIMESTAMP OFF `null`. `null` is "no full import
+	 * has ever completed", which is not a time and must not be softened into
+	 * one; read it with `workCount`, per the pairing note below.
 	 *
 	 * ⚠️ `string | null`, NOT `string | undefined`, and the difference is the
 	 * contract rather than a typing preference. The server sends the key with no
