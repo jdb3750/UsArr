@@ -542,6 +542,12 @@ exclude, and the rows it holds came from runs that really happened.
 ⚠️ **It is distinct items, not failures.** Three partial runs that each failed on the same series
 report `1`. A count of rows would report `3` and describe a library that does not exist.
 
+⚠️ **It is not `libsync.Report.FileReadFailures`, despite the matching name.** The Go field is
+**one run's** count and is returned to that run's caller; this field is the same fact over the window
+above, which can span a completed run and every partial run after it. Same word, two windows — which
+is `DEVELOPMENT.md` §11's collision class, kept here because the alternative is a second name for
+one concept. A consumer reads the window, not the name.
+
 ⚠️ **It carries no reason and no upstream text**, on §5.5.5's rule for the same reason. Each
 failure's classified reason (`not_found`, `unauthorized`, `server_error`, …) and the upstream HTTP
 status are in `sync_report.detail`, which a browser never sees. The classification is a **closed

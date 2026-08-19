@@ -924,3 +924,56 @@ this a small change whenever it is wanted rather than an archaeology problem.
 * **A user reports a type that reads as empty while its source is connected.** That is precisely the
   confusion this removes, and one report is evidence the static half has stopped carrying the
   screen.
+
+---
+
+## 21. One codec per `image_asset` row — the debt the `format` seam is carrying
+
+**What.** [ADR-0050](./DECISIONS.md#adr-0050) clause 1, verbatim:
+
+> **The image pipeline's base output format is JPEG, encoded with the standard library's
+> `image/jpeg`, and EVERY rendition UsArr stores for an asset — all seven widths, `orig`
+> included — is produced by UsArr's own encoder in the codec `image_asset.format` names. There is
+> no passthrough width.**
+
+Per-`role` codec variation stays open (PNG for logos), because `role` is a column on the same row.
+Per-**width** variation is foreclosed.
+
+**Why it is in this file at all — it is not a feature, it is an unpaid obligation on a seam.**
+`image_asset.format` (migration `00008_image_asset_format.sql`) is one column per row, while
+`ARCHITECTURE.md` §4.4 stores up to **seven** renditions per asset. The column can only ever be
+truthful *because* of the clause above, and **nothing enforces the clause today**: there is no
+fetcher, no downscaler and no encoder, so ADR-0050 discharges it **by definition rather than by
+code**. The Go guard that did ship — `ValidImageFormat` and
+`TestImageWritesValidateTheFormatVocabulary` in `internal/store/images.go` — checks that a writer
+uses a *token from the vocabulary*. It cannot check that seven renditions of one asset agree, because
+there is nothing in the schema that even names a rendition.
+
+**What breaks if it is violated**, and both failures are silent:
+
+- **`format` describes six of seven renditions.** Store `orig` as the upstream's untouched bytes and
+  the row still says `jpeg`; the column is now a claim about a subset, with nothing recording which
+  subset.
+- **`/img?w=orig` serves a `Content-Type` that lies about the bytes.** ADR-0050's consequence list
+  makes the `/img` surface a one-line token→media-type lookup that reads the row for **every**
+  allowlisted width. That is sound only under this clause. Break it and the header is wrong for one
+  width out of seven — the case least likely to be in anyone's test fixture.
+
+**What the first writer owes.** The first code that stores a rendition is what makes this real or
+breaks it, and it has exactly two honest options:
+
+1. **Enforce one codec per asset in the encoder** — every allowlisted width, `orig` included, goes
+   through UsArr's own encode in the codec written to `format`; or
+2. **Come back to the schema first.** Storing a rendition in a different codec from its siblings is
+   an amendment to ADR-0050 plus a **second** column for the passthrough codec — measured in
+   `00008`'s header at one more one-line `ALTER TABLE ADD COLUMN`, not a rebuild.
+
+What is not available is writing the mixed-codec row and leaving `format` as it stands.
+
+**The seam.** The column itself. It is nullable, unconstrained `TEXT` holding a lowercase codec
+token, so a second codec costs one map entry in Go and no migration; and because it is a *record*
+rather than a promise, the day the promise is broken deliberately is the day it can be made to say
+so. `reference/schema.md` §12 carries the column's four properties and points here.
+
+**Trigger.** The first commit that writes bytes for an `image_asset` row. Not the pipeline's design,
+not the fetcher — the write.

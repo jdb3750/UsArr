@@ -663,6 +663,13 @@ type serviceHealthResponse struct {
 	// not read, since its last completed full sync. Its wire contract is
 	// http-api.md §3.4.
 	//
+	// ⚠️ IT IS NOT libsync.Report.FileReadFailures, despite the matching name.
+	// That one is ONE RUN's count; this is the same fact over the window
+	// FileWalkFailuresByInstance defines, which can span a completed run and
+	// every partial run since. Same word, two windows — DEVELOPMENT.md §11's
+	// collision class, kept because the two are one fact and named here so the
+	// difference is stated rather than inferred.
+	//
 	// ⚠️ IT IS THE REASON AN UNCOUNTED ITEM IS UNCOUNTED, which is why it is on
 	// this row rather than nowhere. A work whose file walk failed has no rollup,
 	// so `GET /api/v1/library/recent` omits its `availability` — and §1.4.1 is

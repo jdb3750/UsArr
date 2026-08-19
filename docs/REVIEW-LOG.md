@@ -18840,6 +18840,52 @@ trust (`DEVELOPMENT.md` §11).
 
 ---
 
+# Placement pass — ADR-0050 clause 1, recorded where the fetch path starts
+
+**Date:** 2026-08-19. **Prefix:** `LS-300`. **Tree:** a `git worktree` branched from `origin/main`
+at `4fe7821` (the merge of the ADR-0050 thread). **Scope:** documentation only — no Go, no SQL, no
+`web/`. **No ADR:** the decision is ADR-0050's and is unchanged; this is placement.
+
+## LS-300 — clause 1 is discharged by definition, and lived only where the fetch-path implementer would not look
+
+**Severity: Medium. Not a defect in what landed — a gap in where it landed.**
+
+ADR-0050 clause 1 fixes the invariant that makes `image_asset.format` truthful:
+
+> **… EVERY rendition UsArr stores for an asset — all seven widths, `orig` included — is produced by
+> UsArr's own encoder in the codec `image_asset.format` names. There is no passthrough width.**
+
+The ADR is explicit that this is discharged **by definition rather than by code**, because there is
+no pipeline to enforce it in (and LS-290 is why the clause exists at all). The Go guard that shipped
+with `00008` — `ValidImageFormat` plus `TestImageWritesValidateTheFormatVocabulary` — checks that a
+writer uses a token from the vocabulary; it **cannot** check that seven renditions of one asset agree,
+because no schema object names a rendition. So the obligation is real, unenforced, and was recorded
+in an ADR and in this log's pre-merge findings — both archives, neither of them a place someone
+opening `image_asset` to write the fetch path passes through.
+
+**Applied.** Two edits, no new argument:
+
+- **`FUTURE.md` §21** now states it in that file's standing shape — what it is, that nothing enforces
+  it today, what breaks if it is violated (a `format` that describes six of seven renditions, and
+  `/img?w=orig` serving a `Content-Type` that lies about the bytes, since ADR-0050's consequence list
+  makes that header a one-line lookup read for **every** allowlisted width), what the first writer
+  owes (enforce one codec per asset in the encoder, or amend ADR-0050 and add the second column
+  *before* storing a sibling in another codec), the seam, and a trigger that is a commit rather than
+  a mood. `FUTURE.md`'s job is *"the seam in the current design that keeps it cheap"*, and this is
+  that shape read from the other end: the column is the seam, and the invariant is what it is owed.
+- **`reference/schema.md` §12** points there from the `format` bullet that already carries the ⚠️.
+
+**Why one pointer and not three.** `ARCHITECTURE.md` §4.4 and ADR-0050 both already carry the clause
+in full, so a pointer from either is a pointer from the argument to a summary of itself. The person
+this record is for is reading the *table they are about to write*, and that is `schema.md` §12. One
+cross-reference where someone will hit it beats three nobody follows.
+
+**What this changes in behaviour: nothing.** No code, no schema, no gate. If a future reader wants
+the reasoning rather than the obligation, it is in ADR-0050 and in LS-290 above; neither was
+restated, and neither moved.
+
+---
+
 # A failed per-series file walk, made visible — `internal/libsync/files.go`
 
 The walk dropped a series whose `GET /api/Series/volumes` failed on a bare `continue`. The drop is
@@ -18971,6 +19017,14 @@ not exist, and it is a guard below.
 completed run to exclude, and the rows it holds came from runs that really happened. That is the
 `last_full_sync_at IS NULL` arm, and it is asserted rather than assumed
 (`TestServicesHealthCountsItemsTheFileWalkCouldNotRead`, the `Fresh Kavita` case).
+
+**One name, two windows — declared rather than discovered.** `libsync.Report.FileReadFailures` is
+**one run's** count; the wire field is the same fact over the window above, which can span a
+completed run and every partial run since. That is `DEVELOPMENT.md` §11's collision class, landed on
+`origin/main` while this thread was open and inherited on the merge. It is kept rather than renamed
+because the two really are the same fact and a second name would imply a second fact; what the rule
+buys is that the difference is now stated at both ends — `http-api.md` §3.4 and the Go field's own
+comment — instead of being inferred from a query.
 
 **No query-plan assertion, deliberately.** `ix_sync_report_instance` is
 `(service_instance_id, created_at DESC)` and this read carries no equality on the leading column —
