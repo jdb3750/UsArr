@@ -1813,10 +1813,15 @@ vocabulary is a maintenance burden that silently goes wrong, and the fix is to s
 enumerate harder. The three rules above hold for a package no table mentions, which is the whole point
 of writing them as rules.
 
-ℹ️ **The ruling names two id collisions as its occasion — `ADR-0054` and `SD-08`.** Neither is visible
-as a collision in the merged tree, and that is not a counter-example: an id collision is caught and
-reconciled in dispatch, so what it costs is duplicated work and a reconciliation nobody records, not a
-diff you can go and read. **The ruling is the record.**
+ℹ️ **The ruling names two id collisions as its occasion — `ADR-0054` and `SD-08`.** For `SD-08` the
+tree carries a first-hand record: `docs/REVIEW-LOG.md`'s **`SD-10`** entry is the losing lane
+describing its own collision, opening *"This entry was prepared as `SD-08` and is filed as `SD-10`"* —
+a different lane landed a real `SD-08` on `main` while this one was held, so it took the next id rather
+than contesting one, and it declares the gap at `SD-09` deliberate because that id belonged to a third
+lane still in flight. The readable tell is that the `SD-` run sits physically out of order in that
+file. **For `ADR-0054` the ruling is the record**, and that is not a counter-example: an id collision is
+normally caught and reconciled in dispatch, so what it costs is duplicated work and a reconciliation
+nobody records, not a diff you can go and read.
 
 ---
 
