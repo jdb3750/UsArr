@@ -100,11 +100,15 @@ UsArr/
 │   ├── requests/               # v0.2 — request → route to the right *Arr by media type
 │   ├── crossmedia/             # v0.3 — Wikidata edge resolution
 │   ├── metadata/               # v0.2+ — tmdb, tvmaze, musicbrainz, openlibrary, wikidata
+│   ├── bookorbit/                  # v0.1's catalogue source as of ADR-0052
 │   ├── navidrome/ audiobookshelf/ kavita/ komga/  # catalogue adapters. This read "one milestone
 │   │                               #   each after v0.1, in that order subject to the §16.1 probe";
-│   │                               #   ADR-0041 moved kavita/ INTO v0.1 and the probe is discharged,
-│   │                               #   so only the other three are after it. The adapter that drives
-│   │                               #   a client like kavita/ lives in libsync/, not beside it.
+│   │                               #   ADR-0041 moved kavita/ INTO v0.1, then ADR-0052 moved v0.1 off
+│   │                               #   it onto bookorbit/. kavita/ is SUNSET, NOT DELETED — it stays
+│   │                               #   here and stays green — and it is not added back to the
+│   │                               #   after-v0.1 sequence, which is navidrome/, audiobookshelf/,
+│   │                               #   komga/ in that order. The adapter that drives a client like
+│   │                               #   kavita/ lives in libsync/, not beside it.
 │   ├── jellyfin/                # v1.0 southbound adapter
 │   ├── lazylibrarian/          # v0.3 as a Tier 1 YAML manifest (ARCHITECTURE §16); Go code only
 │   │                           #   if the manifest ceiling is hit — cmd= RPC, HTTP 200 + Success:false
