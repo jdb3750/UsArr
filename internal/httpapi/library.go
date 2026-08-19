@@ -32,17 +32,38 @@ import (
 // is how a client came to model `limit` as the value it sent rather than the
 // value the server echoed — a doc comment is not reachable from a browser tab.
 //
-// WHAT IT DOES NOT DO YET, stated so a caller does not assume it:
+// THIS HANDLER READS `limit` AND `cursor` AND NOTHING ELSE — the parameter
+// table is docs/reference/http-api.md §1.1. Unrecognised parameters are ignored
+// rather than refused, so `?lib=…` sent here does not 400; it answers 200 over
+// the whole catalogue. "This endpoint has no such filter" is therefore a silent
+// answer, and only legible to a caller who knows where the filter does live:
 //
-//   - No `?lib=` library scope. §17.2's chip is a multi-select over user-defined
-//     libraries and it is carried on routes that already exist; adding it here
-//     is a join to library_member, whose key leads with sort_title rather than
-//     added_at, so it is a different plan and a different commit. The seam is
-//     that the scope is a parameter of the store call, not of the SQL string.
-//   - No cover art. There is no image endpoint, so shipping poster_asset_id
-//     would be an id the client cannot turn into anything.
+//   - `?lib=` IS BUILT, on handleBrowseWorks below — GET /api/v1/library,
+//     http-api.md §7.3. Slugs are resolved by store.LibraryIDsBySlug and
+//     applied as store.WorksFilter.LibraryIDs. ⚠️ This bullet used to read
+//     "No `?lib=` library scope", and gave as its reason that the scope would
+//     be "a join to library_member, whose key leads with sort_title rather
+//     than added_at, so it is a different plan and a different commit". Both
+//     halves went stale: the commit landed, and ADR-0051 made the scope a
+//     WORK-DRIVEN EXISTS over library_member rather than a join, which is
+//     order-independent and so was never blocked by this endpoint's order.
+//     Block C carries no chip because §17.2 gives it one table, one order and
+//     no filters — not because the scope could not be built here.
+//
+//     Should Block C ever be given the chip, it MUST reuse that resolver and
+//     that EXISTS, and it MUST refuse an unresolvable slug rather than drop it:
+//     §7.3's rule is that dropping a slug WIDENS the page, so a filter has no
+//     safe direction to fail in the way `limit` does. The seam is unchanged —
+//     the scope is a parameter of the store call, not of the SQL string.
+//
+// WHAT IS GENUINELY NOT BUILT ANYWHERE, checked one item at a time rather than
+// asserted as a list:
+//
+//   - No cover art, here or on the grid. server.go routes no image endpoint at
+//     all, so shipping poster_asset_id would be an id the client cannot turn
+//     into anything.
 //   - No Block A and no Block B. Those are a per-type rollup and an attention
-//     list; each is its own read.
+//     list; each is its own read, and server.go routes neither.
 
 // recentWorkResponse is one Block C row as it crosses to a browser.
 //

@@ -39,8 +39,10 @@ provider, no image fetch. Requires an authenticated session; without one it is `
 | `limit` | integer | `50` | The page size **requested**. See §1.2 — it is a clamp, not a validated range, and the response says what was actually applied. |
 | `cursor` | opaque string | — | A token minted by a previous response's `next_cursor`. Never construct one; never edit one. A token that will not parse is `400 bad_request`, never a silent reset to page one. |
 
-There is **no `?lib=` scope** and no per-type filter. Both are later commits; §17.2's library chip is
-a join this read does not carry.
+There is **no `?lib=` scope here and no per-type filter here** — and both exist, on §7. §17.2 closes
+Block C at one table, one order and *no* filters, so this endpoint refuses the chip by design rather
+than by backlog; a client that wants the scope calls §7. Unrecognised parameters are **ignored, not
+refused**, so `?lib=…` sent here is `200` over the whole catalogue rather than a `400`.
 
 ### 1.2 `limit` is a clamp, not a validated range — and the echoed `limit` is authoritative
 
