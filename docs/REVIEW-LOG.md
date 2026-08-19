@@ -18105,3 +18105,47 @@ a config directory, which is FI-06's territory and stays open. The genuine two-p
 reproduced by hand against a scratch config directory, not in the suite — there is no Docker and no
 supervisor in the gate, and a test that raced a real server against a real rotation would be the
 flaky kind LS-250 warns about.
+
+---
+
+## RK-11 — what `make check` green is worth on this change, and one flake it surfaced
+
+**Measured, not asserted.** `make check: OK` on `go1.25.13` (`go.mod`'s floor, and the toolchain the
+recipes selected), against the tree that carries RK-02…RK-10. The gate named its own tools:
+
+```
+tool: /root/go/bin/gofumpt — version v0.11.0, asserted against the pin
+tool: /root/go/bin/golangci-lint — version 2.12.2, asserted against the pin
+tool: /root/go/bin/gitleaks — build-info module github.com/zricethezav/gitleaks/v8@v8.30.1, asserted against the pin (--version is unstamped)
+tool: /root/go/bin/govulncheck — version v1.7.0, asserted against the pin
+```
+
+**What it covers here:** every guard listed in RK-04, each fired by neutering it and watching the
+suite go red. **What it does not cover:** the live sequences. Two UsArr processes against one config
+directory, an interrupted rotation resumed from a restored key file, and a `secret.key` deleted out
+from under a partially-rotated database are all outside a gate with no Docker and no supervisor
+(`DEVELOPMENT.md` §8). Those were reproduced by hand against scratch config directories, and the
+transcripts are what stands behind RK-02 and RK-03 — not the suite.
+
+### 🚩 A pre-existing flake, recorded rather than absorbed
+
+The **first** `make check` of this change went red, on
+`TestProbeErrorIsRedactedBeforeItIsStored` — a health-prober redaction test with no connection to key
+rotation. It is **not caused by this change**, and it is not a shuffle-order artefact: the same
+`-shuffle` seed passes, and 40 `-race` runs of the test alone pass on the **pre-change** tree
+(`a020603`) under deliberate CPU contention.
+
+**The mechanism, from reading the two files:** `newTestApp` starts `registry.RunProber` in a
+goroutine (`e2e_test.go:413`), and `POST /api/v1/services` calls `ProbeNow(id)`
+(`internal/httpapi/services.go:243`). So creating the fixture's service **queues a background probe**.
+The test then flips the double to failing and probes synchronously. If the queued probe's HTTP
+round-trip began before `failStatusWith` but its snapshot write lands *after* the synchronous one's,
+`Snapshot` returns the **healthy** snapshot — which is exactly what the failure printed
+(`AppVersion:2.1.3.5150`, `Error:` empty). It surfaced because the machine was loaded by this pass's
+own live-verification servers, which is a fair simulation of a slower box.
+
+**Left as a follow-up, not fixed here** — it is a different subsystem and outside this thread's scope.
+**Fix shape:** have the test wait for the queued probe to land before flipping the double, or give
+the test app a registry with no background prober, so the synchronous `probe` call is the only writer
+of that snapshot. Recorded because a flake that is silently re-run until green is a gate nobody can
+trust (`DEVELOPMENT.md` §11).
