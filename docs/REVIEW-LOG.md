@@ -19634,3 +19634,205 @@ The evidence that carries this change is not the gate. It is: the primary-source
 wrong file path or a renamed constant would be visible), the first-party licence quote in `LS-355`,
 and the adversarial pass this branch was pushed for. **The ADR gates the implementation precisely so
 that this review happens before code makes the decision expensive to revisit.**
+
+---
+
+# ADR-0052 adversarial pre-merge review — BookOrbit read from source, not summarised
+
+**Pre-merge review of `docs/adr0052-bookorbit-20260819` at `6749365`, before it touches `main`,
+because it edits ARCHITECTURE §16 — this project's authority for what ships in which milestone — and
+amends an accepted ADR.** The drafter's most honest admission was that its BookOrbit reads were
+*summarising fetches, not files read line by line*, because the repo was not attached to its session.
+**That is fixed here**: `bookorbit/bookorbit` was cloned and read directly (`73b7877d`, unshallowed),
+and the 2026-08-17 evaluation's own commit `4a420a04` was checked out as well. Every claim below has a
+file, a line and a command behind it.
+
+**Ten findings. Nine applied to the branch, one rebutted in writing.**
+
+## LS-360 — BookOrbit has NO series-level ordered read, and UsArr's comic unit of work is the series
+
+**Applied — this is the finding the review existed to force, and it closes an "open" question in the
+negative.** The draft established an ordered read over **books** and concluded the page walk was
+*"expressible"*, leaving channel 3b open pending a probe. **Nobody had checked the series.**
+
+**Four measurements, taken against `73b7877d` and re-taken at `4a420a04`, identical at both:**
+
+| Measured | Result | Where |
+|---|---|---|
+| Routes the series controller exposes | **Exactly two**, both `GET`: `/series`, `/series/:seriesId/books`. No `POST …/query` counterpart to `POST /books/query`. | `series.controller.ts:13,18` |
+| Sort keys `GET /series` admits | `SERIES_LIST_SORTS = ['name','bookCount','lastAddedAt','readProgress']` — **no `updatedAt`**, and `@IsIn` **rejects** one with a 400. | `dto/list-series.dto.ts:4,34` |
+| Whether a series watermark is readable at all | **No.** `book_series.updated_at` exists with `$onUpdateFn`, but the repository's projection is `id, name, bookCount, readCount, lastAddedAt` — it is **never selected**. `lastAddedAt` is `max(books.added_at)`, an **added**-time aggregate blind to edits. | `db/schema/series.ts:16`; `series.repository.ts:84,100,120` |
+| Whether `collapseSeries` supplies one indirectly | **No.** `COLLAPSE_REPRESENTATIVE_PICK_SQL` picks one book per series by `series_index ASC NULLS LAST, added_at ASC, id ASC` and the collapsed query orders on **that row's** `updated_at`, not a `MAX()` over the group. Editing volume 7 moves nothing. | `book.repository.ts:142-145,976` |
+
+**Why it is decisive rather than a detail.** UsArr's unit of work for comics and manga **is the
+series**: `work.kind`'s `'comic'` IS the series (`00005_library_sync.sql:242` — *"'comic' is the
+SERIES, 'comic_issue' the issue or chapter"*), which is exactly why the shipped adapter walks
+`POST /api/Series/all-v2` (`internal/libsync/kavita.go:210`). The ordered read BookOrbit **does**
+offer is `POST /books/query`, whose type is named **`BookQuery`** (`packages/types/src/query.ts:380`)
+— **book-scoped by name**. A series rename or an `expectedBookCount` change moves **no** book's
+`updated_at` and is invisible to it.
+
+**The consequence for the record is the point.** The ADR was recording an open question that is
+**closed in the negative for the series half** — which is *worse than recording the closure*, because
+it reads as resolved-pending-a-probe when no probe can resolve it. **A live probe cannot produce a
+series-ordered read, because none exists to find.** Open question 1 and ARCHITECTURE §16.1 both now
+say so, and the book half is kept as the honest residue.
+
+## LS-361 — the watermark question is answerable from source, and the answer is the pessimistic one
+
+**Applied.** The draft's §2 table marked the watermark finding *"NOT re-verified either way … not
+measured here"* and deferred it to a live probe. **It is measurable from source, and was measured.**
+
+Tracing the realistic user edit path end to end: `POST /books/bulk-update-tags` →
+`BookService.bulkUpdateTags` (`book.service.ts:2362`) → `MetadataService.replaceTags` →
+`replaceTagsInExecutor` (`metadata.service.ts:513`), which does `delete(bookTags)` + `insert(bookTags)`
+**and nothing else**. The follow-up `triggerPostMetadataUpdateEffects` schedules a file write/rename
+and recomputes the metadata score; **none of those writes `books.updatedAt`**, and
+`metadata-score.repository.ts` never touches it either. `replaceGenresInExecutor` (`:480`) and
+`replaceAuthorsInExecutor` (`:369`) have the same shape. **No SQL trigger exists anywhere** —
+`grep -rli "create trigger" server/ --include=*.sql` returns no match — so nothing compensates.
+
+🚩 **So a tag, genre or author edit does not move `books.updated_at`.** The 2026-08-17 finding's
+**strong** form is correct. ✅ **The one thing that does hold, and it is worth recording because it is
+the opposite of the fear:** core metadata edits are covered by an **explicit** touch —
+`updateMetadataFields` and `bulkUpdateMetadataFields` both end with
+`update(books).set({updatedAt: new Date()})` (`book.repository.ts:1960, 2012`). The watermark is
+deliberately maintained for the book row and deliberately not for its join tables.
+
+## LS-362 — BookOrbit's own delta sync does not trust a timestamp watermark either
+
+**Applied as corroboration inside LS-360/361's framing; recorded here because it is independent
+evidence the ADR never had.** BookOrbit ships a real delta-sync surface of its own — Kobo sync — and
+it does **not** use a `changed since` timestamp. It materialises a **per-device snapshot**
+(`kobo_device_library_snapshots`, `kobo_device_snapshot_books`) and **reconciles against it**
+(`kobo-sync.service.ts:118-147`, `reconcileSnapshot`), with `encodeSyncToken(snapshotId)` as the
+cursor. Its row projection carries **both** `books.updatedAt` and `bookMetadata.updatedAt` separately
+(`:1094-1096`), rather than treating either as sufficient.
+
+**That is BookOrbit's own answer to "how do I do delta", and it is §7.1a's reconciliation fallback,
+not an ordered watermark walk.** It does not decide anything for UsArr, but it is the strongest
+available signal that the watermark is not trusted for this purpose by the people who wrote it.
+
+## LS-363 — ADR-0050's reopening trigger is re-derived, and it fires harder against BookOrbit
+
+**Applied — one paragraph in ADR-0052's consequences, as scoped. ADR-0050 is NOT reopened.**
+ADR-0050 (Accepted; stdlib JPEG base, AVIF deferred) relocated its risk from *output* to *input* on a
+ground it names in terms: *"v0.1's catalogue source is Kavita (§16.1, ADR-0041), and Kavita's Admin
+settings → Media → **Save Media As** … PNG (the default), WebP, or AVIF"* — concluding the adapter
+serves a stdlib-decodable format *"by default and by default only"* (`DECISIONS.md:6451-6462`).
+**Decision clause 1 voids that stated ground**, and the draft inherited the conclusion silently: the
+string `ADR-0050` appears nowhere in ADR-0052.
+
+**Re-derived against BookOrbit, the trigger survives and the mitigating half is gone.** BookOrbit
+stores a full-size cover under the extension its own magic-byte sniffer returns — `imageExt()`
+recognises `png`, `jpg`, `gif`, **`webp`** and **`bmp`** (`metadata/lib/cover.ts:17-36`) — and
+`cover.service.ts:258` writes it as `${COVER_CUSTOM_FILE_PREFIX}${ext}`. **The served format is
+whatever was embedded in the user's EPUB or CBZ, preserved verbatim.** `image/gif` and `image/png` are
+stdlib; **WebP and BMP are not.** ⚠️ **Where Kavita's risk was an admin checkbox defaulting to safe,
+BookOrbit's is not a setting at all** — one CBZ with a WebP cover yields a cover this binary cannot
+decode, with no toggle that prevents it. ✅ Thumbnails are unaffected: `generateThumbnail()` always
+re-encodes to JPEG q90 (`cover.ts:38-40`).
+
+**No codec is re-decided.** ADR-0050's decision stands; what it already owes — *"a decode-failure path
+that says which format it could not read"* — is unchanged and now more clearly owed.
+
+## LS-364 — the README does not regenerate, and the draft's reason for skipping it was false
+
+**Applied.** The stale-docs list dismissed the README with *"its status tables are generated from §16
+and will regenerate"*. **Nothing regenerates them.** There is no README make target, no `scripts/`
+directory, and no file in the tree references `README.md` programmatically —
+`grep -rln "README.md" --include=*.go --include=*.mjs --include=*.js --include=Makefile .` returns
+**no match**. `CLAUDE.md`'s *"generated from"* describes **provenance, not a mechanism**.
+
+**This is the one stale-doc entry that had to be corrected rather than merely listed**, because the
+false mechanism is precisely what would cause it to be skipped. The tables name Kavita as v0.1's
+source in **at least eight places** (`README.md:7, 8, 22, 69, 70, 72, 80, 92`), including
+*"**v0.1 aggregates Kavita and Prowlarr**"* and *"The sync core, with Kavita as its first adapter"*.
+
+⚠️ **Judgement on whether §16 and the README may move apart: for the README, no.** §16 is scope
+authority and the README is the **front door**; leaving them contradictory is the *"no invented
+status"* fault the ADR elsewhere takes care to avoid. **It is left unfixed here deliberately** — this
+branch is a decision record under adversarial review and a README rewrite would be a second, unrelated
+change in it — but the entry now says *hand-written, eight places, front door* instead of *will
+regenerate*, so the next pass cannot mistake it for self-healing. **The other listed documents
+(ROADMAP, FUTURE, design assets) may lag**, since they are internal records rather than the project's
+public description.
+
+## LS-365 — `DEVELOPMENT.md §105` is a line number wearing a section number's clothes
+
+**Applied.** The stale-docs list cited *"`DEVELOPMENT.md` §105's tree comment"*. Every other citation
+in that list is a real section (`ROADMAP` §1, §3, §4). **`DEVELOPMENT.md` has twelve sections.** The
+tree comment is at **lines 103-107**, inside **§2 "Repository layout (target)"**. Corrected to §2 with
+the line noted, so a reader is not sent looking for a section that does not exist.
+
+## LS-366 — Accepted vs Proposed: answered in the ADR rather than left to a reviewer
+
+**Applied.** ADR-0041's strongest sentence was that Kavita's delta was *"verified against a live
+instance"*; this ADR removes it. **Whether the ADR should be Accepted or Proposed until a probe runs
+is a real question**, and the draft did not address it.
+
+**Answered: Accepted is correct, and the ADR now says why.** The two things are on different axes.
+What is **decided** is which stack v0.1 is built against — the owner's call about his own server,
+which no probe makes more or less true, and which no agent may hold Proposed pending evidence the
+owner did not ask for. What is **evidence** is which sync channels that stack supports, and this ADR
+does not decide it. ⚠️ **The cost is stated rather than absorbed**: v0.1's channel list is weaker than
+ADR-0041's, and §16.1 now says so in the same change. **What would justify Proposed** is the owner
+disputing the migration — not a probe result.
+
+## LS-367 — `4a420a04` was checked out, and the charitable reading did not survive it
+
+**Applied.** The draft could not check out the evaluation's commit and therefore recorded each
+falsification as *"the claim is false today"* rather than *"the evaluation was careless"* — explicitly
+choosing the charitable reading without proving it. **`4a420a04` is reachable** (unshallow the clone;
+`4a420a04a271948219f1f2853a05cb73e3c64e9e`, 2026-08-17 00:45 -0600), and it settles the question:
+
+- `git diff --stat 4a420a04 HEAD -- server/src/modules/auth/magic-link.service.ts` → **empty**.
+- `git diff --stat 4a420a04 HEAD -- server/src/modules/metadata-fetch/providers/comicvine/` → **empty**.
+
+**Both falsified findings were already false at the commit the evaluation examined.** The evidence did
+not move; **the evaluation was wrong when it was written.** ✅ That *strengthens* the swap — the
+standing *"do NOT switch"* recommendation was never well-founded rather than merely outlived.
+⚠️ **And it removes a presumption the charitable reading was granting:** the watermark finding comes
+from that same evaluation, so it was owed no benefit of the doubt — which is why LS-361 re-measured it
+from source instead of inheriting it.
+
+## LS-368 — alternative (a) restated at its strongest, since an ADR owes that to what it rejects
+
+**Applied.** The owner has decided the switch, so **the decision is not in question**; the record is.
+Alternative (a) — keep Kavita for v0.1 — was under-argued against a rival that is *built, probed and
+contract-guarded* where BookOrbit's adapter is **zero lines**: no adapter, no vendored spec, no
+contract guard, no fixture. **LS-360 widens that gap rather than narrowing it**, since Kavita's
+`all-v2` is the very endpoint ADR-0035 §2a probed successfully and BookOrbit has no counterpart. The
+sharper variant the draft never named — **ship v0.1 on the proven adapter and swap after the thesis is
+proven, at the cost of keeping one container running for one milestone** — is now stated. It still
+loses on *on real data*, which is the same sentence ADR-0041 turned on, but it now loses **on the
+record** rather than by omission.
+
+## LS-369 — open question 3 is a §14 question and now has a gate, not an open end
+
+**Applied.** The draft raised what a BookOrbit **shared account** can see and left it *"not decided
+here"* — in an ADR that makes that account the credential UsArr will hold, long-lived, reusable and
+optionally non-expiring.
+
+**Judgement: deferring the *answer* is acceptable; deferring it without a gate is not.** It is
+acceptable because this ADR ships no adapter and no credential reaches a store on it — the ADR's own
+*"What is built: Nothing"* is what makes the deferral honest rather than negligent. It is not
+acceptable open-ended, because §14 treats an over-scoped stored credential the way it treats an \*Arr
+API key, and *"not decided here"* has a way of becoming *"not decided anywhere"*. **The ADR now names
+the gate: the adapter may not read a catalogue under a shared-account credential until that account's
+scope has been enumerated against §14 — closing in the adapter thread, before the first credential is
+stored.**
+
+## What a green gate is worth on this change
+
+**Almost nothing, and saying so is the point.** This is a **docs-only** change: `make check` reads
+`docs/` through **gitleaks only**, so a green attests *"no credential-shaped string was added"* and
+nothing about whether any sentence above is true. It cannot tell whether BookOrbit has a series
+endpoint.
+
+**What carries this review is the commands, each re-runnable against a clone of
+`bookorbit/bookorbit`:** the four measurements in LS-360, the write-path trace and the
+`create trigger` grep in LS-361, the two empty `git diff --stat`s against `4a420a04` in LS-367, the
+`README.md` grep in LS-364, and the `imageExt` read in LS-363. **A reader who doubts any of them
+should run it rather than trust this entry** — which is the standard the drafter's own LS-359 set, and
+the one this pass was commissioned to hold it to.
