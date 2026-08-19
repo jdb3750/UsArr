@@ -24,8 +24,15 @@ import (
 //
 //   - No grouping. Linked works render as separate rows. §4's grouped card is
 //     derived from work_relation edges and is a presentation layer above this
-//     one; work_relation carries the confidence and evidence columns for it and
-//     nothing reads them yet.
+//     one. ⚠️ work_relation IS DESIGNED TO CARRY the confidence and evidence
+//     columns that card needs — the DDL is docs/reference/schema.md §11
+//     "Cross-media edges · v0.3", which is the design of record — AND THE TABLE
+//     DOES NOT EXIST. It is deferred to v0.3, no shipped migration creates it,
+//     and TestDeferredTablesAreAbsent (internal/db/migrate_test.go) fails the
+//     build if one does. This bullet used to read "work_relation carries the
+//     confidence and evidence columns for it and nothing reads them yet", which
+//     is a comment in the search path claiming a table the search path could
+//     not see: there is nothing to read, not merely no reader.
 //   - No "not in your library" section. That is the release search, on its own
 //     endpoint, over a different corpus.
 //   - No paging. The candidate set is capped at retrievalLimit by construction
