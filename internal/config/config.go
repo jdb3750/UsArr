@@ -283,6 +283,20 @@ func (c *Config) TrustedProxyWarnings() []string {
 // speak of, and handing back a half-resolved one invites a caller to use it.
 var ErrVersionRequested = errors.New("config: --version requested")
 
+// ErrKeyRotateRequested is returned by Load when `usarr key rotate` was passed.
+// Like ErrVersionRequested it is a control-flow signal rather than a failure:
+// the caller runs the rotation instead of the server.
+//
+// It differs from ErrVersionRequested in ONE way, and the difference is not an
+// oversight: Load returns a fully resolved Config alongside it. --version is
+// answerable with no configuration at all — that is why it short-circuits
+// before anything can fail — whereas a rotation needs the config directory, the
+// database path and the secret-key channels, which are exactly what Load
+// resolves. Returning nil here would force the caller to parse the command line
+// a second time to find them, which is the drift that keeping one parser exists
+// to prevent.
+var ErrKeyRotateRequested = errors.New("config: key rotate requested")
+
 // Options are the inputs to Load. Both Args and Env are supplied explicitly so
 // the whole of level 1 is testable without touching the process environment.
 type Options struct {
@@ -438,6 +452,14 @@ func Load(o Options) (*Config, error) {
 
 	c.Integration = truthy(env["USARR_INTEGRATION"])
 	c.Record = truthy(env["USARR_RECORD"])
+
+	// Last, deliberately: a rotation runs against a fully validated
+	// configuration, so a bad USARR_PORT or an unparseable
+	// USARR_TRUSTED_PROXIES is still the error the operator sees. The
+	// subcommand selects a program; it does not excuse the settings.
+	if f.keyRotate {
+		return c, ErrKeyRotateRequested
+	}
 
 	return c, nil
 }

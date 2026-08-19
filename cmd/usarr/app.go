@@ -25,6 +25,15 @@ type app struct {
 	store    *store.Store
 	registry *registry
 	server   *httpapi.Server
+
+	// The key material the run resolved. `usarr key rotate` needs all three —
+	// the ring to add a key to, and the master key plus salt to derive the new
+	// KEK from the same salt the old one used. They are held here rather than
+	// re-resolved by the rotation, because re-resolving would be a second copy
+	// of the startup ladder and the two would drift.
+	keyring   *crypto.Keyring
+	masterKey *config.MasterKey
+	kekSalt   []byte
 }
 
 // buildApp runs the startup sequence, in the order CONFIGURATION.md §3 and
@@ -178,12 +187,7 @@ func buildApp(ctx context.Context, cfg *config.Config, log *slog.Logger, build h
 		log.Warn(masterKey.BackupNotice())
 	}
 
-	kek, err := crypto.DeriveKEK(masterKey.Key, salt)
-	if err != nil {
-		_ = database.Close()
-		return nil, err
-	}
-	keyring, err := crypto.NewKeyring(1, kek)
+	keyring, err := buildKeyring(cfg, masterKey, salt, log)
 	if err != nil {
 		_ = database.Close()
 		return nil, err
@@ -253,7 +257,79 @@ func buildApp(ctx context.Context, cfg *config.Config, log *slog.Logger, build h
 	// during startup, before anything can publish.
 	reg.attachEvents(server.Events())
 
-	return &app{cfg: cfg, log: log, db: database, store: st, registry: reg, server: server}, nil
+	return &app{
+		cfg: cfg, log: log, db: database, store: st, registry: reg, server: server,
+		keyring: keyring, masterKey: masterKey, kekSalt: salt,
+	}, nil
+}
+
+// buildKeyring registers every KEK this process must be able to open a row
+// under, and decides which one new rows are sealed with.
+//
+// Three registrations, and each one closes a specific failure:
+//
+//   - KeyID(kek), the PRIMARY. Key ids are content-derived (ADR-0049), so the
+//     key file names its own id and no second piece of state has to stay
+//     consistent with it across a crash.
+//
+//   - crypto.LegacyKEKID, the SAME key under the fixed id 1. Every envelope
+//     sealed before ids were content-derived carries 1, and this is what keeps
+//     those rows opening with no migration and no rewrite. It is decrypt-only:
+//     the primary is the derived id, so nothing new is ever sealed at 1.
+//
+//   - keys/secret.key.new, when it exists, as an additional decrypt-only key.
+//     Its presence means a rotation was interrupted, so rows are split across
+//     two ids; registering both is what makes EVERY row openable in that state
+//     rather than only the ones the rotation had not reached. Primary stays on
+//     secret.key, because secret.key is still the file the operator's backup
+//     matches and the process must not start sealing under material that a
+//     `usarr key rotate` has not yet promoted.
+//
+// The server NEVER rotates on its own. It logs a warning and continues, because
+// a rotation is an operator action with an audit trail, and a startup path that
+// silently re-wrapped every row would do it unattended, unlogged by the
+// operator, and on a restart loop.
+func buildKeyring(cfg *config.Config, masterKey *config.MasterKey, salt []byte, log *slog.Logger) (*crypto.Keyring, error) {
+	kek, err := crypto.DeriveKEK(masterKey.Key, salt)
+	if err != nil {
+		return nil, err
+	}
+	primaryID := crypto.KeyID(kek)
+	keyring, err := crypto.NewKeyring(primaryID, kek)
+	if err != nil {
+		return nil, err
+	}
+	// Add is idempotent for identical bytes, so the 2^-32 case where KeyID
+	// lands on LegacyKEKID needs no special handling here.
+	if err := keyring.Add(crypto.LegacyKEKID, kek); err != nil {
+		return nil, err
+	}
+
+	pending, err := cfg.ReadNewSecretKey()
+	switch {
+	case errors.Is(err, os.ErrNotExist):
+		return keyring, nil
+	case err != nil:
+		// A secret.key.new that exists but cannot be read is fatal. Continuing
+		// would leave whichever rows the interrupted rotation already re-wrapped
+		// unopenable, and report nothing worse than a red connection test.
+		return nil, fmt.Errorf("an interrupted key rotation left %s in place and it could not be read: %w. "+
+			"Restore or remove it before starting; see docs/CONFIGURATION.md §3.4", cfg.NewSecretKeyPath(), err)
+	}
+
+	pendingKEK, err := crypto.DeriveKEK(pending, salt)
+	if err != nil {
+		return nil, err
+	}
+	pendingID := crypto.KeyID(pendingKEK)
+	if err := keyring.Add(pendingID, pendingKEK); err != nil {
+		return nil, fmt.Errorf("registering the pending key from %s: %w", cfg.NewSecretKeyPath(), err)
+	}
+	log.Warn("an interrupted key rotation was found and both keys are active for decryption; "+
+		"no row is unopenable, but the rotation is not finished — re-run `usarr key rotate` to resume it",
+		"pending_key_file", cfg.NewSecretKeyPath(),
+		"active_kek_ids", keyring.IDs(), "primary_kek_id", keyring.PrimaryID())
+	return keyring, nil
 }
 
 // Close releases the database. The HTTP server is drained by the caller first.

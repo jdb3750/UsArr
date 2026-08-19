@@ -256,7 +256,7 @@ full **(proposed)**:
 | Variable **set to the empty string** | **Refuse to start**, naming the variable. Empty is not "absent": the usual way to get an empty value is an unset shell variable interpolated into a compose file (`USARR_SECRET_KEY=${USARR_SECRET_KEY}`), and silently generating a key there would produce a key the operator does not know exists and will not back up. |
 | Variable unset, key file absent, but the database **contains encrypted rows** | **Refuse to start**, naming the missing key and the file path it expected. Never start half-decrypted. |
 | Both `USARR_SECRET_KEY` and `USARR_SECRET_KEY_FILE` set | **Refuse to start.** No guessing. |
-| `kek.salt` absent from `$USARR_CONFIG_DIR` but present at the legacy `keys/kek.salt` | **Copy it forward**, byte for byte, to `$USARR_CONFIG_DIR/kek.salt` (`0600`) via a temp file in that directory plus `rename(2)`, and **leave `keys/kek.salt` in place permanently**. This is the upgrade path for installs created before the salt moved out of `keys/`. It is a copy and **not** a move on purpose: nothing stops two UsArr processes starting against one config directory, and a move has an instant in which neither path holds the salt — a crash there loses key-derivation material for good, which is worse than the bug this guards. A duplicate non-secret costs one 45-byte file, and it means a backup that captured `keys/` still holds a working salt. Safe to run concurrently with itself and idempotent. |
+| `kek.salt` absent from `$USARR_CONFIG_DIR` but present at the legacy `keys/kek.salt` | **Copy it forward**, byte for byte, to `$USARR_CONFIG_DIR/kek.salt` (`0600`) via a temp file in that directory plus `link(2)`, and **leave `keys/kek.salt` in place permanently**. This is the upgrade path for installs created before the salt moved out of `keys/`. It is a copy and **not** a move on purpose: nothing stops two UsArr processes starting against one config directory, and a move has an instant in which neither path holds the salt — a crash there loses key-derivation material for good, which is worse than the bug this guards. A duplicate non-secret costs one 45-byte file, and it means a backup that captured `keys/` still holds a working salt. Safe to run concurrently with itself and idempotent. It is `link(2)` and **not** `rename(2)`, which this row used to say: `rename` replaces the destination unconditionally, so two racing first runs would each clobber the other's salt and each go on to seal credentials under a KEK the file on disk can no longer derive. `link` refuses when the destination exists, so the loser of the race adopts the winner's salt instead. (`usarr key rotate` §3.4 uses `rename(2)` for the opposite reason: promoting a key file *needs* replace semantics.) |
 | `kek.salt` **absent everywhere** and the database holds **no encrypted rows** | Generate 32 bytes from `crypto/rand` and write `$USARR_CONFIG_DIR/kek.salt` mode `0600`. Part of the same first run. |
 | `kek.salt` **absent everywhere** but the database **contains encrypted rows** | **Refuse to start**, naming `kek.salt` by its full path — both the current one and the legacy one — and saying what to restore. `KEK = HKDF-SHA256(master key, salt=kek.salt, info="usarr/kek/v1")`, so a fresh salt is a fresh KEK, and generating one here would **permanently destroy every stored credential** while the process continued, reporting nothing worse than a red connection test. A missing salt is never invented over existing ciphertext. |
 
@@ -291,31 +291,59 @@ Only needed if you want the key in a secrets manager rather than on the config v
 openssl rand -base64 32          # or: usarr keygen   (proposed CLI, v0.1)
 ```
 
-### 3.4 Rotating — atomic and resumable
+### 3.4 Rotating — two-phase and resumable
 
-⚠️ **Not implemented. This section is the design, not a procedure you can follow.** There is no
-`usarr key rotate`, no `usarr keygen`, and no CLI subcommand of any kind — the binary takes flags
-only and **exits 1 on any positional argument**. `keys/secret.key.new` is never written: the path is
-defined in `internal/config` and has no caller anywhere in the tree. If your key needs replacing
-today, the only route is the §3.5 repair — move the key and the salt aside, let first run generate a
-new pair, and re-enter each credential in the UI.
+**`usarr key rotate` is implemented.** It rotates `$USARR_CONFIG_DIR/keys/secret.key` and nothing
+else: a key supplied through `USARR_SECRET_KEY` or `USARR_SECRET_KEY_FILE` lives somewhere UsArr does
+not own, so the command **refuses and names the variable**. Replace such a key yourself and follow
+§3.5.
 
-Scheduled for **v0.1**, alongside `usarr keygen` and the "re-enter your credentials" recovery flow.
-A recovery path on no milestone is a recovery path that does not exist when the first user needs it.
+```
+$ usarr key rotate --config-dir /config      # or: usarr --config-dir /config key rotate
+usarr key rotate
+  config dir:   /config
+  key file:     /config/keys/secret.key
+  new key file: /config/keys/secret.key.new
 
-Two-phase, and every intermediate state is recoverable because each stored envelope carries the id of
-the key that wrapped it:
+prepare: new key material written to /config/keys/secret.key.new
+         active kek ids [4205839355 1 43708734], primary 43708734 — every row is openable from here on
+rewrap:  1 credential(s) re-wrapped under kek id 43708734 (0 tombstoned), 0 remaining at any other id
+verify:  1 credential(s) unwrap under kek id 43708734
+promote: /config/keys/secret.key.new is now /config/keys/secret.key
+         superseded kek ids dropped: [4205839355 1]; active: [43708734]
 
-1. **Prepare.** Generate the new key, write `keys/secret.key.new` (mode `0600`), and register *both*
-   keys as active for decryption. Nothing is unreadable from this moment on.
+rotation complete. Back up /config/keys/secret.key now — the previous key no longer opens anything.
+```
+
+**Stop the server first.** There is no single-instance lock (`REVIEW-LOG.md` FI-06), so a running
+server can seal a credential under the *old* key while the rotation is re-wrapping. The command
+detects that — it re-checks the remaining-work count after each pass and refuses to promote while
+any row is at another key id — but it can only tell you to stop the server, not do it for you.
+
+Every intermediate state is recoverable, because each stored envelope carries the id of the key that
+wrapped it:
+
+1. **Prepare.** Generate the new key, write `keys/secret.key.new` (mode `0600`, `fsync`ed, and the
+   directory `fsync`ed too), and register *both* keys for decryption. Nothing is unreadable from this
+   moment on. An existing `secret.key.new` is **resumed**, never overwritten.
 2. **Re-wrap, in batches.** Re-wrap DEKs in bounded transactions, advancing each row's key id as it
-   goes. Progress is visible as `SELECT count(*) … WHERE kek_id = <old>`. A crash, OOM, disk-full or
+   goes. It re-wraps the data key; it never decrypts the credential and never re-encrypts it.
+   Progress is visible as `SELECT count(*) … WHERE kek_id <> <new>`. A crash, OOM, disk-full or
    container restart here leaves a database that is fully readable under the two-key set.
-3. **Promote.** When zero rows remain at the old key id, `fsync`, then atomically `rename(2)`
-   `secret.key.new` → `secret.key`, then drop the old key from the active set.
-4. **Resume.** If `secret.key.new` exists at startup, rotation resumes from step 2 automatically. It
-   never restarts from the beginning and never needs the operator to work out how far it got.
-5. Write one audit-log entry per phase, including the count re-wrapped.
+   **Soft-deleted rows are re-wrapped too** — they still hold ciphertext, and leaving them behind
+   would strand it under a key file that is about to be replaced.
+3. **Verify.** Re-read every row and prove the new key opens it *before any key file is touched*.
+   Any failure aborts with the key files unchanged.
+4. **Promote.** Only then: `fsync`, `rename(2)` `secret.key.new` → `secret.key`, `fsync` the
+   directory, and drop the superseded keys from the active set.
+5. Write one audit-log entry per phase — `key.rotate.prepare`, `key.rotate.rewrap` (with the count),
+   `key.rotate.promote`. They carry counts and key ids only, never a path or a key.
+
+**If `secret.key.new` exists at startup, the server does *not* resume on its own.** It registers the
+pending key for decryption as well as the live one — so no row is unopenable — keeps sealing new rows
+under `secret.key`, and logs a warning telling you to re-run `usarr key rotate`. Rotation is an
+operator action with an audit trail; a startup path that silently re-wrapped every row would do it
+unattended and on every restart of a crash loop.
 
 Rotate when: the key was ever committed to a repository or pasted into a chat, a machine holding it
 was compromised, or a person with access to it left. Rotating does **not** invalidate sessions and
@@ -440,8 +468,12 @@ $USARR_CONFIG_DIR/                  # /config — IRREPLACEABLE. Back this up. M
 │   │                               #   SECRETS ONLY. Nothing goes in here that a backup
 │   │                               #   needs; that is what made kek.salt a trap. See below.
 │   ├── secret.key                  # 0600 — the master key, when not supplied by env/secret
-│   ├── secret.key.new              # 0600 [planned] — mid-rotation only; rotation (§3.4)
-│   │                               #   is unimplemented, so nothing writes this today
+│   ├── secret.key.new              # 0600 — mid-rotation ONLY, written by `usarr key
+│   │                               #   rotate` (§3.4) and renamed over secret.key when
+│   │                               #   the rotation completes. Present on a healthy
+│   │                               #   install ⇒ a rotation was interrupted: startup
+│   │                               #   registers it for decryption, warns, and does NOT
+│   │                               #   resume on its own. Re-run the command.
 │   └── kek.salt                    # 0600 — ONLY on installs created before the salt
 │                                   #   moved. COPIED to ../kek.salt at startup and then
 │                                   #   LEFT HERE FOREVER; see below and §3.2.
