@@ -287,9 +287,11 @@ func TestSearchResponseKeysAreTheAllowlist(t *testing.T) {
 	if len(items) == 0 {
 		t.Fatal("no items to check the allowlist against")
 	}
+	// `score` is the one key Home's row does not have (§6.2.1). Everything else
+	// here is §1.3's key set, which is the claim the doc comment makes.
 	wantItem := []string{
 		"added_at", "availability", "have_count", "id", "kind",
-		"media_type", "title", "want_count", "year",
+		"media_type", "score", "title", "want_count", "year",
 	}
 	if got := sortedKeys(items[0]); !reflect.DeepEqual(got, wantItem) {
 		t.Errorf("item keys = %v, want %v", got, wantItem)
@@ -311,4 +313,95 @@ func sortedKeys(m map[string]json.RawMessage) []string {
 	}
 	sort.Strings(out)
 	return out
+}
+
+// TestSearchScoreCrossesTheWireOnTheRightRow is the boundary half of
+// `internal/store`'s TestSearchScore* family: the store computes the number, and
+// this is the only place that can go wrong afterwards.
+//
+// Two failures are possible here and neither is caught by the allowlist test
+// above, which only asks whether the KEY exists. The field could be dropped —
+// present as a hardcoded `0` because nothing copied it — or it could be copied
+// onto the wrong row, which is what a `for i := range` against a re-sorted slice
+// produces. So this compares the wire against the store call by ID, pair by
+// pair, rather than checking that a number is there.
+func TestSearchScoreCrossesTheWireOnTheRightRow(t *testing.T) {
+	s := newTestServer(t, nil)
+	seedSearchCorpus(t, s)
+
+	// A MULTI-TOKEN QUERY, so more than one work comes back. §3 step 3 ORs the
+	// tokens, so this matches two of the four seeded works — and a single-row
+	// answer would make the ORDER half of this test vacuous, since one row is in
+	// every order at once.
+	const query = "berserk vinland"
+	want, err := s.store.SearchLibrary(t.Context(), store.OwnerScope(store.SystemUserID),
+		query, store.SearchDefaultLimit)
+	if err != nil {
+		t.Fatalf("SearchLibrary: %v", err)
+	}
+	if len(want.Hits) < 2 {
+		t.Fatalf("the store returned %d hits; this test needs at least two to say "+
+			"anything about order", len(want.Hits))
+	}
+
+	_, body := callLibrarySearch(t, s, "?q="+url.QueryEscape(query))
+	var got searchResponse
+	mustJSON(t, body, &got)
+	if len(got.Items) != len(want.Hits) {
+		t.Fatalf("%d items on the wire, %d from the store", len(got.Items), len(want.Hits))
+	}
+
+	for i, hit := range want.Hits {
+		item := got.Items[i]
+		// THE ORDER IS THE CONTRACT (§6.2), so position i on the wire must be
+		// position i from the store — the handler forwards, it does not sort.
+		if item.ID != hit.ID {
+			t.Fatalf("position %d is work %d on the wire and work %d from the "+
+				"store: the handler reordered the answer. §6.2.1 tells a client "+
+				"the server's order is authoritative, which is only true if the "+
+				"server ships the order it computed.", i, item.ID, hit.ID)
+		}
+		if item.Score != hit.Score {
+			t.Errorf("work %d scored %v in the store and %v on the wire",
+				hit.ID, hit.Score, item.Score)
+		}
+		if item.Score <= 0 {
+			t.Errorf("work %d reached the wire with score %v. The field is "+
+				"unconditional precisely because every hit has a positive one, so "+
+				"a zero here is a dropped copy, not a value.", hit.ID, item.Score)
+		}
+	}
+}
+
+// TestSearchScoreDoesNotDescribeAnythingButTheHit.
+//
+// §6.2.1's last rule is that the number carries nothing internal: not a leg
+// identifier, not a bm25 magnitude, not a column weight. Those are unpublishable
+// for the reason the whole response is an allowlist — the search index's shape
+// is not a consumer's business, and a leg identifier in particular would break
+// the seam ARCHITECTURE §8.2 states as a negative.
+//
+// The seam is held in the store (TestRankingIsBlindToProvenance: the ranker
+// cannot see a leg, so no number it produces can name one). What is left for the
+// wire is that no SECOND field carrying that information came along beside the
+// score, which is what the shape assertion below is.
+func TestSearchScoreDoesNotDescribeAnythingButTheHit(t *testing.T) {
+	s := newTestServer(t, nil)
+	seedSearchCorpus(t, s)
+
+	// Every banned string is a name no TITLE can plausibly contain — the check is
+	// over the whole body, as the allowlist test's is, and a bare `rank` or `leg`
+	// would fire on Frankenstein and on Legend of Zelda rather than on a bug.
+	_, body := callLibrarySearch(t, s, "?q=berserk")
+	for _, banned := range []string{
+		"rrf", "bm25", "search_fts", "search_trgm", "jaro_winkler",
+		"norm_title", "title_idf", "in_library",
+	} {
+		if strings.Contains(body, banned) {
+			t.Errorf("the response carries %q: %s\nThe score is a single blended "+
+				"number by design. Publishing a component beside it would tell a "+
+				"client which engine matched, which is the association §8.2 keeps "+
+				"inside fusion.", banned, body)
+		}
+	}
 }

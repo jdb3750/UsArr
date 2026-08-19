@@ -1140,18 +1140,23 @@ says `q` is missing.
       "added_at": "2026-08-16T12:00:00Z",  // omitted when the upstream reported no date
       "have_count": 43,
       "want_count": 17,
-      "availability": {"k": "count", "have": 43, "total": null}
+      "availability": {"k": "count", "have": 43, "total": null},
+      "score": 0.9708333333333333   // relevance WITHIN THIS ANSWER — read §6.2.1 before using it
     }
   ]
 }
 ```
 
-**`items` is ordered by relevance and the ORDER IS THE CONTRACT.** No score is published. The score
-is normalised per query, so a client comparing one across two queries would be comparing nothing;
-publishing it would also freeze §6.6's ranking, which is expected to change.
+**`items` is ordered by relevance and the ORDER IS THE CONTRACT.** The order is what a client
+renders. `score` is published so that a *grouped* presentation can be built over a flat list — it is
+**not** the order, and re-deriving the order from it produces a worse list than the one you were
+given. §6.2.1 is the whole contract for that field and it is not optional reading.
 
-**The item keys are §1.3's item keys**, deliberately, so one row component renders both Home's
-recently-added table and a search result. Same omission rules: `year` and `added_at` are **absent**
+**The item keys are §1.3's item keys plus `score`**, deliberately, so one row component renders both
+Home's recently-added table and a search result. `score` is the one key Home has no analogue for and
+cannot have one for — Home's list is ordered by date, so there is no relevance for it to carry — and
+a row component that ignores it loses nothing, because the field is read by the grouping layer above
+the row rather than by the row. Same omission rules: `year` and `added_at` are **absent**
 rather than `0`/`null` when unknown, and `availability` follows §1.4 exactly — absent when there is
 no blob, absent *and logged* when the stored blob is unusable.
 
@@ -1171,6 +1176,97 @@ the read would be a second vocabulary free to drift from the first.
 
 **Nothing service-side is on this response.** No instance is named, no `remote_path` is read. Which
 Kavita a series came from is not something a search result publishes.
+
+#### 6.2.1 `score` — what it is, and the five things it must not be used for
+
+**What it is, exactly.** The re-rank's own output for that hit: a weighted sum of three signals, each
+normalised to `[0,1]` **over the candidate set of this one answer**, with weights that sum to `1`.
+
+```
+score  =  0.55 · (this hit's RRF ÷ the best RRF in this answer)
+       +  0.35 · JaroWinkler(the tokens the server searched, the hit's normalised title)
+       +  0.10 · (this hit's position in added_at order within this answer, newest = 1)
+```
+
+It is therefore in **`(0, 1]`**, it is **always present**, and it is **never `0`** — the RRF term is
+strictly positive for any row a retrieval leg returned, so a `0` would be a server bug and not a
+value. It is sent unrounded; the digits past the fourth are an artefact of float arithmetic and carry
+nothing.
+
+**What it is NOT**, because four different numbers in this pipeline have the same shape:
+
+* **Not a BM25 rank.** BM25 magnitudes never leave the retrieval legs. Reciprocal Rank Fusion
+  consumes each leg's *rank* and discards its score, deliberately — a `unicode61` BM25 and a
+  `trigram` BM25 are not on a common scale (§6.6).
+* **Not the RRF value.** That is one of the three inputs, and it appears here only as a **ratio**
+  against the best candidate in the same answer.
+* **Not a percentage, a confidence, or a probability.** The three weights are *chosen, not tuned*:
+  there is no relevance-judgement set and no query log behind them, and three of the five signals
+  the design lists are dead constants today (§6.6). `0.91` is not "91% relevant" and there is no
+  quantity it is 91% of.
+* **Not a property of the work.** It is a property of *one answer to one query*. The same work
+  scores differently under a different query, and under the same query against a different corpus.
+
+**Where it is comparable, and where it is not.**
+
+| Comparison | Valid? | Why |
+| --- | --- | --- |
+| Two items **in one response** | **yes** | Every component was normalised over the same candidate set, against the same typed string. This is the one comparison the field exists for. |
+| Two responses to **different queries** | **no** | Both the RRF ratio and the Jaro-Winkler term are measured against that query's own material. The denominators are different numbers with the same name. |
+| Two responses to the **same** query, different `limit` | equal, and still not a licence | The server retrieves and re-ranks a fixed candidate set and cuts to `limit` afterwards, so the page size does not move a score. That makes it *stable*, not *portable* — see the next two rows. |
+| The same query **before and after an import** | **no** | New rows enter the candidate set and move every ratio in it. |
+| Across **two users** | **no** | The candidate set is scope-filtered first (§6.6), so two callers with different searchable libraries are normalising over different sets. |
+| Across **pages** | n/a | There are no pages (§6.5). |
+| Across **UsArr versions** | **no** | The weights are §6.6's ranking and it is expected to change. |
+
+**Permitted uses — the two this field was published for.**
+
+1. **Ordering groups within one response.** ARCHITECTURE §17.4 rule 2 orders grouped search results
+   *"by the group's best-scoring hit, descending"*. Take the maximum `score` in each group and sort
+   the groups by it. This is valid because it is a comparison among items of one response, and it is
+   the reason the field is on the wire at all: **a bare ordering cannot answer it** — a row's ordinal
+   position tells you nothing about how far the best row of one group sits from the best row of
+   another.
+2. **Choosing which group a cross-media row belongs to.** §17.4 rule 4 puts a linked work in the
+   group of its *highest-scoring medium*. Same reason: one response, one candidate set.
+
+**Forbidden uses. Each of these is wrong for a specific mechanical reason, not out of caution.**
+
+1. ⛔ **Do not sort the rows by it.** The server's order is **not** score-descending and that is
+   deliberate. After ranking, the store applies §6.6's media-type diversity injection, which is a
+   **promotion and not a re-score**: a row whose media type is missing from the top 10 is moved up
+   into it *carrying the lower score it earned*. Sorting by `score` sends every promoted row back
+   down, which is exactly the sweep the injection exists to prevent — the film buries the novella of
+   the same name again. **A client that re-sorts by the published number produces a strictly worse
+   order than the one it was handed, and will do so silently.** Render the order you were given.
+2. ⛔ **Do not threshold it** — no "hide anything under 0.5", no "only show strong matches". The RRF
+   term is normalised **against the best candidate in the same answer**, so the top hit of a query
+   that matched nothing good still scores at least `0.55`. A high score means *"as good as anything
+   else that matched"*, never *"a good match"*. A threshold therefore hides everything or nothing
+   depending on the query, which is worse than no filter.
+3. ⛔ **Do not compare one across two responses**, cache one, or store one. See the table above: the
+   normalising basis is rebuilt per answer. A score remembered from an earlier query is a number
+   about a set that no longer exists.
+4. ⛔ **Do not render it to a user** — no `91% match` badge, no star rating, no sort control named
+   after it. There is nothing behind the absolute value for a user to act on (see *"not a
+   percentage"* above), and a number on screen is a number users will compare across screens, which
+   is the comparison the table forbids.
+5. ⛔ **Do not read a change in it as information about the library.** It moves when the corpus moves
+   and when your own searchable libraries change, and it moves for **nothing else** — see below.
+
+**It describes only what you can already see.** Scope is enforced inside the retrieval legs, before
+ranking, so a document outside the caller's access scope never enters the candidate set the score is
+normalised over. A caller cannot watch a visible work's score shift and learn that something they may
+not see matched their query. This is a **security property of the field**, not a side effect:
+`TestSearchScoreIsBlindToWhatTheCallerCannotSee` fires when the scope filter is moved from the index
+join to a post-filter — which returns the same rows and the wrong numbers.
+
+**And it names nothing about the index.** No leg identifier, no column weight, no corpus statistic
+reaches it. Fusion is the only step that ever sees which engine produced a candidate and it consumes
+that association rather than emitting it (ARCHITECTURE §8.2), so no downstream number can carry it.
+Nor is the blend invertible: two of its three components are computed over a candidate set **larger
+than the response** — up to 200 rows, of which you receive at most 100 — so a client cannot solve for
+the terms and cannot recover which engine matched.
 
 ### 6.3 `limit` is a clamp, and the echoed `limit` is authoritative
 
@@ -1218,7 +1314,9 @@ is how a screen ends up promising a feature the server does not have.
   recency tiebreak.
 * **Media-type diversity injection.** If the top 10 would otherwise be swept by one medium, the
   best-scoring result of each absent media type is promoted into it — `search.md` §4's answer to the
-  case where a film's richer text buries the novella of the same name.
+  case where a film's richer text buries the novella of the same name. ⚠️ **This is why `items` is
+  not in `score` order**, and why re-sorting it client-side is §6.2.1's first forbidden use: the
+  promotion moves a row without changing its number.
 * **Scope, enforced server-side, in the index join.** Results are limited to libraries the caller
   can see *and* to instances the caller can see. A caller who can see nothing gets nothing, never
   everything.
