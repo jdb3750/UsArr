@@ -17,8 +17,8 @@ This file records the instruction text only. The design detail lives in `CLAUDE.
 
 | Version | Date | State | Size (characters) |
 | --- | --- | --- | --- |
-| v1.7 | 2026-08-19 | **Drafted, not yet applied** — supersedes v1.6 only once somebody applies it | 7914 (7926 bytes) |
-| v1.6 | 2026-08-18 | **Applied to project settings** — 2026-08-18 | 7729 (7739 bytes) |
+| v1.7 | 2026-08-19 | **Applied to project settings** — 2026-08-19 | 7914 (7926 bytes) |
+| v1.6 | 2026-08-18 | Applied 2026-08-18, superseded by v1.7 on 2026-08-19 | 7729 (7739 bytes) |
 | v1.5 | 2026-08-17 | Applied 2026-08-17 05:05 UTC, superseded by v1.6 | 8112 (8124 bytes) |
 | v1.4 | 2026-08-17 | Applied 2026-08-17 04:52 UTC, superseded by v1.5 the same day | 8108 |
 | v1.3 | 2026-08-16 | Applied 2026-08-16 16:34 UTC, superseded by v1.4 | 7838 |
@@ -26,17 +26,26 @@ This file records the instruction text only. The design detail lives in `CLAUDE.
 | v1.1 | 2026-08-16 | Superseded by v1.2, never applied | 7022 |
 | v1.0 | 2026-08-16 | Superseded by v1.2 — applied 2026-08-16, replaced the same day | 3847 |
 
-## v1.7 — drafted, not yet applied
+## v1.7 — as applied
 
-**This is not the live settings text.** v1.6 below still is, and stays live until Joe or the project
-coordinator pastes the block below into the Project's settings by hand, exactly as "How this file is
-maintained" describes. Agents cannot apply a version. Until that happens this block binds no session:
-where it and v1.6 disagree, **v1.6 wins**.
+The text applied verbatim to the Project's settings on 2026-08-19 by the project coordinator,
+replacing v1.6. **This is the live settings text.** 7914 characters, md5
+`eb03cc348585d2e7c55c47fb289bea62` over its 7926 bytes.
 
 v1.7 is v1.6 plus exactly two changes and nothing else — a factual repair to the two sentences that
-described `docs/FUTURE.md` as holding deferrals only, and Candidate 1 promoted verbatim. **7914
-characters, md5 `eb03cc348585d2e7c55c47fb289bea62` over its 7926 bytes**, measured with `python3 len()` over the block including
-its trailing newline. The changelog entry below cites what forced each change.
+described `docs/FUTURE.md` as holding deferrals only, and Candidate 1 promoted verbatim. The
+changelog entry below cites what forced each change.
+
+The verification chain, as it actually ran. **Before the apply**, the text was extracted from
+`docs/PROJECT-INSTRUCTIONS.md` at `origin/main` = `e99cf47`, first fenced block, the
+with-trailing-newline variant, and all three gates were matched against that extract: **7914
+characters** via `python3 len()`, **7926 bytes**, and md5 **`eb03cc348585d2e7c55c47fb289bea62`**.
+**After the apply**, the settings API returned the stored string in the same call, and that string
+was compared byte-for-byte against the gate file with `cmp` — clean, same md5, same byte count.
+**The read-back was therefore closed by diffing rather than by inspection**, which is worth stating
+because this file's standing convention is the opposite: a read-back cannot be counted, only
+checked, so v1.6's was carried by boundary and absence alone. Here the stored value came back in
+hand, so byte identity carries it and no eyeball comparison was made or relied on.
 
 **It lands 86 characters under the 8000 limit rather than the ~150 this file aims to leave.** That is
 stated rather than fixed: the brief for this version was two changes and nothing else, and cutting a
@@ -45,7 +54,10 @@ room is named in the changelog entry, so the next editor does not have to redisc
 
 **The seven earlier fenced blocks were measured before and after this edit and are byte-identical**;
 v1.6's re-measurement matched its recorded 7729 characters / 7739 bytes /
-`8ab3304a1ee48975480062d418e6f932` exactly, which is what v1.7 was derived from.
+`8ab3304a1ee48975480062d418e6f932` exactly, which is what v1.7 was derived from. **All eight blocks
+were measured again when this apply was recorded, and all eight were unchanged** — this one
+included, so the apply is recorded against a gate that reproduces rather than against a remembered
+one.
 
 ````
 You are working on UsArr: a fast, self-hosted, unified hub and gateway over the media-acquisition ecosystem, running on a single self-hoster's own server. It aggregates the *Arrs (Sonarr, Radarr, Lidarr, Prowlarr, LazyLibrarian) and media backends (Navidrome, Jellyfin, Audiobookshelf, Komga, Kavita) into one local library you can browse, search and request from, and it exposes protocol surfaces (OpenSubsonic, OPDS) so existing client apps connect to UsArr instead of to each backend individually. It is meant to coexist with the rest of the ecosystem, not replace it. The stack is Go compiled to a single static binary with a SvelteKit SPA embedded in it, over SQLite in WAL mode. Do not state a Go minimum from memory: the go directive in go.mod is authoritative, 1.25.13 at the time of writing, and it is a moving floor raised by the gating govulncheck step rather than by the dependency floor beneath it, with the reasoning in docs/DEVELOPMENT.md. Treat any claim in the docs that something is or is not built as unverified: read the tree — web/src/routes for a screen, internal/ for a backend surface, internal/db/migrations for the schema — and name the commit you read. Do not write a fresher one; write the pointer. A milestone label is scope, not status.
@@ -75,11 +87,12 @@ Some things are permanently refused rather than deferred. Section 1.4 of ARCHITE
 On interface design, read section 17 of ARCHITECTURE.md before touching a screen. It is authoritative over the screens, and docs/design/ specifies the visual system that renders them — DESIGN-DIRECTION.md, tokens.css and the mockups. Read both, and where they disagree, section 17 wins. The constraint is utilitarian over stylish: standard patterns in preference to novel ones, density and speed over animation, and no visual flair that costs render time. Navidrome is the reference point, and "sleek" and "modern" are explicitly not goals. Section 17 enumerates the screens and section 16 says which ship in v0.1; read both rather than assuming a count. A degraded backend gets a non-modal banner; the catalogue never greys out.
 ````
 
-## v1.6 — as applied
+## v1.6 — superseded
 
-The text applied verbatim to the Project's settings on 2026-08-18, replacing v1.5. **This is the
-live settings text.** The apply happened at approximately 04:40 UTC; the exact minute is not pinned,
-so treat the time as approximate and the date as firm. 7729 characters, md5
+The text applied verbatim to the Project's settings on 2026-08-18, replacing v1.5. It was superseded
+by v1.7 above, which was applied on 2026-08-19, so this is **no longer** the live settings text. The
+apply happened at approximately 04:40 UTC; the exact minute is not pinned, so treat the time as
+approximate and the date as firm. 7729 characters, md5
 `8ab3304a1ee48975480062d418e6f932` over its 7739 bytes.
 
 The verification chain, as it actually ran. **Before the apply**, an independent worker cloned the
@@ -323,7 +336,7 @@ On interface design: utilitarian over stylish. The bar is tried-and-true, easy t
 
 ## Changelog
 
-### v1.7 — 2026-08-19 (drafted, NOT applied)
+### v1.7 — 2026-08-19 (applied 2026-08-19)
 
 Two changes against v1.6, each forced by something on `main` at `4731c7d`, and nothing else.
 
@@ -682,8 +695,8 @@ other.
 ## Candidates for a future version — NOT applied
 
 **Nothing in this section is applied, and nothing in it is authoritative.** These are drafted
-changes queued for the next version of the instructions text; the live settings text is v1.6 above
-and stays v1.6 until somebody applies a successor. Agents cannot apply a version — only Joe or the
+changes queued for the next version of the instructions text; the live settings text is v1.7 above
+and stays v1.7 until somebody applies a successor. Agents cannot apply a version — only Joe or the
 project coordinator can, by pasting the full text into the Project's settings by hand, exactly as
 "How this file is maintained" describes. Until that happens, a candidate here binds no session and
 overrides nothing: where a candidate and the applied text disagree, the applied text wins.
@@ -698,9 +711,10 @@ measured is a wish rather than a proposal.
 ### Candidate 1 — quote the gate's `tool:` banner, never a bare `--version`
 
 **PROMOTED into v1.7 on 2026-08-19 — no longer pending.** It is in the v1.7 fenced block above,
-verbatim, and v1.7 is drafted rather than applied, so this candidate is now tracked by v1.7's row in
-the Status table rather than by this section. The rationale below is kept as the record of why it
-was made, and the Makefile line numbers in it are as of `7bd45e9`; v1.7's changelog entry carries
+verbatim, and v1.7 was applied to the Project's settings on 2026-08-19, so this candidate is now
+tracked by v1.7's row in the Status table rather than by this section. The rationale below is kept
+as the record of why it was made, and the Makefile line numbers in it are as of `7bd45e9`; v1.7's
+changelog entry carries
 them re-resolved at `4731c7d`.
 
 **Where it goes.** Appended to the gates sentence in the "Verify, do not assert" paragraph,
