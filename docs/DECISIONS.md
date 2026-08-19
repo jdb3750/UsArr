@@ -7126,6 +7126,20 @@ later pass.
   still free — and what it already owes is unchanged and now more clearly owed: *"a decode-failure
   path that says which format it could not read."* **No codec is re-decided here.**
 
+- ⚠️ **The adapter reads covers from BookOrbit's `/api/v1` routes only, and that constraint is
+  load-bearing rather than stylistic:** those routes sit behind the global `JwtAuthGuard`
+  (`server/src/app.module.ts:164`), whose strategy takes the credential from the `Authorization`
+  header or a cookie and **never from the query string**
+  (`server/src/modules/auth/jwt.strategy.ts:15`); the `?t=` they accept is a **cache-buster** that
+  only selects a `Cache-Control` value (`server/src/modules/book/book.controller.ts:335-348`); and
+  the HMAC-token-in-URL shape is confined to the **OPDS** surface the adapter does not use —
+  `createHmac` has exactly one non-test call site in the repo,
+  `server/src/modules/opds/opds-auth.guard.ts:24`, and it is that guard, not the `/api/v1` one, that
+  reads a credential out of `?t=`. **That is the escape from the exact class LS-260's question 1
+  measured on Kavita**, where the header arm returned 400 and only `?apiKey=` in the query returned
+  200 — forcing a full-admin credential into the URL and thence into every upstream access log.
+  (BookOrbit `73b7877`.)
+
 **What does not change:**
 
 - **The schema.** Six-type from migration 0001, three subtype tables from `00006_kavita_subtypes.sql`.

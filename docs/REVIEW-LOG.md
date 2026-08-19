@@ -17429,6 +17429,101 @@ yes".
 **Re-run it** when the Kavita release moves off `0.9.0.2`, and before any commit that decides how
 UsArr stores or refreshes cover art.
 
+✅ **The probe ran, and four questions came back three answered and one open.** Joe ran
+`kavita-cover-probe.sh` against his own instance on **2026-08-19** and pasted the raw output into
+the coordinating thread at `cmsg_01S5UQT5yPAMR4PFkxyLGSj9T657b3bejFRoPHdHPMh5sT` (~04:23Z).
+Nothing was committed, by his choice, so **the paste is the evidence and this entry is its only
+record in the repo** — which is why the verdicts below quote the output's own words. The run was
+read-only, over **151 series** in the library with **5 sampled evenly across the sort order**.
+`38d00e8` already corrected the opposite claim where `ROADMAP.md` carried it; an absent artefact
+was never evidence that a probe never ran.
+
+🔥 **Question 1 — `FAIL, WITH CONSEQUENCES`.** The three arms, as printed:
+
+| arm | status |
+| --- | --- |
+| `x-api-key` header only | **400** |
+| `?apiKey=` query only, no header | **200** |
+| neither, no credential at all | **401** |
+
+**Only the query arm returned 200.** LS-260's criterion, written before the run — *"Question 1
+PASSES if the header-only request returns 200. If header-only fails and query-only succeeds that
+is a FAIL WITH CONSEQUENCES"* — selects the fail branch, and the probe's own verdict says the
+same: *"the header returned 400 and only `?apiKey=` in the QUERY returned 200 … That is a
+different design, not a smaller one."*
+
+⚠️ **The mechanism and the consequence are separate findings, and conflating them is the mistake
+this note exists to prevent.** A **400 is a malformed-request rejection, not an auth rejection** —
+the probe's own gloss reads *"400: bad request — the endpoint exists but rejected the parameters"*
+against *"401: unauthenticated — the Auth Key was rejected or not seen."* The spec declares
+`seriesId` **and** `apiKey` as query parameters, so the reading is that the controller wants
+`apiKey` **in the query string** and rejects at parameter binding when it is absent. **Kavita did
+not refuse a valid header credential; the header arm may never have reached auth at all.** Nothing
+here says the header scheme is rejected — it says it is not what this controller reads.
+
+⚠️ **What three status codes do not determine, said rather than papered over.** If a missing
+required `apiKey` query parameter alone produced the 400, the **no-credential arm lacked it too and
+should also have returned 400 — it returned 401.** So the header is *not* simply ignored: its
+presence is what turns 401 into 400. **What changed the outcome is established; the exact code path
+is not**, and three status codes cannot settle it. Recorded as the limit of this measurement so a
+later reader does not over-read it in either direction. **The practical consequence below does not
+depend on resolving it** — it follows from the one arm that returned 200.
+
+⚠️ **The consequence, stated as a property of the measurement and not as work anyone is being asked
+to do.** A working cover fetch must carry the Auth Key **in the URL**, and LS-260 attached three
+consequences to that in advance, recorded here in full because the entry promised them: the
+credential **lands in Kavita's access log and in any reverse proxy's**; it **must be scrubbed from
+every error string UsArr logs or renders**; and **no recorded `go-vcr` fixture may retain that
+exchange**. **None of that is an open task, and this entry is not a work item.** The Kavita cover
+fetch path is **stopped by owner decision** — ADR-0052 sunsets Kavita as v0.1's catalogue source in
+favour of BookOrbit, and `c38088f` had already marked this fetch path stopped. A measured fail on
+an instance the project is retiring is **evidence about Kavita's controller, nothing more**. The
+three consequences are recorded so that any fixture or log path that ever touches this exchange is
+judged against them — a standing property of the measurement, not a backlog entry.
+
+✅ **Question 2 — `USABLE`, which is the stronger of the two passing verdicts.** All five sampled
+series carry a hex `primaryColor`, and **all five values are distinct**:
+`#B33039`/`#261C31`, `#A36F48`/`#E3D2A5`, `#AD2727`/`#4E2523`, `#533832`/`#9D948B`,
+`#7D4A37`/`#D39168`. `secondaryColor` is hex **5 of 5**, also **5 distinct**. `primaryColor`
+all-zero: **0**. `coverImage` absent or null: **0 of 5**. LS-260 required *present **and** varied* —
+"5 of 5 carry a colour" was explicitly not going to be an answer, which is why the probe prints the
+values and why they are quoted here. The `POPULATED BUT USELESS` branch does not fire. **A tinted
+placeholder can render with no image fetched at all.**
+
+✅ **Question 3 — `image/png`, ~165 KiB median, and revalidation `AVAILABLE via Last-Modified`.**
+Five covers, **all 200**, **all `image/png`** (5 distinct `Content-Type` values, all the same
+string), bytes **220671 / 66100 / 168502 / 161406 / 339356** — **median 168502 (~165 KiB)**, min
+66100, max 339356. The magic-byte cross-check agrees with the header: *"first bytes of the last 200
+body: PNG"*. `Cache-Control`: **ABSENT**. `ETag`: **0 of 5**. `Last-Modified`: **5 of 5**.
+
+**The validator was fired, not reported, exactly as LS-260 required.** `If-None-Match` was **not
+attempted — no `ETag` came back**; `If-Modified-Since` **earned a 304 (0 bytes)**. So the
+`NOT AVAILABLE IN PRACTICE` branch does not fire: revalidation is available, and **the timestamp is
+what must be stored, because there is no usable `ETag`**. Cost, for whoever sizes the work:
+**median 5 ms per cover** (min 2, max 6, n=5) → *"~0.8s serially over 151 series, ~0.2s at 4
+concurrent, ~24.3 MiB of image bytes."*
+
+⚠️ **Question 4 — `UNDETERMINED`, and it stays open.** The probe's word, and it is not a
+sample-size inference: it scanned **all 151 series on the page** — not the 5 sampled — for a
+null-or-empty `coverImage` and found **0**. **What the output shows is that this library contains no
+coverless series, so the run had none to observe.** The probe says it plainly: *"all 151 series on
+the scanned page have a coverImage, so there was no coverless series to ask about. Not guessed."*
+
+⚠️ **A nonexistent series id is a different question and is not the answer to this one.** The probe
+measured it separately and labelled it so — a series id that does **not exist** returned **404, 162
+bytes** — and recorded that this is *"a different question from 'exists but has no cover' — not
+conflated with it."* That distinction is preserved here. **Whether a series that exists but has no
+cover returns a 404 or a 200 placeholder is unmeasured**, and therefore whether a failed cover fetch
+should be retried or cached as permanently absent is still undecided. LS-260's own rule governs:
+*"Question 4 reports UNDETERMINED when every sampled series has a cover, and does not guess."*
+
+⚠️ **What this closure discharges, and what it does not.** **Q1, Q2 and Q3 are answered**; the entry
+is discharged on those three. **Q4 is not**, so **LS-260 remains open on Q4 alone** and is not
+closed. Answering it needs a Kavita library containing a series with no cover — which ADR-0052 makes
+unlikely to be arranged, and that is an acceptable place to leave it, because the question gates a
+fetch path that is stopped by decision. **Re-run the probe** if Kavita moves off `0.9.0.2`; the
+instruction stands as written.
+
 ## LS-261 — what `make check` green is worth on this change, and the four defects a drill caught that a read did not
 
 **A shell script and a log entry. `make check` compiles no line of either**, exactly as `LS-201`
