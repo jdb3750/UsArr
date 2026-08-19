@@ -1247,7 +1247,9 @@ prose is true, current, or even well formed. Quote it at that size. The measured
 fired in both directions, is in `docs/REVIEW-LOG.md` under *"What a `make check` green on a
 docs-only commit does and does not attest"*.
 
-**A count a gate prints is a fact about how it was counted, not a statement of coverage.**
+**Two counts that read as facts about the repository and are facts about the observer.** Each
+under-reports without saying so, and neither can tell you whether what it did not count was absent
+or merely invisible from where it was standing.
 
 * **`lint-go`'s banner counts different packages than the linter opens.** The recipe derives it from
   `@n=$$($(GO) list ./... | wc -l);` — untagged — while `golangci-lint run` reads `.golangci.yml`,
@@ -1258,6 +1260,19 @@ docs-only commit does and does not attest"*.
   package count cannot distinguish a package that was opened from one that was skipped**, which is
   the same shape as a check whose success condition is an absence: both report the same number
   whether the work happened or not. Quote it as a floor guard, never as the scope of a lint run.
+* **`git rev-list --count` measures the clone's visible depth, not the commit.** One object,
+  commit `2ce8ed9`, was counted in three containers on the same night and gave three different
+  answers. **811** is measured here, in a clone that is not shallow by any probe available:
+  `git rev-parse --is-shallow-repository` is `false`, there is no `shallow` and no `info/grafts`
+  under `git rev-parse --git-common-dir`, and `git replace -l` is empty. The other two figures are
+  **reported, not measured here** — **366** from another clone, said to be shallow with two graft
+  points, and **146** from a third whose shallow status nobody has probed, so its cause is
+  unestablished and should not be guessed at. Every reading was correct about its own tree and
+  none was about the repository. So **any commit count quoted across containers carries its
+  clone's shallow status beside it, or it means nothing.** The cost that earned this rule: an
+  unqualified count was broadcast as a general warning that other threads' gate greens were weaker
+  than they thought, and it took a read-only agent in another container to disprove the general
+  form of it. The local number was real; the generalisation was not.
 
 ### Consistency is a property of the read, not only of the write
 
