@@ -56,10 +56,22 @@ import (
 //     cascade). Counting is the whole of the honesty here: a skipped item that
 //     vanishes silently looks exactly like one that was never there. See
 //     Skipped.
-//  2. CHANNEL 3b AND CHANNEL 4. No delta walk, no reconciliation sweep, no
-//     cover fetch, and no per-book detail read. And STILL no migration: every
-//     column the three passes write already exists in 00005_library_sync.sql and
+//  2. CHANNEL 3b AND CHANNEL 4. No delta walk, no reconciliation sweep, and no
+//     per-book detail read. And STILL no migration: every column the three
+//     passes write already exists in 00005_library_sync.sql and
 //     00007_work_credit.sql.
+//
+//     ⚠️ THIS CLAUSE ALSO READ *"no cover fetch"* AND THAT IS NOW FALSE OF AN
+//     IMPORT, though still true of this file. It was accurate when written:
+//     nothing anywhere fetched a cover. covers.go is the pass that changed it —
+//     phase D of FullImport calls internal/imagepipeline once per imported book,
+//     between committed batches, against the same *bookorbit.Client this adapter
+//     holds. THE ROUTE DOES NOT COME THROUGH HERE: the pipeline takes the client
+//     directly, so BookOrbitReader gained no method and this adapter's three
+//     passes still cost exactly the two HTTP reads they always did. What the
+//     sentence was really promising — that mapping a book does not drag an image
+//     fetch into the item stream — is still kept, and covers.go's header is where
+//     the reason lives.
 
 // BookOrbitReader is the slice of *bookorbit.Client this adapter uses.
 //
