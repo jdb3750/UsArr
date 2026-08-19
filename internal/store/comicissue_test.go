@@ -223,3 +223,50 @@ func TestTheCorpusGuardStillRefusesAComicIssue(t *testing.T) {
 			"DESTINATION reason and is not a child of anything")
 	}
 }
+
+// TestOneSeriesSpanningTwoContainersIsFiledInBoth.
+//
+// ⚠️ THE PREMISE IS ADR-0068'S OWN, NOT A HYPOTHETICAL: "A BookOrbit series is
+// NOT library-scoped upstream, so the container question is answered on UsArr's
+// side". One series can therefore carry issues walked from two containers, and
+// the parent must reach BOTH of the comic libraries those containers mint.
+//
+// It is the assertion that keeps applyOneItem's per-batch parent cache honest: a
+// cache keyed on the upstream series id alone would write the parent once — for
+// whichever container came first — and the second container's comic library
+// would silently never gain the series, with no error anywhere.
+func TestOneSeriesSpanningTwoContainersIsFiledInBoth(t *testing.T) {
+	s := newTestStore(t)
+	inst := fixtureInstance(t, s, "bookorbit")
+	binds, _, err := s.BindContainers(t.Context(), inst, SystemUserID, []CatalogueContainer{
+		{RemoteID: "1", Name: "Shelf One", Kind: "book"},
+		{RemoteID: "2", Name: "Shelf Two", Kind: "book"},
+	})
+	if err != nil {
+		t.Fatalf("BindContainers: %v", err)
+	}
+
+	// ONE BATCH, on purpose: across two batches the cache is empty the second
+	// time and the defect cannot appear. The batch is where it lives.
+	if _, err := s.ApplyCatalogueBatch(t.Context(), inst, binds, []CatalogueItem{
+		issue("101", "1", "Saga #1", "5", "Saga"),
+		issue("102", "2", "Saga #2", "5", "Saga"),
+	}, testNow); err != nil {
+		t.Fatalf("ApplyCatalogueBatch: %v", err)
+	}
+
+	// STILL ONE series work: two containers do not make two series.
+	if n := count(t, s, `SELECT COUNT(*) FROM work WHERE kind = 'comic'`); n != 1 {
+		t.Errorf("comic works = %d, want 1 — the same series id is the same series", n)
+	}
+	if n := count(t, s, `SELECT COUNT(*) FROM library WHERE kind = 'comic' AND id <> 0`); n != 2 {
+		t.Errorf("comic libraries = %d, want 2 — one per mixed container", n)
+	}
+	if n := count(t, s, `SELECT COUNT(*) FROM library_member lm
+	                       JOIN work w ON w.id = lm.work_id
+	                       JOIN library l ON l.id = lm.library_id
+	                      WHERE w.kind = 'comic' AND l.kind = 'comic'`); n != 2 {
+		t.Errorf("the series is filed into %d comic libraries, want 2 — a parent cache keyed "+
+			"on the series id alone writes it once and leaves the second library empty", n)
+	}
+}

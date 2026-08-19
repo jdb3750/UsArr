@@ -798,7 +798,11 @@ func applyOneItem(
 		if err != nil {
 			return 0, res, err
 		}
-		key := parentKey{remoteKind: it.Parent.RemoteKind, remoteID: it.Parent.RemoteID}
+		key := parentKey{
+			containerID: it.ContainerID,
+			remoteKind:  it.Parent.RemoteKind,
+			remoteID:    it.Parent.RemoteID,
+		}
 		if id, ok := parents[key]; ok {
 			// ALREADY WRITTEN IN THIS BATCH. Ninety thousand issues sit under
 			// three thousand series (ARCHITECTURE §13), so re-running the parent's
@@ -1112,7 +1116,16 @@ var childKinds = map[string]bool{
 }
 
 // parentKey identifies one parent within a batch.
-type parentKey struct{ remoteKind, remoteID string }
+//
+// ⚠️ THE CONTAINER IS PART OF THE KEY, and leaving it out is a real defect
+// rather than a redundancy. ADR-0068 is explicit that "a BookOrbit series is NOT
+// library-scoped upstream", so one series can carry issues from two containers —
+// and step 8 files membership per (library, work) pair, ADDING a row rather than
+// replacing one. A cache keyed on the upstream id alone would write the parent
+// once, for the first container, and the second container's comic library would
+// silently never gain the series. Keyed this way the parent is written once per
+// (container, series), which is exactly the granularity membership needs.
+type parentKey struct{ containerID, remoteKind, remoteID string }
 
 // parentCache is the parents already written in THIS batch, by upstream id.
 //
