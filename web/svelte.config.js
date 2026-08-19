@@ -6,7 +6,7 @@ import { vitePreprocess } from '@sveltejs/vite-plugin-svelte';
  * process in production, no SSR, one fallback document served at every depth by
  * `internal/web`.
  *
- * Three settings below are load-bearing and are documented in ADR-0024 §6.
+ * Three settings below are load-bearing and are documented in ADR-0025 §6.
  *
  *   pages/assets = 'build'  The Makefile (`make clean`, `make web-build`) and
  *                           docs/DEVELOPMENT.md §2 both name `web/build`. This
@@ -19,7 +19,7 @@ import { vitePreprocess } from '@sveltejs/vite-plugin-svelte';
  *   paths.base = ''         Baked in at build time, so UsArr must be proxied at
  *                           a domain or subdomain root, never a subpath.
  *
- *   paths.relative = false  ADR-0024 flagged this as untested inference and
+ *   paths.relative = false  ADR-0025 flagged this as untested inference and
  *                           asked for it to be tested before the config froze.
  *                           IT HAS BEEN TESTED, AND THE INFERENCE IS WRONG.
  *                           SvelteKit already special-cases the fallback:
@@ -35,7 +35,7 @@ import { vitePreprocess } from '@sveltejs/vite-plugin-svelte';
  *                           genuinely prerendered pages, of which this SPA has
  *                           none. It is pinned to false anyway — explicit beats
  *                           relying on a special case, and it costs nothing —
- *                           but it is NOT load-bearing. ADR-0024 §6 should be
+ *                           but it is NOT load-bearing. ADR-0025 §6 should be
  *                           corrected. internal/web/web_test.go asserts the
  *                           property that actually matters.
  *
