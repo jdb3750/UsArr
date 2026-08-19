@@ -356,3 +356,303 @@ func (s *Server) toRecentWorkResponse(w store.RecentWork) recentWorkResponse {
 	out.Availability = s.availabilityFor(w.ID, w.Availability)
 	return out
 }
+
+// GET /api/v1/library is §17.2's per-type library grid and §17.8's library
+// scope chip: the same corpus and the same row as Block C above, filtered by
+// media type and by library, in one of three orders, keyset-paginated.
+//
+// IT IS A DIFFERENT ENDPOINT FROM /library/recent AND NOT A SUPERSET OF IT.
+// §17.2 is emphatic that Block C is ONE table with ONE order and no filters — a
+// sixth media type adds rows to it, never a sixth region — so collapsing the two
+// into `/library/recent?media_type=…` would make the Home block a special case
+// of the grid and put a filter on the endpoint whose whole design is that it has
+// none. They share the row shape (recentWorkResponse) and the allowlist that
+// builds it (toRecentWorkResponse), by calling them.
+//
+// IT IS A LOCAL READ (principle 1). One SQLite statement per page — two on the
+// added_at/undated boundary internal/store documents — plus at most one small
+// statement to resolve `?lib=` slugs. No upstream call, no *Arr, no metadata
+// provider, no image fetch.
+//
+// THE WIRE CONTRACT IS IN docs/reference/http-api.md §7, where a consumer can
+// find it. This comment is not reachable from a browser tab.
+//
+// WHAT IT DOES NOT DO YET: no cover art (there is no image endpoint, so
+// poster_asset_id would be an id the client cannot turn into anything), and no
+// facet counts beside the chips (each is its own aggregate and its own read).
+
+// browseWorksResponse is the browse envelope.
+//
+// It is Block C's envelope key for key, deliberately and not accidentally: the
+// two endpoints page identically, so a client that has learned one has learned
+// the other (http-api.md §1.2's clamp rule is written once and governs both).
+// It is a SEPARATE struct rather than a shared one so that the two can diverge
+// later — the grid will want facet counts that Home must never grow — without
+// that divergence silently reaching the Home block.
+type browseWorksResponse struct {
+	Items []recentWorkResponse `json:"items"`
+
+	// Limit is the page size the SERVER applied and is AUTHORITATIVE. See
+	// recentWorksResponse.Limit: a client pages against this number, never
+	// against the one it sent.
+	Limit int `json:"limit"`
+
+	// MediaType and Sort are ECHOED because they are part of what the cursor
+	// means. A cursor is minted under one sort and refused under another
+	// (store.ErrCursorSortMismatch), so a client that has stored a cursor has
+	// to be able to recover the query it belongs to — and a UI that restores a
+	// deep link needs to know which chip to light up. Both are absent when the
+	// request did not name them, so absence stays distinguishable from "movies"
+	// and from "added_at".
+	MediaType string `json:"media_type,omitempty"`
+	Sort      string `json:"sort,omitempty"`
+
+	// NextCursor is absent when this page is the last one, and its absence is
+	// the "Load more" button's off switch.
+	NextCursor string `json:"next_cursor,omitempty"`
+}
+
+// browseMediaTypes is §17.2's navigation enum as an ALLOWLIST for the wire.
+//
+// ⚠️ THE PARAMETER IS `media_type` AND NOT `kind`, AND THAT IS A CORRECTNESS
+// DECISION RATHER THAN A NAMING PREFERENCE. `kind` is a real column with a
+// twelve-member vocabulary and it SHIPS ON THIS WIRE under its own name, in
+// every row (recentWorkResponse.Kind). A parameter called `kind` that accepted
+// `movies` and rejected `movie` — or accepted `tv` and rejected `series` — would
+// be two vocabularies wearing one name, on an endpoint that publishes both of
+// them. The six values here are the navigation enum, they are the strings
+// `internal/store` publishes as MediaTypeMovies … MediaTypeComics, and they are
+// what `web/src/lib/library.ts` already holds.
+//
+// Two of the six are NOT a kind at all: Ebooks and Audiobooks are both
+// `kind = 'book'` separated by `edition.format`, which is why the store resolves
+// them server-side (§17.2: the Tier 1 client index ships no format).
+var browseMediaTypes = map[string]bool{
+	store.MediaTypeMovies:     true,
+	store.MediaTypeTV:         true,
+	store.MediaTypeMusic:      true,
+	store.MediaTypeEbooks:     true,
+	store.MediaTypeAudiobooks: true,
+	store.MediaTypeComics:     true,
+}
+
+// browseSorts is the `?sort=` allowlist, and it is `library.default_sort`'s own
+// vocabulary verbatim — migration 0005 spells it
+// `CHECK (default_sort IN ('sort_title','added_at','year','popularity'))`.
+//
+// Using the schema's words rather than inventing wire words ("newest", "az") is
+// the same rule the paragraph above applies to `media_type`: a library carries a
+// default sort in the database, a client rendering that library has to ask for
+// it, and a second spelling for the same four states is the drift this endpoint
+// exists on the far side of.
+//
+// ⚠️ 'year' IS DELIBERATELY ABSENT. It is legal in the column and unservable by
+// this read — `work.year` has no index, so the order would be a temp b-tree over
+// the whole filtered corpus on every page. store.ListWorks returns
+// ErrUnservableSort for it and this handler renders that as a 400 that names the
+// missing index, rather than a 500 or a silently slow page. See §7.2 of
+// docs/reference/http-api.md.
+// browseUnservableSort is the fourth member of `library.default_sort`'s CHECK,
+// named so the refusal above can be specific. It is a legal column value and an
+// unservable order, and those are different failures.
+const browseUnservableSort = "year"
+
+var browseSorts = map[string]store.WorksSort{
+	string(store.WorksSortAdded):      store.WorksSortAdded,
+	string(store.WorksSortTitle):      store.WorksSortTitle,
+	string(store.WorksSortPopularity): store.WorksSortPopularity,
+}
+
+// browseMaxLibrarySlugs bounds `?lib=`.
+//
+// §17.8's reference install has SEVEN libraries and they are a set a person
+// created by hand, so 32 is far above any real chip selection. The bound exists
+// because the slug list becomes an `IN (…)` with one placeholder per entry: a
+// caller sending ten thousand slugs would otherwise render a ten-thousand-term
+// statement and a ten-thousand-row resolve on a render path. It is a REFUSAL and
+// not a clamp, unlike `limit`: silently dropping slugs would WIDEN the page
+// (fewer scope terms means more rows), which is the one direction a filter must
+// never fail in.
+const browseMaxLibrarySlugs = 32
+
+// handleBrowseWorks serves one keyset page of the library grid.
+func (s *Server) handleBrowseWorks(w http.ResponseWriter, r *http.Request) error {
+	a, ok := sessionFrom(r)
+	if !ok {
+		return errStatus(http.StatusUnauthorized, CodeUnauthorized, "this request has no session")
+	}
+	q := r.URL.Query()
+
+	// The page size clamp is Block C's, shared on purpose: the two endpoints
+	// page identically and http-api.md documents the rule once. See
+	// recentWorksLimit for the whole table and for why it clamps rather than
+	// rejects.
+	effective, err := recentWorksLimit(r)
+	if err != nil {
+		return err
+	}
+
+	filter := store.WorksFilter{}
+
+	// ⚠️ AN UNRECOGNISED media_type IS A 400, NEVER A SILENTLY UNFILTERED PAGE.
+	// Widening on a typo turns "show me my comics" into "show me everything",
+	// which looks like it worked. This follows the cursor-parse precedent below,
+	// which has never silently reset either.
+	if raw := strings.TrimSpace(q.Get("media_type")); raw != "" {
+		if !browseMediaTypes[raw] {
+			// The value is NOT echoed back: it is caller-supplied text rendered
+			// into a response body. The action carries the whole vocabulary,
+			// which is what the caller actually needs.
+			return errStatus(http.StatusBadRequest, CodeBadRequest,
+				"media_type is not one this library serves").
+				withAction("use one of movies, tv, music, ebooks, audiobooks, comics — " +
+					"or omit media_type for every type at once")
+		}
+		filter.MediaType = raw
+	}
+
+	if raw := strings.TrimSpace(q.Get("sort")); raw != "" {
+		sort, ok := browseSorts[raw]
+		switch {
+		case ok:
+			filter.Sort = sort
+		case raw == browseUnservableSort:
+			// ⚠️ NAMED SEPARATELY FROM AN UNKNOWN SORT, because it is not a
+			// typo: `year` is a legal `library.default_sort` value, so a client
+			// reading a library's own default back to this endpoint lands here
+			// through no fault of its own. The message says what is actually
+			// wrong — there is no index — rather than implying the word is
+			// misspelt. See browseSorts.
+			return errStatus(http.StatusBadRequest, CodeBadRequest,
+				"this library cannot be sorted by year: work.year has no index, so that "+
+					"order would sort the whole library on every page").
+				withAction("sort by added_at, sort_title or popularity instead")
+		default:
+			return errStatus(http.StatusBadRequest, CodeBadRequest,
+				"sort is not an order this library serves").
+				withAction("use one of added_at, sort_title, popularity — " +
+					"or omit sort for newest first")
+		}
+	}
+
+	if err := s.resolveBrowseLibraries(r, a, &filter); err != nil {
+		return err
+	}
+
+	// A cursor that will not parse is a 400, never a silent reset to page one:
+	// resetting turns a stale bookmark into a Load-more loop that re-serves the
+	// first page for ever and looks like the list is stuck. A cursor minted
+	// under a DIFFERENT sort parses and is refused by the store, which is the
+	// same 400 for the same reason — see below.
+	cur, err := store.DecodeWorksCursor(strings.TrimSpace(q.Get("cursor")))
+	if err != nil {
+		return errStatus(http.StatusBadRequest, CodeBadRequest,
+			"the cursor on this request is not one this endpoint issued").
+			withAction("reload the page to start from the beginning of this list").
+			wrapping(err)
+	}
+
+	// SCOPE. storeScope derives it from the session and nothing else — the
+	// caller cannot widen it with a query parameter, which is the whole reason
+	// it is not one.
+	rows, next, err := s.store.ListWorks(r.Context(), storeScope(a), filter, cur, effective)
+	switch {
+	case errors.Is(err, store.ErrCursorSortMismatch):
+		return errStatus(http.StatusBadRequest, CodeBadRequest,
+			"that cursor belongs to a different sort order").
+			withAction("drop the cursor to start this order from the beginning").
+			wrapping(err)
+	case errors.Is(err, store.ErrUnservableSort):
+		// The two reachable causes, both named in the action because the caller
+		// can act on either: sort=year has no index at all, and sort_title needs
+		// a media type that is exactly one work.kind — which `music`, being
+		// artists AND albums, is not.
+		return errStatus(http.StatusBadRequest, CodeBadRequest,
+			"this library cannot be sorted that way").
+			withAction("sort_title needs a media_type of one kind — not music — and there is " +
+				"no index behind year at all; added_at and popularity work everywhere").
+			wrapping(err)
+	case err != nil:
+		return errStatus(http.StatusInternalServerError, CodeInternal,
+			"your library could not be read").wrapping(err)
+	}
+
+	out := browseWorksResponse{
+		Items:     make([]recentWorkResponse, 0, len(rows)),
+		Limit:     effective,
+		MediaType: filter.MediaType,
+	}
+	if filter.Sort != "" {
+		out.Sort = string(filter.Sort)
+	}
+	for _, row := range rows {
+		out.Items = append(out.Items, s.toRecentWorkResponse(row))
+	}
+	if next.NullTail || next.Value.Valid {
+		out.NextCursor = store.EncodeWorksCursor(next)
+	}
+	writeJSON(w, http.StatusOK, out)
+	return nil
+}
+
+// resolveBrowseLibraries turns `?lib=` slugs into the library ids the filter
+// takes.
+//
+// ⚠️ AN UNKNOWN SLUG IS A 400, FOR THE SAME REASON AN UNKNOWN media_type IS.
+// Dropping it silently widens the page, and dropping every slug removes the
+// scope entirely — so a stale bookmark to a deleted library would answer with
+// the whole catalogue rather than saying the library is gone. The store's
+// resolver reports HOW MANY slugs did not resolve and never WHICH — and that
+// count is wrapped into the LOGGED error, never the response body, so the wire
+// carries one fixed sentence whichever slug failed. A caller must not be able to
+// probe another user's library names by watching the message change, and a slug
+// the caller cannot see is deliberately indistinguishable from one that does not
+// exist.
+func (s *Server) resolveBrowseLibraries(
+	r *http.Request, a authSession, filter *store.WorksFilter,
+) error {
+	// ⚠️ PRESENCE, NOT EMPTINESS, IS WHAT DECIDES "no scope was asked for".
+	// Get returns "" both for a parameter that was never sent and for `?lib=`,
+	// so testing the VALUE here — above the split — would let `?lib=` and
+	// `?lib=%20` fall through as an absent chip and answer 200 with the whole
+	// catalogue, while `?lib=,,` was correctly refused a few lines below. Three
+	// spellings of "a scope was asked for and nothing was named", two answers.
+	// Every empty spelling now reaches the one refusal below.
+	query := r.URL.Query()
+	if !query.Has("lib") {
+		return nil
+	}
+
+	slugs := make([]string, 0, 4)
+	for _, part := range strings.Split(query.Get("lib"), ",") {
+		if part = strings.TrimSpace(part); part != "" {
+			slugs = append(slugs, part)
+		}
+	}
+	if len(slugs) == 0 {
+		// `?lib=`, `?lib=%20` and `?lib=,,` are not "no scope" — the caller
+		// asked for a scope and named nothing. Answering with the whole
+		// catalogue would be the silent widening this function exists to
+		// prevent.
+		return errStatus(http.StatusBadRequest, CodeBadRequest,
+			"lib was sent with no library in it").
+			withAction("send lib as one or more library slugs separated by commas, " +
+				"or omit it for every library")
+	}
+	if len(slugs) > browseMaxLibrarySlugs {
+		return errStatus(http.StatusBadRequest, CodeBadRequest,
+			fmt.Sprintf("lib names more libraries than this endpoint accepts (%d)",
+				browseMaxLibrarySlugs)).
+			withAction("select fewer libraries, or omit lib for every library")
+	}
+
+	ids, err := s.store.LibraryIDsBySlug(r.Context(), storeScope(a), slugs)
+	if err != nil {
+		return errStatus(http.StatusBadRequest, CodeBadRequest,
+			"lib names a library that does not exist").
+			withAction("reload the Libraries screen — a library may have been renamed or removed").
+			wrapping(err)
+	}
+	filter.LibraryIDs = ids
+	return nil
+}

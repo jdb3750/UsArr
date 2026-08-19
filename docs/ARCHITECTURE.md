@@ -1224,6 +1224,15 @@ asserts the `EXPLAIN QUERY PLAN` for both topologies — one library per kind an
 one kind — because only the second is the interesting one**, and `make bench` carries the wall
 clock.
 
+⚠️ **Amended 2026-08-19 by [ADR-0051](./DECISIONS.md#adr-0051): the denormalisation above serves the
+`sort_title` order and ONLY that one.** `library_member`'s key leads with `sort_title`, so a
+library-scoped page ordered by **`added_at`** — which is the grid's default order and Home's — gets
+`USE TEMP B-TREE FOR ORDER BY` in both topologies, with and without `ANALYZE`, measured. The scoped
+`added_at` page is therefore **work-driven, with an `EXISTS` over `ix_libmem_work`**, which keeps the
+ordered `ix_work_added` walk and probes membership per candidate; the member-driven shape above stays
+the right one for `sort_title`, and `TestLibraryScopedKeysetIsASeek` still pins it. Nothing in this
+section's key design changes — what changes is which order it is the answer for.
+
 ---
 
 ## 7. The sync engine
@@ -2117,7 +2126,7 @@ a third larger. Every p50/p99 below is against this library.
 
 | Operation | p50 | p99 |
 |---|---|---|
-| `GET /api/v1/library?kind=movie` (100 items, keyset) | < 8 ms | < 25 ms |
+| `GET /api/v1/library?media_type=movies` (100 items, keyset) | < 8 ms | < 25 ms |
 | `GET /api/v1/library?lib=…` (100 items, keyset, **library-scoped**, 1%-selective library over a 25k-row kind) | < 8 ms | < 25 ms |
 | **Scope-chip toggle: 1 keyset page + 6 sidebar `COUNT(*)` over `library_member ⋈ work`** | < 15 ms | < 50 ms |
 | `GET /api/v1/search?q=…` (FTS hybrid + rerank) | < 15 ms | < 50 ms |
@@ -2128,6 +2137,18 @@ a third larger. Every p50/p99 below is against this library.
 | Process start to listener accepting | < 300 ms | < 1 s |
 | Idle RSS | target < 80 MB — **storage layer measured at 10 MB** (x86-64, below) | < 120 MB |
 | Peak RSS during a 10k-item import | — | < 300 MB — **500k-row import measured at 50 MB** (x86-64) |
+
+⚠️ **The first row's parameter was corrected 2026-08-19.** It read
+`GET /api/v1/library?kind=movie`, which is wrong twice over: the parameter this endpoint takes is
+**`media_type`**, and its vocabulary is **§17.2's six-value navigation enum** —
+`movies · tv · music · ebooks · audiobooks · comics` — not `work.kind`. The two are genuinely
+different sets, not two spellings: `kind` has twelve members, two of the six media types
+(**Ebooks** and **Audiobooks**) are the *same* kind separated by `edition.format`, and `kind` itself
+**ships on this endpoint's wire under its own name in every row**. A parameter called `kind` that
+accepted `movies` and rejected `movie` would be two vocabularies wearing one name on a response that
+publishes both. The budget itself is unchanged — it is the same query over the same corpus.
+`internal/httpapi/library.go` and [`reference/http-api.md`](./reference/http-api.md) §7 are
+authoritative for the parameter set.
 
 **Cold start** — the run that forms the speed opinion (§4.4.1), previously unbudgeted entirely:
 

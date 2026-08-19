@@ -19,6 +19,9 @@ CREATE INDEX ix_comic_issue_sort ON work_comic_issue(number_sort);
 -- index ix_credit_creator
 CREATE INDEX ix_credit_creator ON work_credit(creator_work_id, role);
 
+-- index ix_edition_format
+CREATE INDEX ix_edition_format ON edition(format, work_id);
+
 -- index ix_edition_work
 CREATE INDEX ix_edition_work ON edition(work_id, is_primary DESC);
 
