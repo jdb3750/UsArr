@@ -320,6 +320,26 @@ server can seal a credential under the *old* key while the rotation is re-wrappi
 detects that — it re-checks the remaining-work count after each pass and refuses to promote while
 any row is at another key id — but it can only tell you to stop the server, not do it for you.
 
+A credential written **after** the verify pass cannot be caught in time, only reported. The command
+re-counts once more after promoting, and if anything appeared it names each instance and **exits
+non-zero**:
+
+```
+!! the rotation completed, but 1 credential(s) were written under another key WHILE it ran
+   service_instance 2 "Radarr" is at kek id 4205839355, not 43708734
+usarr: 1 credential(s) were sealed under a superseded key while the rotation ran and cannot be
+opened by /config/keys/secret.key — a UsArr server was running against /config. The rotation itself
+is complete and every other credential survived it: back up /config/keys/secret.key. Then stop the
+server, start it again, and re-enter the API key for the instance(s) listed above.
+```
+
+The rotation is **not** rolled back, and that is deliberate: at that point every pre-existing row is
+re-wrapped and verified, and the new key file is the one to back up. Re-enter the named API keys.
+The same rows are reported at every subsequent startup, so this cannot be missed by looking away.
+
+**`usarr key rotate` refuses on a config directory with no key.** There is nothing to rotate until
+the server has started once and generated `keys/secret.key`.
+
 Every intermediate state is recoverable, because each stored envelope carries the id of the key that
 wrapped it:
 
@@ -344,6 +364,27 @@ pending key for decryption as well as the live one — so no row is unopenable �
 under `secret.key`, and logs a warning telling you to re-run `usarr key rotate`. Rotation is an
 operator action with an audit trail; a startup path that silently re-wrapped every row would do it
 unattended and on every restart of a crash loop.
+
+#### If `secret.key.new` exists but cannot be read
+
+Startup **refuses**, because continuing would leave every row the interrupted rotation had already
+re-wrapped unopenable while reporting nothing worse than a red connection test. The remedy depends
+entirely on whether any row is wrapped under the key in that file, so **the error tells you which
+case you are in — read it before doing anything**:
+
+| What the error says | What it means | What to do |
+|---|---|---|
+| *"No stored credential is wrapped under it, so restoring or removing it are both safe"* | The rotation died in its **prepare** phase — the file was written, no row moved to it | Either. Removing it discards the pending key and the next `usarr key rotate` starts a fresh rotation |
+| *"N stored credential(s) are wrapped under the key in that file … **RESTORING IT IS THE ONLY SAFE ROUTE***" | The rotation died **during its re-wrap pass**. Those N rows name a key id that exists nowhere else on disk | Restore the file from your backup, then re-run `usarr key rotate` to finish the rotation. **Deleting it destroys those N credentials permanently** — nothing can re-derive that key, and each one can only be re-entered by hand |
+
+⚠️ **Removing the file is not a way to make the error go away.** It makes the *error* go away and
+takes the credentials with it. Before this table existed, the error said only "restore or remove it",
+and taking the second half of that advice on a partially re-wrapped rotation was silent, permanent
+data loss — see `REVIEW-LOG.md` RK-03.
+
+If a credential has already been stranded that way, the server now says so **on every start**, one
+warning per affected instance plus a total, rather than waiting for someone to use the credential.
+The repair is to re-enter that instance's API key; there is no way to recover the old value.
 
 Rotate when: the key was ever committed to a repository or pasted into a chat, a machine holding it
 was compromised, or a person with access to it left. Rotating does **not** invalidate sessions and
