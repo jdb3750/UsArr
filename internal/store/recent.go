@@ -186,6 +186,11 @@ type RecentWorksCursor struct {
 //   - Otherwise, EXISTS over the live links on the visible instances.
 //     `deleted_at IS NULL` is on the inner query because ix_sil_work is partial
 //     on it; a tombstoned link is not visibility.
+//
+// THE INNER ALIAS IS DERIVED FROM THE CALLER'S COLUMN AND IS NEVER A CONSTANT.
+// See scopeLinkAlias — that is a security property of this predicate, not a
+// naming preference, and docs/REVIEW-LOG.md LS-379 is where the leak it closes
+// was found.
 func (s Scope) workVisibilityPredicate(column string) (string, []any) {
 	if s.AllInstances {
 		return "1=1", nil
@@ -197,10 +202,46 @@ func (s Scope) workVisibilityPredicate(column string) (string, []any) {
 	for _, id := range s.InstanceIDs {
 		args = append(args, id)
 	}
-	return `EXISTS (SELECT 1 FROM service_item_link sil
-	                 WHERE sil.work_id = ` + column + `
-	                   AND sil.deleted_at IS NULL
-	                   AND sil.service_instance_id IN (` + placeholders(len(args)) + `))`, args
+	sil := scopeLinkAlias(column)
+	return `EXISTS (SELECT 1 FROM service_item_link ` + sil + `
+	                 WHERE ` + sil + `.work_id = ` + column + `
+	                   AND ` + sil + `.deleted_at IS NULL
+	                   AND ` + sil + `.service_instance_id IN (` + placeholders(len(args)) + `))`, args
+}
+
+// scopeLinkAlias names the inner service_item_link of the scope EXISTS, derived
+// from the outer column that EXISTS correlates to.
+//
+// WHY IT IS DERIVED RATHER THAN THE OBVIOUS CONSTANT `sil` (LS-379). The EXISTS
+// is correlated BY NAME: its only tie to the caller's row is
+// `<inner>.work_id = <column>`. SQL resolves a qualifier to the innermost scope
+// that offers it, so an inner alias equal to the qualifier of `column` shadows
+// the caller's table and the correlation collapses to `x.work_id = x.work_id` —
+// trivially true. The EXISTS then asks "does this caller see ANY live link
+// anywhere", answers yes, and the read returns EVERY row, including rows outside
+// the caller's access scope. It fails as a SILENT FULL LEAK: no error, no empty
+// result, no syntax fault, and a green test suite unless a fixture happens to
+// hold an out-of-scope row. `sil` is precisely the alias every other query in
+// this package gives service_item_link, so the collision was the likely case
+// rather than the perverse one.
+//
+// WHY DERIVATION AND NOT AN ALIAS PARAMETER. A required argument prevents
+// omission, not misuse: a caller can pass a colliding alias as easily as it can
+// forget one, and the failure stays silent either way. Deriving makes the
+// collision UNREPRESENTABLE — the alias is the outer qualifier with a prefix, so
+// it is strictly longer than that qualifier and therefore can never equal it.
+// The construction has no fixed point: a caller that aliases its own table
+// `sil_w` and passes `sil_w.work_id` gets `sil_sil_w` back, and so on for any
+// input. Nothing else in the subquery names an outer identifier, so the
+// qualifier of `column` is the only collision that could do harm.
+//
+// A qualifier that is not a bare identifier — a quoted alias, an expression —
+// yields a syntax error at first use rather than a leak. Every caller in this
+// package passes `alias.column`, and moving the failure from silent to loud is
+// the direction that matters.
+func scopeLinkAlias(column string) string {
+	outer, _, _ := strings.Cut(column, ".")
+	return "sil_" + outer
 }
 
 // recentWorksSQL renders the ListRecentWorks statement and its arguments.
