@@ -74,9 +74,34 @@ credential that can never be opened again.
 **A decryption failure with a valid KEK means tampering.** It fails loudly and names the recovery,
 and it is never a silent skip: `cmd/usarr`'s `openCredential` returns an error naming both causes —
 an edited `base_url`, or a `keys/` directory that does not match the one that sealed the row —
-rather than proceeding without a credential. **It owes an audit row and does not write one today**,
-so a tampering attempt discovered on a background path leaves no durable trace. Whatever puts a
-credential open on an audited path owes that row.
+rather than proceeding without a credential. **It also appends one `credential.open` / `fail` audit
+row**, so a tampering attempt discovered on a background path — the 60-second health prober, a
+bootstrap import — leaves a durable trace rather than a log line that rotates away. Only failures
+are audited: a successful open happens on every client build and every probe, and a row a minute
+per instance would bury the one row that matters.
+
+The row is written by `cmd/usarr`'s `auditFailedOpen`, and three things about it are load-bearing
+rather than incidental:
+
+- **The actor is the system sentinel (`store.SystemUserID`, 0), not NULL.** `audit_log.actor_user_id`
+  is nullable and carries no foreign key, and every scoped audit read renders
+  `actor_user_id IN (0, :uid)` — under SQL three-valued logic `NULL IN (0, 1)` is *unknown*, so a
+  NULL actor makes the row invisible to every reader in the codebase. A tamper-evidence row nothing
+  can read is not evidence. The prober has no acting user, and 0 is exactly what "written by a path
+  with no acting user" means.
+- **The metadata carries ids and context only** — `kek_id`, `kind`, and a fixed reason. Never the
+  envelope, never the ciphertext, never a plaintext (there is none; the open failed), and **not
+  `base_url` either**, even though an edited base URL is one of the two causes: a base URL may carry
+  userinfo (`http://user:pass@host`), and `audit_log` has `BEFORE UPDATE`/`BEFORE DELETE` triggers
+  that `RAISE(ABORT)`, so anything written here is written forever. The instance id in `target_id`
+  identifies the row that was tampered with.
+- **Only `ErrDecrypt` is audited**, not `ErrMalformed`. A structurally broken envelope is detectable
+  with no key at all and is corruption; a GCM or key-wrap failure under a KEK the keyring *holds* is
+  the tampering signal this section is about.
+
+`cmd/usarr`'s `TestATamperedCredentialWritesAnAuditRow` is the drill: it flips one byte of the GCM
+tag in a real sealed envelope, asserts the open fails, and asserts the row exists *through the
+scoped read* — so the NULL-actor invisibility above cannot pass it silently.
 
 ### 1.3 KEK derivation
 

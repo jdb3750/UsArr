@@ -386,3 +386,27 @@ func (s *Store) VerifyAuditChain(ctx context.Context) (int64, error) {
 	}
 	return 0, nil
 }
+
+// AuditActionCredentialOpen is one attempt to open a stored credential
+// envelope. Only the FAILING attempts are appended: a successful open happens
+// on every client build and on every health probe, so auditing those would
+// write a row a minute per instance forever and bury the one row that matters.
+//
+// reference/security.md §1.2 is the contract this exists for — "a decryption
+// failure with a valid KEK means tampering… a loud, audit-logged failure, never
+// a silent skip". The loud half was already there; this is the durable half,
+// and it matters most on the background paths (the health prober, a bootstrap
+// import) where nobody is watching a response body.
+//
+// Metadata on these rows carries IDS AND CONTEXT ONLY — the same rule as the
+// key-rotation actions above, for the same reason. Never the envelope, never
+// the ciphertext, never the decrypted credential, and never the base URL: a
+// base_url may carry userinfo (`http://user:pass@host`), which would put a
+// password into an append-only table that has no delete.
+//
+// The //nolint below is gosec's G101 firing on the IDENTIFIER, not the value:
+// the rule matches names containing "credential" and this is an audit action
+// name — a public vocabulary word that goes into a log column — rather than a
+// hardcoded secret. Renaming it to dodge the rule would trade an accurate name
+// for a linter's pattern.
+const AuditActionCredentialOpen = "credential.open" //nolint:gosec // G101: an audit action name, not a credential

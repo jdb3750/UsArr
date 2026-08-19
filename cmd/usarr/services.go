@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -190,7 +191,7 @@ func (g *registry) entry(ctx context.Context, instanceID int64) (*registryEntry,
 		return e, nil
 	}
 
-	apiKey, err := g.openCredential(si)
+	apiKey, err := g.openCredential(ctx, si)
 	if err != nil {
 		return nil, err
 	}
@@ -244,8 +245,14 @@ func (g *registry) entry(ctx context.Context, instanceID int64) (*registryEntry,
 // The AAD binds the ciphertext to this row AND to this instance's normalised
 // host:port, so a credential moved to a row whose base_url an attacker controls
 // fails to open rather than being decrypted and transmitted. A failure here with
-// a valid keyring means tampering or an edited base_url, and it is loud.
-func (g *registry) openCredential(si store.ServiceInstance) (string, error) {
+// a valid keyring means tampering or an edited base_url, and it is loud AND
+// durable: see auditFailedOpen for why the second half is not decoration.
+//
+// It takes a context ONLY so the audit append has one. That is worth stating,
+// because the decryption itself is pure CPU over bytes already in memory and
+// nothing here is cancellable — a reader who assumes the ctx bounds the open
+// would be wrong.
+func (g *registry) openCredential(ctx context.Context, si store.ServiceInstance) (string, error) {
 	aad, err := crypto.ServiceInstanceAAD(si.ID, si.BaseURL)
 	if err != nil {
 		return "", fmt.Errorf("building AAD for %q: %w", si.Name, err)
@@ -253,6 +260,7 @@ func (g *registry) openCredential(si store.ServiceInstance) (string, error) {
 	plain, err := g.keyring.Open(si.APIKeyEnc, aad)
 	if err != nil {
 		if errors.Is(err, crypto.ErrDecrypt) {
+			g.auditFailedOpen(ctx, si)
 			// Name the real artifacts. This message used to say "restore the
 			// master key that sealed it", which is actively misleading for the
 			// most likely cause: an operator who restored a backup, HAS the
@@ -270,6 +278,64 @@ func (g *registry) openCredential(si store.ServiceInstance) (string, error) {
 		return "", fmt.Errorf("opening the stored API key for %q: %w", si.Name, err)
 	}
 	return string(plain), nil
+}
+
+// auditFailedOpen appends the durable half of reference/security.md §1.2's
+// contract: "a decryption failure with a valid KEK … is a loud, audit-logged
+// failure, never a silent skip".
+//
+// WHY IT IS NOT ENOUGH TO RETURN THE ERROR. The two callers of openCredential
+// are entry() and Test(). Test() is a user pressing a button and reading the
+// answer. entry() is not: it is reached from the 60-second health prober and
+// from the bootstrap import, so a credential that has been tampered with is
+// discovered by a goroutine nobody is watching, and — before this row — left
+// nothing behind but a log line that rotates away. An attempt to move a
+// full-admin \*Arr key onto a row whose base_url the attacker controls is
+// exactly the event that must survive a restart.
+//
+// THE ACTOR IS store.SystemUserID, not NULL, and that is load-bearing rather
+// than tidy. audit_log.actor_user_id carries no foreign key and is nullable, and
+// Scope.userPredicate renders the canonical `actor_user_id IN (0, :uid)` — under
+// SQL three-valued logic `NULL IN (0, 1)` is unknown, so a NULL actor makes the
+// row invisible to EVERY scoped audit read in the codebase. A tamper-evidence
+// row nothing can read is not evidence. The prober has no acting user, and 0 is
+// precisely what "written by a path with no acting user" means; the same
+// reasoning is spelled out at auditRotation in keyrotate.go.
+//
+// THE METADATA CARRIES IDS AND CONTEXT ONLY. Not the envelope, not the
+// ciphertext, not the plaintext — there is no plaintext, the open failed — and
+// not si.BaseURL either, even though the edited base URL is one of the two
+// causes: a base URL may carry userinfo (`http://user:pass@host`), and
+// audit_log has BEFORE UPDATE and BEFORE DELETE triggers that RAISE(ABORT), so
+// a secret written here can never be taken out again. The instance id in
+// target_id is enough to find the row that was tampered with.
+//
+// Best-effort, like internal/httpapi's audit helper and for the same reason:
+// the caller is already failing closed with a loud error, and turning a failed
+// audit insert into a second failure would replace a diagnosable problem with a
+// confusing one. A failure to append is logged at ERROR.
+func (g *registry) auditFailedOpen(ctx context.Context, si store.ServiceInstance) {
+	metadata, err := json.Marshal(map[string]any{
+		"kek_id": si.KEKID,
+		"kind":   si.Kind,
+		"reason": "authenticated decryption failed under a key the keyring holds",
+	})
+	if err != nil {
+		g.log.Error("credential-open audit row not written",
+			"instance_id", si.ID, "err", err)
+		return
+	}
+	if _, err := g.st.AppendAudit(ctx, store.AuditEntry{
+		ActorUserID:  sql.NullInt64{Int64: store.SystemUserID, Valid: true},
+		Action:       store.AuditActionCredentialOpen,
+		TargetType:   "service_instance",
+		TargetID:     strconv.FormatInt(si.ID, 10),
+		Result:       store.AuditResultFail,
+		MetadataJSON: string(metadata),
+	}); err != nil {
+		g.log.Error("credential-open audit row not written",
+			"instance_id", si.ID, "err", err)
+	}
 }
 
 // newEgressClient builds the SSRF-policy HTTP client for one instance.
@@ -379,7 +445,7 @@ func (g *registry) Test(ctx context.Context, req httpapi.TestRequest) (httpapi.T
 		}
 		// httpapi has already refused this combination when the host changed;
 		// the AAD would refuse it a second time anyway, which is the design.
-		if apiKey, err = g.openCredential(stored); err != nil {
+		if apiKey, err = g.openCredential(ctx, stored); err != nil {
 			return httpapi.TestResult{Message: err.Error(), Action: "Re-enter the API key"}, nil
 		}
 		si.Name = stored.Name

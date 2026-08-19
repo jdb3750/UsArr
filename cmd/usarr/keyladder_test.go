@@ -138,7 +138,7 @@ func TestRestoreWithoutKEKSaltRefusesToStart(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read service instance: %v", err)
 	}
-	opened, err := recovered.registry.openCredential(si)
+	opened, err := recovered.registry.openCredential(context.Background(), si)
 	if err != nil {
 		t.Fatalf("the credential did not survive the refuse-and-restore cycle: %v", err)
 	}
@@ -193,7 +193,7 @@ func TestLegacyKEKSaltIsRelocatedNotLost(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read service instance: %v", err)
 	}
-	opened, err := a.registry.openCredential(si)
+	opened, err := a.registry.openCredential(context.Background(), si)
 	if err != nil {
 		t.Fatalf("the credential did not survive the relocation: %v", err)
 	}

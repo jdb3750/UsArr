@@ -177,7 +177,7 @@ func TestKeyRotateKeepsEveryCredentialOpenable(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read service instance: %v", err)
 	}
-	opened, err := after.registry.openCredential(si)
+	opened, err := after.registry.openCredential(context.Background(), si)
 	if err != nil {
 		t.Fatalf("the credential did not survive the rotation: %v", err)
 	}
