@@ -122,12 +122,14 @@ func importStartError(err error) error {
 			"an import is already running for this service; a second one was not started").
 			withAction("Wait for the running import to finish")
 	case errors.Is(err, ErrNotCatalogueSource):
-		// ⚠️ THE WORDING COVERS TWO DIFFERENT SERVICES and must not claim the
-		// stronger of them. A Prowlarr has no catalogue at all; a BookOrbit has
-		// one and UsArr has no reader for it yet (internal/bookorbit is ADR-0052
-		// slice 0, and internal/libsync has no BookOrbit source). "Carries no
-		// catalogue" was true of the first and false of the second, and this
-		// screen must not tell a user their books do not exist.
+		// ⚠️ THE WORDING IS DELIBERATELY WEAKER THAN "carries no catalogue", and
+		// the reason has changed rather than gone away. It used to cover two
+		// services — a Prowlarr with no catalogue at all, and a BookOrbit with
+		// one that UsArr could not yet read — and the second half expired when
+		// internal/libsync/bookorbit.go landed. What survives is the rule: this
+		// sentence is shown for whatever kind has no adapter NEXT, and a screen
+		// must not tell a user their books do not exist because UsArr cannot
+		// read them.
 		return errStatus(http.StatusConflict, CodeNotCatalogueSource,
 			"UsArr has no catalogue reader for this service").
 			withAction("Run a sync on a service UsArr can import from")

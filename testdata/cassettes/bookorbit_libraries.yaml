@@ -1,0 +1,138 @@
+---
+# SYNTHETIC — hand-authored from bookorbit/bookorbit@73b7877d
+# (auth.controller.ts's @Post('magic-links/login'), AuthService.issueTokensForUser
+# and buildUserResponse, library.controller.ts's @Get(), LibraryService.findAll
+# and LibraryRepository.findAllForUser). NOT a wire capture, and no live
+# BookOrbit was contacted — ADR-0052 records that this project has never probed
+# one, and inventing a capture would be worse than saying so.
+#
+# 🚩 THE LIBRARY OBJECTS BELOW ARE THE NON-SUPERUSER PROJECTION, WHICH IS THE
+# POINT OF THE FIXTURE. LibraryService.findAll branches on user.isSuperuser: a
+# superuser gets LibraryRepository.findAll, which is `...getTableColumns(libraries)`
+# — the whole row, allowedFormats and formatPriority and organizationMode
+# included. UsArr's credential is a SHARED VIEWER account by design
+# (internal/bookorbit/scope.go), so it gets findAllForUser instead, whose select
+# list is exactly id, name, icon, displayOrder, coverAspectRatio, scanMode,
+# fileRenameEnabled, createdAt, updatedAt and bookCount — plus the `folders`
+# array the service attaches afterwards. A fixture written from the superuser
+# shape would let this client depend on fields that are absent in production.
+#
+# `folders` is here BECAUSE it must be seen not to cross the package boundary: it
+# is a list of host filesystem paths on the BookOrbit box, it has no reader
+# anywhere in UsArr, and bookorbit.Library deliberately has no field for it.
+#
+# TWO INTERACTIONS, in the order the client produces them: the mint, then the
+# read. Both credentials replay as `<redacted>` and that is the scrubber working
+# — see bookorbit_app_info.yaml's header for the whole argument, including the
+# one path a cassette cannot exercise.
+version: 2
+interactions:
+    - id: 0
+      request:
+        proto: HTTP/1.1
+        proto_major: 1
+        proto_minor: 1
+        content_length: -1
+        host: bookorbit.test:3000
+        headers:
+            Accept:
+                - application/json
+            Content-Type:
+                - application/json
+        url: http://bookorbit.test:3000/api/v1/auth/magic-links/login
+        method: POST
+        body: '{"token":"<redacted>"}'
+      response:
+        proto: HTTP/1.1
+        proto_major: 1
+        proto_minor: 1
+        content_length: -1
+        headers:
+            Content-Type:
+                - application/json; charset=utf-8
+        status: 200 OK
+        code: 200
+        duration: 1ms
+        body: |-
+            {
+              "accessToken": "<redacted>",
+              "user": {
+                "id": 7,
+                "username": "usarr",
+                "name": "UsArr service account",
+                "email": null,
+                "active": true,
+                "isSuperuser": false,
+                "isDefaultPassword": false,
+                "settings": {},
+                "avatarUrl": null,
+                "provisioningMethod": "shared",
+                "permissions": []
+              }
+            }
+    - id: 1
+      request:
+        proto: HTTP/1.1
+        proto_major: 1
+        proto_minor: 1
+        content_length: 0
+        host: bookorbit.test:3000
+        headers:
+            Accept:
+                - application/json
+            Authorization:
+                - <redacted>
+        url: http://bookorbit.test:3000/api/v1/libraries
+        method: GET
+      response:
+        proto: HTTP/1.1
+        proto_major: 1
+        proto_minor: 1
+        content_length: -1
+        headers:
+            Content-Type:
+                - application/json; charset=utf-8
+        status: 200 OK
+        code: 200
+        duration: 2ms
+        body: |-
+            [
+              {
+                "id": 1,
+                "name": "Fiction",
+                "icon": "book",
+                "displayOrder": 0,
+                "coverAspectRatio": "book",
+                "scanMode": "manual",
+                "fileRenameEnabled": false,
+                "createdAt": "2026-07-01T00:00:00.000Z",
+                "updatedAt": "2026-08-01T00:00:00.000Z",
+                "bookCount": 3,
+                "folders": [
+                  {
+                    "id": 11,
+                    "path": "/mnt/user/media/books",
+                    "createdAt": "2026-07-01T00:00:00.000Z"
+                  }
+                ]
+              },
+              {
+                "id": 2,
+                "name": "Audio",
+                "icon": "headphones",
+                "displayOrder": 1,
+                "coverAspectRatio": "square",
+                "scanMode": "manual",
+                "fileRenameEnabled": false,
+                "createdAt": "2026-07-02T00:00:00.000Z",
+                "updatedAt": "2026-08-02T00:00:00.000Z",
+                "bookCount": 1,
+                "folders": [
+                  {
+                    "id": 21,
+                    "path": "/mnt/user/media/audiobooks",
+                    "createdAt": "2026-07-02T00:00:00.000Z"
+                  }
+                ]
+              }
+            ]
