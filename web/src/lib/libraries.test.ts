@@ -959,7 +959,7 @@ describe('the sentence above the table says which read is missing', () => {
 
 describe('the three ways this screen shows nothing read differently', () => {
 	it('reads a 401 as an ended session, with no verbatim block', () => {
-		// §2.6 gives the endpoint exactly two error statuses. This one is a PROMPT:
+		// §2.7 gives the endpoint exactly two error statuses. This one is a PROMPT:
 		// nothing is broken, nothing was lost, and the server did not fail, so
 		// there is no upstream text to quote.
 		const failure = describeFailure(

@@ -353,7 +353,17 @@ express. There is nothing to clamp, so unlike §1 there is no `400` path at all.
           "container_name": "More Books",
           "is_metadata_authority": false
         }
-      ]
+      ],
+      // What the last import measured about how much of this library's upstream
+      // containers UsArr's credential could see. ⚠️ ABSENT MEANS NOTHING WAS
+      // MEASURED — never "complete". See §2.7.
+      "completeness": {
+        "state": "shortfall",
+        "total_items": 412,
+        "visible_items": 389,
+        "hidden_items": 23,
+        "checked_at": "2026-08-19T10:24:00Z"
+      }
     },
     {
       // §6.5 rule 5's retained orphan: no sources left, never auto-deleted,
@@ -389,6 +399,7 @@ from a failure.
 | `items[].include_in_search` | yes | Independent of `enabled`; both are read from their own column. |
 | `items[].item_count` | yes | `library_member` rows in this library **that the caller's access scope admits**. Edition-grained by the table's key; equal to a count of distinct works today, because the only writer files every work under the `edition_id = 0` "whole work" sentinel. |
 | `items[].orphaned_at` | **no** | RFC 3339 UTC. §6.5 rule 5's retained-with-a-reason state, set when the last source goes away. ⚠️ **Nothing writes it** — see §2.4. |
+| `items[].completeness` | **no** | What the last import measured about how much of this library's upstream containers UsArr's credential could see. ⚠️ **Absent means nothing was measured, never "complete"** — see §2.7. |
 | `items[].sources` | yes | Possibly `[]`. Never absent: an absent key reads as *"unknown"*, and *"this library has no sources"* is precisely what §17.8's orphaned state renders. |
 | `sources[].id` | yes | `library_source.id`. |
 | `sources[].service_instance_id` | yes | What §17.8's cross-link needs: *"a degraded source on a library row links to that instance's Services row"*. |
@@ -461,7 +472,63 @@ exactly that case — existing `managed_by = 'auto'` rows are **declared** accep
 migration and no backfill — so the invariant holds by declaration today and by construction once
 Accept lands. Either way the field would be a constant.
 
-### 2.6 Errors
+### 2.6 `completeness` — did UsArr's credential see the whole library?
+
+A catalogue adapter may compare **what the credential was shown** against **what the container says
+it holds**, and record the difference at import time. `completeness` is that verdict, folded to one
+per library and read back from `sync_report`. It is a **local read of a stored measurement** — the
+comparison happens during the import, never on this render path (principle 1).
+
+```jsonc
+"completeness": { "state": "shortfall", "total_items": 412, "visible_items": 389,
+                  "hidden_items": 23, "checked_at": "2026-08-19T10:24:00Z" }
+```
+
+| Field | Always present? | Meaning |
+| --- | --- | --- |
+| `state` | yes | `complete`, `shortfall` or `unverified`. There is no fourth member; a client that meets one must render **nothing**, never the nearest neighbour. |
+| `total_items` | **no** | What the container holds, as the upstream counted it with no per-account filter. |
+| `visible_items` | **no** | What UsArr's credential was shown, under the same upstream predicate. |
+| `hidden_items` | **no** | `total_items - visible_items`. `0` unless `state` is `shortfall`. |
+| `reason` | **no** | UsArr's own sentence about why the check could not be made. Present only with `unverified`. ⚠️ **Never upstream text** — reference/security.md §5. |
+| `checked_at` | **no** | RFC 3339 UTC: when the verdict was recorded. It is what lets a client render a shortfall as a *measurement* rather than as a live fact. |
+
+**The three states, and why there are three.**
+
+| State | Means |
+| --- | --- |
+| `complete` | Measured. The container's own count and what the credential was shown agree. |
+| `shortfall` | Measured. The credential was shown fewer items than the container holds — upstream, a content filter on the account UsArr connects with. It is **actionable**: the filter is set on that service, and widening it there makes the next import pick the items up. |
+| `unverified` | **Not measured.** The comparison could not be made. It must never render as either of the other two. |
+
+⚠️ **`unverified` is the state that keeps the other two honest, and it exists because of a named
+upstream dependency.** On BookOrbit the unfiltered side of the comparison comes from
+`GET /api/v1/libraries/{id}/stats`, which at `bookorbit/bookorbit@73b7877d` carries
+`@RequireLibraryAccess('viewer')` and **no `@RequirePermission`** (`library.controller.ts:108-112`),
+so a shared viewer account with an empty permission set reaches it. *Nobody promised UsArr that.*
+**Named degradation condition: if BookOrbit adds a permission guard to that route, every probe
+answers 403.** In that world every verdict becomes `unverified` — and a two-state design would have
+reported every library as `complete` on the day it stopped being able to tell. See ADR-0061.
+
+⚠️ **Absent is not `complete`.** The key is absent for every library whose source runs no
+completeness check — today that is every Kavita library — and for every library that has never been
+imported. It is the one optional key on this response whose absence is a fact about **UsArr** rather
+than about the library.
+
+⚠️ **This is an ITEM-level check, and it does not answer the other axis.** It compares two counts
+inside a container the credential can already see. Whether **whole containers** are hidden from
+UsArr's account is a different question and is **not answerable from a read-only account**:
+BookOrbit's `LibraryAccessGuard` throws an identical `ForbiddenException('No library access')` for
+*"the container exists and this account has no access row"* and for *"there is no such container"*
+(`common/guards/library-access.guard.ts`). `complete` on every library UsArr can see is therefore
+**not** a statement that UsArr can see every library, and no client may render it as one.
+
+**`total_items` is not `item_count`.** `item_count` counts `library_member` rows UsArr wrote;
+`total_items` counts what the upstream said it holds. The two differ for reasons that have nothing
+to do with a filter — an adapter that deliberately skips part of a container is one — so **do not
+subtract one from the other**.
+
+### 2.7 Errors
 
 | Status | `error` | When |
 | --- | --- | --- |

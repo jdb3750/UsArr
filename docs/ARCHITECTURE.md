@@ -4463,6 +4463,25 @@ being on 3b and Prowlarr carrying no catalogue. The reason previously read `whos
 rather than an absent delta time, because "no number" and "a number from four hours ago" read
 identically otherwise).
 
+**A NINTH STATE, added 2026-08-19 and NOT one of the eight above: *some items are hidden from
+UsArr's credential*.** A catalogue source may compare **what the credential was shown** against
+**what the container says it holds** and record the difference at import (ADR-0061,
+[`reference/http-api.md`](./reference/http-api.md) §2.6). The row then says *"Some books are hidden —
+this library holds 412 books; the service account can see 389"*, amber, with the age of the
+measurement, and one sentence above the table names the fix — which is **off this screen**: the
+filter is set on the service account UsArr connects with, and no control here can widen it.
+
+⚠️ **It has THREE values and the third one renders.** `complete` draws **nothing**, keeping this
+column's standing invariant that no positive health claim is made on it; `unverified` draws
+*"Completeness unverified"* in grey. The third state exists because the measurement depends on an
+upstream route carrying no permission guard, which is a property of somebody else's service and not a
+promise — **if that route is ever guarded, every verdict becomes `unverified`**, and a two-state
+design would have reported every library as complete on the day it stopped being able to tell.
+
+⚠️ **And it is an ITEM-level state. It says nothing about whether whole containers are hidden from
+the account**, which is a different question and is not answerable from a read-only credential at
+all. §17.8's screen must never render the clean half as completeness.
+
 **The *importing* state does not subscribe to `GET /api/events`. The answer is still "not yet", but
 ⚠️ the reason that used to carry it has been retracted — do not repeat it.** This paragraph
 previously named a reopen trigger: *when the Services screen's own subscription lands and the event

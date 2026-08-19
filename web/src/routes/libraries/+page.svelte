@@ -66,6 +66,7 @@
 	import { fetchServicesHealth } from '$lib/api';
 	import {
 		HEALTH_UNREAD,
+		completenessNote,
 		describeFailure,
 		fetchLibraries,
 		healthNote,
@@ -245,6 +246,13 @@
 	const showTable = $derived(loaded && failure === undefined);
 	/** The reverse direction of the join: a health row no library names. */
 	const unbound = $derived(unboundNote(unboundServices(libraries, health)));
+	/**
+	 * The shortfall's FIX, stated once. The numbers are per row and live in the
+	 * State cell; the action is identical on every affected row and is §9.1's
+	 * sentence above the table — and it points OFF this screen, because the
+	 * content filter is set on the service account and nothing here can change it.
+	 */
+	const completeness = $derived(completenessNote(libraries));
 </script>
 
 <svelte:head><title>Libraries · UsArr</title></svelte:head>
@@ -350,6 +358,17 @@
 		-->
 		{#if count > 0}
 			<p class="toolbar__note toolbar__label">{healthNote(health)}</p>
+		{/if}
+		{#if completeness}
+			<!--
+				⚠️ NOT A BANNER. DESIGN-DIRECTION reserves the banner for a DEGRADED
+				BACKEND, and nothing is degraded here: the import ran, the catalogue
+				renders, and what is being reported is that a service account was
+				configured to show UsArr less than the whole library. It is a note
+				beside the table, in the same slot as the other two facts that are
+				identical on every affected row.
+			-->
+			<p class="toolbar__note toolbar__label">{completeness}</p>
 		{/if}
 		{#if unbound}
 			<!--

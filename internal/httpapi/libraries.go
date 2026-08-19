@@ -181,6 +181,60 @@ type libraryResponse struct {
 	// orphaned library: an absent key reads as "unknown", and "this library has
 	// no sources" is precisely the fact §17.8's orphaned state renders.
 	Sources []librarySourceResponse `json:"sources"`
+
+	// Completeness is what the last import measured about how much of this
+	// library's upstream containers UsArr's credential could see.
+	//
+	// ⚠️ ABSENT MEANS NOTHING WAS MEASURED, AND A CLIENT MUST NOT READ IT AS
+	// "COMPLETE". It is absent for every library whose source runs no
+	// completeness check — today that is every Kavita library — and for every
+	// library that has never been imported. This is the ONE optional key on this
+	// response whose absence is a claim about UsArr rather than about the
+	// library, which is why it is `omitempty` on a pointer rather than a
+	// zero-valued struct: an object with `state: ""` would be a fourth state
+	// nobody defined.
+	Completeness *libraryCompletenessResponse `json:"completeness,omitempty"`
+}
+
+// libraryCompletenessResponse is one library's completeness verdict on the wire.
+//
+// A FIELD-BY-FIELD ALLOWLIST like every other struct in this file, and a
+// deliberately narrow one: `containers` is on store.LibraryCompleteness and is
+// NOT here, because the count of folded verdicts is a fact about the fold rather
+// than about the library, and no rendering asks for it. Add it when a screen
+// does.
+type libraryCompletenessResponse struct {
+	// State is `complete`, `shortfall` or `unverified`, and there is no fourth
+	// member. `unverified` is the state that keeps the other two honest: the
+	// check rests on an upstream route being unguarded, and if that changes
+	// every verdict becomes this one rather than silently becoming `complete`.
+	// See internal/store/completeness.go.
+	State string `json:"state"`
+
+	// Total, Visible and Hidden are ITEM COUNTS AS THE UPSTREAM COUNTED THEM,
+	// and they are NOT `item_count` above — that one counts library_member rows
+	// UsArr wrote, these count what the upstream said it holds. The two can
+	// legitimately differ for reasons that have nothing to do with a filter (a
+	// comic BookOrbit holds and UsArr does not map, for one), so a client must
+	// not subtract one from the other.
+	//
+	// ⚠️ ALL THREE ARE ABSENT WHEN State IS `unverified`. In that state they are
+	// not small or stale, they are UNKNOWN, and serving 0 would put "the library
+	// is empty" and "we did not look" in the same value.
+	Total   int64 `json:"total_items,omitempty"`
+	Visible int64 `json:"visible_items,omitempty"`
+	Hidden  int64 `json:"hidden_items,omitempty"`
+
+	// Reason is UsArr's own sentence about why the check could not be made,
+	// present only with `unverified`. ⚠️ NEVER UPSTREAM TEXT — the upstream's own
+	// error stays in the process log, which reference/security.md §5 requires and
+	// which is also why there is no status code or provider message here.
+	Reason string `json:"reason,omitempty"`
+
+	// CheckedAt is when the verdict was recorded. It answers "how old is this
+	// claim", which is the question any stored measurement raises, and it is what
+	// lets a client show a shortfall as a measurement rather than as a live fact.
+	CheckedAt *time.Time `json:"checked_at,omitempty"`
 }
 
 type librariesResponse struct {
@@ -237,6 +291,7 @@ func (s *Server) toLibraryResponse(l store.Library) libraryResponse {
 	}
 	out.Formats = s.libraryFormatsFor(l)
 	out.OrphanedAt = libraryTime(l.OrphanedAt)
+	out.Completeness = libraryCompletenessFor(l)
 	for _, src := range l.Sources {
 		out.Sources = append(out.Sources, librarySourceResponse{
 			ID:                  src.ID,
@@ -249,6 +304,31 @@ func (s *Server) toLibraryResponse(l store.Library) libraryResponse {
 			IsMetadataAuthority: src.IsMetadataAuthority,
 			MissingSince:        libraryTime(src.MissingSince),
 		})
+	}
+	return out
+}
+
+// libraryCompletenessFor renders the verdict, or nothing at all.
+//
+// NOTHING IS INVENTED HERE AND NOTHING IS DEFAULTED. A nil verdict means the
+// last import ran no completeness check for this library — or no import has ever
+// run — and the key is simply absent. The one transformation is the numeric
+// suppression under `unverified`: `omitempty` would already drop three zeroes,
+// and this makes the zeroing explicit so that a later edit adding a non-zero
+// default cannot quietly publish a count nobody measured.
+func libraryCompletenessFor(l store.Library) *libraryCompletenessResponse {
+	c := l.Completeness
+	if c == nil {
+		return nil
+	}
+	out := &libraryCompletenessResponse{State: string(c.State)}
+	if c.State == store.CompletenessUnverified {
+		out.Reason = c.Reason
+	} else {
+		out.Total, out.Visible, out.Hidden = c.Total, c.Visible, c.Hidden
+	}
+	if at, err := store.ParseTime(c.CheckedAt); err == nil {
+		out.CheckedAt = &at
 	}
 	return out
 }

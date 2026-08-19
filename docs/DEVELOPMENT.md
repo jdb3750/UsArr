@@ -1500,6 +1500,23 @@ paragraph describing a repo that no longer exists.
   BookOrbit ADR as 0052, so at that tip the sidebar branch still carries a second, conflicting
   `ADR-0052` and now has to renumber a merged-and-cited id out of its own history. The cost lands on
   whoever merges second, and it is not paid by the thread that caused it.
+  * ⚠️ **The placeholder banner says the id is pending and nothing else — it never enumerates the
+    sites that will need the number.** This is the bullet above applied one level down: the brief
+    that allocates the id is the only site list, the dispatcher allocates and the worker never
+    derives, and a banner carrying its own list is a second, competing mechanism inviting exactly
+    that derivation. ADR-0061 shipped with such a list and the list was **incomplete** — it omitted
+    `docs/ARCHITECTURE.md` §17.8, so a worker filling the id by following the banner rather than the
+    brief would have left that reference dead, and the sweep would have looked finished. Say the id
+    is pending, point at a tree-wide grep, and stop. Do **not** keep the list behind a
+    *"non-exhaustive, grep anyway"* hedge: a checklist in front of a reader beats an instruction to
+    go looking, which is precisely how this one failed.
+  * ⚠️ **Grep for the placeholder case-insensitively — `grep -ri 'adr-xxxx' .` — and say the `-i`
+    out loud wherever the sweep is instructed.** A lowercase anchor form exists, and a tree-wide
+    `grep 'ADR-XXXX'` reported clean while an `<a id="adr-xxxx"></a>` was still sitting in the tree;
+    the uppercase pattern cannot see it. **Occurrences that *describe* the placeholder rather than
+    use it — this bullet, and the dated allocation records in `docs/REVIEW-LOG.md` — are left
+    standing by a fill-in sweep**, or the sweep deletes the rule that produced it, which came close
+    to happening here and was caught only by the sweeping agent's judgement.
   * ⚠️ **A gap in either sequence is correct, and nobody renumbers to close one.** Closing a gap
     rewrites ids that other documents, commit messages and code comments already cite, and it is
     exactly the shared-counter operation this rule exists to avoid — the cure is the disease.

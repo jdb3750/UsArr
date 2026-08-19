@@ -756,3 +756,321 @@ func TestListLibrariesOrderingSortIsIntentional(t *testing.T) {
 			"same change.", joined)
 	}
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// The THIRD statement's plan guard — libraryCompletenessSQL.
+//
+// It was the one statement 1bc400a added without one, and its author flagged the
+// gap themselves. What follows is what MEASURING it produced, which is not quite
+// what that flag guessed.
+//
+// MEASURED — SQLite 3.53.4 (github.com/ncruces/go-sqlite3), this schema, the
+// corpus below, NO ANALYZE. Owner scope, indented by EXPLAIN QUERY PLAN's parent
+// column:
+//
+//	SEARCH ls USING COVERING INDEX sqlite_autoindex_library_source_1 (library_id=?)
+//	SEARCH si USING INTEGER PRIMARY KEY (rowid=?)
+//	SEARCH r USING INTEGER PRIMARY KEY (rowid=?)
+//	CORRELATED SCALAR SUBQUERY 1
+//	  SEARCH r2 USING INDEX ix_sync_report_instance (service_instance_id=?)
+//	  USE TEMP B-TREE FOR ORDER BY
+//	USE TEMP B-TREE FOR LAST TERM OF ORDER BY
+//
+// Instance scope, which is the multi-user plan, differs in three places only: si
+// leads the join, ls picks up its second key column
+// (`library_id=? AND service_instance_id=?`), and the outer sort is a full
+// `USE TEMP B-TREE FOR ORDER BY` rather than a last-term one.
+//
+// ⚠️ THERE ARE TWO TEMP B-TREES, AND ONE OF THEM IS INSIDE THE CORRELATED
+// SUBQUERY. That is worse than "it seeks the instance and then filters kind and
+// remote_id within those rows", which is how the gap was flagged.
+// ix_sync_report_instance is (service_instance_id, created_at DESC) and the
+// subquery orders by `r2.id DESC`, so the newest-verdict pick cannot come off
+// the index at all: for every library_source row, SQLite walks that instance's
+// sync_report rows, filters kind/remote_kind/remote_id with no index help, and
+// SORTS what survives to take one row. sync_report is append-only and this kind
+// writes one row per container per import, so the walked set grows with import
+// COUNT forever — it is not bounded by the size of the library.
+//
+// ⚠️ AND THE INDEX IS WHAT COSTS THE SORT. With ix_sync_report_instance DROPPED
+// the subquery plans as a bare `SCAN r2` and the sort DISAPPEARS — a table scan
+// visits rows in rowid order, which is `r2.id` order, so `ORDER BY r2.id DESC`
+// comes free. Arm 1 of TestLibraryCompletenessPlanGuardFires prints exactly
+// that. So the two shapes trade a bounded walk for a sort, and neither is the
+// one this read wants; whoever scopes the index above should know that dropping
+// the existing one is not the alternative.
+//
+// This is PINNED, NOT FIXED. The fix is an index leading with
+// (service_instance_id, kind, remote_kind, remote_id) and trailing id, which is
+// a new migration and a scoping decision that is not a test's to take. What the
+// guard buys meanwhile is that the plan cannot get WORSE than the paragraph
+// above without a test going red.
+//
+// WHAT IS DELIBERATELY NOT ASSERTED: the absence of the two sorts, because they
+// are really there and forbidding them would fail on the first honest run — the
+// same posture TestSearchLibraryPlanIsSeeks takes for its two. They are asserted
+// as EXPECTED and counted, so if either disappears the plan changed shape and
+// this comment must be re-read rather than left silently wrong.
+// ─────────────────────────────────────────────────────────────────────────────
+
+// seedCompletenessReports gives sync_report rows for every source in the corpus,
+// several imports deep, plus rows of another kind on the same containers so that
+// a subquery which stopped filtering on kind would pick one of those instead.
+//
+// Rows rather than an empty table, because a correlated subquery over nothing is
+// not the read that ships. It does not change the PLAN — measured identical at 0
+// rows, at 240 rows, and at 240 rows after `ANALYZE`, since with no sqlite_stat1
+// the planner chooses from the schema, and this schema offers it no alternative
+// to choose. That null result is recorded here so nobody re-derives it.
+func seedCompletenessReports(t *testing.T, s *Store) {
+	t.Helper()
+	sources := []struct {
+		instance int
+		ref      string
+	}{{1, "11"}, {1, "12"}, {2, "21"}, {2, "22"}}
+
+	if err := s.DB().Write(t.Context(), func(ctx context.Context, tx *sql.Tx) error {
+		for run := range 3 {
+			for _, src := range sources {
+				at := fmt.Sprintf("2026-08-%02d 00:00:00", run+1)
+				if _, err := tx.ExecContext(ctx,
+					`INSERT INTO sync_report
+					   (service_instance_id, kind, remote_kind, remote_id, detail, created_at)
+					 VALUES (?, ?, 'library', ?, ?, ?)`,
+					src.instance, SyncReportContentCompleteness, src.ref,
+					`{"state":"complete","container_identity":"c","expected":10,"visible":10}`,
+					at); err != nil {
+					return err
+				}
+				if _, err := tx.ExecContext(ctx,
+					`INSERT INTO sync_report
+					   (service_instance_id, kind, remote_kind, remote_id, detail, created_at)
+					 VALUES (?, 'items_skipped', 'library', ?, '{}', ?)`,
+					src.instance, src.ref, at); err != nil {
+					return err
+				}
+			}
+		}
+		return nil
+	}); err != nil {
+		t.Fatalf("seed sync_report: %v", err)
+	}
+}
+
+// libraryCompletenessPlan renders the SHIPPED statement through
+// libraryCompletenessSQL — the same function attachLibraryCompleteness calls,
+// per docs/DEVELOPMENT.md §11 rule 1: a guard that asserts against a hand-copied
+// lookalike is probing a proxy.
+func libraryCompletenessPlan(t *testing.T, s *Store, scope Scope) []string {
+	t.Helper()
+	query, args := libraryCompletenessSQL(scope, []int64{1, 2, 3})
+	return planStepsOf(t, s, query, args)
+}
+
+// planStepsOf is planOf's ordered sibling. It returns the steps as a slice
+// rather than one joined string because the step that matters most here is a
+// temp b-tree whose meaning depends entirely on which parent it hangs off:
+// `USE TEMP B-TREE FOR ORDER BY` at the top level is the harmless outer
+// `ORDER BY ls.library_id, ls.id`, and the same words directly under
+// `CORRELATED SCALAR SUBQUERY 1` are the per-source sort described above.
+// EXPLAIN QUERY PLAN emits children immediately after their parent, and
+// db.QueryPlan drops the parent column, so POSITION is what tells them apart.
+func planStepsOf(t *testing.T, s *Store, query string, args []any) []string {
+	t.Helper()
+	plan, err := db.QueryPlan(t.Context(), s.DB().Read(), query, args...)
+	if err != nil {
+		t.Fatalf("QueryPlan: %v", err)
+	}
+	return plan
+}
+
+// libraryCompletenessPlanFaults is the assertion the guard and its firing both
+// run, so neither can drift from the other.
+func libraryCompletenessPlanFaults(plan []string) []string {
+	joined := strings.Join(plan, " | ")
+	var faults []string
+
+	if !strings.Contains(joined,
+		"SEARCH ls USING COVERING INDEX sqlite_autoindex_library_source_1 (library_id=?") {
+		faults = append(faults,
+			"the library_source leg is not a covering seek on the unique key's leading "+
+				"library_id, so the IN list walks every source in the install")
+	}
+	if !strings.Contains(joined, "SEARCH si USING INTEGER PRIMARY KEY") {
+		faults = append(faults, "the service_instance join is not a rowid lookup")
+	}
+	if !strings.Contains(joined, "SEARCH r USING INTEGER PRIMARY KEY (rowid=?)") {
+		faults = append(faults,
+			"the verdict row is not fetched by rowid: `r.id = (subquery)` no longer "+
+				"resolves to an integer-primary-key seek, so the outer join walks sync_report")
+	}
+	if strings.Contains(joined, "SCAN ") {
+		faults = append(faults, "the plan contains a SCAN; every leg of this read is a seek")
+	}
+
+	// The subquery, BY POSITION: its sync_report leg must be the index seek, and
+	// the step under it must be the one measured sort rather than a second one.
+	i := indexOfPlanStep(plan, "CORRELATED SCALAR SUBQUERY 1")
+	switch {
+	case i < 0:
+		faults = append(faults,
+			"the newest-verdict pick is no longer a correlated scalar subquery, so this "+
+				"guard is asserting against a statement it does not describe")
+	case i+2 >= len(plan):
+		faults = append(faults, "the correlated subquery has fewer than two steps under it")
+	default:
+		const wantSeek = "SEARCH r2 USING INDEX ix_sync_report_instance (service_instance_id=?)"
+		if plan[i+1] != wantSeek {
+			faults = append(faults, fmt.Sprintf(
+				"the subquery's sync_report leg is %q, not %q — without that index the "+
+					"newest-verdict pick reads the whole table once per library source",
+				plan[i+1], wantSeek))
+		}
+		if plan[i+2] != "USE TEMP B-TREE FOR ORDER BY" {
+			faults = append(faults, fmt.Sprintf(
+				"the step under the subquery's seek is %q, not the one measured sort "+
+					"(`USE TEMP B-TREE FOR ORDER BY`). If that sort VANISHED the plan "+
+					"improved, and the block comment above seedCompletenessReports is then "+
+					"wrong; fix both in the same change", plan[i+2]))
+		}
+	}
+
+	// Exactly two, both accounted for: the subquery's `ORDER BY r2.id DESC` and
+	// the outer `ORDER BY ls.library_id, ls.id`. A third is a sort nobody wrote
+	// down.
+	if n := strings.Count(joined, "USE TEMP B-TREE"); n != 2 {
+		faults = append(faults, fmt.Sprintf(
+			"the plan has %d temp b-trees, want exactly 2 (the subquery's `ORDER BY "+
+				"r2.id DESC` and the outer `ORDER BY ls.library_id, ls.id`)", n))
+	}
+	return faults
+}
+
+func indexOfPlanStep(plan []string, step string) int {
+	for i, s := range plan {
+		if s == step {
+			return i
+		}
+	}
+	return -1
+}
+
+func TestLibraryCompletenessPlanIsSeeksAndTwoSorts(t *testing.T) {
+	s := newTestStore(t)
+	seedLibrariesCorpus(t, s)
+	seedCompletenessReports(t, s)
+
+	owner := libraryCompletenessPlan(t, s, OwnerScope(0))
+	if faults := libraryCompletenessPlanFaults(owner); len(faults) > 0 {
+		t.Errorf("the owner plan is wrong:\n  plan: %s\n  %s",
+			strings.Join(owner, "\n        "), strings.Join(faults, "\n  "))
+	}
+	// The outer sort in owner scope is a LAST TERM one: the IN list is walked in
+	// library_id order off sqlite_autoindex_library_source_1, so only ls.id is
+	// left to sort.
+	if last := owner[len(owner)-1]; last != "USE TEMP B-TREE FOR LAST TERM OF ORDER BY" {
+		t.Errorf("the owner plan's outer sort is %q, want a LAST TERM sort:\n  %s\n"+
+			"A full sort here means library_id stopped arriving in order from the "+
+			"library_source index.", last, strings.Join(owner, "\n  "))
+	}
+
+	// The SCOPED plan is the one a multi-user install runs, and it reverses the
+	// join order — si leads, ls picks up its second key column. Neither may cost
+	// a seek or add a sort.
+	scoped := libraryCompletenessPlan(t, s, Scope{UserID: 0, InstanceIDs: []int64{1, 2}})
+	if faults := libraryCompletenessPlanFaults(scoped); len(faults) > 0 {
+		t.Errorf("the scoped plan is wrong:\n  plan: %s\n  %s",
+			strings.Join(scoped, "\n        "), strings.Join(faults, "\n  "))
+	}
+	const wantScopedSource = "SEARCH ls USING COVERING INDEX " +
+		"sqlite_autoindex_library_source_1 (library_id=? AND service_instance_id=?)"
+	if !strings.Contains(strings.Join(scoped, " | "), wantScopedSource) {
+		t.Errorf("the scoped source leg does not constrain both key columns.\n"+
+			"  got:  %s\n  want: %s\n"+
+			"Constraining only library_id would make the instance scope a post-filter, "+
+			"and a visibility predicate that filters after the join is the shape §14 "+
+			"does not allow.", strings.Join(scoped, "\n        "), wantScopedSource)
+	}
+}
+
+// FIRING THE PLAN GUARD. Three arms, each breaking a different thing it
+// protects, each running the SAME libraryCompletenessPlanFaults the test above
+// runs.
+func TestLibraryCompletenessPlanGuardFires(t *testing.T) {
+	// Arm 1 — ix_sync_report_instance is dropped outright, the shape a later
+	// migration's tidy-up would take. This is the regression that matters most:
+	// sync_report is append-only, so without the index the newest-verdict
+	// subquery reads the WHOLE table once per library source, on a screen that
+	// renders from local SQLite precisely so that it never waits.
+	t.Run("ix_sync_report_instance dropped", func(t *testing.T) {
+		s := newTestStore(t)
+		seedLibrariesCorpus(t, s)
+		seedCompletenessReports(t, s)
+		if err := s.DB().Write(t.Context(), func(ctx context.Context, tx *sql.Tx) error {
+			_, err := tx.ExecContext(ctx, `DROP INDEX ix_sync_report_instance`)
+			return err
+		}); err != nil {
+			t.Fatalf("drop index: %v", err)
+		}
+
+		plan := libraryCompletenessPlan(t, s, OwnerScope(0))
+		faults := libraryCompletenessPlanFaults(plan)
+		if len(faults) == 0 {
+			t.Fatalf("the guard passed a plan with ix_sync_report_instance dropped:\n  %s",
+				strings.Join(plan, "\n  "))
+		}
+		t.Logf("guard fired with ix_sync_report_instance dropped:\n  plan:   %s\n  faults: %v",
+			strings.Join(plan, "\n          "), faults)
+	})
+
+	// Arm 2 — the index survives but is disqualified from the subquery with
+	// SQLite's unary plus (<https://sqlite.org/optoverview.html>), which is the
+	// shape a rewritten predicate would take. This arm proves the guard names
+	// the index it means rather than merely noticing that the table has one.
+	t.Run("the subquery loses its index", func(t *testing.T) {
+		s := newTestStore(t)
+		seedLibrariesCorpus(t, s)
+		seedCompletenessReports(t, s)
+
+		query, args := libraryCompletenessSQL(OwnerScope(0), []int64{1, 2, 3})
+		broken := strings.Replace(query,
+			"WHERE r2.service_instance_id = ls.service_instance_id",
+			"WHERE +r2.service_instance_id = ls.service_instance_id", 1)
+		if broken == query {
+			t.Fatalf("the shipped statement no longer contains the subquery's instance "+
+				"predicate, so this arm is asserting against nothing:\n%s", query)
+		}
+		plan := planStepsOf(t, s, broken, args)
+		faults := libraryCompletenessPlanFaults(plan)
+		if len(faults) == 0 {
+			t.Fatalf("the guard passed a plan whose subquery scans sync_report:\n  %s",
+				strings.Join(plan, "\n  "))
+		}
+		t.Logf("guard fired with the subquery's index disqualified:\n  plan:   %s\n  faults: %v",
+			strings.Join(plan, "\n          "), faults)
+	})
+
+	// Arm 3 — the outer library_source seek is disqualified, so the read walks
+	// every source in the install and runs the subquery against each. The scan
+	// half of the guard is executed rather than merely written down.
+	t.Run("the source leg degrades to a scan", func(t *testing.T) {
+		s := newTestStore(t)
+		seedLibrariesCorpus(t, s)
+		seedCompletenessReports(t, s)
+
+		query, args := libraryCompletenessSQL(OwnerScope(0), []int64{1, 2, 3})
+		broken := strings.Replace(query, "WHERE ls.library_id IN (", "WHERE +ls.library_id IN (", 1)
+		if broken == query {
+			t.Fatalf("the shipped statement no longer contains the library IN list this arm "+
+				"rewrites:\n%s", query)
+		}
+		plan := planStepsOf(t, s, broken, args)
+		faults := libraryCompletenessPlanFaults(plan)
+		if len(faults) == 0 {
+			t.Fatalf("the guard passed a plan that scans library_source:\n  %s",
+				strings.Join(plan, "\n  "))
+		}
+		t.Logf("guard fired on a scan of library_source:\n  plan:   %s\n  faults: %v",
+			strings.Join(plan, "\n          "), faults)
+	})
+}
