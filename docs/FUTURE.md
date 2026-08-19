@@ -191,8 +191,12 @@ false-positive-management product that nobody is staffed to run.
 exist and would have to be built), the inbox UI, per-user verdict scoping, and permanent-rejection
 semantics — a rejected pair that keeps reappearing is the fastest way to make the feature hated.
 
-**The seam.** **`work_relation` already carries `confidence REAL` and `evidence TEXT NOT NULL`**
-(`reference/schema.md` §11) even though v1 writes only 0.90–1.00 values from authoritative sources.
+**The seam.** **`work_relation` is designed to carry `confidence REAL` and `evidence TEXT NOT NULL`**
+— the DDL is `reference/schema.md` §11 *Cross-media edges · **v0.3***, which is the design of record.
+⚠️ **The table is deferred to v0.3 and no shipped migration creates it**;
+`TestDeferredTablesAreAbsent` (`internal/db/migrate_test.go`) fails if one does, so the seam is a
+designed shape to build to, not a column pair sitting in the schema waiting. The design writes only
+0.90–1.00 values from authoritative sources.
 Those two columns are exactly what a fuzzy tier would populate, and `evidence` is what makes a
 review UI usable rather than a guessing game. Adding the ladder later is: write lower-confidence
 rows, add `status`/`reviewed_by`/`reviewed_at`, build the surface. **No change to how edges are read,
@@ -676,10 +680,11 @@ with `evidence`. Cached in `cache.db`, obeying Open Library's 1 req/s (3 with an
 `User-Agent`) and Audnexus's 100 req/min. **And it must follow `/type/redirect`** — a merged Open
 Library work becomes a redirect record, so an OLID stored last month can resolve to a redirect today.
 
-**The seam.** Three things, all already present: `edition.format` distinguishes `ebook` from
-`audiobook`; `external_id` is `(source, value, work_id, edition_id)`, so an ISBN can be written to the
-edition side and an OLID to the work side without a schema change; and `work_relation` carries
-`confidence` and `evidence`. **The rule that keeps the seam usable is in ADR-0031 and §6.4: never let
+**The seam.** Three things — two in the shipped schema, one designed: `edition.format` distinguishes
+`ebook` from `audiobook`; `external_id` is `(source, value, work_id, edition_id)`, so an ISBN can be
+written to the edition side and an OLID to the work side without a schema change; and `work_relation`
+**is designed to carry** `confidence` and `evidence` (`reference/schema.md` §11), a table deferred to
+v0.3 and held out of the shipped schema by `TestDeferredTablesAreAbsent`. **The rule that keeps the seam usable is in ADR-0031 and §6.4: never let
 an ISBN or an ASIN satisfy `ux_extid_work_strong`.** Break that and the pass has nothing to attach to.
 
 **A companion requirement, and it is *not* deferred with the rest of this entry — it moved out.** A
