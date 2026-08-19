@@ -90,7 +90,7 @@ because no ADR ever decided it. Annotating leaves that failure mode nowhere to h
 | [0036](#adr-0036) | No catalogue source ships in v0.1; they arrive one at a time after it | **Accepted** — owner-decided 2026-08-16; **amends** §16; **re-sequences [ADR-0032](#adr-0032) and [ADR-0035](#adr-0035)** without rejecting any source; ⚠️ **amended 2026-08-17 by [ADR-0042](#adr-0042)** — its libraries bullet justified the subsystem partly on *"the request destination v0.1's write path routes on"*, and **that write path re-sequences out of v0.1**; the subsystem stays on its other grounds; ⚠️ **amended 2026-08-17 by [ADR-0041](#adr-0041)** — the owner runs neither Sonarr nor Radarr, so this ADR's *"prove the replica thesis on real data"* criterion was unmeetable as scoped: **Kavita ships in v0.1 as the sync core's first adapter** and the \*Arr adapters re-sequence behind it. The rule — one source, proven on real data, before a second adapter — is kept unchanged |
 | [0037](#adr-0037) | TOFU SPKI pin enrolment is removed, not completed; enforcement stays | **Accepted** — 2026-08-16; amends no ADR; reopening conditions stated (a pin field on the update path + the change-acceptance UI) |
 | [0038](#adr-0038) | A list freezes its order while a user is aiming at it | **Accepted** — 2026-08-16; amends no ADR; the argument lives in `design/DESIGN-DIRECTION.md` §9.1a and ARCHITECTURE §17.5, this record holds the rejected alternatives |
-| [0039](#adr-0039) | `write_queue.state` loses its `CHECK`; `work_id` gets its foreign key back | **Accepted** — 2026-08-17; **supersedes** `reference/schema.md` §10 step 1 and the seam in `FUTURE.md` §11 / §11.1; closes `REVIEW-LOG.md` WQ-05; ⚠️ **amended 2026-08-17** — decision 3's ground 1 is **struck**, on a misquotation of `reference/sync.md` §4 that dropped the words *toward the \*Arr*: the decision stands on grounds 2 and 3, which are independent of it; ⚠️ **corrected 2026-08-17** — decision 1 and the first rejected alternative wrote the Go `state` validation as **done**; it is **owed by the first `write_queue` writer** and nothing validates the vocabulary today (`REVIEW-LOG.md` M5-25) |
+| [0039](#adr-0039) | `write_queue.state` loses its `CHECK`; `work_id` gets its foreign key back | **Accepted** — 2026-08-17; **supersedes** `reference/schema.md` §10 step 1 and the seam in `FUTURE.md` §11 / §11.1; closes `REVIEW-LOG.md` WQ-05; ⚠️ **amended 2026-08-17** — decision 3's ground 1 is **struck**, on a misquotation of `reference/sync.md` §4 that dropped the words *toward the \*Arr*: the decision stands on grounds 2 and 3, which are independent of it; ⚠️ **corrected 2026-08-17** — decision 1 and the first rejected alternative wrote the Go `state` validation as **done**; it is **owed by the first `write_queue` writer** and nothing validates the vocabulary today (`REVIEW-LOG.md` M5-25); ⚠️ **amended 2026-08-19** — the *declaring* half is **discharged in code**: `007e58e` landed `internal/store/writequeue.go`, whose `ValidWriteQueueState` is the vocabulary's **single Go home**, and the tree's only `write_queue` writer — the **bench-tagged** fixture `internal/db/spike/fixture.go`, behind `//go:build bench` — routes through it; **but there is still NO PRODUCTION WRITER**, so at runtime nothing validates anything because nothing writes anything, and *"nothing validates the vocabulary today"* is false about the declaration and still true about the runtime; **the claim worth recording is stronger than either** — an AST guard (`TestWriteQueueWritesValidateTheStateVocabulary`) fails `make check` if anything writes `write_queue` while nothing references the validator, so **the first production writer cannot be written without validating**, and the guard **fired unplanted** against the bench writer the moment it landed |
 | [0040](#adr-0040) | The six subtype tables land with the catalogue source that writes each | **Accepted** — 2026-08-17; records as a decision what `00005_library_sync.sql` did; **in tension with** ARCHITECTURE §16's enumerated v0.1 schema line, which is left to the thread that owns §16; ⚠️ **amended 2026-08-17 by [ADR-0044](#adr-0044)** — the RULE is confirmed and **applied**, not overridden, and one table moves under it: `work_credit` lands with **Kavita** rather than Navidrome, because Kavita is the source that writes credits. `work_album` and `work_track` are unaffected and this ADR's decision clause 1 is otherwise untouched |
 | [0041](#adr-0041) | The sync core ships with **Kavita** as its first adapter; Sonarr and Radarr re-sequence behind it | **Accepted** — owner-decided 2026-08-17; **amends [ADR-0036](#adr-0036)** (*"No catalogue source ships in v0.1"*) and **amends** ARCHITECTURE §16, whose replacement text is proposed here and routed to the thread that owns §16; **re-sequences, rejects nothing** — Sonarr and Radarr still arrive; confirms [ADR-0035](#adr-0035) and [ADR-0040](#adr-0040); ⚠️ **amended 2026-08-17 by [ADR-0042](#adr-0042)** — the write-path question this ADR flagged as *"NOT decided here"* is now answered: the minimal write path **re-sequences with the \*Arr adapters**, so its consequence bullet and the ⚠️ clause in its proposed §16 text are both settled · ⚠️ **amended 2026-08-19 by [ADR-0052](#adr-0052)** — clause 1's source is now **BookOrbit**, on the owner's decision to sunset Kavita; clauses 2 and 3 stand, and **clause 4's channel list is reopened**, not re-answered |
 | [0042](#adr-0042) | v0.1's minimal write path re-sequences with the \*Arr adapters; Sonarr and Radarr stay on the roadmap | **Accepted** — owner-decided 2026-08-17; **answers the question [ADR-0041](#adr-0041) flagged and refused**; **amends** ARCHITECTURE §16, [ADR-0041](#adr-0041), [ADR-0036](#adr-0036) and [ADR-0012a](#adr-0012a); **re-sequences, rejects nothing** — [ADR-0012a](#adr-0012a)'s queue design is untouched, the seam costs **no migration**, and Sonarr and Radarr stay on the roadmap at the owner's explicit condition; raises one open question it does not close (neither \*Arr has a milestone); ⚠️ **amended 2026-08-17 by [ADR-0045](#adr-0045)** — that open question is **closed**: the owner delegated the call and **Sonarr, Radarr and this write path all land in v0.2**. The decision, the measurement and the seam are untouched; only *"this ADR does not assign them a milestone"* (clause 5), alternative (e) and the open question itself are overtaken |
@@ -101,7 +101,7 @@ because no ADR ever decided it. Annotating leaves that failure mode nowhere to h
 | [0047](#adr-0047) | Prowlarr pins **ONE** spec — floor and ceiling are the same git blob — guarded by an offline blob-identity pin in `check` plus a network drift check outside it | **Accepted** — 2026-08-17; **is the per-upstream remedy [ADR-0046](#adr-0046)'s 2026-08-17 amendment (`LS-53`, `cf5fab5`) points at**, and **answers [ADR-0046](#adr-0046)'s open question 1** (*"`prowlarr.json` has the same shape of gap"*) by **correcting its premise** — measured independently by both threads, `src/Prowlarr.Api.V1/openapi.json` is the **same blob `134d31d7…`** at `v2.5.2.5491` and `develop`, not *"develop, a minor version ahead"*; **the two-spec split is vacuous here, not impossible** — nothing stops two byte-identical copies being vendored, and the second would prove exactly what the first already proves (the Context paragraph's wording, which this row previously overstated); **changes what a green means, not what the code does** — no adapter field, request or migration changes, no file added or renamed; the one file is stale (last regenerated **2025-06-07**, 33 releases ago) and describes **neither ref reliably**; `TestVendoredSpecIsThePinnedBlob` pins the blob **offline, in `check`**, `TestSpecDriftRefsStillShareThePinnedBlob` catches upstream regenerating **on the network, in `make spec-drift`, never in `check`**, and `knownSpecDivergences` machine-checks the `Limit`/`Offset` `int?` gap (PR #2654, `v2.3.6.5351`) as **still live**; `info.version` **`1.0.0`** is Swashbuckle's placeholder and is pinned to by nothing; leaves [ADR-0035](#adr-0035), [ADR-0041](#adr-0041) and [ADR-0046](#adr-0046) untouched; the floor `v2.5.2.5491` is **owner-confirmed 2026-08-17**; raises two open questions it does not close (the floor drifts when the owner's auto-updating box does, and `make spec-drift` is unautomated) |
 | [0048](#adr-0048) | A library **proposal** is not a row in `library`; a row is created only on Accept | **Accepted** — 2026-08-17; **refines [ADR-0026](#adr-0026)** (its binding model, four verbs, single-kind rule and four tables are untouched — what is decided is *when a `library` row comes into existence*, which ADR-0026 did not say); **applies [ADR-0004](#adr-0004)** rather than excepting it — the connect probe is a **setup** action, not a render path; **answers the open decision `web/src/routes/libraries/+page.svelte` records at `78660a4`**, which named three candidates and picked none — this takes the first, *a proposal stops being a row until it is accepted*, and **rejects the other two in writing**; **closes off a third `managed_by` state and any `proposed` flag on `library`**; **costs no migration, no data change and no new state** — ⚠️ **and not for the reason it first appears**: `managed_by` **cannot** express "proposed" and never could, which is a fact *for* this decision rather than against it, because after it the unaccepted state has no persistent representation to record; existing `managed_by = 'auto'` rows are **declared** accepted on upgrade rather than read as accepted, since the column cannot tell an accepted library from one the user has never been shown; states plainly that **it describes unbuilt behaviour on two counts** — `'user'` has never been written by any code path, so §17.8's one-way door is specified and unimplemented, and today's import **creates rows unconditionally**, so implementing Accept **removes** creation from the import path rather than adding a screen to it; **that removal is not done here** — it belongs to the library thread that builds §17.8 |
 | [0049](#adr-0049) | Key ids are **derived from the key material**; there is no counter and no settings row | **Accepted** — 2026-08-19; **enables `usarr key rotate`** rather than being asked for by it; `crypto.KeyID(kek)` is the first four bytes big-endian of `sha256("usarr/kek-id/v1" || kek)`, forced nonzero, so **a key file names its own id** and no second artifact has to stay consistent with the key material across a crash — which is exactly the window rotation exists to survive, since the SQLite transaction and the key-file write are not one atomic unit; **closes off a monotonic counter and a `key_id` row in a settings table**, both of which reintroduce that window (and the settings row puts key identity *inside* the thing being rotated); startup registers the live key under both `KeyID(kek)` and the legacy id `1`, so **every existing row keeps opening with no migration** and the first rotation retires `1`; **costs no migration** — `service_instance.kek_id` is already `INTEGER`; **adds no HKDF label** and does not touch `derive.go`'s five frozen ones; ⚠️ **publishes a 32-bit hash of the KEK in every stored row**, accepted in writing because RFC 3394 key-wrap **already** gives an offline attacker an *exact* per-row oracle for the same question, so a 32-bit filter grants no capability the ciphertext did not |
-| [0050](#adr-0050) | The image pipeline's base output format is **stdlib JPEG**; **AVIF is deferred** with its seam kept | **Accepted** — 2026-08-19; **amends** ARCHITECTURE §4.4 and §4.4.1, which named AVIF as the only output codec and named **no base format at all** — a spec missing its base case, which is why this ADR was owed; the reason for stdlib is **zero new dependencies in a static binary** (UsArr has **five** direct dependencies; `image/jpeg` adds none), **not** "JPEG is good enough" — the ADR records the ledger it is traded against, roughly **2–3× larger** than AVIF on photographic content, so a future reader can weigh it; **AVIF is buildable here** (`gen2brain/avif` v0.6.0, MIT, cgo-free, libaom-as-WASM) and is deferred on a **measured trade with a named reopening condition**, not rejected — one MIT dependency plus a **second** WASM runtime, since `wazero` is **verified absent** from this module graph after `ncruces/go-sqlite3` moved to `wasm2go`, and the **binary-size delta is recorded as UNMEASURED rather than estimated**; **reopens when** someone measures the binary delta and the per-width encode cost and decides the bytes are worth it (an ADR amendment plus one map entry, **no migration**), or when an upstream is found serving a format the stdlib cannot decode — ⚠️ **measured, not assumed, and the first draft's assumption was wrong: Kavita is v0.1's catalogue source and its *Save Media As* setting writes covers as PNG (default), WebP or AVIF**, so one admin checkbox on the owner's own server produces input this binary cannot decode (`x/image/webp` is decode-only; there is no pure-Go AVIF decoder in `x/image`), which relocates the likeliest revisit from output size to **input decode**; **one codec per row is an explicit invariant** — clause 1 puts `orig` inside UsArr's encoder rather than leaving it a passthrough, because §4.4 stores **seven widths per asset** and the column is **one per row**, so per-`role` variation stays expressible and per-**width** variation is foreclosed in writing; the seam is **`image_asset.format`** (migration `00008_image_asset_format.sql`) — nullable `TEXT`, no default, **no `CHECK`** on [ADR-0039](#adr-0039)'s reasoning; ⚠️ **unlike ADR-0039 the Go validation SHIPPED WITH THE COLUMN** (`internal/store/images.go`, plus an AST-walk guard that fails `check` if a writer lands without it), because ADR-0039's promised validator was never written and repeating that would be worse than a `CHECK`; ⚠️ **described a pipeline that did not exist** — when this ADR landed nothing wrote `image_asset`, so what shipped was the decision, the column and the guard; 🔻 **`7e5934d` built the pipeline** (`internal/imagepipeline` + `store.PutPosterAsset`) to clause 1, discharging two of the three owed items, leaving the AVIF deferral untouched, and **still never run against a real cover** |
+| [0050](#adr-0050) | The image pipeline's base output format is **stdlib JPEG**; **AVIF is deferred** with its seam kept | **Accepted** — 2026-08-19; **amends** ARCHITECTURE §4.4 and §4.4.1, which named AVIF as the only output codec and named **no base format at all** — a spec missing its base case, which is why this ADR was owed; the reason for stdlib is **zero new dependencies in a static binary** (UsArr has **five** direct dependencies; `image/jpeg` adds none), **not** "JPEG is good enough" — the ADR records the ledger it is traded against, roughly **2–3× larger** than AVIF on photographic content, so a future reader can weigh it; **AVIF is buildable here** (`gen2brain/avif` v0.6.0, MIT, cgo-free, libaom-as-WASM) and is deferred on a **measured trade with a named reopening condition**, not rejected — one MIT dependency plus a **second** WASM runtime, since `wazero` is **verified absent** from this module graph after `ncruces/go-sqlite3` moved to `wasm2go`, and the **binary-size delta is recorded as UNMEASURED rather than estimated**; **reopens when** someone measures the binary delta and the per-width encode cost and decides the bytes are worth it (an ADR amendment plus one map entry, **no migration**), or when an upstream is found serving a format the stdlib cannot decode — ⚠️ **measured, not assumed, and the first draft's assumption was wrong: Kavita is v0.1's catalogue source and its *Save Media As* setting writes covers as PNG (default), WebP or AVIF**, so one admin checkbox on the owner's own server produces input this binary cannot decode (`x/image/webp` is decode-only; there is no pure-Go AVIF decoder in `x/image`), which relocates the likeliest revisit from output size to **input decode**; **one codec per row is an explicit invariant** — clause 1 puts `orig` inside UsArr's encoder rather than leaving it a passthrough, because §4.4 stores **seven widths per asset** and the column is **one per row**, so per-`role` variation stays expressible and per-**width** variation is foreclosed in writing; the seam is **`image_asset.format`** (migration `00008_image_asset_format.sql`) — nullable `TEXT`, no default, **no `CHECK`** on [ADR-0039](#adr-0039)'s reasoning; ⚠️ **unlike ADR-0039 the Go validation SHIPPED WITH THE COLUMN** (`internal/store/images.go`, plus an AST-walk guard that fails `check` if a writer lands without it), because ADR-0039's promised validator was never written and repeating that would be worse than a `CHECK` — ⚠️ **true when written and the contrast still holds; the premise was discharged hours later on 2026-08-19 by `007e58e`**, which gave `write_queue.state` the same treatment (`internal/store/writequeue.go` plus its own AST guard), so **this ADR's reasoning is unchanged and is now the pattern rather than the exception** — the ordering it argues from, validation shipping *with* the column rather than being promised after it, is exactly why ADR-0039 needed a second commit to catch up; see [ADR-0039](#adr-0039)'s 2026-08-19 amendment; ⚠️ **described a pipeline that did not exist** — when this ADR landed nothing wrote `image_asset`, so what shipped was the decision, the column and the guard; 🔻 **`7e5934d` built the pipeline** (`internal/imagepipeline` + `store.PutPosterAsset`) to clause 1, discharging two of the three owed items, leaving the AVIF deferral untouched, and **still never run against a real cover** |
 | [0051](#adr-0051) | The library-scoped grid is a **work-driven `EXISTS`**, not a join to `library_member` | **Accepted** — 2026-08-19; **supersedes [ADR-0026](#adr-0026)'s materialisation as read by ARCHITECTURE §6.5 for the `added_at` order ONLY** — §6.5's denormalised `(library_id, sort_title, work_id, edition_id)` key stands, and `TestLibraryScopedKeysetIsASeek` still pins it, but it serves the **`sort_title`** order and **only** that one: measured on the real schema (`ncruces/go-sqlite3`, SQLite 3.53.4), a library-scoped page ordered by `added_at` gets `USE TEMP B-TREE FOR ORDER BY` in **both** topologies §6.5 names, **with and without `ANALYZE`**; the work-driven `EXISTS` over `ix_libmem_work` keeps `SEARCH w USING INDEX ix_work_added (added_at<?)` in **every** configuration measured, **including the multi-value `?lib=a,b` case** — which was a hypothesis until the plan was read, because an `IN` on the leading key column destroys the ordered index in every *member-driven* shape; it is also **the only shape that cannot return one work twice**, since a work filed in two of the named libraries carries **one membership row per library** and a browse row is work-keyed — ⚠️ per-**library**, not per-edition: `library_member`'s key carries `edition_id`, but the only production writer hardcodes the `0` sentinel, so membership is **not** edition-grained in the tree today (`REVIEW-LOG.md` LS-213), and the ADR body's argument, which is about two libraries over one work, is unaffected; **costs one migration** — `00009_edition_format_index.sql`, `ix_edition_format ON edition(format, work_id)`, for the Audiobooks filter and not for the scope; **`ix_libmem_added` is explicitly NOT owed** and must not be added on this ADR's authority; ⚠️ **reopens on `make bench` over a NARROW library** — the `EXISTS` walks the *global* `added_at` order and discards non-members, which suits a broad library and not a narrow one, so a 1%-selective library over a 25k-row kind is the measurement that would send this back to a member-driven shape with a new index; ⚠️ **amended 2026-08-19** — the *"says nothing about `year`"* non-decision gains the shape of the gap it leaves: `default_sort`'s CHECK admits four orders and this read serves three, `?sort=year` is **refused and never substituted**, the endpoint never reads `default_sort` at all, and nothing in the tree writes the column yet — so the trap arms the day §17.8's DETAIL view offers the choice. The decision is untouched |
 | [0052](#adr-0052) | v0.1's catalogue source is **BookOrbit**; **Kavita is sunset** and its adapter **stays in the tree** | **Accepted** — **owner-decided 2026-08-19**; **amends [ADR-0041](#adr-0041)** clause 1 (*"v0.1's catalogue source is **Kavita**"*) — ADR-0041's clauses 2 and 3 are **confirmed**, and its clause 4 (channels **1, 3b and 4**) is **REOPENED as an open question, not re-answered**, because BookOrbit has had no equivalent of [ADR-0035](#adr-0035) §2a's live probe; **amends ARCHITECTURE §16.1's v0.1 entry**, edited in the same change because §16 is scope authority; the decision is **the owner's, not an agent's** — he is sunsetting Kavita entirely, BookOrbit takes everything, his word is **"phenomenal"**, and the repo's own one-day-older record of the same direction is `ROADMAP.md` §3's *"in my heart i kind of want to migrate to book orbit"*; ⚠️ **it REVERSES `ROADMAP.md` §3's standing recommendation** *"do NOT switch UsArr's first adapter off Kavita"*, because **two of the three findings that produced it were re-measured on 2026-08-19 against BookOrbit `main` and are FALSE** — headless auth needs **no password** (`server/src/modules/auth/magic-link.service.ts`; SHA-256-hashed token, `loginWithToken()` validates no password), and **comics ARE covered** (a shipped ComicVine provider), leaving only **manga and anime** identifiers absent (zero hits for `mangabaka`/`anilist`/`myanimelist` repo-wide); 🚩 **and a third claim reached the ADR in relay and was REFUSED on primary source** — *"no watermark, so full resync with no delta channel"* is **false in its strong form**, since `packages/types/src/query.ts` admits `"updatedAt"` as a sort key with page/size paging, which is exactly channel 3b's shape, so writing it in would have foreclosed v0.1 work on a premise the source refutes; what is **genuinely unsettled** is whether that timestamp moves on tag, genre and author edits, since `$onUpdateFn` is **application-level, not a DB trigger** and those live off the book row — §7.1a's **reconciliation-only** fallback is the named failure branch, **not** this ADR's decision; **"sunset" explicitly does NOT mean delete** — `internal/kavita`, `internal/libsync/kavita.go`, both vendored specs and [ADR-0046](#adr-0046)'s contract guard stay and stay green, investment stops, and **no milestone for further Kavita work is invented**, on [ADR-0042](#adr-0042)'s refusal-to-number precedent; **MangaBaka is NOT a dependency** — the owner's *"in the near future"* is **his expectation, nobody's commitment**, native support is an **open PR with no maintainer signoff**, and the adapter is designed against what BookOrbit ships **today**; ⚠️ **MangaBaka data may be fetched at runtime and NEVER vendored, shipped or cached as a dump** — **CC BY-NC-SA 4.0**, verified at `mangabaka.org/data/database`, is **not AGPL-3.0-compatible**, and the dump additionally carries third-party terms it does not license; ✅ **identity needs NO migration and NO new mechanism, which INVERTS this ADR's own first draft** — the draft called BookOrbit's series-level identity a structural degradation and warned of a migration, and a schema check against the tree falsified it: `external_id`'s `source` is plain `TEXT` with **no `CHECK`** and it carries `confidence` (`00005_library_sync.sql:444`), a series **IS a work row** (`work.kind` admits `'series'` and `'comic'`, `:242`) so `work_id` **already is** the series-level column, and `kavitaExternalIDs` **already writes seven series-level ids** including **`mangabaka` at 0.90** (`internal/libsync/kavita.go`, `weblinkid.go:111,162`) — because Kavita's own series ids are **weblink-parsed from what the user tagged**, exactly as BookOrbit's would come from a user-populated custom field, so the two are **the same arrangement** and 0.90 is already the right grade; the one recorded wrinkle is that BookOrbit's custom fields are **book-scoped** (`custom-metadata.ts`, `bookId` FK, no series variant) so the id needs a hoist — **which Kavita also needs and does lossily**; 🚫 **`work_relation` is cited nowhere and must not be added** — it is **absent from the tree** and `internal/db/migrate_test.go` fails if it appears; ⚠️ **ships NO code by design** — it gates the adapter |
 | [0053](#adr-0053) | All six media types are **always** in the sidebar; per-type hiding is closed until a facet read exists | **Accepted** — 2026-08-19; **amends [ADR-0027](#adr-0027)** for its sidebar clause **only** — that ADR's *"a type with zero items is not rendered anywhere"* stands for Block A and for search groups, both of which are unaffected — and amends ARCHITECTURE §17.2 and `design/DESIGN-DIRECTION.md` §8.1 to match the shipped shell; the data-driven sidebar those two specified **cannot be built over the wire UsArr serves**, because `reference/http-api.md` §7.1 states there are *"no facet counts beside the chips; each is its own aggregate and its own read"* and no read answers per-type presence at all; so **all six render unconditionally, no row carries a count**, and the honesty moves to the per-type screen, where `browseEmptyState` names which of three reasons the grid is empty; ⚠️ **the rejected alternative that looks like compliance is hiding a type on a count nobody measured** — it fails silently and removes the very row that would have explained the absence; **adds no endpoint, no migration and no backend change**; ⚠️ **reopens on exactly one condition** — a read answering which of the six types have rows under the current scope, in one statement — at which point the seam is one predicate on `TYPE_NAV`, and §13 has already priced the shape at *"1 keyset page + 6 sidebar `COUNT(*)`"* < 15 ms p50 without deciding whether it rides the browse response or its own endpoint; ⚠️ **reopening condition REFINED 2026-08-19, citing [ADR-0059](#adr-0059) — refined, not discharged.** `GET /api/v1/library/facets` shipped and looks like the named read; it is not. It answers *how many works are bucketed to each type*, and every book is bucketed exactly once, so discharging the condition with it would hide **Audiobooks** from a user who has audiobooks held as second editions of ebooks. The condition now reads as a predicate answering **whether a type has content** — the independent `EXISTS` over `edition.format` of §17.2 rows 4–5, which `ix_edition_format` already serves — **and not a read returning per-type counts**. The decision itself is untouched: the nav stays all-six-always for v0.1 |
@@ -4102,7 +4102,11 @@ lever.**
 [`FUTURE.md`](./FUTURE.md) §11 and §11.1, all three of which said the `CHECK` would *gain*
 `'awaiting_choice'`. **Closes** `REVIEW-LOG.md` **WQ-05**, recorded there as "a lean, not a
 decision". Both decisions landed in `internal/db/migrations/00005_library_sync.sql`, whose header
-carries the same reasoning next to the SQL.
+carries the same reasoning next to the SQL. · ⚠️ **amended 2026-08-19** — see the block below:
+decision 1's Go declaration is **discharged** by `007e58e`, its runtime validation is **not**, and
+the obligation on *"whoever writes the first `write_queue` writer"* is **not released but made
+unavoidable**. **No decision changes**; the `CHECK` is still dropped and `work_id` still gains its
+key.
 
 ### Context
 
@@ -4128,6 +4132,12 @@ a 15-minute `verify_until` TTL that would settle a sleeping user's request as
 > `verifying` · `awaiting_choice` · `done` · `failed` — has no home in the schema, and **declaring
 > and validating it in Go is owed by whoever writes the first `write_queue` writer**. ⚠️ **Nothing
 > validates it today**, in Go or anywhere else — see the dated correction immediately below.
+> ⚠️ **Amended 2026-08-19, and clause by clause because the sentence is half true.** The
+> **declaring** half is **discharged**: `internal/store/writequeue.go` (`007e58e`) is the
+> vocabulary's single Go home. *"Nothing validates it today"* is therefore **false about the
+> declaration** and **still true about the runtime** — there is **no production writer**, so nothing
+> validates because nothing writes. The obligation on *"whoever writes the first writer"* is **not
+> released; it is made unavoidable.** See the amendment block below.
 >
 > **2. `'awaiting_choice'` is excluded from `ix_wq_runnable`'s partial predicate**, which stays
 > byte-identical to `00001`'s `WHERE state IN ('pending','inflight','verifying')`, with the reason
@@ -4138,6 +4148,11 @@ a 15-minute `verify_until` TTL that would settle a sleeping user's request as
 > **4. `fail_reason`'s `CHECK` is kept**, in its `IS NULL OR … IN (…)` form.
 
 ### ⚠️ Correction, 2026-08-17 — decision 1's Go validation is **owed**, and this ADR twice wrote it as done
+
+> ⚠️ **This section is true of its own date and is superseded in part on 2026-08-19.** Everything
+> it measures held on `49dfa6c`. What it calls *owed* is now **half discharged** — see the
+> amendment at the end of this section. It is kept verbatim because a retraction kept in place is
+> this file's convention and a deleted assertion is silence.
 
 **As first written, decision 1 said the vocabulary *"moves to Go and is documented and validated
 there"*, and the first rejected alternative said *"the vocabulary is validated in Go on the way
@@ -4158,6 +4173,11 @@ the claim stated as complete. The corrected reading, which is what the decision 
 **Go is where the vocabulary is going to live and it is not there yet.** The first `write_queue`
 writer owes the declaration and the validation, and until it lands the vocabulary is documented in
 `00005_library_sync.sql`'s header and nowhere that runs.
+⚠️ **Amended 2026-08-19, splitting that sentence.** *"It is not there yet"* is now **false** —
+`internal/store/writequeue.go` is there, and it compiles into the binary under no build tag. *"Nowhere
+that runs"* is **false about the declaration** and **still true about any validation actually
+happening**, because no production writer calls it. Of the two things the first writer owed, the
+**declaration has landed** and only the **call** remains.
 
 📌 **Corrected in place rather than by an amendment section or a new ADR, and the reasoning is the
 file's own.** Both of the heavier mechanisms exist here for a reason that does not apply. ADR-0035's
@@ -4179,6 +4199,73 @@ consequences bullet that already said this correctly is left alone.** It reads *
 exists, the vocabulary is documented in `00005`'s header and nowhere else, which is a real gap and is
 why this bullet exists"*, which was the honest sentence in the ADR all along. Recorded as
 `REVIEW-LOG.md` **M5-25**.
+
+### ⚠️ Amendment, 2026-08-19 — the validator shipped, there is still no production writer, and the first one now cannot skip it
+
+**Why an amendment section here, when the 2026-08-17 correction was made in place.** This ADR's own
+📌 note sets the rule: a correction goes in place when *"the sentence was wrong the moment it was
+written"* and nothing in the world changed, and an `⚠️ Amendment` section is for **a fact about the
+world changing under a standing decision** — ADR-0035 §2a's precedent. This is the second case. The
+2026-08-17 text was true of its date; `007e58e` changed the tree on 2026-08-19. So the original stays
+verbatim and the new fact is appended beside it.
+
+**The honest statement needs three clauses, and any two of them mislead.**
+
+1. **A validator exists, and it is the single Go home for the vocabulary.**
+   `internal/store/writequeue.go` declares the six states as constants — `pending` · `inflight` ·
+   `verifying` · `awaiting_choice` · `done` · `failed` — and `ValidWriteQueueState` at `:91` answers
+   membership. The six agree with decision 1's list and with
+   `00005_library_sync.sql:906-913`'s column comment; all three were checked against each other
+   rather than assumed.
+2. **The tree's only `write_queue` writer routes through it — and that writer is a BENCH FIXTURE.**
+   `internal/db/spike/fixture.go` is behind `//go:build bench`, so `go build ./...` never compiles
+   it. It validates every state it can produce before the `INSERT`, exhaustively rather than by
+   sample.
+3. **There is still no production writer.** So **at runtime nothing validates anything, because
+   nothing writes anything.** `internal/httpapi/grabs.go` states the same thing in the tree, and is
+   cited rather than paraphrased: *"Nothing in v0.1 writes `write_queue`; the one writer in the tree
+   is the bench fixture behind `//go:build bench`."*
+
+⚠️ **So the obvious wording — *"the vocabulary is now validated in Go"* — is FALSE, and falsely in
+the quiet way.** It is the sentence a reader writes after seeing clause 1 and stopping. It would
+repeat this ADR's original defect in the opposite direction: 2026-08-17 claimed a validator that did
+not exist, and this wording would claim an enforcement that does not run.
+
+**The claim actually worth recording is stronger than either *"never written"* or *"now validated"*.**
+It is this: **the first production writer cannot be written without validating, and the guard proving
+that has already caught a real writer.** `TestWriteQueueWritesValidateTheStateVocabulary` walks the
+AST of production sources and fails the build if anything writes `write_queue` while nothing
+references the validator. It **did not start vacuous**, unlike its `image_asset` sibling: it went
+**RED unplanted** against the bench fixture the moment it landed, and turning it green required
+**routing that code through the validator** rather than adjusting the test. That is the in-tree
+record, in the guard's own words — *"it went RED on that writer before the writer was routed through
+`ValidWriteQueueState`"*.
+
+**This is what discharges the obligation, and note the form.** Decision 1 put the duty on *"whoever
+writes the first `write_queue` writer"*. A duty stated in prose is exactly what this ADR already lost
+once — the 2026-08-17 correction exists because *"the promise lived only in prose"*. What shipped is
+not a reminder but the thing that makes the duty **unskippable**. The guard is a **floor, not a
+proof**, and it says so: it checks that the validator is **referenced**, not that it is called on the
+right value at the right moment, and a query assembled by `fmt.Sprintf` where verb and table never
+share a string literal still walks past. **What it removes is the silent-skip path**, which is how
+the last one was lost.
+
+**What this amendment does NOT change.** Decisions 1–4 stand exactly as taken. `write_queue.state`
+still carries **no `CHECK`** — the Go validator is not a schema constraint, SQLite will still accept
+`'pendign'` from any writer that bypasses it, and that cost is still the one decision 1 accepted
+knowingly. `'awaiting_choice'` is still **excluded** from `ix_wq_runnable`'s predicate (decision 2);
+`work_id` still gains its foreign key (decision 3); `fail_reason`'s `CHECK` is still **kept**
+(decision 4). Being a **legal** value and being a **runnable** one remain different questions, and
+`ValidWriteQueueState` answers only the first.
+
+📌 **One known inaccuracy is recorded rather than fixed, because it is unfixable.**
+`internal/db/migrations/00008_image_asset_format.sql:149-153` still states the pre-`007e58e` position
+in the present tense. A **merged migration is never edited** (`CLAUDE.md`), so it stays as it is and
+this block is where a reader learns it is stale. The four Go comment sites that carried the same claim
+— `internal/store/images.go`, `internal/store/imagewrite.go`, `internal/store/imagelint_test.go` and
+`internal/httpapi/grabs.go` — were **all discharged by `007e58e`** and are **not** outstanding; each
+keeps its old wording inside a past-tense retrospective and then cancels it, so **a grep match there
+is a correction, not a defect**.
 
 ### Why — decision 1
 
@@ -4278,6 +4365,12 @@ ground 1.
   `ix_wq_runnable`'s predicate is the operational filter — a misspelt state is simply never runnable,
   which is a visible stall rather than silent wrong behaviour. That half is enough to keep a
   misspelling from being *silently wrong*, and it is not enough to keep it from being *written*.
+  ⚠️ **Amended 2026-08-19 — the first clause is corrected and the second is NOT.** *"Does not
+  exist"* is **false**: `ValidWriteQueueState` exists. *"The only mitigation running today is
+  `ix_wq_runnable`'s predicate"* is **still exactly true**, because a validator nothing calls
+  mitigates nothing at runtime, and nothing calls it — there is no production writer. What changed is
+  not today's mitigation but tomorrow's: the AST guard makes the Go check **unskippable** by the first
+  writer, so the missing half is now scheduled rather than merely owed.
 - **Drop `fail_reason`'s `CHECK` too, for symmetry.** Rejected. That vocabulary is *closed* — it is
   the terminal taxonomy (`rejected` · `unknown` · `exhausted`), not the lifecycle one — and the
   column is DB-01's regression witness: it is the one place in the schema that proves
@@ -4307,6 +4400,10 @@ ground 1.
   worker owns declaring and validating it; there is no second copy in a migration to drift from.
   Until that code exists, the vocabulary is documented in `00005`'s header and nowhere else, which is
   a real gap and is why this bullet exists.
+  ⚠️ **Amended 2026-08-19: that code exists.** `internal/store/writequeue.go` (`007e58e`) is the
+  one home, so the bullet's headline — *"exactly one home, and it is Go"* — is now **literally true**
+  rather than aspirational, and the closing sentence's gap is **closed for the declaration**. The
+  worker still owns the **calling**, and until it exists nothing validates at runtime.
 * **`'awaiting_choice'` costs no further migration.** `FUTURE.md` §11's seam is wider than the one it
   described — and correspondingly less self-policing.
 * **Deleting a `work` now deletes its queued commands.** That is new behaviour, it is silent by
@@ -4852,7 +4949,11 @@ and is written into the Decision below rather than left to be inferred.
 > stand exactly as decided. What moves is *when the first writer is built*, not what it will do.
 >
 > **4. The seam is already paid for, and it costs no migration to use.** `write_queue` ships today as
-> a table with all three of its indexes and no writer. [ADR-0039](#adr-0039) left its `state`
+> a table with all three of its indexes and no writer. ⚠️ **Still true of production as of
+> 2026-08-19, with one narrowing**: `007e58e` added a **bench-tagged** writer
+> (`internal/db/spike/fixture.go`, `//go:build bench`), so *"no writer"* now means **no production
+> writer**. This clause's argument is untouched — the vocabulary is still unconstrained in the schema
+> and a writer still costs no migration. See [ADR-0039](#adr-0039)'s 2026-08-19 amendment. [ADR-0039](#adr-0039) left its `state`
 > vocabulary **unconstrained** — 00005 creates the column with an explicit *"NO CHECK"* and the
 > reason beside it — and `kind`, the verb half of the same row, **has never carried a `CHECK`
 > either**. A writer can therefore be added later **with no migration at all**: the table, the
@@ -4945,6 +5046,12 @@ and is written into the Decision below rather than left to be inferred.
   the first `write_queue` writer"* and that nothing validates it today. **That writer is now known to
   be the first \*Arr adapter's**, not v0.1's — which is a narrowing of the obligation, not a release
   from it.
+  ⚠️ **Amended 2026-08-19 — the assignment stands, its premise is half discharged.** `007e58e`
+  landed the **declaration** (`internal/store/writequeue.go`), so *"nothing validates it today"* is no
+  longer accurate about the vocabulary's Go home; it remains accurate about the **runtime**, there
+  being no production writer. What this bullet assigns — the **calling** of the validator, owed by the
+  first \*Arr adapter's writer — is unchanged and is now enforced by an AST guard rather than by
+  prose. See [ADR-0039](#adr-0039)'s 2026-08-19 amendment.
 
 **What this does NOT change — stated explicitly, because a re-sequencing ADR is easy to over-read:**
 
@@ -5538,6 +5645,11 @@ audit. The three things needing a slot:
 > writes `write_queue` first, so **[ADR-0039](#adr-0039)'s outstanding obligation** — its corrected
 > decision 1, the Go `state`-vocabulary declaration and validation *"owed by whoever writes the first
 > `write_queue` writer"* — is **v0.2's**. It still costs no migration.
+> ⚠️ **Amended 2026-08-19:** of the two things named here, the **declaration** shipped early, in
+> v0.1, as `internal/store/writequeue.go` (`007e58e`); what remains **v0.2's** is the **validation
+> call** at the first production writer, now guarded in `check` rather than owed in prose. The clause
+> is otherwise unchanged, and it still costs no migration. See [ADR-0039](#adr-0039)'s 2026-08-19
+> amendment.
 
 ### Alternatives considered
 
@@ -5599,6 +5711,9 @@ audit. The three things needing a slot:
 - **[ADR-0039](#adr-0039)'s outstanding obligation acquires a version**, per decision clause 6.
   ADR-0042 narrowed it from *"whoever writes the first writer"* to *"the first \*Arr adapter's"*; this
   narrows it once more, to **v0.2**.
+  ⚠️ **Amended 2026-08-19:** the obligation **split** rather than moved. Its **declaration** half
+  was discharged in v0.1 by `007e58e`; only the **validation call** is still v0.2's. See
+  [ADR-0039](#adr-0039)'s 2026-08-19 amendment.
 
 **What this does NOT change — stated explicitly, because a scheduling ADR is easy to over-read:**
 
@@ -6406,7 +6521,12 @@ representative. See `REVIEW-LOG.md` RK-06.
 **Status:** Accepted · **2026-08-19** · **Amends** [`ARCHITECTURE.md`](./ARCHITECTURE.md) §4.4 and
 §4.4.1, which named AVIF as the only output codec and named **no base format at all** · **Applies**
 [ADR-0039](#adr-0039)'s no-`CHECK` reasoning to a second column, and **discharges in code** the
-Go-validation obligation ADR-0039 promised and never wrote · Lands with migration
+Go-validation obligation ADR-0039 promised and never wrote — ⚠️ **accurate on the day this ADR
+landed, and superseded in one word since**: ADR-0039's obligation was itself discharged later the
+same day, 2026-08-19, by `007e58e`, so *"never wrote"* should now read *"had not yet written"*. **This
+ADR's argument is untouched** and is strengthened: shipping the validation **with** the column is what
+kept `image_asset` from needing a catch-up commit at all. See [ADR-0039](#adr-0039)'s 2026-08-19
+amendment · Lands with migration
 `00008_image_asset_format.sql`, whose header carries the schema half of the reasoning next to the
 SQL.
 
