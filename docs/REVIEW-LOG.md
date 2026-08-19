@@ -17339,3 +17339,147 @@ behaviour was never pinned, which is why it survived.
 know about `files`**, and the line numbers they cite for the publish sites (`importer.go:213`, `:370`,
 `:443`) have been stale since well before this change. The `files` phase landed without them; fixing
 that is a documentation pass on §5, not a rider on a two-word bug.
+
+---
+
+## LS-260 — four facts gate the cover-art work, and every one of them lives inside the owner's Kavita
+
+**Raised, not fixed — because it is not fixable here.** The deliverable is a second probe the owner
+runs against his own instance, `kavita-cover-probe.sh` at the repo root, alongside `LS-200`'s
+`kavita-volume-walk-probe.sh`. This entry is the criterion written down **before** it runs.
+
+**Why a second probe rather than a paragraph.** The same reason `LS-200` gave, in
+`internal/libsync/doc.go`'s words: *"A SPEC TELLS YOU A FIELD EXISTS. IT DOES NOT TELL YOU WHICH CODE
+PATH POPULATES IT, OR WHETHER ANY DOES."* Four questions gate cover art, they are all facts about a
+running controller, and the tree cannot answer one of them.
+
+| # | Question | What it decides |
+|---|---|---|
+| **1** | Does `GET /api/Image/series-cover` accept the Auth Key in the **`x-api-key` header**? | whether a full-admin credential has to travel in a URL on every cover fetch |
+| **2** | Does a **free** Kavita populate `SeriesDto.primaryColor` / `secondaryColor`? | whether a zero-fetch tinted placeholder is a real first slice or a fiction |
+| **3** | What `Content-Type` and size does a cover come back as, and is a validator honoured? | whether decoding needs a dependency this project does not have, and whether refreshes can be conditional |
+| **4** | What does a series with **no** cover return — 404 or a 200 placeholder? | whether a failed fetch is retried or cached as permanently absent |
+
+**Question 1 is the gate, and the reason it is a question at all is recorded in this repo.** The
+vendored spec declares exactly one security scheme — `AuthKey`, `x-api-key`, `in: header` — and
+declares it **globally**. That is not evidence about any particular controller, and this repo has
+already written down the counter-example: `internal/kavita/doc.go:62` says it in one line —
+*"GET /api/Plugin/version?apiKey= is [AllowAnonymous] and validates the key"* — and
+`api/specs/SOURCES.md` says the same where it explains how the Kavita version has to be asked for:
+*"(anonymous, and it puts the credential in the query string)"*. That controller is
+`[AllowAnonymous]` and **validates the key out of the QUERY STRING itself**, which is why
+`cmd/usarr/kavita_e2e_test.go` actively asserts that the connection test never calls it. `GET /api/Health` is a second `[AllowAnonymous]` controller. A global `security`
+block that two known controllers ignore is a claim, not a finding. So the probe **tests three ways —
+header only, `?apiKey=` only, and neither — and prints the status of each**, because the three
+statuses together are the answer and any one of them alone is not.
+
+**The criterion, stated in advance.** Question 1 **PASSES** if the header-only request returns 200.
+If header-only fails and query-only succeeds that is a **FAIL WITH CONSEQUENCES**, and the verdict
+says the consequences in full rather than reporting a status: the credential then lands in Kavita's
+access log and in any reverse proxy's, it has to be scrubbed from every error string UsArr logs or
+renders, and no recorded `go-vcr` fixture may keep it. That is §14's problem, not a tuning
+difference. Question 2 is **USABLE** only if the colours are present *and* varied — the probe
+separates "populated" from "informative" and reports `POPULATED BUT USELESS` when every sampled
+series carries the same tint or every value is all-zero, because a field that is filled and constant
+answers nothing. Question 4 reports **UNDETERMINED** when every sampled series has a cover, and does
+not guess.
+
+**Endpoints and parameters verified against `api/specs/kavita-v0.9.0.2.json`** — the floor spec, the
+release the owner runs — before a line of the script was written: `GET /api/Image/series-cover`
+(declares **both** a `seriesId` `int32` and an `apiKey` `string`, both `in: query`, which is what
+makes the three-way test constructible at all); `POST /api/Series/all-v2` with `PageNumber` /
+`PageSize` / `context` in the query and `SeriesFilterV2Dto` in the body, returning `SeriesDto[]`;
+`GET /api/Health`. `SeriesDto` was read field by field: `primaryColor` and `secondaryColor` are
+`string, nullable`, and `coverImage` is a `string, nullable` **storage path** — which is why the
+probe records only whether it is null and never prints it. The single global `AuthKey` scheme is
+`x-api-key`, `in: header`, and question 1 exists precisely because that declaration is global.
+
+**Written jq-absent from the first line, and this is the whole reason the design differs from
+`LS-200`'s.** `jq` is **not installed on the owner's box**. The volume probe treated it as optional
+and consequently reported **four of its five questions UNANSWERED** on the run that mattered. This
+probe **does not use `jq` anywhere** — not as a fallback, not as a fast path. Every extraction is
+`grep -o` and `sed` over shapes the payload guarantees: `SeriesDto` contains **no nested object**, so
+on a one-element page each of `"id"`, `"primaryColor"`, `"secondaryColor"` and `"coverImage"` occurs
+exactly once and needs no parser. `od` is used for one optional magic-byte cross-check and its
+absence costs that one line and nothing else.
+
+**Output constraint, same as `LS-200`, with one deliberate exception.** Counts, classifications,
+status codes, header **names**, byte sizes and timings; never the Auth Key, the base URL, a library
+name, a series title, a file path or a `coverImage` value; series named by sample slot. The
+exception is that the probe **prints the `primaryColor` / `secondaryColor` hex values**, and it is
+deliberate: they are tints derived from cover art, they name nothing, and *"5 of 5 carry a colour"*
+is not the answer to question 2 — a field can be populated and useless, and only the values show it.
+That exception is fenced rather than trusted: `safe_color()` prints a value **only** if it matches a
+3-, 6- or 8-digit hex colour, and reports anything else as `NON-HEX (withheld, N chars)`. Validator
+values are **not** printed — an `ETag` can be derived from a file's identity and a `Last-Modified` is
+a file mtime — so `ETag` and `Last-Modified` are reported as present/absent and by whether a
+conditional re-request earns a 304.
+
+**Firing the validator rather than reporting it.** `DEVELOPMENT.md` §11's rule — a guard that has
+never been triggered is indistinguishable from no guard — applies to a *measurement* too. A response
+that carries an `ETag` proves nothing about whether the server honours `If-None-Match`. The probe
+therefore sends the conditional request and reports `NOT AVAILABLE IN PRACTICE` when a validator
+header is present but no 304 comes back, which is a different and more useful answer than "ETag:
+yes".
+
+**Re-run it** when the Kavita release moves off `0.9.0.2`, and before any commit that decides how
+UsArr stores or refreshes cover art.
+
+## LS-261 — what `make check` green is worth on this change, and the four defects a drill caught that a read did not
+
+**A shell script and a log entry. `make check` compiles no line of either**, exactly as `LS-201`
+recorded for the first probe. `gofumpt`, `golangci-lint`, `go build -tags=bench`, `go test` and
+`govulncheck` do not read `.sh` files, and `gitleaks` reads these two files only for
+credential-shaped strings — of which there are none, the probe holding no key and no fixture key.
+The green attests that **the rest of the tree still builds and passes**, which on a change that
+touches no Go is the correct claim and no larger one.
+
+**So the script was checked by three other means, named so the next reader can repeat them.**
+`shellcheck` **is still not installed in this container** — recorded as a gap, not skipped past.
+Instead: `bash -n` for syntax; a field-by-field read of `api/specs/kavita-v0.9.0.2.json` for every
+endpoint, parameter and DTO field the script touches; and **a dry run against a fake Kavita** in
+sixteen shapes. That stub is **not committed**, for `LS-201`'s reasons unchanged: it exists to answer
+what this probe asks, it carries a hard-coded fake key `gitleaks` would rightly object to, and a
+fixture no gate step reads is a file that rots.
+
+| Shape driven | What it showed |
+|---|---|
+| header auth works, query works, anonymous refused | the `PASS` path |
+| header 401, query 200 | `FAIL, WITH CONSEQUENCES` renders in full |
+| all three 200 | `PASS, with a caveat` — the controller is anonymous, and that is said |
+| colours JSON `null` | `NOT USABLE` |
+| every series the same colour | `POPULATED BUT USELESS` |
+| every colour `#000000` | same, and the all-zero count is printed |
+| a **non-colour string** in `primaryColor` | withheld as `NON-HEX (withheld, 40 chars)` — the planted value was a series title |
+| WebP covers | reported as WebP by header **and** by magic bytes |
+| no `ETag`, no `Last-Modified` | `revalidation: ABSENT` |
+| `ETag` present, 304 never returned | `NOT AVAILABLE IN PRACTICE` |
+| a coverless series returning 404 | `cache it as absent` |
+| a coverless series returning a 200 placeholder | `UsArr cannot tell by status alone` |
+| every series has a cover | `UNDETERMINED`, not guessed |
+| no `Pagination` header | falls back to one page, says the total is unknown |
+| `401` on `all-v2`; host unreachable | stop at section 0, `INCONCLUSIVE`, exit 1, no URL in the message |
+| `od` removed from `PATH`; `--api-key` on the command line; `--sample` > library size; a key full of shell metacharacters; a base URL with a reverse-proxy path prefix | degrade or refuse cleanly, in that order |
+
+🔥 **Four real defects came out of that, and two of them would have wrecked the owner's run.**
+
+1. **The probe went blind whenever it answered its own first question with "not the header".** In
+   query-auth mode it proved query auth works, then kept sending header auth for sections 4, 5 and
+   6 — and reported `Q3 UNANSWERED`, `Q4 UNANSWERED`, `cold start UNANSWERED`. **A probe that throws
+   away three of its four questions to make a point about the first is the exact failure this probe
+   was written to avoid**, reproduced from the inside. The run now picks whichever variant returned
+   200 and uses it for every image call below, and says which one it picked.
+2. **The wide page scan undercounted by one series, silently.** `sed` leaves the final object without
+   a trailing newline, so `wc -l` read **39** for a stub with a known **40**. The last series
+   vanished from every count downstream — including the coverless-series hunt, where the missing one
+   could have been the only answer to question 4. Caught only because the stub had a known count;
+   a read would not have found it.
+3. **The magic-byte cross-check read whichever body came back last, including an error page** left
+   by a failing sample. It now reads the last body that was actually a 200.
+4. **The conditional re-request hardcoded header auth**, so on an instance where the header does not
+   work the revalidation answer would have been a 401 misreported as "no 304".
+
+⚠️ **What the fake server cannot prove.** It answers what the probe *asks*, so it validates parsing,
+arithmetic, redaction, auth-mode selection and failure handling — and **nothing at all** about what
+Kavita's real `ImageController` does with an `x-api-key` header. That is the entire question, and it
+is why the script exists.
