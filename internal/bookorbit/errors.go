@@ -33,12 +33,14 @@ var (
 	//
 	// JwtAuthGuard.handleRequest throws ForbiddenException('Password change
 	// required') when user.isDefaultPassword, on EVERY route that is not
-	// @AllowDefaultPassword. UserService.createSharedUser sets
-	// isDefaultPassword:false, so this cannot fire for a properly created shared
-	// account — which makes it a precise diagnosis when it does fire: the magic
-	// link was minted for an account created by createUser, not createSharedUser.
-	// Reporting that as a generic auth failure would send the user to re-paste a
-	// token that is perfectly good.
+	// @AllowDefaultPassword. At 73b7877d it cannot reach this client at all:
+	// only UserService.createUser sets isDefaultPassword:true, nothing sets it
+	// true again afterwards, and MagicLinkService.createToken will not mint
+	// against a target whose provisioningMethod is not 'shared' — which
+	// createUser's accounts never become. The sentinel exists so that an upstream
+	// invariant BREAKING does not arrive as a generic auth failure: if this ever
+	// fires, the account is in a state the mint path cannot produce, and the fix
+	// is in BookOrbit rather than in the stored token.
 	ErrPasswordChangeRequired = errors.New("bookorbit: the account must change its password before any API call succeeds")
 
 	// ErrNotFound is a 404.

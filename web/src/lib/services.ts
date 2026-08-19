@@ -613,7 +613,7 @@ export function likelyCauses(message: string, kind: string): string[] {
 			// exist, looking for something that no longer does.
 			return [
 				`The magic-link token is revoked, expired or deactivated. It cannot be re-read anywhere: mint a new one.`,
-				`The link was minted against an ordinary account rather than a shared one, so BookOrbit demands a password change before any call succeeds.`
+				`BookOrbit says the account behind the link must change its password before any call succeeds. The token is fine and re-pasting it will not help: that is an account state on the BookOrbit side, and it is fixed there.`
 			];
 		}
 		return [

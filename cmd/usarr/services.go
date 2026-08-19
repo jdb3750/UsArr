@@ -900,11 +900,13 @@ func plural(n int, one, many string) string {
 func bookOrbitTestAction(err error) string {
 	switch {
 	case errors.Is(err, bookorbit.ErrPasswordChangeRequired):
-		// The precise diagnosis the sentinel exists for, and it must not read as
-		// a bad token: the link was minted against an account created with
-		// createUser rather than createSharedUser, so BookOrbit demands a
-		// password change before any guarded route answers.
-		return "Mint the link against a SHARED BookOrbit account; this one must change its password first"
+		// Not a credential failure, so it must not read as one — re-pasting the
+		// token will not help. But nor is it a link minted against an ordinary
+		// account: MagicLinkService.createToken refuses any target that is not
+		// shared-provisioned, and no shared account carries isDefaultPassword.
+		// The account is in a state the mint path cannot produce, which puts the
+		// fix upstream rather than in anything the user can retype here.
+		return "Check this account in BookOrbit: it demands a password change, which a shared magic-link account cannot require — the fix is on the BookOrbit side, not the stored token"
 	case errors.Is(err, bookorbit.ErrUnauthorized):
 		return "Mint a new magic-link token: this one is unknown, revoked, deactivated or expired"
 	case errors.Is(err, bookorbit.ErrForbidden):

@@ -79,8 +79,9 @@ type userDTO struct {
 //
 // What IS here is the §14 enumeration's whole input: the flags and the
 // permission array scope.go classifies. IsDefaultPassword is carried because it
-// is the difference between "your token is bad" and "this account was created
-// with createUser instead of createSharedUser" — see ErrPasswordChangeRequired.
+// is the difference between "your token is bad" and "the account behind the link
+// is in a state that 403s every guarded route" — see ErrPasswordChangeRequired,
+// which records why the mint path cannot produce that state.
 type AccountView struct {
 	ID                 int64        `json:"id"`
 	Username           string       `json:"username"`

@@ -51,7 +51,7 @@ func boSetUp(t *testing.T) *testEnv {
 // with an encrypted credential and a real health row.
 //
 // That is the thing that was impossible before. internal/bookorbit shipped a
-// client, headless magic-link authentication and a scope grader at 568ddbc, and
+// client, headless magic-link authentication and a scope grader at c324cbf, and
 // none of it was reachable: `bookorbit` was in no service-kind map, so the
 // credential could not be stored, so the client could never be built. This test
 // is the gate on the three places that had to learn the kind:
