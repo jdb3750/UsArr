@@ -19342,9 +19342,10 @@ closes one.
 **The report was right, and the check was run rather than assumed.**
 `internal/db/migrations/00005_library_sync.sql:221` reads
 `source_url TEXT NOT NULL UNIQUE,      -- CREDENTIAL-STRIPPED. See security.md §6.`
-`docs/reference/security.md` **§6** is *"Sessions, CSRF, rate limiting, audit"* (`:516`). The
-credential-stripped `source_url` rule is in **§5**, *"Redaction is middleware, not a convention"*
-(`:373`), at `:411-419` — *"`image_asset.source_url` and the `http_cache` keys store the
+`docs/reference/security.md` **§6** is *"Sessions, CSRF, rate limiting, audit"*. The
+credential-stripped `source_url` rule is in **§5**, *"Redaction is middleware, not a convention"*,
+in the bullet headed *"URLs stored in the database are in scope too"* — *"`image_asset.source_url`
+and the `http_cache` keys store the
 **credential-stripped** URL, and no row may be written whose `source_url` still carries a credential
 parameter"*, including the `cache_key = sha256(source_url)[:16]` consequence the migration's
 `cache_key` comment depends on. So the citation is off by one section, in the same class as the
@@ -19374,6 +19375,12 @@ fired from the other side: `security.md §6.` → `§5.` on `testdata/schema.sql
 produces the identical diff. `go test ./internal/db -run TestMigrationRoundTrip` went from `ok` to
 `--- FAIL`, printing the two `source_url` lines against each other. Restored, `git status` clean,
 green again. Go 1.25.13, tree `ef3f041`.
+
+⚠️ **This entry's `security.md` citations were section names and line numbers when written, and
+the line numbers were stale within the hour** — `bf66828`'s rewrite of that file moved every one of
+them while this change was in a rebase. They are named by heading and bullet above instead, which is
+the same correction LS-320 made to `http-api.md` one commit earlier. The `00005:221` and
+`testdata/schema.sql:292` line numbers are kept, because neither file is edited.
 
 **And the test's own doc comment names this exact case** — *"This catches … drift: **a migration
 edited after it shipped**"* (`migrate_test.go:25-27`). The rule has a mechanism here, not just a
