@@ -1433,6 +1433,33 @@ paragraph describing a repo that no longer exists.
   with the new date and the new tree, leaving the original standing (`docs/REVIEW-LOG.md` §6.1
   *Amended dispositions*, whose closing line is *"No existing entry's id, text or severity
   changed"*).
+* **Cross-reference another repo document by heading or anchor, never by line number.** The two
+  bullets above are the code half and the dated-record carve-out; this is the prose half, and it
+  decays faster, because several lanes push `docs/` concurrently and a rotted line number **does not
+  announce itself** — it keeps resolving, just to the wrong place. Two `docs/REVIEW-LOG.md` entries
+  from 2026-08-19 are the evidence, and both are worth reading over this summary of them. `LS-320`
+  corrected two `docs/reference/http-api.md` claims and deliberately wrote the replacements as
+  *"Named by anchor, not by line … because this document has just spent a pass moving off citations
+  that rot, and a line number would be the same defect in a new place"*, pointing at the `fileReadNote`
+  helper and the `Items` cell's muted second line rather than at offsets. `LS-321`, one commit later,
+  had its own citations rot **inside the pass that wrote them**: *"This entry's `security.md`
+  citations were section names and line numbers when written, and the line numbers were stale within
+  the hour"*, because `docs/reference/security.md` was rewritten wholesale while that change sat in a
+  rebase. It re-verified against the pushed tree and re-cited by heading and bullet instead — §5,
+  *"Redaction is middleware, not a convention"*, under *"URLs stored in the database are in scope
+  too"*.
+  * ⚠️ **A line number is correct, and preferred, where the file is never edited.** `LS-321` kept
+    `internal/db/migrations/00005_library_sync.sql:221` and `internal/db/testdata/schema.sql:292` as
+    line cites for exactly that reason — *"because neither file is edited"* — a merged migration, and
+    the checked-in schema snapshot `TestMigrationRoundTrip` compares against byte-for-byte. Where
+    nothing can move the line, the line is the most precise anchor there is; everywhere else it is a
+    claim with a shelf life.
+  * 🔍 **`LS-321` names the wrong commit for the rewrite that rotted it**, which is the rule failing
+    on its own evidence. Its ⚠️ note attributes the `security.md` rewrite to `bf66828`; at `36d7f71`
+    that commit touches `docs/DEVELOPMENT.md` and nothing else. The rewrite is `0ca1be6`, *"docs:
+    security.md's present tense claimed guards nothing reaches"*, 193 insertions and 89 deletions in
+    `docs/reference/security.md`. Cite `0ca1be6` when repeating this, and leave the entry's own text
+    standing — it is a dated record, and the bullet above governs how it gets corrected.
 * **Key the worktree decision to the operation, not to the size of your change.** Any *whole-tree*
   git operation — `git add -A`, a `git commit` of an index somebody else may have added to,
   `git checkout <branch>` — belongs in a detached worktree of your own. Targeted single-path
