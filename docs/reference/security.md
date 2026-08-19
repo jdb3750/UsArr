@@ -539,10 +539,18 @@ silently change which resource a redirect resolves to. The tracker-specific name
 - **URLs stored in the database are in scope too**: `image_asset.source_url` and the `http_cache`
   keys store the **credential-stripped** URL, and no row may be written whose `source_url` still
   carries a credential parameter — the ingest path that writes these rows owes that assertion.
-  ⚠️ **It is still owed and is owed by nothing that exists**: measured on this tree, no production
-  code writes `image_asset` at all, so there is no writer to carry the check and none to test it
-  against. The serving half of the pipeline (`/img`, §4) landed without one because it writes
-  nothing. This is a requirement on the first writer, not a description of a guard.
+  ✅ **Discharged 2026-08-19 in `7e5934d`.** ⚠️ This paragraph used to read *"it is still owed and is owed by
+  nothing that exists … no production code writes `image_asset` at all"*, which was true and is not
+  any more. `internal/store`'s `PutPosterAsset` is the writer, and `checkImageSourceURL` is the
+  assertion: it **refuses** a row whose `source_url` carries a credential parameter or userinfo —
+  it does not strip and proceed, because §5 asks for an assertion and a sanitiser would leave the
+  bug that produced the URL in place. `internal/imagecache`'s `Key` applies the same refusal where
+  `cache_key` is derived, so a credentialled URL cannot yield a key either. Both consult
+  `internal/ssrf`'s `IsCredentialParam` — the one deny-list — and both were drilled red before being
+  trusted. **Limit:** query parameters and userinfo only, not path segments; `internal/ssrf`'s
+  path-segment rule is a deliberately lossy heuristic and a false positive here would permanently
+  refuse a legitimate cover. ⚠️ **The writer has never met a real cover**: `internal/imagepipeline`
+  has been exercised only against images its own tests fabricate.
   **Which names those are is `internal/ssrf/redact.go`'s `credentialParams` to say, not this
   bullet's** — a shorter list restated here is the second deny-list, and the one that drifts is the
   one that leaks. TMDB v3, Fanart.tv and Comic Vine all authenticate by query parameter, so without

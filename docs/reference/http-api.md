@@ -152,7 +152,7 @@ integer"`, of a value that plainly is one. `recentWorksLimit` parses at 64 bits 
 | `items[].have_count` | yes | Denormalised rollups. The numerator and the gap behind §17.2's `have / total · N missing` grammar. ⚠️ **`0` is also the column default, so a `0` here is not evidence on its own** — §1.4.1. |
 | `items[].want_count` | yes | |
 | `items[].availability` | **no** | The polymorphic blob — see §1.4. **Absent means *not counted*, never *none held*** — §1.4.1. |
-| `items[].poster_key` | **no** | `image_asset.cache_key` for the work's poster: the key `GET /img/{key}` takes — §9. Absent when the work has no poster asset, which ⚠️ **is every row of every install today**, because the fetch half of the image pipeline is not built. Absent rather than `""`: a renderer that treated `""` as a key would request `/img/` on every row. |
+| `items[].poster_key` | **no** | `image_asset.cache_key` for the work's poster: the key `GET /img/{key}` takes — §9. Absent when the work has no poster asset, which ⚠️ **is still every row of every install today** — but no longer because the fetch half is unbuilt: `internal/imagepipeline` renders and records a poster, and **nothing calls it during an import yet**. Absent rather than `""`: a renderer that treated `""` as a key would request `/img/` on every row. |
 | `limit` | yes | **Authoritative** (§1.2). |
 | `next_cursor` | **no** | Absent when this page is the last one; its absence is the "Load more" button's off switch. Absent rather than empty, because `""` reads as a cursor whose value is unknown. |
 

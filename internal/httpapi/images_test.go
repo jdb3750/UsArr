@@ -21,10 +21,11 @@ import (
 // carrying a poster, one carrying a backdrop, and one pending asset.
 //
 // ⚠️ THE image_asset INSERTS ARE TEST-ONLY. internal/store's format lint exempts
-// `_test.go` and stays vacuous; the obligation to call store.ValidImageFormat —
-// and to refuse a `source_url` still carrying a credential (security.md §5) —
-// attaches to the first PRODUCTION writer, which is the fetch half and is not
-// built. Nothing here is a model for one.
+// `_test.go`, so these do not satisfy it. The obligation to call
+// store.ValidImageFormat — and to refuse a `source_url` still carrying a
+// credential (security.md §5) — attaches to the PRODUCTION writer, which is now
+// internal/store's PutPosterAsset and discharges both there. Nothing here is a
+// model for one.
 func newImageServer(t *testing.T) (*Server, string) {
 	t.Helper()
 	cacheDir := t.TempDir()

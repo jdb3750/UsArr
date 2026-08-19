@@ -18,12 +18,12 @@ import (
 //
 // ⚠️ THESE INSERTS ARE IN A TEST FILE AND THAT IS LOAD-BEARING.
 // TestImageWritesValidateTheFormatVocabulary exempts `_test.go`, so seeding
-// image_asset here does not make that guard non-vacuous — it stays vacuous, and
-// the obligation to call ValidImageFormat travels with the first PRODUCTION
-// writer, which is the fetch half and is not built. Nothing in this file is a
-// model for how a real writer should look; a real writer owes the format
-// vocabulary check and the credential-stripped `source_url` assertion
-// (security.md §5), and neither is exercised by a fixture.
+// image_asset here does not make that guard non-vacuous. ⚠️ It is no longer
+// vacuous ANYWAY — imagewrite.go is the production writer, and it is what
+// discharges the format-vocabulary check and the credential-stripped
+// `source_url` assertion (security.md §5). Nothing in this file is a model for
+// how a real writer should look; PutPosterAsset is, and imagewrite_test.go is
+// where both obligations are exercised.
 func seedImageAssetCorpus(t *testing.T, s *Store) {
 	t.Helper()
 
