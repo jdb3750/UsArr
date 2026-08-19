@@ -19432,6 +19432,11 @@ and not the gate — is what a reader can re-run.
 run on their own threads and are not renumbered against it; a gap in either is fine and nobody
 closes one.
 
+⚠️ **AMENDED — every ⏭️ Open row of the table above is now closed.** The dispositions were
+re-measured at `60c9286` and are recorded under **`SD-05`** at the end of this file, as
+*"`SD-03` — amended dispositions"*. Nothing above is edited: the finding and its table stand as
+written and as measured at `3c88b2e`. 📌 **Route off the amendment, not off this table.**
+
 ## LS-321 — `00005`'s `source_url` comment cites `security.md §6` and the rule is §5; the migration is not edited and this entry is the pointer
 
 **The report was right, and the check was run rather than assumed.**
@@ -20457,6 +20462,143 @@ both and nothing about whether any of the prose is true. What is re-runnable is 
 `git show d16d1e7 --unified=0 -- docs/DECISIONS.md` returns six hunk headers including `@@ -81`,
 `@@ -2088`, `@@ -2118` and `@@ -2153`; `git show 92eff15 --unified=0 -- docs/DECISIONS.md` returns
 two, `@@ -106,0 +107` and `@@ -7216,0 +7218,95`. That difference is the whole finding.
+
+## SD-05 — `Caps` "already carries" a capability split that exists only as a design, and the **shipped column** that makes it not `SD-03`. **Applied at `703db64`; this entry is the record that was owed.**
+
+**The finding was applied without an entry, which is the process defect underneath the prose one.**
+The working practice is that every finding is *applied or rebutted **in writing***. `703db64` applied
+one and wrote nothing here, so a reader of this log could not have found it. This entry closes that,
+and it is written **after** the fix rather than before it — the claims below were re-measured in a
+worktree at **`60c9286`** rather than copied from the commit message.
+
+**What the sentence claimed.** `docs/FUTURE.md` §12 — *Suwayomi as a comics catalogue source* — closed
+its **The seam** paragraph with:
+
+> `Caps` **already carries** the ability to advertise `LibrarySync` without `Add`, which is exactly
+> Suwayomi's shape.
+
+**Why it was false.** *"Already carries"* asserts a live switch in the tree. There is no such switch.
+Re-measured at `60c9286`:
+
+- `grep -rn 'ProviderFactory\|LibrarySyncer\|LibrarySync' internal/ cmd/` returns **zero lines**.
+  `LibrarySync` does not occur under `internal/` at all — its tracked hits are
+  `docs/reference/providers.md` (3), `docs/ARCHITECTURE.md` (3), `docs/FUTURE.md` (2), this file (1),
+  and three `web/src/` files (`lib/home.ts:90`, `lib/home.test.ts:30,94`,
+  `routes/+page.svelte:80,1296`) where it appears **in prose comments** quoting §8.5's empty-state
+  rule, not as an identifier. ℹ️ A sixth document, `docs/RESEARCH.md:1606`, matches only
+  case-insensitively and is unrelated: it cites LazyLibrarian's own `librarysync.py`.
+- The design of record is [`docs/reference/providers.md`](reference/providers.md) **§2**, whose
+  `type Caps struct` (`:74-75`) declares `Search, LibrarySync, DeltaSync, Push, Add, Monitor` and
+  whose `LibrarySyncer` interface is at `:101`. That file's own header (`:3-5`) says in as many
+  words: *"the registry seam (§1) and the Go provider interface (§2) are **designed, not
+  implemented**"*. So the document that owns the design already labelled it unbuilt while §12 was
+  describing it as built.
+
+**What it says now.** `703db64` took `SD-03`'s pattern — **tense, plus a citation, plus a warning
+naming what is absent**, never a deletion, because the paragraph exists to tell a later reader which
+seam the deferred feature is designed against. `docs/FUTURE.md:558` now reads *"`Caps` **is designed
+to** advertise `LibrarySync` independently of `Add`"*, cites `reference/providers.md` §2 and quotes
+its *"designed, not implemented"* label, and carries ⚠️ **"Neither the registry nor `Caps` exists in
+`internal/` today"** with the three absent names spelled out. It also promotes the reason the split
+is load-bearing rather than incidental: ARCHITECTURE **§8.3**'s sink rule, restated verbatim at
+`internal/db/migrations/00005_library_sync.sql:558` — *"an instance that does not probe
+`Caps.MediaKinds` ∋ (kind, format) and advertise `Add` cannot be chosen"* — is exactly the *"never a
+request sink"* property §12 calls Suwayomi's genuine structural difference from Mylar3 and Kapowarr.
+The mechanism named was right; only its tense was wrong.
+
+**🚩 The durable distinction, and the reason this is not just `SD-03` again: the storage half
+ships.** `SD-03`'s `work_relation` had **no shipped DDL whatsoever** — the table is named only in two
+migrations' deferred lists, and `TestDeferredTablesAreAbsent` fails the build if one creates it. Here
+the column is **real, merged and queryable**:
+
+| | `SD-03` (`work_relation`) | `SD-05` (`Caps`) |
+|---|---|---|
+| DDL in a merged migration | ❌ none — named only in `00005`/`00006` deferred lists | ✅ **`00001_initial.sql:159`** — `capabilities  TEXT,  -- JSON Caps, probed live`, mirrored at `internal/db/testdata/schema.sql:659` |
+| A guard forbidding it | ✅ `TestDeferredTablesAreAbsent` (`internal/db/migrate_test.go`) | ❌ none, and none would be correct — the column is *supposed* to be there |
+| Go type | ❌ absent | ❌ absent — no `Caps`, no `ProviderFactory`, no `LibrarySyncer` under `internal/` |
+| Anything writing it | n/a | ❌ **nothing.** `insertServiceInstance` (`internal/store/serviceinstance.go:145-153`) names 13 columns and `capabilities` is not among them; no `UPDATE service_instance` anywhere in `internal/store/` sets it |
+| The semantics, in a merged migration comment | — | ✅ **`00005_library_sync.sql:558`** carries §8.3's sink rule referring to `Caps.MediaKinds` by name |
+
+**⚠️ So a correction that had copied `SD-03`'s wording would itself have been false.** *"No shipped
+migration creates it"* is true of `work_relation` and **wrong** about `Caps`: two shipped migrations
+mention `Caps`, one of them creating the column meant to hold it. The state here is neither *"it
+ships"* nor *"nothing ships"* — it is **the storage shipped and the producer did not**, which is a
+third state, and the honest sentence has to say the column exists and is never written. `703db64`'s
+text does exactly that. 📌 **The general lesson: a fix pattern is a shape, not a sentence.**
+`SD-03`'s shape — *re-tense, cite the owner, name what is absent* — transfers. `SD-03`'s **words** do
+not, and the failure mode of a family of defects swept by one hand is that the second site gets the
+first site's prose applied to a different tree.
+
+**📌 Evidence, not a scolding: the report that prompted the fix understated its own grep.** The
+report claimed `Caps` had **a single unrelated test-name hit**. Re-run at `60c9286`,
+`git grep -n Caps -- . ':!docs/' ':!*.md'` returns **six** lines:
+
+- **Two unrelated**, both test function names — `internal/servarr/breaker_test.go:71`
+  (`TestBreakerBackoffDoublesAndCaps`) and `internal/servarr/search_test.go:188`
+  (`TestEffectiveLimitFallsBackWhenCapsAreUnknown`), where *"Caps"* is `limitsMax` capping, an
+  unrelated Prowlarr concept.
+- **Four related**, and **two of those are in shipped migrations** — `00001_initial.sql:159`,
+  `00005_library_sync.sql:558`, plus their two mirrors in `internal/db/testdata/schema.sql:369,659`.
+
+**The direction of the error is what makes it worth logging.** Understating *unrelated* hits is
+harmless. This understated the **related** ones to zero, and those four are precisely the evidence
+that distinguishes this defect from `SD-03`. A fixer who had trusted *"one unrelated hit"* would have
+concluded nothing ships, written `SD-03`'s sentence verbatim, and shipped a false correction of a
+false claim — the second-order version of the very defect being corrected. ℹ️ **A grep summary
+relayed second-hand is a hypothesis, not a measurement.** It is cheap to re-run and the re-run is the
+only thing with evidentiary weight; the number in a brief is a *prediction* of what the grep will
+say. `SD-03` recorded the same discipline from the other side — *"the brief predicted two in
+`FUTURE.md`; there are two there, but only one uses the word 'already'"* — and was right to.
+
+**The id was allocated, not discovered, and the `SD-04` gap is expected.** This entry is **`SD-05`**
+because the coordinator assigned it at dispatch. Reading the tree for the highest `SD-` id would have
+produced `SD-04` at the moment this work started: `SD-04` was then sitting in an unmerged worktree and
+landed on `main` as `60c9286` *while this entry was being written*. 🚩 **This is the
+discovery-instead-of-allocation race that was closed for ADR numbers and migration ids earlier the
+same day, arriving on the `SD-` series.** Re-reading the highest id is **necessary and not
+sufficient**, because the merge that invalidates the answer lands between the read and the commit.
+Numbers come from the coordinator; nobody discovers one. **A gap is correct and nobody closes one** —
+that rule already stands in `SD-03`'s closing paragraph for the `LS-`/`RK-` threads and applies here
+unchanged.
+
+**What `make check` green is worth on `703db64`, and on this entry.** `703db64` is a **docs-only**
+diff; `make check` reads `docs/` through **gitleaks alone**, so its green attests *"no
+credential-shaped string"* and says nothing about whether the prose is true. This entry is likewise
+`docs/` only. The compile, `go vet`, `golangci-lint` and `go test` arms **do not read either diff** —
+no `.go` file changes in either. The re-runnable evidence is the `file:line` claims above, every one
+of them measured at `60c9286`. ℹ️ `main` moved under this entry while it was being written — four
+Go commits merged as `dd88a67` — so the two claims that could have gone stale were **re-run against
+that tree rather than assumed**: `git grep -n Caps -- . ':!docs/' ':!*.md'` still returns the same
+six lines, and `git grep -n capabilities -- internal/store/` still returns **nothing**. Both hold.
+
+### SD-03 — amended dispositions: all four sites left ⏭️ Open are **closed**, and by commits that logged nothing here
+
+**Read this before routing anything off `SD-03`'s table.** `SD-03`'s table was accurate when written
+and is now stale in four of its seven rows. Later commits swept the sites it left open and **none
+wrote an entry**, which is the same omission `SD-05` above records for `703db64`. `SD-03`'s original
+finding text and table are **not edited**; the current state is below, re-measured at `60c9286`.
+
+| `SD-03` row | `SD-03`'s state | State re-measured at `60c9286` |
+|---|---|---|
+| `internal/store/searchlibrary.go:27` — *"the one site a reader is least likely to check against the schema"* | ⏭️ Open | ✅ **CLOSED by `ab99c63`**, which did it **first** for that stated reason. The comment now reads *"⚠️ `work_relation` **IS DESIGNED TO CARRY** the confidence and evidence columns that card needs — the DDL is `docs/reference/schema.md` §11 … **AND THE TABLE DOES NOT EXIST**"*, names the v0.3 deferral and `TestDeferredTablesAreAbsent`, and **quotes its own prior text** so the correction is legible in place. 🚩 It also caught what the row understated: the old text ended *"and nothing reads them yet"*, and the commit's diagnosis is exact — *"there is nothing to read, not merely no reader"* |
+| `docs/ARCHITECTURE.md:1875` | ⏭️ Open — *"same defect, different owner"* | ✅ **CLOSED by `ab99c63`.** Now *"`work_relation` **is designed to carry**"*, with the §11 citation, the deferral and the test. The commit also fixed an adjacent falsehood the row did not predict: the next sentence said `status`/`reviewed_by`/`reviewed_at` *"are dropped from migration 0001"*, describing a migration that never carried the table |
+| `docs/DECISIONS.md:582`, `:729`, `:3240` | ⏭️ Open — deliberately, as `SD-02t`'s question | ✅ **CLOSED by `ab99c63`, and in the shape the row's hesitation was right to want.** Now `:584` (ADR-0007), `:738` (ADR-0009), `:3259` (ADR-0033), each a `~~strike~~` on the falsified words with the correction beside it and a dated note — **the record shows itself changing** rather than being silently rewritten, and none reopens a decision. ℹ️ Checking the three **one at a time** found two extra defects a tense sweep would have missed: ADR-0009 also claimed the table carries `status`, which ADR-0007 revision 2's removal of the review inbox and §11's own text both contradict; and ADR-0033's *"an added edge type rather than a schema change"* is narrowed to *"rather than a new table"*, since §11's `rel_type` is a `CHECK` over thirteen values and `same_person` is not one |
+| `docs/design/DESIGN-DIRECTION.md:2814` | ⏭️ Open — design-area owned, on `SD-02r`'s precedent | ✅ **CLOSED** — ⚠️ **anchor by text, not by line**: the bullet opening *"The cross-media review inbox (FUTURE §5)"*, which was `:2814` when `SD-03` measured it, `:2845` an hour ago and `:2873` after `fb58790` landed, all inside one working day. Carries the full `SD-03` shape: *"is designed to carry"*, the §11 citation, ⚠️ the deferral, both migrations' deferred lists and `TestDeferredTablesAreAbsent`, closing *"it is not a column pair already sitting in the schema waiting"*. `ab99c63` explicitly **left this one alone** as another session's, and that session took it |
+| `docs/FUTURE.md:194`, `:681`, `CLAUDE.md:109` | ✅ Applied / 🔶 Split | Unchanged. The `CLAUDE.md` **enrichment** half — the §11 citation, the v0.3 deferral and the test name — remains **drafted and handed to Joe, not committed**, and that is the one thing in `SD-03` still genuinely outstanding |
+
+**⏭️ Nothing in `SD-03`'s site table is open any more**, other than the `CLAUDE.md` enrichment that
+was deliberately withheld for the owner. `git grep -n 'already carries' -- docs/ internal/ CLAUDE.md`
+returns no live `work_relation` line at `60c9286`; the surviving occurrences are the struck-through
+originals inside the three ADRs, which are supposed to be there.
+
+**📌 What the sweep is worth as evidence, stated the way `SD-03` stated it.** `ab99c63` fired the
+guard rather than trusting it: a throwaway `00099_throwaway_fire_guard.sql` creating `work_relation`
+made `TestDeferredTablesAreAbsent` fail at `internal/db/migrate_test.go:479` with *"work_relation
+exists, but no shipped migration should create it"*, and was then deleted with the test re-run green.
+That is the **second independent firing** of the same guard on the same day — `c6ce265` fired it too,
+with a differently-named probe. 🚩 **Neither firing is redundant**: `SD-03`'s own rule is that a
+guard which has never been triggered is indistinguishable from no guard, and a citation to a guard is
+worth what the citing commit checked, not what an earlier commit checked.
 
 ## SD-06 — `accessToken` was not on the ONE list, and the lookup folds case and nothing else
 
