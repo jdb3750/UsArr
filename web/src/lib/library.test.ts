@@ -506,10 +506,14 @@ describe('the paging stop rule', () => {
  * THE POSTER KEY AND THE URL BUILT FROM IT — ARCHITECTURE.md §4.4's serving
  * half, client side.
  *
- * ⚠️ EVERY ROW OF EVERY REAL INSTALL IS THE ABSENT CASE TODAY. The fetch half of
- * the image pipeline is not built, so nothing writes `image_asset` and the
- * server omits `poster_key` everywhere. That makes the absent path the one that
- * actually runs, and the one a renderer must handle first.
+ * ⚠️ THE ABSENT CASE IS NO LONGER THE ONLY CASE. This used to say every row of
+ * every real install was absent, because the fetch half of the image pipeline
+ * was not built and nothing wrote `image_asset`. It is built: `internal/store`'s
+ * `PutPosterAsset` writes the row, and `internal/libsync`'s phase D calls it
+ * once per imported book on a BookOrbit import. Absence stays ordinary all the
+ * same — any other adapter, any work imported before that pass, any cover that
+ * 404'd — so both paths below are live, and the absent one is still the one a
+ * renderer must handle first.
  */
 describe('the poster key', () => {
 	it('is absent, not empty, when the server omits it', () => {

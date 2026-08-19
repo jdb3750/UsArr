@@ -115,7 +115,7 @@ because no ADR ever decided it. Annotating leaves that failure mode nowhere to h
 | [0063](#adr-0063) | A walked container records a **zero-count skip row**; "none skipped" stops being an absence | **Accepted** — 2026-08-19; **supersedes [ADR-0061](#adr-0061) §5's absent-row semantics for `items_skipped`**, leaving ADR-0061's text standing and unreworded with an inline flag on §5, on the pattern [ADR-0052](#adr-0052) used against [ADR-0041](#adr-0041) clause 1; **the problem is a coupling, not a bug** — `42246c0` built a reader that needed three states from a table that offered two (*items left out* · *walked, nothing left out* · *nothing walked it*), and could only separate the last two by joining against the **completeness** row, which measures a **different axis** and was quietly the only per-container record in the schema that an import had gone near a container, so `cmd/usarr` recorded in as many words that *"stop writing a row for the clean containers and every one of those collapses back into silence"*; ⚠️ **and the two adjacent readers had OPPOSITE absence conventions** one §17.8 column apart — absent completeness meant *nothing was asked*, absent skip meant *nothing was found* — which is a hazard on its own; **the same-screen compensating control was ruled INSUFFICIENT by the owner**, in his words *"cross-referencing is what people stop doing"*; **the decision**: every container an import **walked** gets a row, zero or not, and a container nothing walked gets none; ⚠️ **the three states survive and only the EVIDENCE moves** — `left_out` is a non-zero row, `none` is a zero row, absent is no row, and the wire contract, the `SkipState` vocabulary and the §17.8 render are all unchanged (`none` still renders nothing, keeping that screen's standing invariant that it paints no positive health claim); **the completeness derivation is RETIRED rather than left as a fallback**, taking `ListLibraries`'s ordering constraint with it, because a dead cleverness kept just-in-case is a second code path nobody exercises; ⚠️ **the change belongs in the ADAPTER and not in `cmd/usarr`, which is load-bearing** — the tally map is populated by `tallyFor` at the top of one container's iteration **inside** the walk and is never pre-seeded, so the row set is the set of containers the walk **reached**; ✅ **the before-the-walk imprecision therefore genuinely DIES** — completeness is measured in `Containers()` before the walk, so an aborted import writes verdicts for containers it never reached, and those used to read *"nothing was skipped"* when the truth was *"not observed"*; ⚠️ **and what is STILL OPEN is stated rather than implied** — the one container the walk died **inside** carries a row from what it had read, so a clean partial read is indistinguishable from a clean complete one (at most one per import), not closed because withholding it loses genuine observed skips and contradicts the invariant, and marking it means a fourth state the screen cannot render; 🚫 **synthesising the zero rows in `cmd/usarr` from the container list is REJECTED and was fired deliberately** — the only list available there is `Containers()`'s, and seeding from it produces a clean zero for a container named `Never Reached`, which **moves** the imprecision into the field just decoupled from it; **a zero row carries no `reason` and no `effect`** (they explain a skip, and on a zero they assert a cause for a non-event) but keeps `covers`/`does_not_cover`, because a skip count is not a completeness verdict at any count; **the `StreamItems` LOG keeps its zero gate** — nobody infers "walked clean" from an absent log line, so the record is the row; **adds no migration, no column and no DDL** — same `kind`, and `sync_report.kind` carries no `CHECK` (migration `00005`, verified in the DDL); **no SQL and no plan change** — `librarySkipsSQL` and `libraryCompletenessSQL` still share one `containerReportSQL`, and `TestTheSkipStatementIsTheCompletenessStatement` was re-examined and **kept**; **the Libraries screen does not change**, since `skipMarks` and `skippedNote` already keyed on `left_out` and the absent key; ⚠️ **one reader behaviour inverts in the safe direction** — a library whose only skip row is undecodable now reads absent rather than `none`; **four existing assertions are INVERTED rather than deleted**, because an inverted assertion records that the decision changed and a deleted one is silence |
 | [0064](#adr-0064) | BookOrbit's wire vocabulary is pinned by vendoring `packages/types` under `api/specs/`, guarded by an offline git-tree pin plus a network drift check | **Accepted** — 2026-08-19; **extends [ADR-0047](#adr-0047)'s two-half guard shape from one file to a directory** and leaves [ADR-0046](#adr-0046), [ADR-0047](#adr-0047) and [ADR-0052](#adr-0052) standing and unreworded — the change carrying it edits no ADR at all; **the problem is that [ADR-0052](#adr-0052) made BookOrbit the SOLE catalogue source** while every wire shape in `internal/bookorbit` is **hand-transcribed** from BookOrbit's TypeScript citing `73b7877d`, so an upstream rename or retyped field was not the degradation of one adapter among several but a single point of failure for the whole library, **invisible until an import broke against a real server**; ⚠️ **there is nothing else to vendor** — BookOrbit commits no OpenAPI document, `server/src/swagger.ts` builds one at **runtime** and `main.ts` mounts it only under a default-false `SWAGGER_ENABLED`, so [ADR-0046](#adr-0046)'s floor/ceiling split has nothing to bite on and no "fetch it from the running instance" recipe exists either; **the decision**: vendor `packages/types` **verbatim and whole** — all **68 files** at `73b7877d` — to `api/specs/bookorbit-types/`; **`api/specs/` rather than `docs/reference/`, DECIDED rather than inherited**, settling an inference `docs/ROADMAP.md` explicitly flagged as one to settle — `api/specs/SOURCES.md` opens *"vendored verbatim, never fetched at build or test time"* and carries a provenance table contract tests read, while `docs/reference/` holds hand-written Markdown and **not one vendored artefact**; **the identity is a git TREE name** (`4cb990a36b8325845abb79eb4b7a4445e6df679b`) and not a SHA-256 of our own devising, which buys two things a home-grown hash would not — upstream is **comparable with no download**, since a blobless fetch resolves a path to its tree name out of the tree objects alone, and the value is **upstream's own name**, so nobody must trust that we hashed the right bytes in the right order; ⚠️ **nothing may be added inside the vendored directory** — one extra file changes the tree and destroys that identity, which is why the manifest lives **beside** it and never in it; **two authorities and one diagnosis**: the tree name moves for **any** byte (right offline, where the bytes are frozen), a comment-blind **declaration digest** moves only when a type, field, enum member or literal union changes (so an upstream comment rewrite does not read the same as a rename — **an alarm that is usually noise is an alarm nobody reads**), and the per-file manifest is *"a diagnosis and never an authority"*, read only to turn *"the tree hash differs"* into *"these files differ"*; ⚠️ **the digest is a LEXER THAT REFUSES RATHER THAN GUESSES, which is why five files are digested and not sixty-eight** — `stripTypeScript` cannot tell a regex literal from a division, and `src/pattern-resolver.ts:71` declares a character class **containing a double quote** that would trap the scanner in a string state it never leaves, so it **asserts it finished in code state** and errors otherwise rather than pinning a file to nonsense; **the guard is split across the network line** on [ADR-0047](#adr-0047)'s reason — three offline checks in **`make check`**, the upstream comparison behind the `upstream` tag in **`make spec-drift`** only, because `make check` makes exactly two network calls and a third would let a GitHub outage redden an unrelated commit; ⚠️ **the network half asks TWO questions and they are not the same news** — the tree at the **pinned commit** not matching is **our** bug and invalidates every transcription, while the tree at **`main`** having moved is **upstream news**, graded per file by whether `internal/bookorbit` transcribes it; ✅ **`SPEC_DRIFT_FLOOR` was raised 1 → 2 in the same change, and that is what makes the drift check non-vacuous** — `go test -run` matching nothing exits 0, so a floor is the only thing standing between a green and a green over zero checks; 🚫 **rejected**: vendoring only the five transcribed files (silently un-covers the next slice, and a guard that quietly shrank is indistinguishable from one that held), a plain SHA-256 over a concatenation (not upstream-comparable, and demands trust), the tree hash as the **only** signal (cries wolf on comment churn and on a Prettier rewrap), [ADR-0046](#adr-0046)'s floor/ceiling (no committed document and no release-tag line to split), and vendoring the NestJS server; ⚠️ **the honest limit is stated rather than implied** — it pins **the file we vendored, not the server the owner runs**; it sees **types, not behaviour**; it does **not** check whether our transcription reads them correctly (`TestMediaKindVocabularyMatchesTheSource` and `TestPermissionVocabularyMatchesTheSource` stay necessary); the server's own **NestJS DTOs are unpinned by anything**, the largest uncovered surface; and **nothing runs the network half on a schedule** — there is no CI and `make spec-drift` is a thing a person types, so this ADR claims no cadence |
 | [0065](#adr-0065) | The BookOrbit cover fetch runs **inside the import, between committed batches** — not on a render path, and not inside `applyOneItem`'s transaction | **Accepted** — 2026-08-19; **the SHAPE is a restatement of ARCHITECTURE §4.4.1 rule 4 rather than a novelty** — *"the grid paints from `work` rows as import phase A commits; images fill in behind, and the grid is never blocked on the image queue"* — so covers are fetched **during the import** and there is **no per-work on-demand entry point**, a render path being disqualified by principle 1 and [ADR-0004](#adr-0004) because a synchronous upstream call on a render is exactly what they refuse; ⚠️ **the LEVEL named in the first ruling was WRONG, and the correction is MEASURED** — `applyOneItem` runs inside `ApplyCatalogueBatch`'s single `BEGIN IMMEDIATE` transaction, which spans a whole batch at `min(2000 rows, 100 ms)` on a writer pool hard-capped to **one connection** (`write.SetMaxOpenConns(1)`, *"Exactly one. This is the entire single-writer discipline."*), so a fetch there would hold the process's only writer across a network round trip **per book** and serialise the entire import behind upstream latency — which `internal/db/sqlite.go`'s `Write` doc already forbids in writing: *"fn must not call Write, and must not hold the transaction across a network call: the whole process shares one writer connection"*; **so the pass sits in `internal/libsync`, between committed batches**, keyed by **remote id** with the work re-resolved inside the store's own transaction, because `ImportedItem` carries **no work id by design** and `PosterAsset`'s header names the hazard — an id read before a network round trip is an id read arbitrarily long ago, and `work.id` being `INTEGER PRIMARY KEY` turns a reused id into **the wrong book's cover**, silent and visible only as art that does not match its title; **two in-tree precedents, both built before this question was asked** — credits were moved OUT of the stream callback (`FullImport` phase 3: issuing per-item GETs from inside it *"would hold the streaming connection open across all of them"*) and `PutPosterAsset` opens *"The bytes are already on disk when this runs"*, a sentence a fetch inside the transaction would falsify; **a cover-fetch failure NEVER fails the import**, a partial catalogue that says it is partial beating no catalogue, on `FileReadFailures`' existing *"NOT an import failure"* shape; ⚠️ **concurrency is bounded and the bound is BUILT rather than INHERITED** — §4.4's `min(NumCPU, 4)` is **prose** and is about **transcoding**, so this decision's own first constraint was wrong and is carried verbatim rather than quietly fixed: *"§4.4's semaphore is scoped to transcoding… fetch concurrency needs its own bound, stated in its own terms, not borrowed from a limit that exists for a different resource"*; 🔍 **and one supporting claim was CHECKED AND IS FALSE, so it is not leaned on** — `internal/imagepipeline/pipeline.go`'s *"the tree's only one is the Argon2id gate"* does not hold, `internal/releases/search.go` having bounded its indexer fan-out at `DefaultConcurrency = 6` since `dd15d95`, which is a bound over concurrent **network legs** and therefore the closest precedent rather than a counter-argument; **a 404 is "absent for this credential" and never terminal** — BookOrbit throws the same `NotFoundException` for a missing cover file, a missing book, and a book the credential's content filters hide, so a 404 is **not evidence about a file** and the next import retries rather than inheriting a permanent verdict, which deliberately NARROWS `cover.go`'s own *"caching absence on a 404 is sound"*; ⚠️ **what it does NOT decide is stated rather than implied** — whether whole libraries are hidden from the account remains **unanswerable read-only** ([ADR-0061](#adr-0061)), the permit count and the pass's exact slot in `FullImport` are implementation (though `PutPosterAsset` sets no `rollup_dirty` — verified — so a cover pass does not compete with the file walk for the last-before-flush slot), and within-import retry is left open; **the pipeline's *"NEVER AGAINST A REAL COVER"* caveat is untouched and stays exactly as loud**; **adds no migration, no column and no DDL, and edits no other ADR's reasoning** — two mechanical anchor/rule repairs elsewhere in this file ride along in the same change and touch no decision · ⚠️ **amended 2026-08-19** — decision 5's *"a fetch bound, stated in fetch terms"* is less precise than the bound that shipped: one permit is held across fetch, decode **and** render, so it caps concurrent transcodes and caps connections only incidentally, and **N permits is not N concurrent requests**; **the decision itself — bounded, built rather than inherited, own constant and own refusal test — is unchanged** |
-| [0066](#adr-0066) | A wholly skipped BookOrbit library is **bound with an honest zero**, never declined; and the whole-library sentence says **what happened**, not just how many | **Accepted** — 2026-08-19; **builds on [ADR-0063](#adr-0063)** — the zero-count skip row is what makes an all-skipped library representable, so this ADR is about **what the screen says**, not about the schema — and **amends no ADR's reasoning**, editing no other entry in this file; **it is the ADR `internal/libsync/bookorbit.go` asked for by name**: *"Splitting one container into two libraries is a deviation from §17.8 that needs an ADR, and it is comics' slice to ask for"*; **the case is not hypothetical** — comics are skipped inside the walk today (`StreamItems`: `case bookorbit.MediaKindComic: tally.Comics++; return nil`, on the unit-of-work gap its package doc names, BookOrbit's series having no library to bind a comic's series work to) while **no container is declined at all** (`Containers()`: *"NOTHING IS DECLINED HERE… BookOrbit says nothing, so there is no answer to decline on"*, its `libraries` table carrying no type/kind/mediaType column), and **the owner's own BookOrbit keeps comics and prose in SEPARATE libraries** — his words, 2026-08-19, *"libraries are split up"* — so on the install v0.1 is proven against a comics library **walks, reports and yields nothing**, which is a whole library on his screen rather than an edge case; **the decision**: such a container is **BOUND** with an item count of zero and a sentence, and **no adapter declines one for being wholly skipped** — ratifying what the code already does, precisely because the tempting change is the one that makes the row disappear; ⚠️ **and the whole-library case gets its OWN sentence, because the count is not the message** — *"42 items were read and not mapped"* is a report **on the remainder** and reads as *some of this arrived*, so when the 42 IS the library the identical sentence reads as *this is broken*; the specified pair is *"Nothing in this library is imported yet"* over *"All 412 items were read. UsArr does not import comics yet."*, with **three acceptance criteria rather than taste** — it asserts the read succeeded with the count as evidence, it names the **media type** and the reason, and **it must be impossible to mistake for a connection failure**; **the condition is DERIVED and no wire field is added** — `item_count == 0` ∧ `skipped.state == "left_out"` ∧ `skipped.items > 0`, both fields shipping today, with the **empty upstream library** staying distinct for free since it walks clean to `state: "none"` with `items` absent; 🔍 **`skipEffect`'s remainder clause is measured FALSE on this shape and recorded as false rather than left to be found on a screen** — *"every other book in the library was imported"*, when there is no other book (it travels to `sync_report` and not to the cell, on §9.1's split, which bounds the blast radius and not the wrongness); **the MIXED container is decided too, and it becomes TWO library records** — `library.kind` is *"Exactly one, required"* under a `CHECK` that **already permits `'comic'`**, and `library_source`'s uniqueness is per `(library_id, …, container_ref)`, so two libraries may name one container and **no migration is needed**; until comics import, a mixed container binds exactly as today, one `book` library with its comics counted, which is the partial case and renders the partial sentence; ⚠️ **that half is DESIGNED AND UNTESTED, stated plainly so untested does not read as unsupported** — the owner's split libraries mean **his data will never exercise it**, and the precedent for the distinction is this project's own **synthetic-cassette rule** (`internal/bookorbit/vcr_test.go`: *"A SYNTHETIC CASSETTE PROVES THIS CLIENT'S PARSING, NOT THE SERVER'S BEHAVIOUR"*), where a green is **spec evidence only** and the tests are kept and trusted for exactly what they cover; 🚫 **DECLINING THE LIBRARY IS THE ALTERNATIVE THIS ADR CLOSES**, and it loses on three counts — invisible reads as broken, since §17.8 renders `library` joined to `library_source` and a declined container has neither, leaving a green Services row, a library the owner can see upstream and **no row at all**, which is principle 3's *"empty screen that looks broken"* exactly; the decline lands in `container_declined`, which is **measured to have no reader** in `internal/store`, `internal/httpapi` or `web/`; and it makes the state **unstable across a release**, a library materialising out of nowhere with a full catalogue the day comics import, where binding now turns that day into a zero becoming a number on a row the user has already seen; 🚫 **also rejected**: rendering nothing (`none` is the **measured negative** meaning *nothing was left out*, so using it where **everything** was would make the column's one honest silence say the opposite of the truth), reusing the partial sentence, a `whole_library` wire field or a third `SkipState` member (**"and also"** — derivable from two shipping fields, and a second thing that can be absent or disagree, on ADR-0063's own ground for declining a fourth state), and giving the row `kind = 'comic'` today (it could only be inferred **from the tally**, i.e. from what the walk happened to read, and §6.4's cascade makes a wrong `work.kind` unmergeable); ⚠️ **one residual is recorded rather than closed** — the row's kind is `book` while its contents are comics, mitigated only by `kind` being *"EDITABLE (§6.5 rule 4)"*, and closed when comics get a unit of work; **adds no migration, no column, no DDL and no wire field**, owes the implementing slice exactly **two strings**, and **nothing here is built** — it rules behaviour the §17.8 screen and the comics slice implement |
+| [0067](#adr-0067) | A pasted BookOrbit **magic link is accepted and reduced to its token**; the refusal becomes the fallback | **Accepted** — 2026-08-19; **reverses a ruling taken the same morning and records both**, because the first one was correct reasoning on a premise that turned out to be false — `ab9e0f3` refused a pasted magic-link URL on the belief that BookOrbit's copy button *"yields a URL, while POST /api/v1/auth/magic-links/login wants the bare token"*, read as *an artefact its own API cannot consume*; **reading the consumer falsified it** — `client/src/router/index.ts` declares a public `/magic` route, `MagicLinkLoginView.vue` takes `route.query.token` and strips it from history, and `useAuth.loginWithMagicLink` POSTs `{"token": raw}`, so **URL in / bare token out is an adapter BookOrbit already implements**, and `MagicLinksSettings.vue` offers the operator nothing else (the table renders the label, the account, the expiry and the use count, never the raw value); **measured at `73b7877d2fede2221b0ca360af9bfced7c3797f3`, cited as a commit because the tag `v2.6.0` was NOT verified to point at it**; **found by a live failure on the owner's install**, not by review; **leaves [ADR-0060](#adr-0060) standing and unreworded**; the price is named rather than buried — the accept rule is a **whitelist**, so an upstream token-format change would have UsArr refuse a valid credential |
 
 ---
 
@@ -9256,221 +9256,221 @@ and unclaimed.
 
 ---
 
-<a id="adr-0066"></a>
-## ADR-0066 — A wholly skipped BookOrbit library is **bound with an honest zero**, never declined; and the whole-library sentence says **what happened**, not just how many
+<a id="adr-0067"></a>
+## ADR-0067 — A pasted BookOrbit magic link is **accepted and reduced to its token**; the refusal is the fallback, not the rule
 
-**Status:** Accepted — 2026-08-19. **Builds on [ADR-0063](#adr-0063)** — the zero-count skip row is
-what makes the empty library representable at all — and **amends no ADR's reasoning**: ADR-0061,
-ADR-0063 and ADR-0065 stand unreworded, and this change edits no other entry in this file.
-**It is the ADR `internal/libsync/bookorbit.go` asked for**, in the `bookKind` doc's own words:
-*"Splitting one container into two libraries is a deviation from §17.8 that needs an ADR, and it is
-comics' slice to ask for."* ⚠️ **Nothing here is built.** This ADR rules behaviour a later slice
-implements — the §17.8 screen and the comics slice — and every sentence below describing what a user
-sees is a specification of intent, on §17.8's own standing warning.
+**Status:** Accepted · **2026-08-19** · **Reverses a ruling taken the same morning, on a premise that
+was measured and found false — BOTH rulings are recorded below**, because a reader who sees only the
+second one cannot tell whether the first was careless or correct-on-bad-evidence, and it was the
+second · **Found by a live failure on the owner's install**, not by review — the owner added a
+BookOrbit and the mandatory connection test came back 401 · **Ships code**: `serviceCredential` in
+[`internal/httpapi/services.go`](../internal/httpapi/services.go) and its guards in
+`services_credential_test.go` · **No migration, no schema change, no new configuration key** ·
+**Leaves [ADR-0060](#adr-0060) standing and unreworded** — that ADR measured what BookOrbit does with
+a token it has issued, and nothing here touches it · **Measurements cite a COMMIT, not a tag**:
+everything below was read from `bookorbit/bookorbit` at
+`73b7877d2fede2221b0ca360af9bfced7c3797f3`, cloned and read on 2026-08-19. ⚠️ **The tag `v2.6.0` was
+NOT verified to point at that commit** and is deliberately not named as if it did.
 
 ### Context
 
-#### 1 · Comics are skipped during the import today, and the container is not
+#### 1 · The occasion is a 401 nobody could act on
 
-Measured, not recalled. `internal/libsync/bookorbit.go`'s `StreamItems` switches on the book's media
-kind and a comic returns without reaching `fn`:
+Adding a BookOrbit failed the mandatory connection test (ARCHITECTURE §11.3, §17.7) with a 401 from
+`POST /api/v1/auth/magic-links/login`. The credential pasted was the whole magic link. On the wire
+that is indistinguishable from a revoked, expired, deactivated or simply unknown token — the login
+route hashes what it is given and looks the hash up, so a *wrong-shaped* value and a *dead* value
+produce the same status and the same body. `bookOrbitTestAction`'s advice for that status was
+therefore aimed at the wrong fault, and the operator was told to go and change something that was
+already correct.
 
-```go
-case bookorbit.MediaKindComic:
-    tally.Comics++
-    return nil
-```
+**The distinction is available in exactly one place: before the value is sent.** After the send,
+nothing downstream can recover it. That is the whole argument for a check at the API boundary, and
+it is common to both rulings below — what the two rulings disagree about is what the check should
+then DO.
 
-The package doc states it as a standing gap — *"COMICS. A comic-format book is SKIPPED AND COUNTED,
-never guessed at"* — and gives the reason, which is a unit-of-work question rather than a parsing
-one: BookOrbit's series have no library and a book can belong to several of them, so the series work
-a comic would hang under **has no container to bind to**, and a wrong `work.kind` is written once at
-ingest and can never be merged away (§6.4's cascade).
+#### 2 · The first ruling, and the premise under it
 
-**The container is a different matter, and nothing declines one.** `Containers()` reads
-`GET /api/v1/libraries` and gives every library the `book` kind, and its own doc says why that is not
-a Kavita-style judgement: *"NOTHING IS DECLINED HERE… mapLibraryType declines Kavita's Image type
-because Kavita SAYS what a library holds and UsArr has no kind for that answer. BookOrbit says
-nothing, so there is no answer to decline on."* BookOrbit's `libraries` table has no `type`, `kind`
-or `mediaType` column. So the judgement is **per book, inside the walk**, and every container
-`Containers()` reports reaches `store.BindContainers` → `bindOneContainer` and becomes a library row
-regardless of what the walk later makes of its contents.
+The first ruling, shipped in `ab9e0f3`, was **refuse and name which half to paste**: a BookOrbit
+credential containing `://` or `token=` was rejected with a message telling the operator to paste
+only the value after `token=`. Its stated reason was that guessing which half of a pasted string is
+the secret is *"the inventing configuration on the user's behalf that `normalizeServiceURLBase`
+already declines"* — and behind that sat a premise, which the code comment stated as fact:
 
-#### 2 · The record for the empty case already exists, so this is a copy and a policy question
+> the copy button on the screen the user is told to use yields a URL, while
+> `POST /api/v1/auth/magic-links/login` wants the bare token
 
-[ADR-0063](#adr-0063) gives **every container an import walked** an `items_skipped` row, zero or not,
-and reserves the absence for *nothing walked this container*. A library whose every item is skipped
-therefore already produces a `left_out` row whose total equals everything the walk read. **No new
-kind, no new column and no new state is needed to represent it** — which is why this ADR can be about
-what the screen says rather than about what the schema holds.
+Read as *"BookOrbit hands its operator an artefact its own API cannot consume"*, that premise makes
+the URL an upstream oversight, a pasted URL a user error, and refusal the honest answer. **It is
+false.**
 
-#### 3 · On the owner's install this is a whole library, not an edge case
+#### 3 · What falsified it: `/magic` is an implemented adapter, not a dead link
 
-**The owner's BookOrbit keeps comics and prose in separate libraries** — his words, 2026-08-19:
-*"libraries are split up."* Recorded as a statement about **his install**, not as a property of
-BookOrbit, which declares no container type at all (context 1) and permits a mixed one. So on the
-install v0.1 is proven against, a comics library **walks, reports, and yields nothing**. It is not a
-corner the design may leave rough: it is one of his libraries, on the screen, every day.
+Read at `73b7877d2fede2221b0ca360af9bfced7c3797f3`:
 
-#### 4 · And the copy that ships today is written for the partial case, in two places
+- **`client/src/router/index.ts`** declares `{ path: '/magic', name: 'magic-link-login', meta: {
+  public: true } }`. It is a real, public, named route.
+- **`client/src/features/auth/MagicLinkLoginView.vue`** reads `route.query.token`, immediately
+  `router.replace`s it away — its own comment: *"Strip token from URL immediately to prevent leaks
+  via browser history/referrer"* — and hands the value to `loginWithMagicLink`.
+- **`client/src/features/auth/composables/useAuth.ts`** posts it: `fetch('/api/v1/auth/magic-links/login', { method: 'POST', body: JSON.stringify({ token }) })`.
 
-Both are measured, and the first is plainly false rather than merely imprecise:
+So **URL in, bare token out is a reduction BookOrbit already implements**, on the route its own copy
+button's URL points at. The link is not a mis-copied token; it is the artefact the product means to
+hand an operator, and the token is the payload it carries.
 
-- **`skipEffect` asserts a remainder that does not exist.** `cmd/usarr/import.go`'s constant ends
-  *"…and this library's item count is short by that many; **every other book in the library was
-  imported**"*. On a wholly skipped container there is no other book. It reaches an operator reading
-  `sync_report` rather than a browser — `reason` is the half that travels to the cell, on §9.1's
-  split — which bounds the blast radius and does nothing about the wrongness.
-- **The rendered mark is a count under a "some" word.** `skipMarks`
-  (`web/src/lib/libraries.ts`) draws the word *"Some items were left out"* over the detail
-  `` `${items} items were read and not mapped` `` plus the wire `reason`, and ARCHITECTURE §17.8
-  specifies exactly that sentence as the tenth state's rendering: *"Some items were left out — 42
-  items were read and not mapped; UsArr maps prose books only"*. **Every word of it is right for a
-  partial library.** *"Some"* is wrong when it was all, and a bare count with no explanation of the
-  whole is the shape a reader has to guess at.
+**One adjacent claim was checked at the same time and holds**: there is **no header-borne magic-link
+credential anywhere in `server/src`**. `AuthController.loginWithMagicLink` takes
+`@Body() dto: MagicLinkLoginDto`, whose only field is `token: string` (`@IsString`, `@MinLength(1)`,
+`@MaxLength(512)`), and a search of `server/src` for a magic-token header name returns nothing. Any
+wording that says or implies the login route reads a header would be wrong; none was found in this
+tree (see Consequences).
+
+#### 4 · The settings screen offers the operator nothing else
+
+This is what turns "the URL is legitimate" into "refusing it is hostile". In
+`client/src/features/settings/MagicLinksSettings.vue`:
+
+- `getMagicUrl(rawToken)` returns `` `${window.location.origin}/magic?token=${rawToken}` ``, and
+  `copyMagicUrl` is what the row's only credential-shaped button calls.
+- **The raw token is never rendered.** The table's columns are the label, the account, the creator,
+  the expiry and the use count. `rawToken` arrives in the JSON and is passed to the copy handler; no
+  cell prints it.
+- **Not even at creation.** `handleCreate` awaits `createToken` and closes the dialog. There is no
+  show-once panel.
+
+So an operator following BookOrbit's UI **cannot obtain a bare token at all** — only the link. A
+refusal therefore instructs them to hand-edit the only artefact the upstream will give them, before
+pasting it into a field that could have done the edit itself. *Explicit over clever* is a good rule
+and it loses here, because the "user error" it would be policing is the upstream's designed
+workflow.
+
+#### 5 · Where the accepted shape comes from
+
+`MagicLinkRepository.create` mints `randomBytes(32).toString('hex')` — **64 lowercase hex
+characters**, Node's hex encoder being lowercase — and stores `sha256(rawToken)` alongside it.
+That single line is the only definition of the shape; nothing in this decision infers it.
 
 ### Decision
 
-**1 · A container whose every item is skipped is BOUND, and no adapter declines one for being
-wholly skipped.** `Containers()` keeps reporting it, `bindOneContainer` keeps binding it, and the
-library renders on §17.8 with an item count of zero and a sentence. This **ratifies what the code
-already does** rather than changing it — which is the point of recording it: the tempting change is
-the one that makes the row go away, and it is now closed rather than merely unbuilt.
+1. **Two shapes are accepted for a `bookorbit` credential, and only two**: a bare token that is 64
+   lowercase hex characters, or a URL whose `token` query value is one. The second is reduced to the
+   first, and everything downstream sees only the first.
 
-**2 · The whole-library case gets its OWN sentence, and that sentence says what happened.**
-Specification, in `skipMarks`'s existing word/detail shape (§9.1's split: the word is the state, the
-detail is the evidence and the why):
+2. **Everything else is refused, with a message naming both shapes that work.** The refusal built by
+   the first ruling is not deleted — it becomes the fallback the accept path leans on. Without it a
+   mistyped credential still reaches the login route and still comes back as an unactionable 401.
 
-- **word** — *"Nothing in this library is imported yet"*
-- **detail** — *"All 412 items were read. UsArr does not import comics yet."*
+3. **Only the extracted token is sealed and sent.** Guarded on all four credential-bearing endpoints
+   — create, PATCH, test-unsaved, test-saved — and asserted against the *decrypted* envelope, not
+   only against the connection tester, because sealing a URL is invisible afterwards: the credential
+   is never returned to the browser, so no screen could ever show that the wrong half is inside it.
 
-**Three properties are acceptance criteria rather than taste**, and an implementation that keeps the
-meaning may move the wording:
+4. **The URL is PARSED with `net/url`, never cut with string surgery**, so the query value is
+   percent-decoded once, by the rules a browser would apply, rather than by whatever an index-of
+   would have implied. A scheme is not required — a link pasted without one still parses.
 
-  1. **It asserts the read succeeded, with the count as evidence.** *"All N items were read"* is a
-     positive statement about the connection, which is the half a bare shortfall cannot make.
-  2. **It names the media type and the reason.** Not *"not mapped"* — *comics*, and *not imported
-     yet*. A reader who does not know what UsArr maps learns it here.
-  3. **It must be impossible to mistake for a connection failure.** That is the test to apply to any
-     rewording, and it is the whole reason this state is not left to the partial sentence.
+5. **Two different `token` values in one paste is a refusal, not a first-wins guess.** This is the
+   one part of the first ruling's reasoning that survives on its own terms: where a paste has no
+   single right answer, UsArr does not invent one.
 
-§13's ban on the mid-sentence em-dash beat in UI microcopy applies here as to every string in §17,
-which is why the detail is two plain sentences.
+6. **The submitted value is never echoed back** — not in the refusal message, not in its action, not
+   in an audit row, not in a log attribute. A pasted magic link carries two things worth keeping out
+   of a log: the token, and the operator's own BookOrbit hostname. The message says what was
+   expected and says nothing about what arrived.
 
-**3 · The condition is DERIVED from fields that already ship. No wire field is added.**
-`item_count == 0` **and** `skipped.state == "left_out"` **and** `skipped.items > 0`.
-`libraryResponse.ItemCount` and `librarySkipsResponse.Items` both exist today
-(`internal/httpapi/libraries.go`; `reference/http-api.md` §2 and §2.6a). **The empty upstream library
-stays distinct and needs no care**: it walks clean, so its row is `state: "none"` with `items`
-absent — the wire contract's *"Absent under `none`"* — and it renders nothing, which keeps §17.8's
-standing invariant that no positive health claim is painted on that column.
+7. **The rule is BookOrbit's alone.** A Prowlarr or Kavita key is opaque to UsArr, so nothing here
+   may refuse one and nothing here may rewrite one; a key that happens to contain `token=` reaches
+   the wire byte for byte. `TestTheMagicLinkShapeRuleIsBookOrbitOnly` pins that property, and it now
+   pins both halves of it — no refusal leaks, and no extraction leaks either.
 
-**4 · `skipEffect`'s remainder clause is FALSE on this shape and is recorded as false here**, rather
-than left to be discovered on a screen. Fixing it belongs to the slice that implements decision 2;
-this ADR's job is that nobody later reads that sentence as a decision somebody took about the whole
-case.
+8. **The whitespace trim from `ab9e0f3` stands and runs FIRST**, before shape detection: a paste's
+   surrounding whitespace is not part of its shape.
 
-**5 · A MIXED container becomes TWO library records on UsArr's side, and that shape is decided
-here.** `library.kind` is `TEXT NOT NULL CHECK (kind IN ('movie','series','artist','album','book',
-'comic','game'))` — *"Exactly one, required"* (migration `00005_library_sync.sql`) — so once comics
-have a unit of work, one upstream container holding prose and comics **cannot** be one UsArr record.
-It becomes a `book` library and a `comic` library over the same `library_source` container ref.
-**This needs no migration**: `'comic'` is already a permitted kind and `library_source`'s uniqueness
-is `(library_id, service_instance_id, container_kind, container_ref)`, so two libraries may name the
-same container. **Until comics import, a mixed container binds exactly as it does today** — one
-`book` library, its comics counted as skipped — which is decision 2's *partial* case and renders the
-partial sentence, correctly.
+### ⚠️ What this costs: the acceptance rule is a WHITELIST
 
-**6 · Decision 5 is DESIGNED AND UNTESTED, and that is not the same as unsupported.** The owner's
-libraries are split (context 3), so **his data will never exercise it** and no import against his
-server can confirm or refute it. Stated plainly because the alternative is that a later reader finds
-no evidence for it and concludes it does not work. **The precedent for the distinction is this
-project's own synthetic-cassette rule** — `internal/bookorbit/vcr_test.go`: *"A SYNTHETIC CASSETTE
-PROVES THIS CLIENT'S PARSING, NOT THE SERVER'S BEHAVIOUR"* — where a green is evidence **about the
-spec we transcribed** and never about the running server, and the tests are kept and trusted for
-exactly what they cover. Decision 5 has the same grade: buildable, fixture-testable, and standing on
-no byte of real data.
+Stated plainly because it is the real price and it is not the one the first ruling paid. Before this
+change, an unrecognised BookOrbit credential was passed through and failed upstream. Now anything
+that is neither accepted shape is refused **locally**, so a BookOrbit that changed its token format —
+longer, base64, prefixed — would have UsArr refuse a *valid* credential and make adding the service
+impossible, where the old code would merely have produced a confusing 401.
 
-### Why
+That trade is taken deliberately: an actionable refusal today beats an indistinguishable 401 today,
+and the failure mode it introduces is loud, immediate and names its own cause. **The falsifier is
+one line upstream** — `randomBytes(32).toString('hex')` in `magic-link.repository.ts` — and it is
+cited at the constant in the code so the next reader meets it there rather than here.
 
-**Declining makes it invisible, and invisible reads as broken.** A declined container produces no
-`library` row, so §17.8 — which renders `library` joined to `library_source` — shows **nothing at
-all**. The owner then sees a BookOrbit that connected green on Services, a library he knows exists
-upstream, and no row for it, with nothing on the screen to tell that apart from a connection that
-half-failed. Principle 3 is written against exactly this: *every feature degrades honestly when a
-service is absent — it says what is missing and why, rather than rendering an empty screen that looks
-broken.* A zero-count row with one sentence is that honest degradation; an absence is the empty
-screen.
+⚠️ **A consequence inside this repo, worth stating because it fired immediately:** the `cmd/usarr`
+BookOrbit end-to-end fixtures used 32-hex tokens and were refused at the API boundary before they
+reached the fake BookOrbit at all. They are now 64-hex. A fixture that no longer resembles the real
+credential is a test that has stopped testing the boundary, and this is the boundary moving, not a
+test to relax.
 
-**And the decline would not even be recorded where anyone looks.** `container_declined` rows are
-written (`internal/libsync/importer.go`) and **read by nothing** — measured: the string appears in no
-file under `internal/store`, `internal/httpapi` or `web/`, its one other occurrence being a comment
-in `internal/store/skips.go` distinguishing it from this kind. So declining moves the fact into a
-table with no reader, which is the opposite of the direction ADR-0063 just moved this field.
+### The ruling this reverses, and why it was reasonable
 
-**The count is not the message, and the same sentence changes meaning at the boundary.** *"42 items
-were read and not mapped"* is a report **on the remainder**, and it is right precisely because there
-is a remainder — it reads as *some of this arrived*. When 42 is the entire library there is no
-remainder for it to be about, and the identical sentence reads as *this is broken*. That is a
-property of the sentence and not of the reader, which is why decision 2 is a second string rather
-than a threshold on the first.
+**Refuse-don't-parse was correct reasoning on a wrong premise, and it is recorded that way rather
+than as an error.** Given *"BookOrbit hands out something its own API cannot consume"*, refusal is
+the better answer on every axis the first ruling weighed: it declines to guess at a secret, it keeps
+one rule instead of two, and it matches `normalizeServiceURLBase`'s existing refusal to invent
+configuration. Nothing about that argument was sloppy. **What was missing was one read** — the SPA
+router — and the premise did not survive it.
 
-**It is also where every neighbouring verdict already sits.** The ninth state (a content-filter
-shortfall) and the tenth (items left out) both render **on a bound library's row**, greyed or ambered
-by whether anything is actionable. A skip is UsArr doing what it was built to do — grey, nothing to
-go and fix — and a whole-library skip is the same fact at a different size. Putting it anywhere other
-than that row would need an argument this ADR does not have.
+**What generalises, and it is not "check harder":** the first ruling described an upstream's UI
+behaviour (*the copy button emits a URL*) and then inferred an upstream's intent (*so the URL is a
+mistake*). The behaviour was measured; the intent was assumed and written in the same voice. **An
+inferred intent should never be the load-bearing premise of a refusal**, because a refusal is where
+UsArr overrides what the user did — and the evidence that settles intent is usually one file away,
+in the consumer of the artefact rather than in its producer.
 
-### Alternatives rejected
+### Rejected
 
-**Decline the container, so no library is created.** ⚠️ **This is the alternative this ADR exists to
-close**, and it is tempting for a real reason: a library with nothing in it looks like clutter, and
-Kavita's adapter already declines containers it has no kind for, so the machinery is right there. It
-loses on three counts. **(a)** Invisible reads as broken — the Why above, and principle 3.
-**(b)** The decline lands in `container_declined`, which nothing reads, so the user is not told;
-UsArr would be silently dropping a library the owner can see upstream. **(c)** It makes the state
-**unstable across a release**: the day comics import, a library appears out of nowhere carrying a
-full catalogue, and nothing on the screen ever said it was there. Binding it now means that day
-changes a zero to a number on a row the user has already seen — which is a catalogue growing, not a
-library materialising.
+- **Refusing a pasted magic link** — the first ruling, and the reason above.
+- **Accepting a URL and passing it upstream unchanged**, letting BookOrbit fail it. That is the
+  original defect: it seals a credential that can never work into an AAD-bound envelope nothing can
+  read back, and reports it as a 401 that reads as *"your token was revoked"*.
+- **Cutting on `strings.Index(v, "token=")`.** One line, and it hands percent-escapes to the login
+  route verbatim while silently taking the first of two conflicting values. Decision 4 and 5.
+- **Folding case on the token.** Uppercase hex is not the string BookOrbit hashed, so accepting it
+  would convert a clear local refusal into a remote 401 — the failure this ADR exists to remove.
+- **Consulting the host inside the pasted link.** The service's `base_url` is configured separately
+  and is the only thing that decides where requests go (`internal/ssrf` owns that). The link's host
+  is read by the parser and discarded; making it authoritative would be a new SSRF entry point
+  (§14) for no gain.
+- **Doing the reduction in the SPA.** The rule would then be advisory: the API is a supported
+  surface and `cmd/usarr` and any script are clients of it too. The SPA sends what the operator
+  typed, trimmed, and the server owns the shape.
 
-**Bind it, but render nothing** — treat "everything skipped" as the `none` silence. Rejected, and it
-is backwards rather than merely thin: `none` is §17.8's *measured negative*, the silence that means
-**nothing was left out**, and using it for a library where **everything** was left out would make the
-column's one honest silence say the opposite of the truth. It also collides with the invariant that
-that column paints no positive claim, by making its silence carry one.
+### ⚠️ What this does NOT decide
 
-**Reuse the partial sentence and let the count speak.** Decision 2, and the second Why paragraph:
-the sentence is a report on a remainder, and at this boundary there is none.
-
-**Add a wire field — `whole_library: true`, or a third `SkipState` member.** Rejected as "and also".
-The condition is derivable from two fields that already ship (decision 3), and a second field is a
-second thing that can be absent, can disagree with the first, and must be kept true by every future
-adapter. ADR-0063 declined a fourth state on the same ground and this is the same vocabulary.
-
-**Give the wholly skipped comics library `kind = 'comic'` today.** Rejected. `bookKind` is a constant
-*"BECAUSE BOOKORBIT SUPPLIES NO CONTAINER-LEVEL KIND AT ALL"*, so a `comic` kind here could only be
-inferred **from the tally** — from what the walk happened to read — and §6.4's cascade means a wrong
-`work.kind` written at ingest can never be merged away. The kind stays `book` until comics have a
-unit of work; decision 5 is what changes it, on evidence rather than on a guess.
+1. **Anything about `rawToken`'s retrievability.** [ADR-0060](#adr-0060) owns that measurement and is
+   untouched. The two ADRs meet only in the user-facing strings that lean on both.
+2. **Whether BookOrbit should keep returning `rawToken` on its list route.** That is upstream's call;
+   this repo's dependence on it is now annotated at each site that leans on it, with what would
+   falsify it.
+3. **Anything about other credential kinds.** Decision 7 is a scope limit, not a promise that a
+   similar reduction is right for Kavita or an *Arr.
+4. **Whether the connection test should be able to distinguish a wrong token from a revoked one.** It
+   still cannot, and no upstream signal makes it possible; this ADR only removes one *category* of
+   value from ever reaching that ambiguity.
 
 ### Consequences
 
-- **No migration, no column, no DDL and no new wire field.** The row, the state vocabulary and both
-  read fields already exist; what this ADR adds is a rendering rule and a policy.
-- **Two strings are owed by the implementing slice**, and only two: §17.8's tenth state gains a
-  whole-library arm alongside the partial sentence it already specifies, and `skipEffect` loses the
-  remainder clause decision 4 marks false. Both are copy in files that already exist.
-- **The owner's Libraries screen gains a row it would not otherwise have had** — his comics library,
-  at zero, saying why. That is the entire user-visible effect of this ADR on his install, and it is
-  the intended one.
-- **One residual, recorded rather than closed: the row's kind is `book` and its contents are
-  comics.** Decision 5's rejected alternative explains why no better kind is available today, and
-  `library.kind` is *"EDITABLE (§6.5 rule 4)"* in the schema's own comment, so a user is not stuck
-  with it. It closes when comics get a unit of work.
-- **Decision 5 ships as a decision and not as code**, and carries decision 6's grade permanently: any
-  future claim that the two-record split "works" must name the fixture it was proven against, never
-  an import.
-- **The next adapter inherits one rule**, and it is short: *a container you walked is a library you
-  bind, whatever the walk made of its contents.* The counting rule (ADR-0063) and the binding rule
-  now say the same thing about a container the import reached.
+**The user-facing copy inverts.** The Services screen's placeholder and API-key help, and
+`credentialAction`'s string, now say a pasted magic link is fine and name the bare token as the
+alternative. Wording that framed the copy button as a BookOrbit mistake is removed: it is a real
+feature serving BookOrbit's own login page, and describing it as a trap would have been wrong in the
+same direction the first ruling was.
+
+**A search of `cmd/`, `internal/` and `web/src/` for wording claiming the magic-link token travels in
+a HEADER found none** — `internal/bookorbit/doc.go` already documents `POST
+/api/v1/auth/magic-links/login with body {"token": "<raw>"}`, and
+`TestCredentialTravelsInHeadersAndOneBodyOnly` (`internal/bookorbit/client_test.go`) plus
+`cmd/usarr/bookorbit_e2e_test.go` already assert the body-not-header split on the wire. The
+mechanism was never mis-stated in this tree; only the intent behind the copy button was.
+
+**The refusal path gained a guard it did not have**: that a refused credential is quoted back in
+neither the response, the log, nor the audit row. Nothing was found leaking — the create path's audit
+metadata carries the instance name and a reason, and `errorBody`'s `message` and `action` both pass
+through `redactText` — so the guard pins existing behaviour rather than fixing a breach. It was fired
+against a deliberately-broken build first: with the submitted value interpolated into the refusal
+message, it fails.

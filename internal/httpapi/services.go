@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"net/url"
 	"sort"
 	"strings"
 	"time"
@@ -173,7 +174,11 @@ func (s *Server) handleCreateService(w http.ResponseWriter, r *http.Request) err
 	if err != nil {
 		return err
 	}
-	if strings.TrimSpace(req.APIKey) == "" {
+	apiKey, err := serviceCredential(kind, req.APIKey)
+	if err != nil {
+		return err
+	}
+	if apiKey == "" {
 		return errStatus(http.StatusBadRequest, CodeBadRequest,
 			"an API key is required: every service UsArr talks to authenticates with one").
 			withAction(credentialAction(kind))
@@ -184,7 +189,7 @@ func (s *Server) handleCreateService(w http.ResponseWriter, r *http.Request) err
 	// the test would otherwise store a credential against a host nobody has
 	// established is the service it claims to be.
 	result, err := s.runTest(r, TestRequest{
-		Kind: kind, BaseURL: baseURL, URLBase: urlBase, APIKey: req.APIKey,
+		Kind: kind, BaseURL: baseURL, URLBase: urlBase, APIKey: apiKey,
 	})
 	if err != nil {
 		return err
@@ -242,7 +247,7 @@ func (s *Server) handleCreateService(w http.ResponseWriter, r *http.Request) err
 	// carrying an unsealed credential.
 	id, err := s.store.CreateServiceInstanceSealed(r.Context(), si,
 		func(id int64) ([]byte, uint32, error) {
-			return s.sealKey(id, baseURL, req.APIKey)
+			return s.sealKey(id, baseURL, apiKey)
 		})
 	if err != nil {
 		return errStatus(http.StatusConflict, CodeConflict,
@@ -334,12 +339,20 @@ func (s *Server) handleUpdateService(w http.ResponseWriter, r *http.Request) err
 		update.BaseURL = &newBase
 	}
 
+	// One normalisation, read by both the re-entry check below and the reseal.
+	// Two calls could not disagree today, but the create path proved the shape of
+	// the mistake: a credential normalised in one place and read raw in another.
+	key, err := serviceCredential(existing.Kind, derefString(req.APIKey))
+	if err != nil {
+		return err
+	}
+
 	// The rule from reference/security.md §1.6, enforced server-side and not
 	// left to the UI. Refusing is not pedantry: the stored ciphertext is bound
 	// by AAD to the OLD host:port, so it could not be opened for the new host
 	// even if UsArr were willing to try — and the failure mode of "try anyway"
 	// is sending a full-admin key to whatever the user just typed.
-	if hostChanged && strings.TrimSpace(derefString(req.APIKey)) == "" {
+	if hostChanged && key == "" {
 		return errStatus(http.StatusBadRequest, CodeCredentialReentryRequired,
 			"changing this service's scheme, host or port invalidates the stored API key: "+
 				"the key is bound to the old host and cannot be moved").
@@ -347,7 +360,7 @@ func (s *Server) handleUpdateService(w http.ResponseWriter, r *http.Request) err
 	}
 
 	var reseal func(int64) ([]byte, uint32, error)
-	if key := strings.TrimSpace(derefString(req.APIKey)); key != "" {
+	if key != "" {
 		// A test against a MODIFIED base_url uses ONLY the key typed into the
 		// form. That is what runTest gets here, and it is why req.APIKey is
 		// passed rather than "" — "" would mean "use the stored one".
@@ -452,13 +465,17 @@ func (s *Server) handleTestUnsaved(w http.ResponseWriter, r *http.Request) error
 	if err != nil {
 		return err
 	}
-	if strings.TrimSpace(req.APIKey) == "" {
+	kind := strings.ToLower(strings.TrimSpace(req.Kind))
+	apiKey, err := serviceCredential(kind, req.APIKey)
+	if err != nil {
+		return err
+	}
+	if apiKey == "" {
 		return errStatus(http.StatusBadRequest, CodeBadRequest,
 			"an API key is required to test a service that has not been saved yet")
 	}
 	result, err := s.runTest(r, TestRequest{
-		Kind: strings.ToLower(strings.TrimSpace(req.Kind)), BaseURL: baseURL,
-		URLBase: urlBase, APIKey: req.APIKey,
+		Kind: kind, BaseURL: baseURL, URLBase: urlBase, APIKey: apiKey,
 	})
 	if err != nil {
 		return err
@@ -515,7 +532,12 @@ func (s *Server) handleTestService(w http.ResponseWriter, r *http.Request) error
 		return errStatus(http.StatusBadRequest, CodeBadRequest, redactText(herr.Error()))
 	}
 
-	if oldHost != newHost && strings.TrimSpace(req.APIKey) == "" {
+	apiKey, err := serviceCredential(existing.Kind, req.APIKey)
+	if err != nil {
+		return err
+	}
+
+	if oldHost != newHost && apiKey == "" {
 		return errStatus(http.StatusBadRequest, CodeCredentialReentryRequired,
 			"a connection test against a changed host uses only the key typed into the form, "+
 				"never the stored one").
@@ -527,7 +549,7 @@ func (s *Server) handleTestService(w http.ResponseWriter, r *http.Request) error
 		Kind:       existing.Kind,
 		BaseURL:    baseURL,
 		URLBase:    stringOr(urlBase, existing.URLBase),
-		APIKey:     req.APIKey, // empty means "the stored one", allowed only when the host is unchanged
+		APIKey:     apiKey, // empty means "the stored one", allowed only when the host is unchanged
 	})
 	if err != nil {
 		return err
@@ -1036,21 +1058,164 @@ func knownKinds() string {
 // "Paste the key from Settings → General" sends a Kavita user hunting through a
 // screen that does not have it.
 //
-// BookOrbit's is not a key at all and the wording says so. It is a MAGIC-LINK
-// TOKEN, minted by a superuser against a shared account, and BookOrbit returns
-// the raw value exactly once — only sha256(raw) is stored upstream
-// (MagicLinkService.createToken). A user who has lost it cannot look it up; they
-// mint a new one. Telling them to "find" it would send them looking for
-// something that no longer exists anywhere.
+// BookOrbit's is not a key at all: it is a MAGIC-LINK TOKEN, minted by a
+// superuser against a shared account.
+//
+// ⚠️ This used to say the token could not be looked up again — that BookOrbit
+// returns the raw value once and keeps only sha256(raw) — and told the user to
+// mint a replacement. ADR-0060 measured the opposite at bookorbit/bookorbit
+// 73b7877: `magic_access_tokens` carries `raw_token` in plaintext BESIDE
+// `token_hash`, and `MagicLinkRepository.findAll` returns `rawToken` for every
+// row behind GET /api/v1/auth/magic-links to any superuser
+// (AuthController.listMagicLinks). The vendored types agree — `rawToken` is on
+// `MagicLinkToken` in api/specs/bookorbit-types/src/auth.ts. So the token IS
+// re-readable, and sending the user to mint a new one made them rotate a working
+// credential instead of comparing the one they had.
+//
+// ⚠️ WHAT WOULD MAKE THE LINE BELOW WRONG, stated where the next reader meets
+// it: BookOrbit dropping `rawToken` from `findAll`'s select while keeping it in
+// the create response. The advice would then name a screen that can no longer
+// show the value, and "compare them" would have to become "mint a new one" —
+// the very sentence ADR-0060 falsified. It is measured at
+// 73b7877d2fede2221b0ca360af9bfced7c3797f3, re-read 2026-08-19; it is not a
+// property BookOrbit has promised anyone.
+//
+// The other half of this string is the SHAPE, and it says both shapes are fine
+// because both are things BookOrbit's own UI hands out. See serviceCredential.
 func credentialAction(kind string) string {
 	switch kind {
 	case "kavita":
 		return "Paste the Auth Key from Kavita's User Settings → Manage Auth Keys"
 	case "bookorbit":
-		return "Paste the magic-link token a BookOrbit superuser minted for a shared account. " +
-			"BookOrbit shows it once, when the link is created — if it was not kept, mint a new one"
+		return "Paste the magic link a BookOrbit superuser minted for a shared account — " +
+			"the whole link from Settings → Magic Links is fine, or the 64-character token " +
+			"inside it. A superuser can list the links back on that screen and compare them"
 	}
 	return "Paste the key from the service's Settings → General"
+}
+
+// serviceCredential normalises a submitted credential and, for BookOrbit,
+// reduces the TWO shapes BookOrbit's own UI hands an operator to the one its
+// login route takes. Every path that sends a credential upstream or seals it
+// goes through here — create, PATCH and both connection tests.
+//
+// TRIMMING IS NOT COSMETIC. This was the one form field that was not normalised:
+// name, base_url and url_base all were, while the credential reached the
+// connection test and the sealer exactly as it arrived — and create and PATCH
+// disagreed, so the same paste was refused on create and silently accepted on
+// edit. A stray newline sealed into the envelope cannot be seen afterwards from
+// any screen, because the value is never returned to the browser. It runs BEFORE
+// the shape check, because a paste's whitespace is not part of its shape.
+//
+// THE BOOKORBIT CLAUSE FLIPPED ONCE IN ONE DAY, AND THE REASON IS RECORDED IN
+// ADR-0067 rather than here. The short form: this first REFUSED a pasted
+// magic-link URL and named the half to paste, on the premise that BookOrbit's
+// copy button handed out something BookOrbit's own API could not consume. That
+// premise is false. `client/src/router/index.ts` declares a public `/magic`
+// route named `magic-link-login`; `MagicLinkLoginView.vue` reads
+// `route.query.token`, strips it from history, and hands it to `useAuth`'s
+// `loginWithMagicLink`, which POSTs `{"token": raw}` to
+// /api/v1/auth/magic-links/login. URL in, bare token out is an IMPLEMENTED
+// adapter upstream, so the URL is the artefact the product means to give its
+// operator — and `MagicLinksSettings.vue` offers no other one: the table renders
+// the label, the account, the expiry and the use count, never the raw value, and
+// the only affordance is `copyMagicUrl`. All measured at bookorbit/bookorbit
+// 73b7877d2fede2221b0ca360af9bfced7c3797f3, read 2026-08-19.
+//
+// So UsArr does the same reduction BookOrbit's own login page does. Refusing
+// would be asking the operator to hand-edit the only thing the upstream UI will
+// give them.
+//
+// ⚠️ THE ACCEPTANCE RULE IS A WHITELIST, WHICH IS THE PRICE. Anything that is
+// neither shape is refused, so a BookOrbit that changed its token format —
+// longer, base64, prefixed — would have UsArr refuse a valid credential rather
+// than pass it through to a 401. That is a deliberate trade (an actionable
+// refusal beats an indistinguishable 401, ADR-0067) and it is the one thing to
+// re-measure if a BookOrbit upgrade makes adding a service impossible:
+// `MagicLinkRepository.create` mints `randomBytes(32).toString('hex')`, which is
+// where the 64 lowercase hex characters come from and the only place they are
+// defined.
+func serviceCredential(kind, raw string) (string, error) {
+	v := strings.TrimSpace(raw)
+	if kind != "bookorbit" || v == "" {
+		return v, nil
+	}
+	if isMagicLinkToken(v) {
+		return v, nil
+	}
+	if token, ok := magicLinkTokenFromURL(v); ok {
+		return token, nil
+	}
+	// ⚠️ THE SUBMITTED VALUE IS NOT QUOTED BACK, and must never be. A pasted
+	// magic link carries the operator's own BookOrbit hostname, which is exactly
+	// the kind of value §14 keeps out of error strings, audit metadata and log
+	// attributes — and an error string is the one place a credential travels
+	// back to a browser that is otherwise never sent one. The message says what
+	// was EXPECTED; it says nothing about what arrived.
+	return "", errStatus(http.StatusBadRequest, CodeBadRequest,
+		"a BookOrbit credential is a magic-link token — 64 lowercase hex characters — or the "+
+			"whole magic link that contains one, and this is neither").
+		withAction("Paste the link BookOrbit's Settings → Magic Links copy button gives you, " +
+			"or just the 64-character token from inside it")
+}
+
+// magicLinkTokenLen is BookOrbit's magic-link token length, and it is not a
+// guess: `MagicLinkRepository.create` mints `randomBytes(32).toString('hex')` at
+// 73b7877d2fede2221b0ca360af9bfced7c3797f3. Node's hex encoding is lowercase, so
+// an uppercase paste is not the same string and would miss the hash lookup —
+// which is why case is not folded here.
+const magicLinkTokenLen = 64
+
+func isMagicLinkToken(v string) bool {
+	if len(v) != magicLinkTokenLen {
+		return false
+	}
+	for i := 0; i < len(v); i++ {
+		c := v[i]
+		if (c < '0' || c > '9') && (c < 'a' || c > 'f') {
+			return false
+		}
+	}
+	return true
+}
+
+// magicLinkTokenFromURL pulls the token out of a pasted magic link, and reports
+// false for anything it cannot resolve to exactly one token — the caller then
+// refuses rather than passing the string through.
+//
+// PARSED, NOT CUT. `net/url` is used instead of string surgery so the query
+// value is percent-decoded once, by the same rules BookOrbit's browser applies,
+// rather than by whatever `strings.Index` would have implied. A scheme is not
+// required: a link pasted without one still parses, with the host landing in
+// Path, and the query is all this reads.
+//
+// THE HOST IS READ AND DISCARDED, DELIBERATELY. The service's base_url is
+// configured separately and is what every request goes to; a host inside the
+// pasted link is not consulted, not compared and not stored, so this cannot
+// become a way to point UsArr somewhere new (internal/ssrf still owns where
+// requests may go). Nor is it echoed back — see the refusal above.
+//
+// TWO DIFFERENT `token` VALUES ARE A REFUSAL, not a first-wins guess. That was
+// the strongest argument the refuse-everything rule had, and it survives here
+// intact: where a paste has no single right answer, UsArr does not invent one.
+func magicLinkTokenFromURL(raw string) (string, bool) {
+	u, err := url.Parse(raw)
+	if err != nil {
+		return "", false
+	}
+	values, ok := u.Query()["token"]
+	if !ok || len(values) == 0 {
+		return "", false
+	}
+	for _, other := range values[1:] {
+		if other != values[0] {
+			return "", false
+		}
+	}
+	if !isMagicLinkToken(values[0]) {
+		return "", false
+	}
+	return values[0], true
 }
 
 func boolOr(p *bool, def bool) bool {
