@@ -1155,6 +1155,15 @@ function progressCounts(progress: ImportProgress): string {
 			return total === ''
 				? `Recording files: ${read} items read, ${applied} files recorded.`
 				: `Recording files: ${read} of ${total} items read, ${applied} files recorded.`;
+		// `applied` is covers FETCHED, and `read` counts every item the pass has
+		// settled — including the ones it skipped because the work already had a
+		// poster, and the ones the service answered 404 for. So the two legitimately
+		// differ by a lot on a re-import, and the wording says "settled" rather than
+		// implying every read item produced a cover.
+		case 'covers':
+			return total === ''
+				? `Fetching covers: ${read} items settled, ${applied} covers fetched.`
+				: `Fetching covers: ${read} of ${total} items settled, ${applied} covers fetched.`;
 		default:
 			return `Read ${read} so far, and applied ${applied}.`;
 	}
