@@ -381,10 +381,49 @@ type testEnv struct {
 	base    string
 }
 
-func newTestApp(t *testing.T) *testEnv { return newTestAppWith(t, "") }
+func newTestApp(t *testing.T, opts ...testAppOpt) *testEnv {
+	return newTestAppWith(t, "", opts...)
+}
 
-func newTestAppWith(t *testing.T, urlBase string) *testEnv {
+// testAppOpt tunes the harness. There is exactly one, and it exists because of
+// RK-11.
+type testAppOpt func(*testAppOpts)
+
+type testAppOpts struct{ noProber bool }
+
+// withoutProber builds the app with NO background health prober, which makes a
+// test's own `registry.probe` call the ONLY writer of that instance's snapshot.
+//
+// ⚠️ TAKE THIS ONLY IF THE TEST PROBES BY HAND, and know what it costs: with the
+// prober off, `ProbeNow` still queues into `probeReq` and nothing ever drains
+// it, so the health a Services-screen read renders is whatever the test itself
+// probed and nothing else.
+//
+// WHY IT IS NEEDED (RK-11). `POST /api/v1/services` calls `ProbeNow`
+// (internal/httpapi/services.go), so creating the fixture's service QUEUES a
+// background probe, and `RunProber` runs `probe` on the prober goroutine while
+// the test runs `probe` on its own. Two writers of one snapshot, ordered by
+// nothing. If the queued probe's round-trip began before the test flipped the
+// double but its `recordProbe` lands after the test's, `Snapshot` returns the
+// stale HEALTHY row and the test fails having asserted on the wrong probe.
+// Reproduced deterministically by holding the queued probe's `/system/status`
+// response open across the synchronous probe: the snapshot came back
+// `AppVersion:2.1.3.5150, Error:""`, which is the signature RK-11 recorded.
+//
+// ⚠️ AND IT IS THE TEST'S RACE, NOT THE BINARY'S. In production `probe` is
+// called from ONE goroutine — `RunProber`, directly and through `probeAll` — so
+// the concurrency only exists where a test calls `probe` itself. Stopping the
+// prober AFTER it starts would not do: `select` picks freely between `ctx.Done`
+// and a queued `probeReq`, so a cancel racing a queued id can still run one
+// last probe. The goroutine is never started instead.
+func withoutProber(o *testAppOpts) { o.noProber = true }
+
+func newTestAppWith(t *testing.T, urlBase string, opts ...testAppOpt) *testEnv {
 	t.Helper()
+	var o testAppOpts
+	for _, opt := range opts {
+		opt(&o)
+	}
 	dir := t.TempDir()
 
 	args := []string{"--config-dir", dir}
@@ -407,10 +446,13 @@ func newTestAppWith(t *testing.T, urlBase string) *testEnv {
 	t.Cleanup(func() { _ = a.Close() })
 
 	// The prober is a background goroutine in production too; the test runs it
-	// so the Services screen has real snapshots rather than a stub.
-	proberCtx, stopProber := context.WithCancel(context.Background())
-	t.Cleanup(stopProber)
-	go a.registry.RunProber(proberCtx)
+	// so the Services screen has real snapshots rather than a stub. A test that
+	// probes by hand asks for it to stay off — see withoutProber.
+	if !o.noProber {
+		proberCtx, stopProber := context.WithCancel(context.Background())
+		t.Cleanup(stopProber)
+		go a.registry.RunProber(proberCtx)
+	}
 
 	srv := httptest.NewServer(a.server.Handler())
 	t.Cleanup(srv.Close)
