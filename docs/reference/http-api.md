@@ -1401,7 +1401,10 @@ none. The two share the row shape and the allowlist that builds it, and they pag
 
 There is **no cover art**: there is no image endpoint, so shipping `poster_asset_id` would be an id
 the client cannot turn into anything. There are **no facet counts** beside the chips; each is its
-own aggregate and its own read.
+own aggregate and its own read — ⚠️ **and that read now exists, as its own endpoint: §8.** The
+sentence above is unchanged and still true of *this* response; what changed is that "its own read"
+stopped being a description of something unbuilt. A client that wants the chip counts calls §8 and
+must read §8.4 first, because those counts are **not** narrowed by `?lib=`.
 
 **Any other parameter is ignored, not refused** — the preamble's API-wide rule, and this is the
 one endpoint where it is pinned, by `TestUnrecognisedQueryParametersAreIgnoredNotRefused`. So
@@ -1576,3 +1579,129 @@ with a typo, because a client sending it is most likely reading a library's own 
 
 There is **no `404`**. A filter that matches nothing is `200` with `"items": []`, which is a fact
 about the library and not a failure.
+
+---
+
+## 8 · `GET /api/v1/library/facets` — the per-media-type counts
+
+How many works of each of ARCHITECTURE §17.2's six navigation types the caller can see, as one
+call. It is the read [ADR-0053](../DECISIONS.md#adr-0053) names as its single reopening condition —
+*"a read that answers which of the six types have rows — under the current scope — in one
+statement"* — and it is what §17.2's **Block A**, the media-type summary, has been blocked on. One
+read, two consumers.
+
+It is a local read (principle 1) — two SQLite statements, no \*Arr call, no metadata provider, no
+image fetch. Requires an authenticated session; without one it is `401 unauthorized`.
+
+⚠️ **Routing this endpoint does not amend ADR-0053, and the sidebar has not changed.** That ADR
+closes per-type hiding *until* a facet read exists. It exists now; reopening the decision is an
+amendment somebody writes, not a consequence of an endpoint appearing. `TYPE_NAV` in
+`web/src/routes/+layout.svelte` still maps all six with no predicate.
+
+### 8.1 Query parameters
+
+**None.** Not "none yet" — the endpoint reads no parameter at all, and each absence is a decision:
+
+| Not accepted | Why |
+| --- | --- |
+| `lib` | §17.2 settles it: *"Ownership decides shape; scope decides numbers"* — and ADR-0053 removed the numbers from the sidebar, leaving ownership as the only axis this read serves. Counts under a chip selection are a **different read**. See §8.4. |
+| `media_type` | Six numbers is the whole response, bounded at six by construction. A filter would let a client ask six times for what one call answers. |
+| `limit`, `cursor` | There is nothing to page. |
+
+Unrecognised parameters are **ignored, not refused**, per the preamble. This endpoint inherits that
+rule and — like every endpoint here except §7 — does not itself pin it.
+
+### 8.2 Response
+
+```jsonc
+{
+  "counts": {
+    "movies": 1204,
+    "tv": 733,
+    "music": 612,
+    "ebooks": 0,
+    "audiobooks": 0,
+    "comics": 88
+  }
+}
+```
+
+**All six keys are always present and every value is an integer.** No key is omitted, none is
+`null`, and none carries a flag beside it. The vocabulary is §17.2's navigation enum — the same six
+strings §7.2's table publishes — and **not** `work.kind`: there is no `movie` key and no `series`
+key.
+
+The counts are nested under `counts` rather than being the whole body because §17.2's Block A row is
+`name · count · availability rollup · last import · see all`, and only the count is this read. The
+rollup and the import time are their own aggregates; nesting leaves them somewhere to land that
+cannot collide with a media type's name.
+
+### 8.3 What the counts count
+
+A work is counted when **all** of these hold. This list is the contract, not a summary of one:
+
+* **`work.deleted_at IS NULL`.** A tombstoned work is not in the library, and the 7-day tombstone
+  window would otherwise inflate every number for a week after an upstream deletion.
+* **Its `kind` is one of the six top-level kinds** `movie · series · artist · album · book · comic` —
+  the same allowlist §1 and §7 page over.
+* **The caller's access scope admits it.** See §8.5.
+
+### 8.4 What the counts do **not** exclude — read this before rendering one
+
+A facet count that silently excludes something looks correct in every test its author writes and
+disagrees only with the screen a user reaches by clicking it. So the exclusions that are **not**
+applied are stated as explicitly as the ones that are:
+
+* **Library membership is not consulted at all.** A work that is in **no** user-defined library is
+  counted. That is a decision and not an oversight, and it is the one that makes the number match
+  the list: `GET /api/v1/library?media_type=X` applies no library predicate unless `?lib=` was sent
+  (§7.3), so **the facet count equals the row count of an exhausted, unscoped §7 walk for the same
+  type.** Excluding unfiled works would print a *smaller* number than the grid it links to, and a
+  count that is short by an amount the user cannot discover reads as "some of my library is
+  missing". §17.2's own *"has content"* predicates agree: all six are over `work` and `edition` and
+  name no library.
+* **There is no `?lib=` scope, so these counts do not narrow with the library chip.** ⚠️ **A client
+  that paints a scoped grid beside an unscoped facet is showing two true numbers that disagree.**
+  Either scope both or label the facet as a total.
+* **`library.enabled` and `library.include_in_search` are not consulted**, for the same reason:
+  they are properties of a library, and this read is not about libraries.
+
+⚠️ **The Ebooks/Audiobooks split is an assignment, not two independent tests, and it diverges from
+§17.2's table on purpose.** §17.2 rows 4 and 5 give each type its own `EXISTS` over
+`edition.format`, under which a book with an EPUB *and* an M4B makes **both** types "have content". A
+*count* cannot do that and stay a count — the column would not sum, and one work would be reported
+twice in a summary whose whole job is *"what do I have?"*. So every `book` work lands in exactly one
+of the two, a mixed book lands in **Ebooks**, and `ebooks + audiobooks` is exactly the number of
+book works. This is the same assignment §1 and §7 already make for a row's `media_type` cell, which
+is why the count and the grid agree. **The consequence, stated rather than left to be found: a
+library whose only audiobooks are second editions of ebooks reports `audiobooks: 0`** while §17.2's
+row-5 predicate would say the type has content. That matters the day something hides a type on this
+number.
+
+### 8.5 Zero and invisible are the same answer, in one direction only
+
+**A type with genuinely no rows and a type the caller cannot see are indistinguishable, and the
+collapse runs one way: restriction renders as `0`, and `0` never widens into "hidden" or
+"unknown".** There is no third state — no `null`, no absent key, no flag. A caller who can see
+nothing receives a body byte-identical to an owner's over an empty library.
+
+Only one of the two directions is a leak, which is what fixes the direction. A caller who can see
+everything learning that a type is empty **is the answer**. A caller who cannot see a type learning
+that it is non-empty is the existence oracle principle 4 exists to prevent — six numbers whose
+entire content is *how much exists* are that oracle in its most literal form, which is why the
+counts are computed inside the caller's scope rather than filtered after.
+
+**The cost is real and is paid elsewhere: this endpoint cannot tell an empty screen why it is
+empty.** It does not have to. `browseEmptyState` (`web/src/lib/librarygrid.ts`) already words that
+from the services read, separating *"no library-bearing service is connected"* from *"this type has
+no rows yet"* from *"the library scope excludes everything"*.
+
+### 8.6 Errors
+
+| Status | `error` | When |
+| --- | --- | --- |
+| `401` | `unauthorized` | no session. |
+| `500` | `internal` | the local read failed. |
+
+There is **no `400`**, because there is no parameter to get wrong, and **no `404`**: a library with
+nothing in it is six zeroes, which is a fact about the library and not a failure.

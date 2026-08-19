@@ -38,11 +38,14 @@ import {
 	DEFAULT_BROWSE_SORT,
 	emptyBrowseFeed,
 	fetchBrowsePage,
+	libraryNames,
+	libraryScopeLine,
 	LIBRARY_BROWSE_URL,
 	MAX_LIBRARY_SLUGS,
 	nextBrowsePage,
 	readBrowseEcho,
 	readBrowseSort,
+	readLibraryNames,
 	readLibraryScope,
 	REFUSED_BROWSE_SORT,
 	sameBrowseQuery,
@@ -950,4 +953,164 @@ describe('the media-type vocabulary is one list', () => {
 		const types: MediaType[] = [...MEDIA_TYPES];
 		expect(types).toEqual(['movies', 'tv', 'music', 'ebooks', 'audiobooks', 'comics']);
 	});
+});
+
+/* ── the scope line ─────────────────────────────────────────────────────────
+ *
+ * A scoped view used to print `Scoped to <slug>`, and ARCHITECTURE §17.8
+ * deliberately renders a slug NOWHERE on the Libraries screen — so a user could
+ * be scoped by a value the UI had never shown them. These guards hold the four
+ * halves of the fix: the name is used when it resolves, the slug stands when it
+ * does not, an unscoped view says nothing at all, and the libraries read is
+ * never something the grid waits on.
+ *
+ * ⚠️ THE ABSENCE GUARD ASSERTS THE PRESENCE FIRST. "Nothing renders when
+ * unscoped" passes just as well on a function that returns `undefined` for every
+ * input, which would delete the line from the scoped view too.
+ */
+
+const RECENT_ROUTE = 'routes/library/+page.svelte';
+const RECENT_ROUTE_CODE = stripComments(RECENT_ROUTE_SOURCE);
+const RECENT_MARKUP = userFacingMarkup(RECENT_ROUTE_SOURCE);
+
+/** Both screens share this toolbar block, so every rule below runs over both. */
+const SCOPED_SCREENS: [string, string, string][] = [
+	[ROUTE, ROUTE_CODE, MARKUP],
+	[RECENT_ROUTE, RECENT_ROUTE_CODE, RECENT_MARKUP]
+];
+
+/** The `const NAME = …;` initialiser, up to the statement's end. */
+function binding(source: string, where: string, name: string): string {
+	const open = source.indexOf(`const ${name} =`);
+	expect(open, `${where} no longer declares ${name}`).toBeGreaterThanOrEqual(0);
+	const end = source.indexOf(';', open);
+	expect(end, `${where}'s ${name} is not a statement any more`).toBeGreaterThan(open);
+	return source.slice(open, end);
+}
+
+describe('a scoped view states its scope in words a user can read', () => {
+	const EBOOKS = { slug: 'ebooks', name: 'Ebooks' };
+	const AUDIO = { slug: 'audiobooks', name: 'Audiobooks' };
+
+	it('names the library when GET /api/v1/libraries resolved the slug', () => {
+		const names = libraryNames([EBOOKS, AUDIO]);
+		expect(names.size, 'the map is empty, so this guard proves nothing').toBe(2);
+		expect(libraryScopeLine(['ebooks'], names)).toBe('Scoped to Ebooks');
+	});
+
+	it('falls back to the slug when the read has not answered', () => {
+		// `undefined` is the value the screen holds from its first frame until the
+		// read lands, and for ever if it never does.
+		const line = libraryScopeLine(['ebooks']);
+		expect(line, 'a scoped view rendered nothing, which is the one outcome forbidden').toBeTruthy();
+		expect(line).toBe('Scoped to ebooks');
+	});
+
+	it('falls back to the slug when the read answered without that library', () => {
+		const line = libraryScopeLine(['kids'], libraryNames([EBOOKS]));
+		expect(line).toBe('Scoped to kids');
+	});
+
+	it('names every library in a multi-slug scope, in the address’s order', () => {
+		const names = libraryNames([EBOOKS, AUDIO]);
+		expect(libraryScopeLine(['audiobooks', 'ebooks'], names)).toBe('Scoped to Audiobooks, Ebooks');
+	});
+
+	it('resolves per slug, so one known name sits beside one unknown slug', () => {
+		const line = libraryScopeLine(['ebooks', 'kids'], libraryNames([EBOOKS]));
+		expect(line).toBe('Scoped to Ebooks, kids');
+	});
+
+	it('never stores a blank name, because a blank label states no scope at all', () => {
+		const names = libraryNames([{ slug: 'ebooks', name: '   ' }]);
+		expect(names.has('ebooks'), 'a whitespace name was stored and would render blank').toBe(false);
+		expect(libraryScopeLine(['ebooks'], names)).toBe('Scoped to ebooks');
+	});
+
+	it('says nothing on an unscoped view, and the scoped case proves it looked', () => {
+		expect(libraryScopeLine(['ebooks']), 'the scoped case is empty too').toBeTruthy();
+		expect(libraryScopeLine([])).toBeUndefined();
+		expect(libraryScopeLine([], libraryNames([EBOOKS]))).toBeUndefined();
+	});
+});
+
+describe('the libraries read is an enrichment, never a precondition', () => {
+	it('resolves to no names when the read fails, rather than rejecting', async () => {
+		vi.stubGlobal('fetch', () => Promise.reject(new TypeError('connection refused')));
+		try {
+			const names = await readLibraryNames();
+			expect(names.size, 'a failed read produced names, so the stub did not bite').toBe(0);
+			// The line the screen still renders over that failure.
+			expect(libraryScopeLine(['ebooks'], names)).toBe('Scoped to ebooks');
+		} finally {
+			vi.unstubAllGlobals();
+		}
+	});
+
+	it('resolves to no names on a 500, rather than rejecting', async () => {
+		stubFetch(() => jsonResponse({ detail: 'nope' }, 500));
+		try {
+			await expect(readLibraryNames()).resolves.toHaveProperty('size', 0);
+		} finally {
+			vi.unstubAllGlobals();
+		}
+	});
+
+	it('reads the names it is given, so the two guards above are not vacuous', async () => {
+		stubFetch(() =>
+			jsonResponse({
+				items: [
+					{
+						id: 2,
+						name: 'Ebooks',
+						slug: 'ebooks',
+						kind: 'book',
+						sort_order: 5,
+						enabled: true,
+						include_in_search: false,
+						item_count: 3,
+						sources: []
+					}
+				]
+			})
+		);
+		try {
+			const names = await readLibraryNames();
+			expect(names.get('ebooks')).toBe('Ebooks');
+		} finally {
+			vi.unstubAllGlobals();
+		}
+	});
+
+	it.each(SCOPED_SCREENS)('%s does not gate its table on the names', (where, code) => {
+		// `drawList` is the one gate on whether the catalogue is in the DOM at all.
+		const gate = binding(code, where, 'drawList');
+		expect(gate, `${where}'s drawList reads nothing`).toContain('feed');
+		expect(gate, `${where} gates its table on the libraries read`).not.toMatch(/\bnames\b/);
+		const page = code.slice(code.indexOf('async function loadPage'));
+		expect(page.length, `${where} no longer has a loadPage`).toBeGreaterThan(0);
+		expect(
+			page.slice(0, page.indexOf('\n\t}')),
+			`${where} reads the library names on the paging path`
+		).not.toMatch(/\bnames\b/);
+	});
+
+	it.each(SCOPED_SCREENS)(
+		'%s renders the resolved line, never a raw slug join',
+		(where, code, markup) => {
+			expect(markup, `${where} no longer renders a scope line`).toContain('{scopeLine}');
+			expect(markup, `${where} still prints the slug list verbatim`).not.toContain(
+				'query.libraries.join'
+			);
+			// Nothing renders unscoped: the whole block is behind the scope test.
+			const label = markup.indexOf('{scopeLine}');
+			const guard = markup.lastIndexOf('{#if query.libraries.length > 0}', label);
+			expect(guard, `${where}'s scope line is not behind the scoped test`).toBeGreaterThanOrEqual(
+				0
+			);
+			expect(code, `${where} asks for names on an unscoped view`).toContain(
+				'query?.libraries.length ?? 0) === 0'
+			);
+		}
+	);
 });

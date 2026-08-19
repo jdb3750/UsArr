@@ -63,7 +63,11 @@ import (
 //     all, so shipping poster_asset_id would be an id the client cannot turn
 //     into anything.
 //   - No Block A and no Block B. Those are a per-type rollup and an attention
-//     list; each is its own read, and server.go routes neither.
+//     list. ⚠️ THIS BULLET USED TO END "and server.go routes neither", WHICH IS
+//     NOW HALF WRONG: Block A's per-type COUNT is routed — facets.go,
+//     GET /api/v1/library/facets, http-api.md §8. What is still not built is
+//     Block A itself and the rest of its row (the availability rollup and the
+//     last-import time are further aggregates), and Block B in its entirety.
 
 // recentWorkResponse is one Block C row as it crosses to a browser.
 //
@@ -408,7 +412,15 @@ func (s *Server) toRecentWorkResponse(w store.RecentWork) recentWorkResponse {
 //
 // WHAT IT DOES NOT DO YET: no cover art (there is no image endpoint, so
 // poster_asset_id would be an id the client cannot turn into anything), and no
-// facet counts beside the chips (each is its own aggregate and its own read).
+// facet counts beside the chips.
+//
+// ⚠️ THE FACET COUNTS ARE BUILT — they are just not on THIS response. See
+// facets.go and http-api.md §8: GET /api/v1/library/facets answers all six in
+// one call. It is a separate endpoint rather than a field here for the reason
+// browseWorksResponse gives above ("the grid will want facet counts that Home
+// must never grow") and one more: the counts carry NO `?lib=` scope, so
+// returning them inside a scoped page would put two differently-scoped numbers
+// in one envelope.
 
 // browseWorksResponse is the browse envelope.
 //
