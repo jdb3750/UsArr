@@ -78,7 +78,7 @@ because no ADR ever decided it. Annotating leaves that failure mode nowhere to h
 | [0024](#adr-0024) | AGPL-3.0 is the licence | **Accepted** — owner-confirmed 2026-08-16 |
 | [0025](#adr-0025) | Styling and typography: Tailwind v4 with the default theme deleted, Bits UI, Tabler, self-hosted IBM Plex | **Accepted** — ⚠️ **amended 2026-08-16**: **Tailwind is not used**; the styling layer is hand-written CSS in `web/src/app.css`. Bits UI, Tabler and IBM Plex are unaffected |
 | [0026](#adr-0026) | A library is a user-owned binding to upstream containers, with a correction layer | **Accepted** — refines ADR-0004, extends ADR-0014; ⚠️ **amended 2026-08-17 by [ADR-0043](#adr-0043)** — the binding, the four verbs and the storage are untouched, but this ADR's consequence capping the correction **UI** at v0.3 rested on *"§6.4 already establishes that tier 1 resolves essentially 100% of the v0.1 identity problem"*, which [ADR-0041](#adr-0041) falsified for v0.1's actual source: **the minimal *"fix this match"* case moves earlier**, and the full four-verb surface stays at v0.3 |
-| [0027](#adr-0027) | Two axes: media type is navigation, a library is scope | **Accepted** — settles §17.2's open question |
+| [0027](#adr-0027) | Two axes: media type is navigation, a library is scope | **Accepted** — settles §17.2's open question; ⚠️ **amended 2026-08-19 by [ADR-0053](#adr-0053)** — the two axes, the scope chip, the pins and the row budget all stand, but the **data-driven sidebar** does not: *"showing only types that have content"* needs a read answering which types have rows, and `reference/http-api.md` §7.1 says no facet count is on the wire, so **all six entries always render**; the zero-items rule survives for **home and for search groups**, which ADR-0053 leaves untouched |
 | [0028](#adr-0028) | Home is three fixed blocks, not one strip per media type | **Accepted** — **amends** ARCHITECTURE §17.2 |
 | [0029](#adr-0029) | "Load more" + `content-visibility`; virtualization is a benchmarked escalation | **Accepted** — **amends** §4.5, corrects an argument in ADR-0003; ⚠️ **amended 2026-08-16** — the required benchmark ran against the shipped primitive: the decision is unchanged, correction (c)'s arithmetic, the mitigation ranking and the row-ceiling extrapolation are corrected, the page size is **200 rows**, and two benchmark gaps are recorded; ⚠️ **amended 2026-08-17** — the 100 ms every row ceiling divided by was Tier 0's and was never this ADR's to borrow: the toggles are governed by `DESIGN-DIRECTION.md` §7.2's new **Controls** budget at **400 ms**, so every ceiling scales 4×, the worst-case residual-risk note is weakened rather than withdrawn, the shipped 200-row page gains a measured cost, and the page size is still **200 rows** |
 | [0030](#adr-0030) | `work.kind` gains `comic_issue`; manga is not a separate kind | **Accepted** — refines ADR-0009 |
@@ -2103,7 +2103,30 @@ catalogue comics with no sink at all beyond Prowlarr free-text.
 ## ADR-0027 — Two axes: media type is navigation, a library is scope
 
 **Status:** Accepted · **Settles the navigation question ARCHITECTURE §17.2 left open**, and closes
-`design/DESIGN-DIRECTION.md` OQ-2 in the sidebar's favour.
+`design/DESIGN-DIRECTION.md` OQ-2 in the sidebar's favour · ⚠️ **Amended 2026-08-19 by
+[ADR-0053](#adr-0053)** — the data-driven **sidebar** clause only; see the block below.
+
+> ⚠️ **AMENDED 2026-08-19 by [ADR-0053](#adr-0053): the sidebar renders all six media types
+> unconditionally, and the sidebar is the only thing that moves.** **What no longer holds:** the
+> Decision's *"showing only types that have content"*, and the **sidebar** third of the consequence
+> *"A type with zero items is not rendered anywhere — sidebar, home, or search group"*. Both need a
+> read answering which of the six types have rows, and there is none:
+> [`reference/http-api.md`](./reference/http-api.md) §7.1 states there are *"no facet counts beside
+> the chips; each is its own aggregate and its own read"*, and nothing UsArr serves answers per-type
+> presence either. Each falsified clause carries an inline flag at its own site.
+>
+> **What still holds — including two thirds of that consequence.** The two axes and the rule that
+> they are never merged, media type as the navigation axis, a library as scope, the `?lib=` URL
+> state, the `LibrarySelector` chip and its three owed keyboard behaviours, pinning, the row budget
+> (whose arithmetic already sized the sidebar at all six types, so it is unaffected — its *"≤6
+> types"* is now simply exactly six), and every rejected alternative. **Home and search groups keep
+> the zero-items rule**: ADR-0053 amends the sidebar clause **and no other**, because neither of the
+> other two is contradicted — Block A's rollup is blocked on the same missing read and draws nothing
+> at all, and a search group's count is a property of a response the screen already has.
+>
+> **This is one clause narrowed on a wire fact, not a reopening of the navigation model**, and the
+> rule is *closed rather than abandoned*: ADR-0053 reopens it on one named condition. That decision
+> lives there; this note points at it and does not re-argue it.
 
 ### Context
 
@@ -2122,7 +2145,8 @@ documented failure mode for putting unbounded things in a sidebar.
 ### Decision
 
 > **Media type is the navigation axis: a closed set of six — movies, TV, music, ebooks, audiobooks,
-> comics — rendered as sidebar entries, showing only types that have content. A library is a *scope*,
+> comics — rendered as sidebar entries, ~~showing only types that have content~~** ⚠️ **all six
+> render unconditionally — amended 2026-08-19, [ADR-0053](#adr-0053)**. **A library is a *scope*,
 > not a place: a multi-select chip above the nav, reflected in the URL as `?lib=`, on the routes that
 > already exist. The two axes are never merged.**
 
@@ -2156,7 +2180,15 @@ dogma. A pin sets the scope and lands on Home; it is not a separate view of the 
   "eleven fixed entries" over a list of eight and is corrected; the arithmetic here was ambiguous
   between the 6-entry and 8-entry cases, and the cap differs by two depending on which is read.) 🔍 16 is derived from the design's own 32 px sidebar row height against a 900 px viewport,
   cross-checked against Kavita's published "10 items + Home"; it is not empirical.
-- A type with zero items is not rendered anywhere — sidebar, home, or search group.
+- A type with zero items is not rendered anywhere — ~~sidebar,~~ home, or search group. 🚩 **The
+  sidebar third is struck 2026-08-19 by [ADR-0053](#adr-0053), and struck rather than deleted
+  because it is one of the two clauses the amendment at the top of this ADR exists for.** All six
+  media-type entries render unconditionally, in one fixed order, on every install, and no sidebar row
+  carries a count — because no read answers which types have rows, and `reference/http-api.md` §7.1
+  publishes *"no facet counts"*. The honesty this row used to carry moves to the per-type screen,
+  which says which of three reasons made it empty — rather than the row vanishing from the nav and
+  taking the only explanation with it. **The other two thirds stand exactly as written**, and ADR-0053 says so
+  in its own consequences: home and search groups are not contradicted by anything on the wire.
 
 ### Alternatives rejected
 
