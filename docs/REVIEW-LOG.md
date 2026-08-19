@@ -2025,7 +2025,7 @@ drwx------ 3 root root 4096 … logs
 | **DS-07** | **§16 says the Services UI does not exist; a 677-line Services screen ships.** `docs/ARCHITECTURE.md:2203` — *"the Services health **screen** (its endpoint exists, the UI does not)"*; `README.md:70` — `\| **Services health screen** … \| 📋 Planned — v0.1 \|` with no partial marker, though the README uses `🚧 Partial` elsewhere (`:66`). `web/src/routes/services/+page.svelte` is 677 lines: it lists instances, renders `state` + verbatim `problem` from `GET /api/v1/services/health`, adds, edits, re-tests, removes, and handles the sudo re-prompt. `web/src/routes/+page.svelte:39` tells a fresh user *"Start on Services"* — because without it there is no way to add a Prowlarr instance at all | **Open — recorded here rather than applied.** The file's own header (`:3-15`) is precise and honest about what it is — *"the SCAFFOLDING version… deliberately NOT the screen §17.3 specifies… Delete this file wholesale when §17.3 lands"* — §16 and the README simply have not absorbed it. **Fix shape:** §16 gains a partial/scaffolding row and the README's row moves to `🚧 Partial`. This is the rare direction where §16 **understates**, and it understates by exactly the amount that matters to a first-time user: whether the install is usable without `curl`. Corroborated by the fresh-install pass, which drove the whole add-a-service flow through the shipped screen |
 | **DS-08** | **`HttpOnly; Secure; SameSite=Lax` is stated unconditionally in two docs; `Secure` is conditional in code.** `docs/ARCHITECTURE.md:1786` and `docs/reference/security.md:378`, identical wording. `internal/httpapi/auth.go:306-308` — `secureCookies` returns `clientOf(r.Context()).scheme == "https"`, so `Secure` is omitted on plain HTTP | **Split. The code half is already dispositioned; the doc half is Open.** The reviewer states plainly that **the code is right and the docs are wrong**, and the argument at `auth.go:293-305` is the same one Round 2 accepted at **W-02**: `CONFIGURATION.md:630` (§8.1) makes plain HTTP on a trusted LAN the documented v0.1 default, browsers discard `Secure` cookies over http, so an unconditional `Secure` means nobody can log in on the default deployment. **Recorded as a deliberate decision rather than a defect**, cross-referenced to W-02. What is **still open** is exactly what W-02 did not do: the carve-out exists only as a Go comment, and neither of the two documents a reviewer actually reads records it. **Fix shape:** one sentence in each of `ARCHITECTURE.md:1786` and `security.md:378`. Independently corroborated by the security pass, which verified by execution that both cookies carry `Secure=true` over HTTPS |
 | **DS-09** | **§17.3's state vocabulary and the code's disagree in both directions.** `docs/ARCHITECTURE.md:2489` names four states (`healthy` / `degraded` / `down` / `needs re-identification`); `:2493` asserts *"`not configured` is already a first-class state with its own token"*. `internal/httpapi/services.go:540-546` defines **five** — the four plus `unknown`, returned for a disabled instance (`:679`) and as the fallback (`:694`) — and `not configured` **exists nowhere in the codebase**. The function's own doc comment at `:668` says *"derives the four states"* while its body returns five | **Open — recorded here rather than applied.** Both directions are wrong, which is why it is one entry and not two. **Fix shape:** §17.3 gains `unknown` and drops the `not configured` claim; `services.go:668`'s doc comment says five. **Low-severity rider, flagged as INFERENCE by the reviewer:** §17.3's plain-language amendment (`:2503-2509`) requires `paused — 7 failed attempts, retrying 14:19` rather than `degraded / breaker open`, and `this may be a different Sonarr` rather than `needs re-identification`, while the API returns the raw tokens. That is *plausibly* intended as a UI-layer rendering concern and the §17.3 screen is not built — but **nothing in the code or docs says which layer owns it**, and that is the part worth settling |
-| **FI-06** | **No single-instance lock: two processes will share one config directory and one database.** Both start, both serve, both write. The port collision **is** caught (`usarr: USARR_BIND_ADDRESS/USARR_PORT: cannot listen on 0.0.0.0:18484: bind: address already in use`, exit 1) — a *different* port on the same volume is not | **Open — recorded here rather than applied.** This defeats the documented single-writer discipline from outside the process, where DL-03 defeats it from inside, and it would break key rotation mid-flight. The realistic first-run mistake is a systemd unit plus a manual `./usarr` to "just check something". **Fix shape:** a `flock` on the config directory, failing closed with a message naming the other PID |
+| **FI-06** | **No single-instance lock: two processes will share one config directory and one database.** Both start, both serve, both write. The port collision **is** caught (`usarr: USARR_BIND_ADDRESS/USARR_PORT: cannot listen on 0.0.0.0:18484: bind: address already in use`, exit 1) — a *different* port on the same volume is not | **Open — recorded here rather than applied.** This defeats the documented single-writer discipline from outside the process, where DL-03 defeats it from inside, and it would break key rotation mid-flight. The realistic first-run mistake is a systemd unit plus a manual `./usarr` to "just check something". **Fix shape:** a `flock` on the config directory, failing closed with a message naming the other PID. ⚠️ **See the dated FI-06 note at the end of this file** (2026-08-19): `usarr key rotate` now **detects and refuses** the mid-flight case rather than closing it, and the note says why adding the lock to the startup path was left to a thread that owns it |
 
 **SR-02, SR-03, DL-04…DL-08 and FI-06 — the proving commands, carried verbatim:**
 
@@ -17483,3 +17483,102 @@ fixture no gate step reads is a file that rots.
 arithmetic, redaction, auth-mode selection and failure handling — and **nothing at all** about what
 Kavita's real `ImageController` does with an `x-api-key` header. That is the entire question, and it
 is why the script exists.
+
+---
+
+## RK-01 — the rotation's termination condition would have read "done" with tombstoned rows still under the old key
+
+**Found by execution, before `usarr key rotate` had a line of code**, while reading which existing
+store helpers the re-wrap pass could stand on. It is a defect *avoided* rather than *fixed* — the
+command has never shipped in the broken shape — but it is recorded as a finding rather than a code
+comment because the trap is invisible at the call site and the next person to touch this will reach
+for the same helpers.
+
+**The shape.** Two facts in `internal/store/serviceinstance.go` disagree, and only together:
+
+| Helper | Treats a soft-deleted row as |
+|---|---|
+| `UpdateServiceInstanceCredential` (and every other credential/field UPDATE in the file) | invisible — every statement carries `AND deleted_at IS NULL`, and `expectOneRow` turns a tombstone into `ErrNotFound` |
+| `CountEncryptedCredentials` | **present** — `WHERE length(api_key_enc) > 0`, no `deleted_at` clause, and its own comment says so: *"Tombstoned rows count — their ciphertext is still there"* |
+
+Both are correct for what they were written for. `SoftDeleteServiceInstance`'s contract is that the
+id stays burned and the row is gone as far as callers are concerned, so a user action must not touch
+it; and the startup salt/key refusal must count tombstones, or an install whose only sealed rows are
+deleted ones would start and silently derive a fresh KEK over live ciphertext.
+
+**Why that combination is fatal to a rotation specifically.** A rotation built on the visible-row
+helpers reads a tombstone (nothing filters the *read* the counting query models), fails to update it,
+and then asks "how many rows remain at the old key id" using a query that **can** see it. Depending
+on which side of that mismatch the loop's condition falls, it either spins forever on a row it cannot
+write, or — the dangerous one — counts only what it could see, reports zero remaining, and promotes:
+`rename(2)` puts the new key over `secret.key`, the old key file is gone, and the tombstone's
+ciphertext is wrapped under a KEK that no longer exists anywhere. **Permanently unopenable
+ciphertext, produced by the one procedure whose entire purpose is not to produce any.**
+
+It is not a hypothetical row, either. A tombstone is what an operator has after deleting a service
+they misconfigured — the single most likely row on a pre-alpha install — and `service_instance` never
+hard-deletes.
+
+**The fix.** Three new methods in `internal/store/rotate.go`, each of which ignores `deleted_at`, each
+named so the omission cannot be read as an oversight:
+`ListCredentialEnvelopesIncludingDeleted`, `RewrapCredentialsIncludingDeleted`,
+`CountCredentialsOutsideKEKIDIncludingDeleted`. A block comment above the three carries the argument
+in full and states the rule for anything that follows: *"Anything else that needs a credential must
+use the `deleted_at`-filtered helpers in `serviceinstance.go`."*
+
+Two further details fell out of writing them:
+
+* **The count is `kek_id <> :new`, not `kek_id = :old`.** With content-derived ids (ADR-0049) a row
+  can legitimately sit at a *third* id — an earlier interrupted attempt, a row restored from an older
+  backup — and "at the old id" walks straight past it.
+* **The read and the count apply the identical `length(api_key_enc) >= crypto.MinEnvelopeLen`
+  filter.** `CreateServiceInstanceSealed` writes a one-byte placeholder between its insert and its
+  seal; if the read skipped it and the count did not, the loop would never terminate.
+
+**The guard was fired against the gap, not written around it.** `TestRotationReachesSoftDeletedRows`
+(`internal/store/rotate_test.go`) asserts the premise before it asserts the fix — it calls
+`UpdateServiceInstanceCredential` on the tombstone and **requires** it to fail — so the test would
+stop meaning anything the day that helper started matching tombstoned rows, instead of quietly
+passing. `TestKeyRotateKeepsEveryCredentialOpenable` (`cmd/usarr/keyrotate_test.go`) runs the same
+case end to end through the real command and opens the tombstone's credential afterwards.
+
+---
+
+## FI-06 — note: `usarr key rotate` mitigates in-process rather than adding the lock
+
+**FI-06 (no single-instance lock) stays open, and this note records what the key-rotation work did
+about it — which is deliberately not "add a lock".**
+
+FI-06's own text names key rotation as one of the things a second process would break, and it is
+right: with no lock, a running server can seal a credential under the **old** key while
+`usarr key rotate` is re-wrapping, and that row would then be stranded when the key file is promoted.
+
+**Why the lock was not added here.** FI-06's stated fix shape is a `flock` on the config directory,
+failing closed with a message naming the other PID. That is a change to the **startup path of the
+server**, on a box that is already running — the owner's. A `flock` that fails closed turns any stale
+lock into a server that will not come back up: a container killed with `SIGKILL` on a filesystem where
+the lock is not released as expected, a `--config-dir` on an NFS or overlay mount with imperfect
+`flock` semantics, or simply a second process the operator forgot about. The blast radius of getting
+it wrong is *the service does not start*, and it would land as a side effect of a maintenance
+subcommand rather than as a change anyone chose to review on its own terms. **Adding it belongs to a
+thread that owns the startup path and can test the failure modes; it does not belong to this one.**
+
+**The mitigation that did land, in `cmd/usarr/keyrotate.go`:**
+
+1. **The re-wrap pass is re-checked, not assumed.** After each full pass it re-reads
+   `CountCredentialsOutsideKEKIDIncludingDeleted(new)`. A row written under the old key during the
+   pass shows up there.
+2. **It retries a bounded number of times** (`rotateExtraPasses = 3`) and then **fails closed**,
+   naming the real remedy: *"Stop the UsArr server and re-run `usarr key rotate`; it resumes where it
+   left off."* An unbounded retry against a busy server would spin forever; a single pass would
+   promote over a row it had missed.
+3. **Promotion is gated on a full verify pass**, not on the count alone: every row must name the new
+   id, the envelope's own id must agree with the column, and the wrapped DEK must unwrap under it. A
+   row concurrently re-sealed under the old key fails that check and aborts the rotation **before any
+   key file is touched**.
+4. **`CONFIGURATION.md` §3.4 tells the operator to stop the server first**, and says why, citing
+   FI-06 by name.
+
+So the window FI-06 describes is **detected and refused** rather than closed. That is strictly weaker
+than a lock and is not offered as a substitute for one: FI-06 remains **Open**, with its fix shape
+unchanged.

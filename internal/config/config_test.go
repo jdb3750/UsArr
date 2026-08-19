@@ -435,3 +435,63 @@ func TestVersionFlagShortCircuitsLoad(t *testing.T) {
 		}
 	}
 }
+
+// TestKeyRotateSubcommand pins the parsing rule for the ONE positional form the
+// binary accepts, and — more importantly — that every other positional still
+// errors exactly as it did before subcommands existed. A parser that quietly
+// accepted a prefix or a near miss would let `usarr key` mean something.
+func TestKeyRotateSubcommand(t *testing.T) {
+	dir := t.TempDir()
+
+	// Both orderings resolve, because Go's flag package stops at the first
+	// non-flag argument and the leading form is the one an operator types.
+	for _, args := range [][]string{
+		{"key", "rotate", "--config-dir", dir},
+		{"--config-dir", dir, "key", "rotate"},
+	} {
+		c, err := Load(Options{Args: args})
+		if !errors.Is(err, ErrKeyRotateRequested) {
+			t.Fatalf("Load(%v) = %v, want ErrKeyRotateRequested", args, err)
+		}
+		// Unlike --version, a resolved Config comes back with it: a rotation
+		// needs the config directory, and re-parsing to find it is the drift
+		// that one parser exists to prevent.
+		if c == nil {
+			t.Fatalf("Load(%v) returned a nil Config; the rotation needs the resolved settings", args)
+		}
+		if c.ConfigDir != dir {
+			t.Errorf("ConfigDir = %q, want %q", c.ConfigDir, dir)
+		}
+	}
+
+	// The near misses. Every one of these is the pre-subcommand error.
+	for _, args := range [][]string{
+		{"key"},
+		{"rotate"},
+		{"key", "rotate", "now"},
+		{"key", "rotat"},
+		{"keys", "rotate"},
+		{"serve"},
+	} {
+		_, err := Load(Options{Args: args})
+		if err == nil || !strings.Contains(err.Error(), "unexpected argument") {
+			t.Errorf("Load(%v) = %v, want the unchanged \"unexpected argument\" error", args, err)
+		}
+		if errors.Is(err, ErrKeyRotateRequested) {
+			t.Errorf("Load(%v) resolved to a rotation", args)
+		}
+	}
+
+	// Two programs at once is a refusal, not a silent win for one of them.
+	if _, err := Load(Options{Args: []string{"key", "rotate", "--version"}}); err == nil ||
+		errors.Is(err, ErrVersionRequested) || errors.Is(err, ErrKeyRotateRequested) {
+		t.Errorf("`key rotate --version` = %v, want a refusal naming both commands", err)
+	}
+
+	// A rotation still runs against validated settings: the subcommand selects
+	// a program, it does not excuse a bad value.
+	if _, err := Load(Options{Args: []string{"key", "rotate"}, Env: map[string]string{"USARR_PORT": "0"}}); err == nil ||
+		!strings.Contains(err.Error(), "USARR_PORT") {
+		t.Errorf("`key rotate` with a bad USARR_PORT = %v, want the port error", err)
+	}
+}
