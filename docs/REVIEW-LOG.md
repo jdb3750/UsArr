@@ -21894,3 +21894,75 @@ re-verification behind this entry is therefore manual and is listed above so it 
 the absence of `.github/` and of non-sample hooks, the existence of all eight named guards, the
 `0.55` / `0.35` / `0.10` const block, `schema.md` §7's corrected count, and the three commits being
 merged ancestors of `main`.
+
+# `internal/bookorbit/scope_test.go`'s ADR-0047 disclaimer, re-checked against what the vendoring actually shipped
+
+**`LS-378`, allocated by the coordinator.** The `LS-` series is block-allocated by decade lanes and
+the gaps are deliberate; nobody closes one. `LS-377` is the high-water on `main`, and the batch that
+took `LS-376`/`LS-377` already records `LS-378` as where the next lane starts. Nothing here touches
+the `SD-`, `DS-` or `RK-` series, and nothing in `DECISIONS.md` is edited by this lane.
+
+## LS-378 — `scope_test.go` says ADR-0047's shape "does not transfer"; it had already transferred, to source files instead of a spec
+
+🔻 **Corrected 2026-08-19 — the clause naming ADR-0047 is now false: that shape does transfer, and
+had already transferred before the comment was read.** `internal/bookorbit/scope_test.go:15-18`, in
+the header of `TestEveryBookOrbitPermissionIsClassified`, says *"There is no vendored spec to pin —
+BookOrbit builds its OpenAPI document at RUNTIME (server/src/swagger.ts, and main.ts only mounts it
+when SWAGGER_ENABLED is true, which defaults to false), so ADR-0046's and ADR-0047's shape does not
+transfer and this is the substitute."* **Content commit `72207f8`** (*"feat: vendor BookOrbit's
+`packages/types` and pin it against upstream drift"*, 75 files) is the artefact that falsifies the
+ADR-0047 half. It vendored `packages/types` verbatim under `api/specs/bookorbit-types/` and pinned
+it by **git's own tree name** for that directory at upstream `73b7877d` (`vendoredTypesTree`), with
+a per-file blob manifest at `api/specs/bookorbit-types.manifest`, a comment-blind **declaration
+digest** over the five transcribed files (`dependedOnDeclarations`), offline guards in `make check`
+(`TestVendoredBookOrbitTypesAreTheUpstreamTree`, `TestVendoredBookOrbitTypesManifestIsCurrent`,
+`TestDependedOnTypeFilesCarryThePinnedDeclarationDigest`) and the upstream comparison in
+`make spec-drift` (`TestSpecDriftBookOrbitTypesStillMatchUpstream`). Its own commit message names
+the shape it is copying: *"The guard is ADR-0047's shape, one level up the git object graph."*
+ADR-0047's decision is an **offline identity pin inside the gate plus a network drift check outside
+it**, and that is reproduced clause for clause — only the object being named moved, from one blob to
+a tree of them. 📌 The point lands squarely on this test: **`src/permissions.ts`, the very file this
+package's permission vocabulary is transcribed from, is one of the five carrying a pinned
+declaration digest.**
+
+✅ **The half that survives, and it is the larger half — ADR-0046's split really does not transfer.**
+Floor and ceiling are two pins only where upstream regenerates a **committed** document per release,
+so the structure needs a release-tag line *and* a checked-in document to split; ADR-0046's own
+2026-08-17 amendment says exactly this when it records that ADR-0046 is not a template. BookOrbit has
+neither, so there is nothing for a floor/ceiling to bite on, and the comment is right about it.
+**The premise the sentence opens with is also true, and is not what is being corrected** — BookOrbit
+commits no OpenAPI document, `server/src/swagger.ts` builds one at runtime, and `main.ts` mounts it
+only under a `SWAGGER_ENABLED` that defaults to false. The vendoring works **because** of that
+premise rather than despite it: with no spec to pin, types are pinned instead. So one clause of three
+is stale, and reading the note as "this was wrong" would discard two accurate findings to repair one.
+Converting a stale note into a second defect is the failure this record exists to prevent.
+
+🔍 **`vendoredtypes_test.go` already states the corrected version**, which is what makes this a stale
+comment rather than an open question in the tree. Its header reads *"ADR-0046's floor/ceiling split
+and ADR-0047's blob-identity pin both assume a committed document; the second shape transfers to
+source files, the first does not."* Two files in one package answer the same question differently,
+and the one a reader arrives at from the permission guard is the stale one.
+
+⏭️ **`scope_test.go` is not edited, and this entry is the pointer.** `LS-321`'s precedent — *"the
+migration is not edited and this entry is the pointer"* — applies unchanged: the clause is corrected
+by this record, and whichever lane next has that file open takes it. Nothing about the guard's
+behaviour depends on the sentence: `TestEveryBookOrbitPermissionIsClassified` still does exactly what
+it claims, and a 24th permission upstream still reaches it as an unrecognised string.
+
+## What a green gate is worth on this entry
+
+`make check` was run green on the tree carrying this change. **The entry is docs-only, so almost
+every arm attests nothing about it** — `gofumpt`, `golangci-lint`, `build-tagged`, `modverify`, the
+Go and web suites and `govulncheck` all measured Go and Svelte trees that adding a Markdown section
+does not alter. **`gitleaks`, via `make secrets`, is the one arm that reads this diff**, and what it
+attests is roughly *"no credential-shaped string in the added prose"* — nothing whatever about
+whether the prose is true.
+
+🔍 **The verification behind this entry is therefore manual, and is listed so it can be repeated:**
+the comment read at the tip rather than at a relayed line number; `72207f8`'s message and its
+75-file diff; `api/specs/SOURCES.md`'s provenance table and its four-row table of what guards it;
+`vendoredtypes_test.go`'s `vendoredTypesTree`, `vendoredTypesCommit` and `dependedOnDeclarations`;
+`specdrift_upstream_test.go` and the `spec-drift` target in the `Makefile`; and **ADR-0046 and
+ADR-0047 read in `DECISIONS.md` rather than taken on report**. The five strings a prior mention would
+have carried — `72207f8`, `vendoredtypes`, `bookorbit-types`, `SWAGGER_ENABLED`, `scope_test` —
+returned nothing in this file before this entry, so it is a new finding and not an amendment.
