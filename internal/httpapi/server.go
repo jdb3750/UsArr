@@ -273,6 +273,19 @@ func (s *Server) routes(mux *http.ServeMux) {
 	// upstream. See library.go.
 	mux.Handle("GET /api/v1/library/recent", s.authenticated(s.wrap(s.handleRecentWorks)))
 
+	// §17.2's per-type library grid and §17.8's library scope chip: the same
+	// corpus and the same row as Block C, filtered by `?media_type=` and
+	// `?lib=`, in one of three orders. A pure SQLite read, and the FIRST request
+	// a grid screen makes, so nothing on this path may block on an upstream
+	// either. ADR-0051 is why the library scope is a work-driven EXISTS rather
+	// than a join. See library.go.
+	//
+	// ⚠️ IT IS A SEPARATE ROUTE FROM /library/recent RATHER THAN A PARAMETER ON
+	// IT. §17.2 closes Block C at one table, one order and no filters; folding
+	// the two together would put a filter on the endpoint whose design is that
+	// it has none.
+	mux.Handle("GET /api/v1/library", s.authenticated(s.wrap(s.handleBrowseWorks)))
+
 	// §17.8's Libraries screen, row view: the user-defined libraries, each with
 	// the containers a service already named. Two SQLite reads and no upstream
 	// call — it is not the connect probe, and ADR-0048 puts the proposal set

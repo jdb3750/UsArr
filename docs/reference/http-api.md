@@ -1173,3 +1173,174 @@ not errors.
 
 There is **no `404`** and no empty-result error. A query that matches nothing is `200` with
 `"items": []`, which is a fact about the library and not a failure.
+
+---
+
+## 7 · `GET /api/v1/library` — the library grid
+
+ARCHITECTURE §17.2's per-type grid and §17.8's library scope chip, as one endpoint. **The same
+corpus and the same row as §1**, filtered by media type and by library, in one of three orders,
+keyset-paginated.
+
+It is a local read (principle 1) — one SQLite statement per page (two on the `added_at`/undated
+boundary §7.5 describes), plus at most one small statement to resolve `?lib=` slugs. No \*Arr call,
+no metadata provider, no image fetch. Requires an authenticated session; without one it is
+`401 unauthorized`.
+
+**It is a different endpoint from §1, not a superset of it.** §17.2 closes Block C at *one* table,
+*one* order and *no* filters — a sixth media type adds rows to it, never a sixth region — so
+`/library/recent?media_type=…` would put a filter on the endpoint whose whole design is that it has
+none. The two share the row shape and the allowlist that builds it, and they page identically
+(§7.4). They do **not** share cursors (§7.5).
+
+### 7.1 Query parameters
+
+| Parameter | Type | Default | Behaviour |
+| --- | --- | --- | --- |
+| `media_type` | enum | all six | One of `movies` · `tv` · `music` · `ebooks` · `audiobooks` · `comics`. Anything else is `400 bad_request` — **never a silently unfiltered page**. See §7.2. |
+| `lib` | comma-separated slugs | every library | Library **slugs**, as `GET /api/v1/libraries` publishes them. An unknown slug is `400`; so is `?lib=` with nothing in it. At most 32. See §7.3. |
+| `sort` | enum | `added_at` | One of `added_at` · `sort_title` · `popularity`. `year` is a legal `library.default_sort` value and is refused here, with the reason. See §7.6. |
+| `limit` | integer | `50` | The page size **requested**. Identical to §1.2 — a clamp, not a validated range, and the response says what was actually applied. |
+| `cursor` | opaque string | — | A token minted by a previous response's `next_cursor`. Never construct one; never edit one. See §7.5. |
+
+There is **no cover art**: there is no image endpoint, so shipping `poster_asset_id` would be an id
+the client cannot turn into anything. There are **no facet counts** beside the chips; each is its
+own aggregate and its own read.
+
+### 7.2 The parameter is `media_type`, and its vocabulary is **not** `work.kind`
+
+🚩 **`kind` is a real column with twelve members and it ships on this wire, in every row, under its
+own name.** `media_type` is §17.2's six-value navigation enum. They are different sets, not two
+spellings of one:
+
+| `media_type` | is | `work.kind` |
+| --- | --- | --- |
+| `movies` | | `movie` |
+| `tv` | | `series` |
+| `music` | | `artist` **and** `album` — two kinds |
+| `ebooks` | | `book` **with at least one non-audiobook edition, or none at all** |
+| `audiobooks` | | `book` **whose every edition is an audiobook** |
+| `comics` | | `comic` |
+
+Two of the six are the *same* kind separated by `edition.format`, which is why the split is resolved
+server-side: §17.2 states the Tier 1 client index carries no format, so **a browser holding `kind`
+cannot tell an ebook from an audiobook**. A parameter named `kind` that accepted `movies` and
+rejected `movie` — or accepted `tv` and rejected `series` — would be two vocabularies wearing one
+name on a response that publishes both.
+
+**An unrecognised value is `400 bad_request`, never an unfiltered page.** Widening on a typo turns
+"show me my comics" into "show me everything", which looks like it worked. The refusal carries the
+whole vocabulary in its `action` and never echoes the value back.
+
+⚠️ **ARCHITECTURE §13's budget table said `?kind=movie` until 2026-08-19** and has been corrected;
+the budget itself did not change.
+
+### 7.3 `?lib=` takes slugs, and an unknown one is a refusal
+
+A slug is a library's **URL identity** — migration 0005 allocates it once from the name and keeps it
+durable across a rename, so a permalink survives. `GET /api/v1/libraries` publishes it as `slug`.
+
+```
+GET /api/v1/library?lib=ebooks
+GET /api/v1/library?lib=ebooks,audiobooks
+```
+
+| Sent | Result |
+| --- | --- |
+| absent | every library — the chip's cleared state is the whole catalogue |
+| one or more known slugs | scoped to those libraries |
+| any slug that names no library you can see | `400 bad_request` |
+| `?lib=` empty, or only commas | `400 bad_request` — a scope was asked for and nothing was named |
+| more than 32 slugs | `400 bad_request` |
+
+**Every failure is a refusal and none is a clamp**, which is the opposite of `limit`'s rule and
+deliberately so: dropping a slug **widens** the page, and dropping every slug removes the scope
+entirely — so a bookmark to a deleted library would answer with the whole catalogue instead of
+saying the library is gone. `limit` fails in the safe direction; a filter has no safe direction to
+fail in.
+
+**The error says how many slugs did not resolve and never which.** A slug you cannot see is
+deliberately indistinguishable from one that does not exist, so the message cannot be used to probe
+another user's library names. The reserved `Unfiled` library is never offered in the scope chip
+(migration 0005), so `?lib=unfiled` is refused like any other unknown slug.
+
+**A work in two of the named libraries appears once.** Membership is edition-grained — §17.8's
+Audiobookshelf split is the reason — while a row here is work-keyed, so the scope is an existence
+test rather than a join ([ADR-0051](../DECISIONS.md#adr-0051)).
+
+### 7.4 Response
+
+```jsonc
+{
+  "items": [ /* exactly §1.3's row shape, field for field */ ],
+  "limit": 50,
+  "media_type": "comics",
+  "sort": "sort_title",
+  "next_cursor": "MXR2My5iZXJzZXJr"
+}
+```
+
+`items` is **§1.3's row**, key for key — `id`, `media_type`, `kind`, `title`, `year`, `added_at`,
+`have_count`, `want_count`, `availability` — with §1.4's rules for `availability` unchanged. Nothing
+service-side appears here either.
+
+`limit` is **authoritative** and works exactly as §1.2 says: a client pages against this number,
+never against the one it sent. The clamp table in §1.2 governs both endpoints; it is written once.
+
+`media_type` and `sort` are **echoed, and omitted when the request did not name them**, so absence
+stays distinguishable from `"movies"` and from `"added_at"`. They are echoed because they are part
+of what the cursor *means* (§7.5): a client restoring a deep link has to know which query its stored
+cursor belongs to.
+
+### 7.5 Paging, and why a cursor is not portable
+
+Keyset, not offset. Walk it by following `next_cursor` until it is absent, exactly as §1.5
+describes — **and send `media_type`, `lib` and `sort` again on every page**, unchanged. The server
+does not remember them.
+
+🚩 **A cursor is minted under one sort order and is refused under another.** All three orders encode
+to the same-looking token and all three decode, so nothing but the discriminator inside stops a
+popularity position being replayed as an `added_at` position — which does not error, it silently
+starts the page in the wrong place and skips or repeats rows for ever. Changing the sort chip means
+**dropping the cursor**; replaying it is `400 bad_request`.
+
+🚩 **§1's cursors and §7's cursors are not interchangeable either**, in either direction. Both are
+versioned and each decoder refuses the other's tokens.
+
+⚠️ **Works with no `added_at` form a tail after every dated row** under the `added_at` order, and
+reaching that tail is the cursor's job rather than the client's — §1.5's warning, unchanged. The
+other two orders sort NOT NULL columns and have no tail.
+
+### 7.6 The three orders, and the fourth that is refused
+
+The vocabulary is `library.default_sort`'s own, verbatim, so a client that reads a library's default
+sort out of `GET /api/v1/libraries` can send it straight back here.
+
+| `sort` | Order | Available |
+| --- | --- | --- |
+| `added_at` *(default)* | newest first, then id | always |
+| `popularity` | highest first, then id | always |
+| `sort_title` | A→Z, then id | **only with a `media_type` of exactly one kind** |
+| `year` | — | **never** |
+
+**`sort_title` needs a single-kind `media_type`.** Its index is `(kind, sort_title, id)`, and SQLite
+cannot supply `ORDER BY` from an index whose leading column is constrained by `IN`. `music` is two
+kinds (`artist` **and** `album`) and no `media_type` at all is six, so those two combinations are
+`400 bad_request` rather than a sort of the whole library on every page. The honest fixes are a new
+index or splitting the Music grid into Artists and Albums; both are §17.2's decisions and neither is
+built.
+
+**`year` is refused outright.** `work.year` has no index of any kind, so the order would be a temp
+b-tree over the whole filtered corpus on every page. It is named in the refusal rather than lumped in
+with a typo, because a client sending it is most likely reading a library's own `default_sort` back.
+
+### 7.7 Errors
+
+| Status | `error` | When |
+| --- | --- | --- |
+| `400` | `bad_request` | `media_type` is not one of the six (§7.2); `lib` names a library that does not exist, is empty, or names more than 32 (§7.3); `sort` is not one of the three, or is `year`, or is `sort_title` without a single-kind `media_type` (§7.6); `limit` is negative or not a whole number (§1.2); `cursor` is not a token this endpoint issued, or belongs to another sort order (§7.5). Every one carries an `action`. |
+| `401` | `unauthorized` | no session. |
+| `500` | `internal` | the local read failed. |
+
+There is **no `404`**. A filter that matches nothing is `200` with `"items": []`, which is a fact
+about the library and not a failure.

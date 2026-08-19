@@ -468,6 +468,12 @@ CREATE TABLE edition (
   abridged     INTEGER     -- nullable: unknown is distinct from 'unabridged'
 ) STRICT;
 CREATE INDEX ix_edition_work ON edition(work_id, is_primary DESC);
+-- Migration 0009. The reverse direction: "is this work an audiobook", asked as a FILTER once per
+-- candidate row of an ordered walk (§17.2 rows 4 and 5, GET /api/v1/library). ix_edition_work seeks
+-- on work_id and then fetches `format` from the table; this makes `format = ? AND work_id = ?` a
+-- two-column COVERING seek. NOT partial: `edition` has no soft-delete column, and the NULL formats
+-- are rows the Ebooks side of the split has to see. ADR-0051.
+CREATE INDEX ix_edition_format ON edition(format, work_id);
 ```
 
 **`edition.format` is where `audiobook` lives.** This is the single decision that makes

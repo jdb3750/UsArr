@@ -1,0 +1,119 @@
+-- Migration 0009 — ix_edition_format, the index the Audiobooks filter seeks on.
+--
+-- SCOPE. Exactly one index, and nothing else:
+--
+--   ix_edition_format
+--
+-- No table, no ALTER, no rebuild, no new CHECK member, no other object. It is
+-- the smallest migration in the tree and it is deliberately kept that way: the
+-- library browse read (`GET /api/v1/library`, internal/store/browse.go) is the
+-- first query in the project that filters ON `edition.format` rather than
+-- looking format up for a work it already has, and one index is the whole cost
+-- of serving it.
+--
+-- WHY THE READ NEEDS IT, AND WHY ix_edition_work CANNOT DO THE JOB.
+-- ARCHITECTURE.md §17.2 rows 4 and 5 split one `work.kind = 'book'` corpus into
+-- two media types by `edition.format`, and §17.2 also states the Tier 1 client
+-- index ships no format at all — so the split is resolved SERVER-SIDE or not at
+-- all. internal/store/recent.go renders it for DISPLAY with
+-- `MIN(e.format = 'audiobook')` over a work whose id it already holds, which
+-- ix_edition_work(work_id, is_primary DESC) serves as a seek. Browse asks the
+-- OTHER direction — "is this candidate work an audiobook" as a FILTER, once per
+-- candidate row of an ordered walk — and the selective half of that predicate is
+-- `format = 'audiobook' AND work_id = ?`. Measured on the real schema, this
+-- engine (github.com/ncruces/go-sqlite3, SQLite 3.53.4), no ANALYZE:
+--
+--   without this index  →  SEARCH e USING INDEX ix_edition_work (work_id=?)
+--   with this index     →  SEARCH e USING COVERING INDEX ix_edition_format
+--                                        (format=? AND work_id=?)
+--
+-- One column constrained and a row fetch per edition, versus two columns
+-- constrained and no row fetch at all. The column order is (format, work_id) and
+-- not the reverse: `format` is the equality this filter always carries, and a
+-- (work_id, format) index would duplicate the leading column ix_edition_work
+-- already has while serving the filter no better than it does.
+--
+-- ⚠️ WHAT THIS INDEX DOES NOT DO, stated so nobody reads more into it. It does
+-- NOT make the whole media-type filter a covered seek. `audiobooks` is "EVERY
+-- edition is an audiobook", which is two predicates — the covered EXISTS above
+-- plus a NOT EXISTS over the editions that are not — and the second one is a
+-- work_id seek on ix_edition_work with a row fetch, exactly as before. What this
+-- index buys is that the SELECTIVE half runs first and short-circuits: most
+-- books are not audiobooks, so most candidates never reach the second predicate.
+-- internal/store/browse_test.go's plan guards pin both halves.
+--
+-- IT ALSO HAS A SECOND READER ALREADY, which is why it is not speculative:
+-- `SELECT … FROM edition WHERE format = ?` — every edition of one format, with
+-- no work in hand — is a full table SCAN without it and a covering seek with it.
+-- That is the shape the format-scoped membership derivation runs
+-- (reference/schema.md §13.2's `library.formats` filter over §17.8's
+-- Audiobookshelf split), and it is measured as a SCAN today.
+--
+-- NO 12-STEP REBUILD, AND NOT MERELY BECAUSE NOTHING CHANGED SHAPE. CREATE INDEX
+-- is not one of the ALTER forms SQLite's own "making other kinds of table schema
+-- changes" procedure covers at all: no column is added, dropped, renamed or
+-- retyped, no CHECK moves, and no data is copied, so there is no window in which
+-- a row could be lost. TestMigrate0009 says that rather than claiming data
+-- survived a copy that never happened.
+--
+-- PRAGMA foreign_keys=OFF is not written, for the reason 00005, 00006 and 00007
+-- each give: goose runs each migration inside a transaction, SQLite documents the
+-- pragma as a no-op there, and there is no rebuild for it to protect.
+--
+-- THE COST, WHICH IS A WRITE COST AND IS SMALL. One more b-tree page set to
+-- maintain per edition insert, update of `format`, and delete. §17.8's flagship
+-- topology measures 58,500 edition rows; the importer writes them in batches
+-- inside one transaction and runs ANALYZE afterwards, so the index is built
+-- once per full import rather than probed per row. No render path writes an
+-- edition.
+--
+-- DDL convention follows 00005's `edition` block and 00007: index names are
+-- `ix_<table>_<what>`, and the index is created beside the statement of what
+-- reads it.
+--
+-- A merged migration is NEVER edited. Write a new one.
+
+-- +goose Up
+-- +goose StatementBegin
+
+-- ─── The media-type split, as a filter · schema.md §2, ARCHITECTURE §17.2 ────
+--
+-- (format, work_id), in that order. See the header: `format` is the equality the
+-- Audiobooks/Ebooks filter always carries, `work_id` is what makes the per-
+-- candidate probe a two-column covered seek instead of a one-column seek plus a
+-- row fetch, and the reverse order would duplicate ix_edition_work's leading
+-- column for no gain.
+--
+-- NOT PARTIAL. `edition` has no soft-delete column — an edition dies with its
+-- work through ON DELETE CASCADE — so there is no tombstone predicate to make
+-- this partial on, unlike ix_work_added and ix_work_kind_sort on `work`.
+-- `format` is nullable and NULL rows are indexed like any other; they are the
+-- "unset format" state 00005's CHECK note describes, and the Ebooks side of the
+-- split has to be able to see them.
+CREATE INDEX ix_edition_format ON edition(format, work_id);
+
+-- +goose StatementEnd
+
+-- +goose Down
+-- Downgrades are not a supported user path (docs/CONFIGURATION.md §6.3). This
+-- block exists so a migration can be tested locally, and for nothing else.
+--
+-- One DROP and no rebuild. An index holds no data of its own, so this loses
+-- nothing that a re-Up does not rebuild from `edition` itself. Nothing in the
+-- schema refers to an index by name, so no other object needs recreating.
+--
+-- ⚠️ WHAT THIS DOWN DOES NOT UNDO, stated because it is invisible: nothing. The
+-- reads that seek on this index keep returning the same rows without it — they
+-- return them by scanning instead — so a rollback is a performance regression
+-- and never a wrong answer. That is the one property that separates an index
+-- migration from every other migration in this directory, and it is why this
+-- Down block is safe in a way 00005's, 00006's and 00007's are not — and 00008's
+-- is not in that class either: `ALTER TABLE image_asset DROP COLUMN format`
+-- drops a column and every value in it, where this drops a derived structure
+-- that `edition` can rebuild.
+-- +goose StatementBegin
+
+DROP INDEX IF EXISTS ix_edition_format;
+
+-- +goose StatementEnd
+
