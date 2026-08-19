@@ -19477,6 +19477,31 @@ them while this change was in a rebase. They are named by heading and bullet abo
 the same correction LS-320 made to `http-api.md` one commit earlier. The `00005:221` and
 `testdata/schema.sql:292` line numbers are kept, because neither file is edited.
 
+⚠️ **Amendment, 2026-08-19 — the note above names the wrong commit. It stands as written, and the
+correction is here rather than in it.** `bf66828` did not rewrite `docs/reference/security.md`. It
+does not touch that file at all. Measured at `794b1a4`, the `origin/main` this amendment was written
+against, `git show --stat bf66828` reports *"docs: the lint banner is a mislabel, and a compile count
+is not lint coverage"* and one file — `docs/DEVELOPMENT.md | 30 ++++++++++++++++++++++--------`,
+`1 file changed, 22 insertions(+), 8 deletions(-)`. The rewrite the note describes is **`0ca1be6`**,
+*"docs: security.md's present tense claimed guards nothing reaches"* —
+`docs/reference/security.md | 282 +++++++++++++++++++++++++++++++--------------`, `1 file changed,
+193 insertions(+), 89 deletions(-)`, and `security.md` is the only file in it.
+
+**How the two were transposed, since the mechanism is the reusable part.** `0ca1be6` is committed at
+`05:03:47` and reaches `main` through the merge `b2221df` at `05:04:05`; `bf66828` is the very next
+commit on `main`, at `05:04:36`. So the SHA that lands *after* the rewrite arrives was read as the
+SHA that *is* the rewrite — thirty-one seconds and one merge commit apart. A `git log --oneline`
+taken in that window shows `bf66828` on top and the rewrite two rows down behind a merge, which is
+exactly the reading that produces this error.
+
+**Only the attribution changes; the note's remedy was and is correct.** The line numbers were stale,
+a `security.md` rewrite is what staled them, and the heading-and-bullet citations this entry now uses
+are unaffected by which SHA did it. `LS-320`'s parallel holds too — it re-anchored `http-api.md` by
+symbol against the same class of rot — and it is worth saying that a citation naming the wrong SHA is
+the same defect as a citation naming a moved line: both look precise and both send a reader somewhere
+that does not carry what they were promised. The remedy is the same in both directions, which is to
+name the thing by something that does not move and to quote what was actually measured.
+
 **And the test's own doc comment names this exact case** — *"This catches … drift: **a migration
 edited after it shipped**"* (`migrate_test.go:25-27`). The rule has a mechanism here, not just a
 convention.
