@@ -905,7 +905,9 @@ func TestBrowseWorksScopedPlanKeepsTheIndex(t *testing.T) {
 	if faults := browseWorksPlanFaults("ix_work_added", joined); len(faults) > 0 {
 		t.Errorf("the scoped plan is wrong:\n  plan: %s\n  %s", joined, strings.Join(faults, "\n  "))
 	}
-	if !strings.Contains(joined, "SEARCH sil") || !strings.Contains(joined, "ix_sil_work") {
+	// Derived, not literal — see scopeLinkAlias and recent_test.go's note.
+	if !strings.Contains(joined, "SEARCH "+scopeLinkAlias("w.id")) ||
+		!strings.Contains(joined, "ix_sil_work") {
 		t.Errorf("the scope EXISTS is not a seek on ix_sil_work: %s", joined)
 	}
 	if strings.Contains(joined, "SCAN sil") {
