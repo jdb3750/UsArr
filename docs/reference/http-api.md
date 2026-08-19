@@ -183,7 +183,8 @@ statement about the user's library, and it is emphatically not a zero.
 
 🚩 **A consumer must not render an absent blob as `0`, as "none", or as any glyph, bar or accessible
 name that asserts emptiness.** The honest rendering is **"not counted yet"**, or whatever that
-screen's vocabulary calls the same thing. A crossed circle reading *none held* on a series the user
+screen's vocabulary calls the same thing. It is honest and it is also mute — it cannot say WHY the
+work is uncounted, and §3.4's `file_read_failures` is the per-instance number that can. A crossed circle reading *none held* on a series the user
 demonstrably has on disk is the failure this paragraph exists to prevent.
 
 ⚠️ **`have_count: 0` is not evidence of anything on its own.** `have_count` is sent
@@ -435,18 +436,20 @@ set means no libraries rather than every library.
 
 ---
 
-## 3 · `GET /api/v1/services/health` — the two catalogue-freshness fields
+## 3 · `GET /api/v1/services/health` — the catalogue-freshness fields
 
-**This section documents `last_full_sync_at` and `work_count` and nothing else on the endpoint.**
+**This section documents `last_full_sync_at`, `work_count` and `file_read_failures`, and nothing
+else on the endpoint.**
 The rest of the row's contract has not been settled here; read `internal/httpapi/services.go`'s
-`serviceHealthResponse` for it. The two fields below are what the Services screen's
+`serviceHealthResponse` for it. The first two are what the Services screen's
 `Last successful sync` and `Items` columns render, and both were hardcoded client-side before they
-existed on the wire.
+existed on the wire. The third (§3.4) has **no consumer yet** — it is on the wire and nothing reads
+it; §3.4 says what a consumer has to do with it.
 
 Like every read on this screen it is served **entirely from SQLite** (principle 1): no \*Arr call,
 no probe issued on the request path. Requires an authenticated session.
 
-### 3.1 The two fields
+### 3.1 The three fields
 
 ```jsonc
 {
@@ -454,7 +457,8 @@ no probe issued on the request path. Requires an authenticated session.
     {
       // …the rest of the health row…
       "last_full_sync_at": "2026-08-16T12:00:00Z",
-      "work_count": 3
+      "work_count": 3,
+      "file_read_failures": 0
     }
   ]
 }
@@ -464,6 +468,7 @@ no probe issued on the request path. Requires an authenticated session.
 | --- | --- | --- | --- |
 | `services[].last_full_sync_at` | **yes**, as a value or as an explicit `null` | RFC 3339 UTC, or `null` | When this instance last **completed** a full catalogue import. `null` means **never**. |
 | `services[].work_count` | **yes** | integer | How many **distinct works** this instance contributes to the local catalogue. |
+| `services[].file_read_failures` | **yes** | integer | How many of this instance's items the **file walk could not read** — see §3.4. `0` is a positive statement, not an absence. |
 
 ### 3.2 `null` and `0` are different facts, and neither is omitted
 
@@ -478,7 +483,7 @@ found an empty library:
 | a timestamp | `> 0` | The ordinary case. |
 | `null` | `> 0` | **A partial import's rows stand.** Batches committed before the import failed; the set is not known to be complete. |
 
-**Neither field carries `omitempty`, deliberately.** `"last_full_sync_at": null` is a *positive*
+**No field in this section carries `omitempty`, deliberately** — including `file_read_failures`. `"last_full_sync_at": null` is a *positive*
 statement — "this instance has never completed a full import". An absent key would be
 indistinguishable from a server build that does not send the field at all, which is the ambiguity
 this endpoint exists to remove.
@@ -508,6 +513,53 @@ containers across instances (§17.8), so a per-library number is a different que
 
 Credited people are outside it by construction rather than by a filter: the credit pass creates a
 `work` of kind `person` with no `service_item_link` at all, so no instance contributes one.
+
+### 3.4 `file_read_failures` — why an item is uncounted, rather than that it is empty
+
+**This is §1.4.1's missing half.** A work whose file walk failed gets no rollup, so
+`GET /api/v1/library/recent` omits its `availability` and §1.4.1 requires the honest rendering
+*"not counted yet"*. That rendering is truthful and it is also mute: it cannot tell the user
+whether nobody has counted yet or whether **the upstream refused to answer**. This field is the
+number that lets a screen say *"3 series could not be read"* instead.
+
+The producer is the Kavita file walk (`internal/libsync`'s `StreamFiles`). A per-item failure there
+is **dropped, not fatal**: the item keeps every file row it already had, because a failed read is
+not evidence of an empty library, and the walk carries on to the next item. Each drop writes a
+`sync_report` row of kind `file_walk_failed`, and **this field is that table's only reader**.
+
+| Value | What it means |
+| --- | --- |
+| `0` | Every item the last walk asked for answered. **Not "no data"** — the key is never omitted. |
+| `> 0` | That many **distinct items** could not be read. Their file rows and counts are STALE, not zero. |
+
+**The window is "since the last completed full sync started".** `sync_report` is append-only, so a
+bare count would include failures a later successful import already fixed. The read is scoped by
+`created_at >= last_full_sync_at`, which is exactly the last completed run plus anything a partial
+run has added since — `last_full_sync_at` is stamped with the run's *start* time. An instance whose
+`last_full_sync_at` is `null` counts **everything it has**: there is no earlier completed run to
+exclude, and the rows it holds came from runs that really happened.
+
+⚠️ **It is distinct items, not failures.** Three partial runs that each failed on the same series
+report `1`. A count of rows would report `3` and describe a library that does not exist.
+
+⚠️ **It carries no reason and no upstream text**, on §5.5.5's rule for the same reason. Each
+failure's classified reason (`not_found`, `unauthorized`, `server_error`, …) and the upstream HTTP
+status are in `sync_report.detail`, which a browser never sees. The classification is a **closed
+vocabulary** rather than a redacted message: `ssrf.RedactText` finds credentials inside URLs and
+says in its own doc that "a bare secret that is not inside a URL passes through untouched", and an
+upstream body echoing a bare key is exactly the shape `RESEARCH.md` R-08 measured on Mylar3.
+
+🚩 **A non-zero value does not make the instance unhealthy, and must not be rendered as an error.**
+The import completed; `last_full_sync_at` is stamped; the works imported. What is incomplete is
+those items' **file** facts. The honest sentence is about the items, not about the service.
+
+**What a consumer has to do.** Nothing reads this field today — `web/src/lib/services.ts` models
+`last_full_sync_at` and `work_count` and stops there. A consuming thread has to: add
+`fileReadFailures: num(value.file_read_failures) ?? 0` to the `ServiceHealth` mapper in
+`web/src/lib/api.ts` beside `workCount`; render the count on the Services row **only when it is
+non-zero**, as a note rather than a fault state; and pin it the way
+`services-screen.test.ts` pins the four-state pair — a test that passes on the constant `0` passes
+on the bug.
 
 ---
 

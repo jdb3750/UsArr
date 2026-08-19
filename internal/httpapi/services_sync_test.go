@@ -196,6 +196,11 @@ func TestServicesHealthKeysAreTheAllowlist(t *testing.T) {
 	// need a probe snapshot, which this test deliberately does not have.
 	want := []string{
 		"action", "base_url", "breaker_state", "consecutive_failures", "enabled",
+		// Added deliberately, and named here rather than allowed through by
+		// widening: http-api.md §3.4. It is a COUNT and carries no reason and no
+		// upstream text — the reason lives in sync_report.detail, which the
+		// browser never sees.
+		"file_read_failures",
 		"id", "kind", "last_full_sync_at", "name", "role", "stale", "state",
 		"work_count",
 	}
@@ -235,5 +240,79 @@ func TestWorkCountIsScoped(t *testing.T) {
 	}
 	if _, leaked := counts[1]; leaked {
 		t.Errorf("a scope naming only instance 2 was told instance 1's count: %v", counts)
+	}
+}
+
+// seedWalkFailures appends `file_walk_failed` rows to the corpus.
+func seedWalkFailures(t *testing.T, s *Server, rows ...[3]string) {
+	t.Helper()
+	if err := s.store.DB().Write(t.Context(), func(ctx context.Context, tx *sql.Tx) error {
+		for _, r := range rows {
+			if _, err := tx.ExecContext(ctx, `
+				INSERT INTO sync_report
+				  (service_instance_id, kind, remote_kind, remote_id, detail, created_at)
+				VALUES (?, ?, 'series', ?, '{"phase":"files","reason":"server_error"}', ?)`,
+				r[0], store.SyncReportFileWalkFailed, r[1], r[2]); err != nil {
+				return err
+			}
+		}
+		return nil
+	}); err != nil {
+		t.Fatalf("seed sync_report: %v", err)
+	}
+}
+
+func rawField(t *testing.T, row map[string]json.RawMessage, key string) string {
+	t.Helper()
+	raw, present := row[key]
+	if !present {
+		t.Fatalf("%s is ABSENT; 0 is a real answer and must be sent", key)
+	}
+	return string(raw)
+}
+
+// TestServicesHealthCountsItemsTheFileWalkCouldNotRead is what makes an
+// uncounted item explicable.
+//
+// ⚠️ THE READ IS sync_report's ONLY ONE. The importer wrote `file_walk_failed`
+// rows and nothing read them, which surfaces exactly as much as the silent
+// `continue` those rows replaced. The four cases below are the whole contract of
+// http-api.md §3.4.
+func TestServicesHealthCountsItemsTheFileWalkCouldNotRead(t *testing.T) {
+	s := newTestServer(t, nil)
+	seedSyncCorpus(t, s)
+	seedWalkFailures(t, s,
+		// Instance 1 completed a run at 12:00. Two series failed DURING it…
+		[3]string{"1", "r1", "2026-08-16 12:00:30"},
+		[3]string{"1", "r3", "2026-08-16 12:00:31"},
+		// …the same series failed twice, which is one series, not two…
+		[3]string{"1", "r3", "2026-08-16 12:00:45"},
+		// …and one failed in an EARLIER run that the completed one superseded.
+		[3]string{"1", "r4", "2026-08-15 08:00:00"},
+		// Instance 3 has NEVER completed a run, so there is no earlier run to
+		// exclude and its one partial run's failure counts.
+		[3]string{"3", "r9", "2026-08-16 07:00:00"},
+	)
+
+	code, body := callServicesHealth(t, s)
+	if code != http.StatusOK {
+		t.Fatalf("GET /api/v1/services/health = %d: %s", code, body)
+	}
+	rows := healthRows(t, body)
+
+	for _, tc := range []struct{ name, want, why string }{
+		{"Kavita", "2", "two DISTINCT series failed since the last completed run started"},
+		{"Empty Kavita", "0", "an instance with no rows sends 0, not an absent key"},
+		{"Fresh Kavita", "1", "an instance that never completed a run counts what it has"},
+	} {
+		if got := rawField(t, rows[tc.name], "file_read_failures"); got != tc.want {
+			t.Errorf("%s: file_read_failures = %s, want %s — %s", tc.name, got, tc.want, tc.why)
+		}
+	}
+
+	// And the response says nothing about WHY, on §5.5.5's rule: the classified
+	// reason is in sync_report.detail, for an operator with database access.
+	if strings.Contains(body, "server_error") || strings.Contains(body, "reason") {
+		t.Errorf("the health response carries a failure reason: %s", body)
 	}
 }

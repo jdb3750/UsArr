@@ -18837,3 +18837,299 @@ own live-verification servers, which is a fair simulation of a slower box.
 the test app a registry with no background prober, so the synchronous `probe` call is the only writer
 of that snapshot. Recorded because a flake that is silently re-run until green is a gate nobody can
 trust (`DEVELOPMENT.md` §11).
+
+---
+
+# A failed per-series file walk, made visible — `internal/libsync/files.go`
+
+The walk dropped a series whose `GET /api/Series/volumes` failed on a bare `continue`. The drop is
+right and stays; the silence around it was not. Ten findings, LS-310…LS-319.
+
+## LS-310 — the claim, measured rather than taken
+
+**The brief named `internal/libsync/files.go` around `:216` and flagged the line number as
+second-hand.** It is exact. At `origin/main` `4fe7821`, `files.go:216` is the `continue` inside
+`StreamFiles`'s error branch, and the branch above it — `errors.Is(err, kavita.ErrBreakerOpen)` —
+is the only failure that leaves the loop. Nothing in the function, in `streamAndApplyFiles`, or in
+`Report` recorded a dropped series: `grep` for the *only* per-item facts the pass produced finds
+`rep.FileItemsRead` and nothing else, so `len(items) - FileItemsRead` was the closest a caller could
+get — and that number also folds in items whose remote id the adapter never wrote, which the loop
+skips two branches earlier with a different `continue` for a different reason.
+
+**The user-visible consequence is not in the log, it is on a screen**, and that is what made it worth
+a commit rather than a log line. A work with no file rows gets no rollup, so `work.availability`
+stays `NULL` and `GET /api/v1/library/recent` omits the key — which `http-api.md` §1.4.1 requires be
+rendered *"not counted yet"*. That rendering is honest for a work nobody has counted **and** for a
+work whose upstream refused to answer, and there was no third thing anywhere in the tree that could
+tell the two apart.
+
+## LS-311 — `file_walk_failed`, and why not `series_walk_failed`
+
+`sync_report.kind` carries **no `CHECK`** — migration `00005` states that as a decision, on the
+grounds that the vocabulary is the least settled in the schema — so the name is held by convention
+and is worth arguing about once rather than never.
+
+**Chosen: `file_walk_failed`.** The existing kinds are `container_declined`, `container_bind_failed`
+and `identity_conflict`; the second is the closest neighbour in shape and in meaning (one row of a
+pass failed, the pass continued), and it is spelled `<what was being done>_failed`. The subject is
+already on the row — `remote_kind = 'series'`, `remote_id = '<id>'` — so putting `series` in `kind`
+too would name it twice and would be wrong the first time a non-series item is walked.
+
+**Rejected: `series_walk_failed`**, for that duplication, and **`file_read_failed`**, because it
+reads as a claim about one file rather than about a walk that never got a file list at all.
+
+**One spelling, not two.** The writer is `internal/libsync` and the reader is `internal/store`, in
+different packages, and a `kind` column with no `CHECK` turns a typo on either side into a count
+that silently reads zero rather than into an error. `store.SyncReportFileWalkFailed` is the single
+symbol; a whole-tree grep for the string literal finds the constant and nothing else.
+
+## LS-312 — `ssrf.RedactText` is *not* what makes this row safe, and saying so is the finding
+
+**The brief instructed: use `ssrf.RedactText` rather than writing a second redactor, and do not put
+a raw upstream body in the row if a classified reason will do.** Both halves are applied, and the
+second is what actually carries the safety — which is worth writing down, because "we redacted it"
+is the kind of claim that stops further thought.
+
+`ssrf.RedactText`'s own doc states its limit in as many words: *"a bare secret that is not inside a
+URL passes through untouched. The URL rewriting is `RedactRawURL`'s; this function only finds the
+substrings to hand it."* `internal/kavita`'s `clean` already puts every byte of upstream body text
+through it before it reaches `APIError.Message` — so a message that arrives here is *already*
+redacted, and is **still** not safe to store: `RESEARCH.md` R-08's measured shape is a Mylar3
+returning an indexer API key in a response **body**, bare, with no URL around it for a deny-list to
+find.
+
+`sync_report.detail` is durable and is what an operator pastes into a bug report, so the answer is
+not a better scrubber. `walkFailureReason` returns a **closed vocabulary** (`unauthorized`,
+`forbidden`, `not_found`, `validation`, `server_error`, `timeout`, `decode`,
+`response_too_large`, `wrong_service`, `invalid_request`, `unexpected_status`, `unknown`) plus the
+HTTP status as an integer, and the upstream's own words are discarded at the classification and
+never carried further. **There is therefore no `RedactText` call on this path, and its absence is
+the design rather than an omission** — a redactor call over text that is provably a fixed token
+would tell a later reader that free text is allowed here.
+
+The tokens are the sentinels' own names on purpose: `internal/kavita` has already made this
+classification, and a second taxonomy in `internal/libsync` would be able to disagree with it.
+
+**The unclassified branch returns `"unknown"`, not `err.Error()`.** That is the branch a future
+sentinel falls into, and quoting the error there would reintroduce exactly the leak — which is why
+it is one of the guards fired below.
+
+## LS-313 — the surfacing path: `services/health` §3.4, and the SSE frame deliberately untouched
+
+Three candidates, and the SSE frame was refused rather than chosen.
+
+* **`import.progress`** (`http-api.md` §5) is a **documented contract with two consumers already
+  built against it**, and §5.5.1's heading is literally *"one new `phase` value and NO new field"*.
+  Adding a field is a contract change that has to be sequenced with the consuming thread, not
+  discovered by it. It is also the **wrong shape**: the frame is per-run and vanishes when the run
+  ends, and the fact this commit exists to surface has to still be true tomorrow when somebody opens
+  the Libraries screen and asks why a series says "not counted yet". **Not touched, and this thread
+  did not have the standing to touch it.**
+* **`sync_report` alone** surfaces nothing — the brief said so and the tree agrees: before this
+  change, `grep` finds writers of that table and **no reader anywhere**. Rows are the durable record
+  and they are necessary; they are not sufficient.
+* **`GET /api/v1/services/health`** is where it landed. The row already carries per-instance sync
+  facts (§3), the endpoint is served entirely from SQLite so the read costs one grouped query on a
+  path that already makes one, and `ARCHITECTURE.md` §17.3 makes this the screen that *"must show
+  what in the pipeline is broken and how to fix it"*. **New contract surface: one integer field on
+  a section that already documents two.**
+
+`file_read_failures` carries **no reason and no upstream text** — §5.5.5 already settled that for a
+sync surface, and the classified reason stays in `sync_report.detail`, which no browser sees.
+
+🚩 **A non-zero value is not an unhealthy service, and §3.4 says so.** The import completed, the
+works imported, `last_full_sync_at` is stamped. What is incomplete is those items' file facts. A
+consumer that lights the row red would replace one false statement with another.
+
+**What a consumer must do** is in §3.4's last paragraph, in the same shape the `stopped` phase got:
+the mapper line in `web/src/lib/api.ts`, render only when non-zero, and pin it the way
+`services-screen.test.ts` pins the four-state pair — because a test that passes on the constant `0`
+passes on the bug. **Nothing renders it today**, and §3 now says that in its own opening paragraph
+rather than leaving a reader to assume a screen exists.
+
+## LS-314 — the window on an append-only table, and the two things it is not
+
+`sync_report` is append-only by convention (migration `00005` says so and explains why there is no
+trigger), so `COUNT(*)` is *every failure the instance has ever had*, including ones a later
+successful import already fixed. The read is scoped
+`created_at >= service_instance.last_full_sync_at`, which is the last completed run plus anything a
+partial run has added since — `last_full_sync_at` is stamped with the run's **start** time
+(`FullImport` passes `rep.StartedAt`), so the boundary falls before the run's own rows rather than
+after them.
+
+**The comparison is a string comparison and that is safe here, not lucky.** `sync_report.created_at`
+defaults to `datetime('now')` and `last_full_sync_at` is written through `store.FormatTime`, whose
+layout is `2006-01-02 15:04:05` — `store.go`'s comment says the layout was chosen *because* these
+columns are compared and ordered lexicographically. Two formats in one column would break this
+predicate silently, which is the failure that comment exists to prevent.
+
+**`COUNT(DISTINCT remote_id)`, not `COUNT(*)`.** Three partial runs that each failed on the same
+series are one series that cannot be read, not three. A row count would describe a library that does
+not exist, and it is a guard below.
+
+**An instance that has never completed a run counts everything it has.** There is no earlier
+completed run to exclude, and the rows it holds came from runs that really happened. That is the
+`last_full_sync_at IS NULL` arm, and it is asserted rather than assumed
+(`TestServicesHealthCountsItemsTheFileWalkCouldNotRead`, the `Fresh Kavita` case).
+
+**No query-plan assertion, deliberately.** `ix_sync_report_instance` is
+`(service_instance_id, created_at DESC)` and this read carries no equality on the leading column —
+it groups across every visible instance — so the plan is a scan of a small operational log and
+pinning it would assert nothing about an index. `DEVELOPMENT.md` §5's rule is that the assertions
+catch *index regressions*; there is no index here to regress.
+
+## LS-315 — no existing test asserted the silence as correct, and the one that came closest was extended rather than reversed
+
+The brief asked whether any test pinned the current behaviour as right. **One was close and it was
+not wrong.** `TestStreamFilesDropsAPerSeriesFailure` asserted that a 404 does not fail the walk and
+that the failed series is **not** delivered as an empty set — both of which are the deliberate half
+and both of which still hold unchanged.
+
+**It asserted the silence only by omission**, which is a real gap and is now closed in place: the
+test stops three assertions later, on the reported failure and its classified reason, with a comment
+at the assertion site saying what the test used to not say and why that let the bare `continue` stay
+green. **Nothing was reversed** — there was no green assertion of a defect here, unlike
+`services-screen.test.ts`'s `Never` case, which is the precedent for what a reversal looks like in
+this repo.
+
+`TestServicesHealthKeysAreTheAllowlist` did go red, and correctly: it pins the health row's key set
+whole *because* that row is built from a record holding an encrypted full-admin credential. The new
+key is added to the allowlist **by name**, with the reason at the line — that test is the mechanism
+for making a field addition deliberate, and it worked.
+
+## LS-316 — every guard fired, with the one absorption named
+
+Each break was applied to production code, run, and reverted. Verbatim.
+
+**B1 — the failure is never appended to `[]FileWalkFailure`:**
+
+```
+--- FAIL: TestStreamFilesDropsAPerSeriesFailure (0.00s)
+    files_test.go:197: the walk reported 0 failures, want 1
+--- FAIL: TestAFailedFileWalkIsCountedRecordedAndSurvived (0.06s)
+    filewalkfail_test.go:124: Report.FileReadFailures = 0, want 1
+    filewalkfail_test.go:143: no file_walk_failed row was written: sql: no rows in result set
+```
+
+**B2 — `rep.FileReadFailures = len(failed)` deleted:**
+
+```
+--- FAIL: TestAFailedFileWalkIsCountedRecordedAndSurvived (0.06s)
+    filewalkfail_test.go:124: Report.FileReadFailures = 0, want 1
+    filewalkfail_test.go:161: the import's own summary line does not carry the count:
+```
+
+**B3 — the `recordFileWalkFailures` call deleted:**
+
+```
+--- FAIL: TestAFailedFileWalkIsCountedRecordedAndSurvived (0.06s)
+    filewalkfail_test.go:143: no file_walk_failed row was written: sql: no rows in result set
+```
+
+**B4 — the unclassified branch quotes `err.Error()` and the `ErrServer` case is removed.** This is
+the leak, and it fires on the durable row *and* on the log:
+
+```
+    filewalkfail_test.go:244: sync_report.detail carries the planted secret: {"effect":"the item keeps the file rows it already had; none were removed","phase":"files","reason":"kavita SeriesVolumes: GET /api/Series/volumes -> 500: backend rejected key 0123456789abcdefdeadbeefcafef00d","status":500}
+    filewalkfail_test.go:245: the log carries the planted secret: time=… level=WARN msg="kavita: a series' file walk failed and was dropped" remote_kind=series remote_id=1 reason="kavita SeriesVolumes: GET /api/Series/volumes -> 500: backend rejected key 0123456789abcdefdeadbeefcafef00d" status=500
+```
+
+**B5 — the failed series is delivered as an empty set. THE DELIBERATE HALF:**
+
+```
+--- FAIL: TestStreamFilesDropsAPerSeriesFailure (0.00s)
+    files_test.go:179: delivered 3 sets (n=2), want 2
+--- FAIL: TestAFailedFileWalkDeletesNothing (0.06s)
+    filewalkfail_test.go:197: a failed read removed the item's file rows: 0 left, want 1
+    filewalkfail_test.go:200: a failed read removed 1 file rows, want 0
+```
+
+**B6 — the per-series `WARN` removed:**
+
+```
+--- FAIL: TestAFailedFileWalkIsCountedRecordedAndSurvived (0.06s)
+    filewalkfail_test.go:158: the dropped series was not logged:
+```
+
+**B7 — the `continue` becomes a `return` (one failure aborts the walk):**
+
+```
+--- FAIL: TestStreamFilesDropsAPerSeriesFailure (0.00s)
+    files_test.go:176: one 404 failed the whole walk: kavita: walk files for series 2: kavita: not found
+--- FAIL: TestAFailedFileWalkIsCountedRecordedAndSurvived (0.05s)
+    filewalkfail_test.go:116: one failed walk failed the whole import: full import of service_instance 1: walk files (delivered 1): …
+```
+
+**B8 — the since-last-completed-run window dropped:** `Kavita: file_read_failures = 3, want 2`.
+**B9 — `COUNT(DISTINCT remote_id)` → `COUNT(*)`:** the same line, `= 3, want 2` — a different bug
+with the same fixture, which is why the fixture carries both a superseded run and a repeated series.
+**B10 — the health field never assigned:** `Kavita: … = 0, want 2` and `Fresh Kavita: … = 0, want 1`.
+
+**B11 — `store.SyncReportFileWalkFailed` misspelled. ABSORBED, and that is CORRECT.** The suite stays
+green, because the constant is one symbol referenced by the writer, the reader and the tests, so
+renaming it moves every side together and nothing observable changes. That is precisely the property
+LS-311 introduced it for: the failure mode it prevents is a **literal** on one side drifting from a
+literal on the other, and a whole-tree grep confirms the string appears exactly once. A test that
+went red here would be asserting the spelling of a private constant.
+
+**Two guards were deliberately NOT written**, and are named rather than left implied. The `Scope`
+predicate on the new read is `instancePredicate`, which fails closed at `1=0` and is guarded where it
+is defined; re-firing it per caller would be a test of shared machinery. And the walk's real
+behaviour against a live Kavita is untested here for `DEVELOPMENT.md` §8's reason — there is no
+demo instance and no Docker in the gate.
+
+**⚠️ The tests drive the REAL adapter, not a fake `FileSource`.** The obvious shortcut for the
+importer-level tests is a fake that reports a failure directly, and it would have left B1, B4, B5,
+B6 and B7 green with the production code broken. Only `Containers` and `StreamItems` are faked;
+`realWalkSource` runs `KavitaSource.StreamFiles` over a fake HTTP client.
+
+## LS-317 — what `make check` green is worth on this change
+
+**Measured.** `make check: OK` at both merged heads, with the gate naming its own tools:
+
+```
+tool: /root/go/bin/gofumpt — version v0.11.0, asserted against the pin
+tool: /root/go/bin/golangci-lint — version 2.12.2, asserted against the pin
+tool: /root/go/bin/gitleaks — build-info module github.com/zricethezav/gitleaks/v8@v8.30.1, asserted against the pin (--version is unstamped)
+tool: /root/go/bin/govulncheck — version v1.7.0, asserted against the pin
+```
+
+**What it covers:** every guard in LS-316, each fired by breaking the code and watching the suite go
+red. **What it does not cover:** that a real Kavita produces the failures being classified. The
+sentinels are `internal/kavita`'s and its own tests pin the status→sentinel mapping, but no test in
+this tree has seen a live 5xx from `GET /api/Series/volumes` — this thread's fixtures are synthetic,
+on `harness_test.go`'s stated terms. The owner's next full sync is the first real exercise of it, and
+if his instance answers cleanly the classification stays unexercised in practice as well as in the
+suite.
+
+## LS-318 — `StreamCredits` has the identical silence, and it is deliberately out of scope
+
+`credits.go`'s per-series drop is the same three lines with the same bare `continue`
+(`errors.Is(err, kavita.ErrBreakerOpen)` → return, otherwise drop), and it records nothing either.
+It is **not** fixed here. The brief scoped this thread to the file walk, "cut before you add" applies
+to a thread's own diff as much as to a design, and the two failures do not cost the same thing: a
+failed credit walk leaves a work without a `writer` row, while a failed file walk leaves it without a
+count — and it is the count that a screen renders as an assertion about the user's library.
+
+**Follow-up, not a defect of this change.** The seam is already the right shape: `FileWalkFailure`,
+`walkFailureReason` and `recordFileWalkFailures` are not file-specific in anything but their names,
+and a credit version is the same three edits plus a second `kind`.
+
+## LS-319 — one write transaction per failed item: the bound, and where the seam is
+
+`recordFileWalkFailures` calls `Store.RecordSyncReport` once per failure, which is one write
+transaction each — the same shape as `FullImport`'s existing `container_declined` loop. **The bound
+is the number of items the walk failed on**, and the ordinary case is zero.
+
+**The pathological case is real and is named rather than papered over.** A 401, 403 or 404 does not
+trip the circuit breaker — `internal/kavita`'s `recordStatus` says *"4xx says nothing about instance
+health, so it must not trip the breaker. 5xx does"* — so an instance that answers 403 for every
+series produces one row and one transaction per item, where a 5xx storm would be stopped by the
+breaker after five. On the owner's 151-series library that is 151 tiny inserts and is not worth
+machinery; on a 100k-series library it would be.
+
+**Not capped, and the reason is the point of the commit.** A cap would make `file_read_failures` on
+the Services screen an undercount — a number that says "12 could not be read" when 40,000 could not
+is a worse falsehood than the silence this change removes. **The seam if it ever measures slow is a
+batched writer in `internal/store`** — one transaction, N inserts — which keeps every row and costs
+nothing at the call site.

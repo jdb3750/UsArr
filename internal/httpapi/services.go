@@ -659,6 +659,27 @@ type serviceHealthResponse struct {
 	// store.WorkCountsByInstance for why each narrowing is there.
 	WorkCount int64 `json:"work_count"`
 
+	// FileReadFailures is how many of this instance's items the file walk could
+	// not read, since its last completed full sync. Its wire contract is
+	// http-api.md §3.4.
+	//
+	// ⚠️ IT IS THE REASON AN UNCOUNTED ITEM IS UNCOUNTED, which is why it is on
+	// this row rather than nowhere. A work whose file walk failed has no rollup,
+	// so `GET /api/v1/library/recent` omits its `availability` — and §1.4.1 is
+	// categorical that absence means NOT COUNTED and must never be rendered as
+	// "none held". Without this number the screen can say "not counted yet" and
+	// nothing more; with it, it can say WHY three of them are not counted.
+	//
+	// NO `omitempty`, on the pair's reasoning above: `0` is the positive
+	// statement "the last walk read everything it asked for", and an absent key
+	// is indistinguishable from a server that does not send the field.
+	//
+	// ⚠️ IT CARRIES NO REASON AND NO UPSTREAM TEXT. Each failure's classified
+	// reason is in `sync_report.detail` for an operator with database access;
+	// this row is a browser-facing count, and http-api.md §5.5.5 already settled
+	// that no upstream text rides a sync surface.
+	FileReadFailures int64 `json:"file_read_failures"`
+
 	// Stale is true when no probe has been taken yet, or the last one predates
 	// the last recorded change. An honest "not measured yet" beats a green tick
 	// that means nothing.
@@ -683,6 +704,12 @@ func (s *Server) handleServicesHealth(w http.ResponseWriter, r *http.Request) er
 		return errStatus(http.StatusInternalServerError, CodeInternal,
 			"the configured services could not be read").wrapping(err)
 	}
+	// The second grouped read, on the same rule. sync_report's only reader.
+	walkFailures, err := s.store.FileWalkFailuresByInstance(r.Context(), storeScope(a))
+	if err != nil {
+		return errStatus(http.StatusInternalServerError, CodeInternal,
+			"the configured services could not be read").wrapping(err)
+	}
 
 	out := make([]serviceHealthResponse, 0, len(instances))
 	anyUnhealthy := false
@@ -692,6 +719,10 @@ func (s *Server) handleServicesHealth(w http.ResponseWriter, r *http.Request) er
 		// WorkCountsByInstance on why absent and 0 are the same answer HERE and
 		// last_full_sync_at is what makes them different on the wire.
 		row.WorkCount = counts[si.ID]
+		// Absent from the map and 0 are the same answer here, and unlike
+		// work_count they are allowed to be: "no item failed" is the only
+		// reading of no rows. See FileWalkFailuresByInstance.
+		row.FileReadFailures = walkFailures[si.ID]
 		if row.State != stateHealthy {
 			anyUnhealthy = true
 		}

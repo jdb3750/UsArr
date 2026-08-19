@@ -1413,6 +1413,69 @@ func (s *Store) WorkCountsByInstance(ctx context.Context, scope Scope) (map[int6
 	return out, nil
 }
 
+// FileWalkFailuresByInstance counts the items each instance's file walk could
+// not read, per instance.
+//
+// ⚠️ IT IS sync_report's FIRST READER, and that is the point of it existing.
+// Before this, `file_walk_failed` rows were written and nothing anywhere read
+// them, which surfaces exactly as much as the bare `continue` it replaced. The
+// Services screen is where §17.3 says a broken pipeline has to be visible.
+//
+// # The window: since the last COMPLETED full sync
+//
+// sync_report is append-only, so a bare count is every failure the instance has
+// ever had — including ones a later successful import already fixed. The window
+// is `created_at >= service_instance.last_full_sync_at`, which is exactly the
+// last completed run plus anything a partial run has added since:
+// last_full_sync_at is stamped with the run's START time (libsync's FullImport),
+// and both columns are stored through FormatTime, whose layout is ordered
+// lexicographically on purpose (store.go's timeLayout comment).
+//
+// AN INSTANCE THAT HAS NEVER COMPLETED A RUN counts everything it has, because
+// there is no earlier completed run to exclude and the rows it does have came
+// from runs that really happened. COUNT(DISTINCT remote_id) is what keeps three
+// failed partial runs over one series reporting 1 rather than 3.
+//
+// # Zero versus absent
+//
+// An instance with no rows is ABSENT from the map, on WorkCountsByInstance's
+// terms — but unlike that function, absent and 0 mean the same thing here and
+// the caller may collapse them: "no item failed" is the only reading of no rows,
+// and there is no second fact that could distinguish it.
+//
+// It AGGREGATES ACROSS INSTANCES, so it carries a Scope for the reason
+// WorkCountsByInstance states: without the predicate it is an existence oracle
+// over the whole configured stack.
+func (s *Store) FileWalkFailuresByInstance(ctx context.Context, scope Scope) (map[int64]int64, error) {
+	pred, args := scope.instancePredicate("r.service_instance_id")
+	args = append([]any{SyncReportFileWalkFailed}, args...)
+	rows, err := s.db.Read().QueryContext(ctx, `
+		SELECT r.service_instance_id, COUNT(DISTINCT r.remote_id)
+		  FROM sync_report r
+		  JOIN service_instance i ON i.id = r.service_instance_id
+		 WHERE r.kind = ?
+		   AND (i.last_full_sync_at IS NULL OR r.created_at >= i.last_full_sync_at)
+		   AND `+pred+`
+		 GROUP BY r.service_instance_id`, args...)
+	if err != nil {
+		return nil, fmt.Errorf("count file walk failures per service_instance: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+
+	out := make(map[int64]int64)
+	for rows.Next() {
+		var id, n int64
+		if err := rows.Scan(&id, &n); err != nil {
+			return nil, fmt.Errorf("count file walk failures per service_instance: scan: %w", err)
+		}
+		out[id] = n
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("count file walk failures per service_instance: %w", err)
+	}
+	return out, nil
+}
+
 // Analyze refreshes SQLite's planner statistics after a bulk import
 // (reference/sync.md §6 rule 5: "SQLite's planner is materially better with
 // stats for the multi-index intersections tag filtering depends on").
