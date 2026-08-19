@@ -1,0 +1,53 @@
+---
+# SYNTHETIC — hand-authored from bookorbit/bookorbit@73b7877d
+# (health.service.ts's checkDatabase / sanitizeErrorMessage) and @nestjs/terminus,
+# which answers 503 when any indicator is down while sending the SAME body shape
+# as a 200. NOT a wire capture.
+#
+# This fixture exists for one behaviour: A 503 HERE IS AN ANSWER, NOT A FAILURE.
+# The host is up, BookOrbit is running, and it has named the indicator that is
+# broken — which is exactly what §17.3's "show what in the pipeline is broken and
+# how to fix it" needs. Classifying it as ErrServer would throw that away, and
+# tripping the circuit breaker on it would silence the probe that explains the
+# outage.
+#
+# The message is what sanitizeErrorMessage produces: newlines and quotes replaced
+# with spaces, whitespace collapsed, truncated at 200 characters. The client
+# bounds and redacts it again anyway — "the upstream already bounded it" is not a
+# reason to skip our own bound.
+version: 2
+interactions:
+    - id: 0
+      request:
+        proto: HTTP/1.1
+        proto_major: 1
+        proto_minor: 1
+        content_length: 0
+        host: bookorbit.test:3000
+        headers:
+            Accept:
+                - application/json
+        url: http://bookorbit.test:3000/api/v1/health
+        method: GET
+      response:
+        proto: HTTP/1.1
+        proto_major: 1
+        proto_minor: 1
+        content_length: -1
+        headers:
+            Content-Type:
+                - application/json; charset=utf-8
+        status: 503 Service Unavailable
+        code: 503
+        duration: 1ms
+        body: |-
+            {
+              "status": "error",
+              "info": {},
+              "error": {
+                "database": { "status": "down", "message": "connect ECONNREFUSED 127.0.0.1:5432" }
+              },
+              "details": {
+                "database": { "status": "down", "message": "connect ECONNREFUSED 127.0.0.1:5432" }
+              }
+            }

@@ -336,7 +336,10 @@ func TestBreakerIgnores4xxAndTripsOn5xx(t *testing.T) {
 }
 
 func TestBreakerDefaultsMatchTheArchitectureNumbers(t *testing.T) {
-	cfg := BreakerConfig{}.withDefaults()
+	// WithDefaults is exported since the state machine moved to
+	// internal/breaker; this test still lives HERE so that a change to the §7.5
+	// numbers fails every client's suite rather than one shared one.
+	cfg := BreakerConfig{}.WithDefaults()
 	if cfg.FailureThreshold != 5 {
 		t.Errorf("FailureThreshold = %d, want 5 (ARCHITECTURE.md §7.5)", cfg.FailureThreshold)
 	}

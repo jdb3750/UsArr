@@ -1,0 +1,118 @@
+---
+# SYNTHETIC — hand-authored from bookorbit/bookorbit@73b7877d
+# (auth.controller.ts's @Post('magic-links/login'), magic-link.service.ts's
+# loginWithToken, auth.service.ts's issueTokensForUser and buildUserResponse,
+# app-info.controller.ts, and packages/types/src/app-info.ts). NOT a wire
+# capture.
+#
+# TWO INTERACTIONS, IN THE ORDER THE CLIENT PRODUCES THEM: the mint, then the one
+# authenticated read. There is no third, and there is deliberately no
+# GET /libraries — knowing what a library is belongs to slice 1.
+#
+# 🚩 BOTH CREDENTIALS ARE `<redacted>` HERE AND THAT IS THE FIXTURE WORKING, not
+# a placeholder someone forgot to fill in:
+#
+#   * the REQUEST body key `token` is in internal/ssrf's deny-list, so
+#     vcrscrub.RedactBody rewrites it;
+#   * the RESPONSE body key `accessToken` is in the same list — added at 66ea9a5
+#     for precisely this shape, after internal/vcrscrub's TestAccessTokenDrillArmed
+#     recorded a live JWT into a cassette while the entry was missing.
+#
+# The client is written for that: mint() checks the accessToken is NON-EMPTY, not
+# that it is a well-formed JWT, and tokenExpiry falls back to fallbackTokenTTL for
+# anything it cannot decode. A cassette can therefore exercise the whole
+# mint-then-read path without ever holding a credential.
+#
+# ⚠️ WHAT A CASSETTE CANNOT EXERCISE, stated here so nobody writes one that
+# appears to: the 401 re-mint retry. Two logins recorded in one cassette both
+# replay as `<redacted>`, so the client's "did the token actually change" guard
+# — which is what stops N concurrent 401s becoming N mints — sees no change and
+# correctly declines to retry. That path is fired against the local fake in
+# client_test.go instead. It is the same family as the cache-buster collision
+# internal/vcrscrub documents for BookOrbit's cover routes: matching and storing
+# on redacted content costs the ability to tell two values apart, and the
+# alternative is storing the secret.
+#
+# The `user` object is the CORRECTLY SCOPED credential ADR-0052's §14 gate asks
+# for: provisioningMethod 'shared', isSuperuser false, permissions empty. Every
+# benign sibling field survives the scrubber, which is the control that shows the
+# redaction above is targeted rather than a blanket wipe.
+version: 2
+interactions:
+    - id: 0
+      request:
+        proto: HTTP/1.1
+        proto_major: 1
+        proto_minor: 1
+        content_length: -1
+        host: bookorbit.test:3000
+        headers:
+            Accept:
+                - application/json
+            Content-Type:
+                - application/json
+        url: http://bookorbit.test:3000/api/v1/auth/magic-links/login
+        method: POST
+        body: '{"token":"<redacted>"}'
+      response:
+        proto: HTTP/1.1
+        proto_major: 1
+        proto_minor: 1
+        content_length: -1
+        headers:
+            Content-Type:
+                - application/json; charset=utf-8
+            Set-Cookie:
+                - <redacted>
+        status: 200 OK
+        code: 200
+        duration: 1ms
+        body: |-
+            {
+              "accessToken": "<redacted>",
+              "user": {
+                "id": 7,
+                "username": "usarr",
+                "name": "UsArr service account",
+                "email": null,
+                "active": true,
+                "isSuperuser": false,
+                "isDefaultPassword": false,
+                "settings": {},
+                "avatarUrl": null,
+                "provisioningMethod": "shared",
+                "permissions": []
+              }
+            }
+    - id: 1
+      request:
+        proto: HTTP/1.1
+        proto_major: 1
+        proto_minor: 1
+        content_length: 0
+        host: bookorbit.test:3000
+        headers:
+            Accept:
+                - application/json
+            Authorization:
+                - <redacted>
+        url: http://bookorbit.test:3000/api/v1/app-info
+        method: GET
+      response:
+        proto: HTTP/1.1
+        proto_major: 1
+        proto_minor: 1
+        content_length: -1
+        headers:
+            Content-Type:
+                - application/json; charset=utf-8
+        status: 200 OK
+        code: 200
+        duration: 1ms
+        body: |-
+            {
+              "version": "v1.4.2",
+              "updateAvailable": false,
+              "latestVersion": "v1.4.2",
+              "maxUploadSizeMb": 200
+            }
