@@ -1,0 +1,169 @@
+-- Migration 0010 — the three indexes the /img serving path seeks on.
+--
+-- SCOPE. Exactly three indexes, and nothing else:
+--
+--   ix_img_cache_key
+--   ix_work_poster
+--   ix_work_backdrop
+--
+-- No table, no ALTER, no rebuild, no CHECK, no column. It is 0009's shape — a
+-- read landed, and one index per predicate it seeks on is the whole schema-side
+-- cost of serving it.
+--
+-- WHAT LANDED. `GET /img/{cache_key}` (ARCHITECTURE.md §4.1, §4.4) is the first
+-- route in the tree that addresses an `image_asset` row, and
+-- `internal/store.LookupImageAsset` is the read behind it. That read asks two
+-- questions in one statement, and neither had an index before this migration:
+--
+--   1. WHICH ROW IS THIS?      image_asset.cache_key = ?
+--   2. MAY THIS CALLER SEE IT? does any work the caller's access scope admits
+--                              point at it, through poster_asset_id or
+--                              backdrop_asset_id?
+--
+-- Measured on the real schema, this engine (github.com/ncruces/go-sqlite3,
+-- SQLite 3.53.4), no ANALYZE, EXPLAIN QUERY PLAN over the statement
+-- internal/store.imageAssetSQL ships, with these three indexes and without them:
+--
+--   with     SEARCH ia USING INDEX ix_img_cache_key (cache_key=?)
+--            MULTI-INDEX OR
+--              INDEX 1  SEARCH w USING INDEX ix_work_poster   (poster_asset_id=?)
+--              INDEX 2  SEARCH w USING INDEX ix_work_backdrop (backdrop_asset_id=?)
+--
+--   without  SCAN ia
+--            SCAN w USING INDEX ix_work_pop
+--
+-- Two seeks and a key lookup, against a scan of every image asset crossed with a
+-- walk of every work.
+--
+-- ⚠️ THE SECOND LINE OF THE "without" PLAN IS THE ONE THAT COSTS. `SCAN w USING
+-- INDEX ix_work_pop` is a walk of the whole `work` table wearing an index name —
+-- SQLite picked the popularity index only as a cheaper way to visit every row,
+-- not as a seek, and there is no `(…=?)` on it to say otherwise.
+--
+-- ⚠️ THE SCAN IS THE POINT, NOT A MICRO-OPTIMISATION. §17.2's grid paints a
+-- screenful of covers, so ONE screen is up to sixty `/img` requests, and
+-- §13 budgets each of them at p50 < 3 ms on a cache hit. Without these indexes
+-- each one walks `work` — §17.8's flagship topology measures 27,500 of them —
+-- once per request. That is the recently-added view's degradation (schema.md §1)
+-- transplanted onto a path that runs sixty times more often.
+--
+-- WHY THE AUTHORIZATION IS AN EXISTS OVER `work` AT ALL. `image_asset` carries
+-- no user_id and no service instance of its own that scoping could key on —
+-- `origin_service_instance_id` names where the BYTES come from, which is a
+-- fetcher's SSRF-policy input (security.md §2) and not an entitlement. What
+-- entitles a caller to an image is entitlement to the ITEM the image belongs to
+-- (security.md §4: "authorized against the owning item"), and the only edges
+-- from an asset to an item in this schema are `work.poster_asset_id` and
+-- `work.backdrop_asset_id`. So the owning item is a work, and the scope
+-- predicate is the same service_item_link EXISTS every other work read uses.
+--
+-- TWO `work` INDEXES AND NOT ONE COMPOSITE, because the two columns are
+-- ALTERNATIVES and never a pair: a lookup constrains one or the other, never
+-- both, so a composite over (poster_asset_id, backdrop_asset_id) would serve the
+-- backdrop arm not at all. The read spells the two arms as one `OR` inside a
+-- single EXISTS, and SQLite's MULTI-INDEX OR transformation turns that into one
+-- seek per index — which is measured above, on both scope shapes, rather than
+-- assumed. ⚠️ That transformation is conditional by SQLite's own documentation
+-- ("if it is advantageous"), and its fallback is the `SCAN w` in the "without"
+-- plan, so internal/store's TestLookupImageAssetPlanGuardFires drops each index
+-- in turn and watches the assertion catch the fallback. An index whose absence
+-- nothing detects is an index that will one day be absent.
+--
+-- PARTIAL, ON `IS NOT NULL`, AND THAT IS WHERE ALMOST ALL THE SAVING IS.
+-- Both columns are nullable and both are NULL for every work with no artwork —
+-- which, on a tree where nothing writes `image_asset` at all, is every work in
+-- every install today, and stays the majority for any library whose covers have
+-- not finished backfilling (§4.4.1's cold start is explicitly that state). A
+-- full index would hold one entry per work, nearly all of them NULL and none of
+-- them ever sought; the partial index holds one entry per work that actually has
+-- a cover. SQLite's partial-index rule is that the query's WHERE clause must
+-- imply the index's, and `poster_asset_id = ?` implies `poster_asset_id IS NOT
+-- NULL` because `=` is never true of NULL — the plans quoted above were measured
+-- with the partial form and are what the shipped statement produces.
+-- ix_work_added and ix_work_kind_sort are partial on `deleted_at IS NULL` for
+-- the same class of reason.
+--
+-- ⚠️ ix_img_cache_key IS NOT UNIQUE, AND THE READ DOES NOT ASSUME IT IS.
+-- `cache_key` is `sha256(credential-stripped source_url)[:16]` (00005's own
+-- comment, §4.4) and `source_url` is UNIQUE, so a duplicate cache_key means a
+-- 64-bit truncated-SHA-256 collision between two DIFFERENT source URLs — at
+-- which point serving "the" row for that key would serve one item's artwork
+-- under another item's authorization. A UNIQUE index would turn that into a
+-- write-time failure, but it is not this migration's to declare: nothing writes
+-- `image_asset` yet, the writer is the half of the pipeline that is not built,
+-- and a constraint asserted here would be asserted on behalf of a caller that
+-- does not exist. The read fails closed on the ambiguity instead — it selects
+-- two rows and refuses if it gets two — which needs no constraint and is pinned
+-- by TestLookupImageAssetRefusesAnAmbiguousCacheKey.
+--
+-- NO 12-STEP REBUILD, for 0009's reason verbatim: CREATE INDEX is not one of the
+-- ALTER forms SQLite's "making other kinds of table schema changes" procedure
+-- covers. No column is added, dropped, renamed or retyped, no CHECK moves, and
+-- no data is copied, so there is no window in which a row could be lost.
+--
+-- PRAGMA foreign_keys=OFF is not written, for the reason 00005, 00006, 00007 and
+-- 00009 each give: goose runs each migration inside a transaction, SQLite
+-- documents the pragma as a no-op there, and there is no rebuild for it to
+-- protect.
+--
+-- THE COST, WHICH IS A WRITE COST AND IS SMALL. `image_asset` has no writer at
+-- all, so ix_img_cache_key costs nothing until the fetch half lands. The two
+-- `work` indexes are maintained on an insert or update that SETS one of the two
+-- columns and on a delete; the partial predicate means a work with no artwork
+-- never touches either b-tree. No render path writes a work.
+--
+-- DDL convention follows 00005's `work` block and 00009: index names are
+-- `ix_<table>_<what>`, and each index is created beside the statement of what
+-- reads it.
+--
+-- A merged migration is NEVER edited. Write a new one.
+
+-- +goose Up
+-- +goose StatementBegin
+
+-- ─── Question 1: which asset is this? · ARCHITECTURE §4.1, §4.4 ──────────────
+--
+-- The route key. `/img/{cache_key}` addresses an asset by cache_key rather than
+-- by `image_asset.id` because §4.1 and §13 both name that key, and because the
+-- key is derived from a URL rather than from a sequence: an integer primary key
+-- on this route would be enumerable in a few thousand round trips (gateway.md
+-- §3), which is not a defence on its own — security.md §4 rule 5 is emphatic
+-- that authorization must never depend on ID secrecy, and the EXISTS below is
+-- what actually protects the row — but it is a free one on top of the check.
+--
+-- NOT UNIQUE, NOT PARTIAL. See the header for the first; `cache_key` is
+-- `TEXT NOT NULL`, so there is no NULL half to exclude for the second.
+CREATE INDEX ix_img_cache_key ON image_asset(cache_key);
+
+-- ─── Question 2: may this caller see it? · security.md §4 ───────────────────
+--
+-- One index per arm of the owner EXISTS. Both are partial on `IS NOT NULL`, so
+-- they hold an entry only for a work that HAS the artwork in question — which is
+-- exactly the set the seek is over, and a small minority of `work` during
+-- §4.4.1's cold start.
+CREATE INDEX ix_work_poster   ON work(poster_asset_id)   WHERE poster_asset_id   IS NOT NULL;
+CREATE INDEX ix_work_backdrop ON work(backdrop_asset_id) WHERE backdrop_asset_id IS NOT NULL;
+
+-- +goose StatementEnd
+
+-- +goose Down
+-- Downgrades are not a supported user path (docs/CONFIGURATION.md §6.3). This
+-- block exists so a migration can be tested locally, and for nothing else.
+--
+-- Three DROPs and no rebuild, exactly as 0009's Down is one DROP and no rebuild:
+-- an index holds no data of its own, so a rollback loses nothing that a re-Up
+-- does not rebuild from `image_asset` and `work` themselves. Nothing in the
+-- schema refers to an index by name, so no other object needs recreating.
+--
+-- ⚠️ WHAT THIS DOWN DOES NOT UNDO: nothing. `LookupImageAsset` returns the same
+-- rows without these indexes — it returns them by scanning `work` twice per
+-- request instead — so a rollback is a performance regression on /img and never
+-- a wrong answer or a widened one. The access-scope predicate is in the SQL, not
+-- in the index, and dropping an index cannot remove a WHERE clause.
+-- +goose StatementBegin
+
+DROP INDEX IF EXISTS ix_work_backdrop;
+DROP INDEX IF EXISTS ix_work_poster;
+DROP INDEX IF EXISTS ix_img_cache_key;
+
+-- +goose StatementEnd

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -59,7 +60,7 @@ func TestMigrationRoundTrip(t *testing.T) {
 // asserted rather than derived so that adding a migration is a deliberate edit
 // here too — a version the tests do not know about is a migration nobody
 // round-tripped.
-const latestSchemaVersion int64 = 9
+const latestSchemaVersion int64 = 10
 
 // Down is not a supported user path, but it must work, because it is the
 // cheapest way to test a migration locally. A Down that leaves objects behind
@@ -3162,6 +3163,15 @@ func TestMigrate0009DownAndUp(t *testing.T) {
 		t.Fatalf("fixture: %v", err)
 	}
 
+	// ⚠️ TO VERSION 9 FIRST, and this line is owed by every migration that lands
+	// on top of one of these round-trips. The dump below is the schema THIS
+	// migration creates, and openTestDB migrates to LATEST — so on a tree where
+	// 0010 exists, dumping here without stepping back to 9 captures 0010's
+	// objects too, and the "removed an object it did not create" comparison
+	// below then blames 0009's Down block for rolling back 0010. Measured: it
+	// did, on all three of 0010's indexes, the moment 0010 landed.
+	migrateDownTo(t, ctx, d, 9)
+
 	at9, err := dumpSchema(ctx, d.Read())
 	if err != nil {
 		t.Fatal(err)
@@ -3201,6 +3211,9 @@ func TestMigrate0009DownAndUp(t *testing.T) {
 	if err := d.Migrate(ctx); err != nil {
 		t.Fatalf("Migrate 8 to latest: %v", err)
 	}
+	// Back to 9 for the same reason the first dump stepped back to it: `again`
+	// has to be the schema at the version this test is about.
+	migrateDownTo(t, ctx, d, 9)
 	again, err := dumpSchema(ctx, d.Read())
 	if err != nil {
 		t.Fatal(err)
@@ -3213,5 +3226,265 @@ func TestMigrate0009DownAndUp(t *testing.T) {
 	}
 	if n != 2 {
 		t.Errorf("%d edition rows after the re-Up, want 2", n)
+	}
+}
+
+// TestMigrate0010IndexShapes pins the three indexes this migration exists to
+// create — name, table, column, uniqueness and partiality — read back out of
+// SQLite rather than out of the migration file they were written in.
+//
+// THE PARTIALITY IS THE DECISION on the two `work` indexes and is asserted
+// rather than described. Both columns are NULL for every work with no artwork,
+// which during §4.4.1's cold start is most of the library and on this tree is
+// all of it; a full index over them would hold one entry per work, nearly all
+// NULL and none of them ever sought. A test that asserted only "an index named
+// ix_work_poster exists on work" would stay green through the loss of the WHERE
+// clause.
+func TestMigrate0010IndexShapes(t *testing.T) {
+	ctx := t.Context()
+	d := openTestDB(t)
+
+	for _, tc := range []struct {
+		index   string
+		table   string
+		column  string
+		partial string // "" means the index must NOT be partial
+	}{
+		// The route key. NOT partial: cache_key is TEXT NOT NULL, so there is
+		// no NULL half to exclude. NOT unique either — the read fails closed on
+		// a duplicate instead, because the writer that would owe a constraint
+		// is not built.
+		{"ix_img_cache_key", "image_asset", "cache_key", ""},
+		{"ix_work_poster", "work", "poster_asset_id", "poster_asset_id   IS NOT NULL"},
+		{"ix_work_backdrop", "work", "backdrop_asset_id", "backdrop_asset_id IS NOT NULL"},
+	} {
+		t.Run(tc.index, func(t *testing.T) {
+			var unique int
+			if err := d.Read().QueryRowContext(ctx,
+				`SELECT "unique" FROM pragma_index_list(?) WHERE name = ?`,
+				tc.table, tc.index,
+			).Scan(&unique); err != nil {
+				t.Fatalf("%s is not an index on %s: %v", tc.index, tc.table, err)
+			}
+			if unique != 0 {
+				t.Errorf("%s is UNIQUE. Migration 00010's header states why none of the "+
+					"three is: the writer that would owe the constraint is not built, and "+
+					"internal/store.LookupImageAsset refuses an ambiguous key instead.",
+					tc.index)
+			}
+
+			rows, err := d.Read().QueryContext(ctx,
+				`SELECT name FROM pragma_index_info(?) ORDER BY seqno`, tc.index)
+			if err != nil {
+				t.Fatal(err)
+			}
+			var cols []string
+			for rows.Next() {
+				var c string
+				if err := rows.Scan(&c); err != nil {
+					_ = rows.Close()
+					t.Fatal(err)
+				}
+				cols = append(cols, c)
+			}
+			if err := rows.Err(); err != nil {
+				_ = rows.Close()
+				t.Fatal(err)
+			}
+			_ = rows.Close()
+			if got, want := strings.Join(cols, ","), tc.column; got != want {
+				t.Errorf("%s is on (%s), want (%s)", tc.index, got, want)
+			}
+
+			var ddl string
+			if err := d.Read().QueryRowContext(ctx,
+				`SELECT sql FROM sqlite_master WHERE type = 'index' AND name = ?`, tc.index,
+			).Scan(&ddl); err != nil {
+				t.Fatal(err)
+			}
+			switch tc.partial {
+			case "":
+				if strings.Contains(strings.ToUpper(ddl), " WHERE ") {
+					t.Errorf("%s is partial and must not be: %s", tc.index, ddl)
+				}
+			default:
+				if !strings.Contains(ddl, "WHERE "+tc.partial) {
+					t.Errorf("%s is not partial on %q: %s\n"+
+						"A full index over a column that is NULL for most works holds one "+
+						"entry per work, almost none of them ever sought.",
+						tc.index, tc.partial, ddl)
+				}
+			}
+		})
+	}
+}
+
+// TestMigrate0010PartialIndexesAreUsable executes the claim the partiality rests
+// on rather than asserting the presence of a WHERE clause and calling it proof.
+//
+// SQLite will only use a partial index when the query's WHERE clause IMPLIES the
+// index's. `poster_asset_id = ?` implies `poster_asset_id IS NOT NULL` because
+// `=` is never true of NULL — but that implication is SQLite's to make, not this
+// migration's to assert, and if it ever stopped making it the two indexes would
+// be dead weight that no plan mentions and no test noticed. `INDEXED BY` forces
+// the question: SQLite raises "no query solution" if the index is unusable for
+// the statement, so this either runs or fails loudly.
+func TestMigrate0010PartialIndexesAreUsable(t *testing.T) {
+	ctx := t.Context()
+	d := openTestDB(t)
+
+	if err := d.Write(ctx, func(ctx context.Context, tx *sql.Tx) error {
+		for _, s := range []string{
+			`INSERT INTO image_asset (id, source_url, origin_class, role, cache_key, state)
+			   VALUES (1, 'http://k/1', 'configured', 'poster', 'aaaaaaaaaaaaaaaa', 'ready')`,
+			`INSERT INTO image_asset (id, source_url, origin_class, role, cache_key, state)
+			   VALUES (2, 'http://k/2', 'configured', 'backdrop', 'bbbbbbbbbbbbbbbb', 'ready')`,
+			`INSERT INTO work (id, kind, title, sort_title, normalized_title,
+			                   poster_asset_id, backdrop_asset_id)
+			   VALUES (1, 'comic', 'Berserk', 'berserk', 'berserk', 1, 2)`,
+			// A work with NO artwork: the row the partial predicate excludes.
+			`INSERT INTO work (id, kind, title, sort_title, normalized_title)
+			   VALUES (2, 'comic', 'Vagabond', 'vagabond', 'vagabond')`,
+		} {
+			if _, err := tx.ExecContext(ctx, s); err != nil {
+				return fmt.Errorf("%s: %w", s, err)
+			}
+		}
+		return nil
+	}); err != nil {
+		t.Fatalf("fixture: %v", err)
+	}
+
+	for _, tc := range []struct {
+		index  string
+		column string
+		asset  int64
+	}{
+		{"ix_work_poster", "poster_asset_id", 1},
+		{"ix_work_backdrop", "backdrop_asset_id", 2},
+	} {
+		var n int
+		q := `SELECT count(*) FROM work INDEXED BY ` + tc.index + ` WHERE ` + tc.column + ` = ?`
+		if err := d.Read().QueryRowContext(ctx, q, tc.asset).Scan(&n); err != nil {
+			t.Fatalf("%s is not usable for `%s = ?`: %v\n"+
+				"The partial predicate is `%s IS NOT NULL` and the query's equality is "+
+				"supposed to imply it; if SQLite disagrees, the index is dead weight.",
+				tc.index, tc.column, err, tc.column)
+		}
+		if n != 1 {
+			t.Errorf("%s reports %d rows through the index, want 1", tc.index, n)
+		}
+	}
+
+	// And the route key, which is not partial and must find its row.
+	var n int
+	if err := d.Read().QueryRowContext(ctx,
+		`SELECT count(*) FROM image_asset INDEXED BY ix_img_cache_key WHERE cache_key = ?`,
+		"aaaaaaaaaaaaaaaa").Scan(&n); err != nil {
+		t.Fatalf("ix_img_cache_key is not usable for `cache_key = ?`: %v", err)
+	}
+	if n != 1 {
+		t.Errorf("ix_img_cache_key reports %d rows, want 1", n)
+	}
+}
+
+// TestMigrate0010DownAndUp round-trips the migration.
+//
+// Three DROP INDEXes, and this checks the header's claim that nothing else is
+// owed: after Down the three are gone and NOTHING ELSE changed — asserted over
+// the whole schema dump rather than over three names, because a Down that also
+// took a table with it would pass a name check.
+//
+// ⚠️ An index Down cannot lose data, which the header claims and this executes:
+// the row counts over `work` and `image_asset` are taken before and after and do
+// not move. It cannot widen an answer either — the access-scope predicate
+// LookupImageAsset carries is in the SQL, and dropping an index cannot remove a
+// WHERE clause.
+func TestMigrate0010DownAndUp(t *testing.T) {
+	ctx := t.Context()
+	d := openTestDB(t)
+
+	if err := d.Write(ctx, func(ctx context.Context, tx *sql.Tx) error {
+		for _, s := range []string{
+			`INSERT INTO image_asset (id, source_url, origin_class, role, cache_key, state)
+			   VALUES (1, 'http://k/1', 'configured', 'poster', 'aaaaaaaaaaaaaaaa', 'ready')`,
+			`INSERT INTO work (id, kind, title, sort_title, normalized_title, poster_asset_id)
+			   VALUES (1, 'comic', 'Berserk', 'berserk', 'berserk', 1)`,
+		} {
+			if _, err := tx.ExecContext(ctx, s); err != nil {
+				return fmt.Errorf("%s: %w", s, err)
+			}
+		}
+		return nil
+	}); err != nil {
+		t.Fatalf("fixture: %v", err)
+	}
+
+	created := []string{"ix_img_cache_key", "ix_work_poster", "ix_work_backdrop"}
+
+	// ⚠️ TO VERSION 10 FIRST — a no-op today and the line 0011 will need.
+	// openTestDB migrates to LATEST, so the dump below captures whatever landed
+	// after this migration, and the "removed an object it did not create"
+	// comparison then blames THIS Down block for rolling back a later one.
+	// 0009's round-trip lacked this line and 0010 broke it on all three
+	// indexes; the same warning is on 0009 now.
+	migrateDownTo(t, ctx, d, 10)
+
+	at10, err := dumpSchema(ctx, d.Read())
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	migrateDownTo(t, ctx, d, 9)
+
+	for _, index := range created {
+		var n int
+		if err := d.Read().QueryRowContext(ctx,
+			`SELECT count(*) FROM sqlite_master WHERE type = 'index' AND name = ?`, index,
+		).Scan(&n); err != nil {
+			t.Fatal(err)
+		}
+		if n != 0 {
+			t.Errorf("%s survived the Down block", index)
+		}
+	}
+	for _, table := range []string{"work", "image_asset"} {
+		var n int
+		if err := d.Read().QueryRowContext(ctx,
+			`SELECT count(*) FROM `+table).Scan(&n); err != nil {
+			t.Fatal(err)
+		}
+		if n != 1 {
+			t.Errorf("%d %s rows after the Down, want 1 — an index rollback must not "+
+				"touch a row", n, table)
+		}
+	}
+
+	at9, err := dumpSchema(ctx, d.Read())
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, obj := range strings.Split(at10, "\n\n") {
+		if obj == "" {
+			continue
+		}
+		if slices.ContainsFunc(created, func(name string) bool { return strings.Contains(obj, name) }) {
+			continue
+		}
+		if !strings.Contains(at9, obj) {
+			t.Errorf("0010's Down block removed or changed an object it did not create:\n%s", obj)
+		}
+	}
+
+	if err := d.Migrate(ctx); err != nil {
+		t.Fatalf("Migrate 9 to latest: %v", err)
+	}
+	migrateDownTo(t, ctx, d, 10)
+	again, err := dumpSchema(ctx, d.Read())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if again != at10 {
+		t.Error("a Down followed by an Up did not reproduce the schema 0010 creates")
 	}
 }

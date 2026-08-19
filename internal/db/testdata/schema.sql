@@ -37,6 +37,9 @@ CREATE INDEX ix_file_content ON media_file(content_key) WHERE content_key IS NOT
 -- index ix_file_work
 CREATE INDEX ix_file_work ON media_file(work_id);
 
+-- index ix_img_cache_key
+CREATE INDEX ix_img_cache_key ON image_asset(cache_key);
+
 -- index ix_img_state
 CREATE INDEX ix_img_state ON image_asset(state, expires_at);
 
@@ -117,6 +120,9 @@ CREATE INDEX ix_tag_ns ON tag(namespace, value);
 -- index ix_work_added
 CREATE INDEX ix_work_added     ON work(added_at DESC, id DESC) WHERE deleted_at IS NULL;
 
+-- index ix_work_backdrop
+CREATE INDEX ix_work_backdrop ON work(backdrop_asset_id) WHERE backdrop_asset_id IS NOT NULL;
+
 -- index ix_work_dirty
 CREATE INDEX ix_work_dirty     ON work(rollup_dirty) WHERE rollup_dirty = 1;
 
@@ -131,6 +137,9 @@ CREATE INDEX ix_work_parent    ON work(parent_work_id, kind);
 
 -- index ix_work_pop
 CREATE INDEX ix_work_pop       ON work(popularity DESC, id DESC) WHERE deleted_at IS NULL;
+
+-- index ix_work_poster
+CREATE INDEX ix_work_poster   ON work(poster_asset_id)   WHERE poster_asset_id   IS NOT NULL;
 
 -- index ix_wq_runnable
 CREATE INDEX ix_wq_runnable ON write_queue(state, next_attempt_at)
