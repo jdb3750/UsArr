@@ -382,7 +382,7 @@ func TestQueryPlans(t *testing.T) {
 			// its reader is the credit applier — replacing one work's credits
 			// wholesale needs a person's remaining credits, and a person work
 			// credited on nothing is what a later sweep collects — because
-			// 'person' has no screen in any milestone (§6.1). Without it both
+			// 'person' has no screen in any milestone (§1.1). Without it both
 			// are a full scan of every credit in the library.
 			name:  "everything one creator is credited on",
 			index: "ix_credit_creator",

@@ -308,7 +308,7 @@ func (s *Server) routes(mux *http.ServeMux) {
 	// A DIFFERENT QUESTION OVER A DIFFERENT CORPUS from the line above, and the
 	// two names say so. This one reads the local FTS corpus and answers in its
 	// own body; /releases/search asks Prowlarr and answers 202 with results on
-	// the SSE stream. ARCHITECTURE.md §2073 budgets THIS path at p50 < 15 ms,
+	// the SSE stream. ARCHITECTURE.md §13 budgets THIS path at p50 < 15 ms,
 	// which is the measurement that separated them.
 	mux.Handle("GET /api/v1/search", s.authenticated(s.wrap(s.handleLibrarySearch)))
 	mux.Handle("POST /api/v1/releases/{id}/grab", s.csrfProtected(s.authenticated(s.wrap(s.handleGrab))))

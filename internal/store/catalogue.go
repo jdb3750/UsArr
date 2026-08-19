@@ -975,7 +975,7 @@ func readSearchDocText(ctx context.Context, tx *sql.Tx, workID int64) (searchDoc
 //
 // # Why the column is filled at all, when 'person' is excluded from the corpus
 //
-// The two rules point in opposite directions and both hold. schema.md §6.1 and
+// The two rules point in opposite directions and both hold. schema.md §1.1 and
 // search.md §2 keep 'person' WORKS out of search_doc because a person hit is a
 // result row with nowhere to land — there is no person screen in any milestone —
 // and TestPeopleNeverEnterTheSearchCorpus enforces it. This column is the

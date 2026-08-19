@@ -81,7 +81,7 @@ consequence is answered and the candidate was not taken.** `internal/store`'s `c
 **`search_fts.people`** from `work_credit` — its own column, so it can carry its own bm25 weight in §4
 below, which `alt_titles` never could — and the credit pass rebuilds the document whenever a credited
 name changes. The exclusion above is untouched: a creator's *name* is on the *work's* document, and no
-`person` row enters the corpus. schema.md §6.1 owns the detail.
+`person` row enters the corpus. schema.md §1.1 owns the detail.
 
 CI asserts
 `SELECT COUNT(*) FROM search_doc WHERE kind IN ('season','episode','track','comic_issue','person')`

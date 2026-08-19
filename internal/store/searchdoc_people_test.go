@@ -69,7 +69,7 @@ func clarkeOnPiranesi(t *testing.T, s *Store, inst int64) CreditResult {
 
 // TestAWorkIsFoundByItsAuthorsName is the whole point of the column.
 //
-// docs/reference/schema.md §6.1 and docs/reference/search.md §2 both carry the
+// docs/reference/schema.md §1.1 and docs/reference/search.md §2 both carry the
 // same ⚠️ — *"find everything by this author" is unanswered in v0.1* — because
 // `person` is excluded from the corpus and the document builder wrote
 // `search_fts.people` as the empty string. This is the assertion that it no
@@ -101,7 +101,7 @@ func TestAWorkIsFoundByItsAuthorsName(t *testing.T) {
 	got := worksMatching(t, s, `people : Clarke`)
 	if len(got) != 1 || got[0] != "Piranesi" {
 		t.Errorf("searching the people column for the author returned %q, want "+
-			"[Piranesi]. schema.md §6.1's owed enrichment is the credited names "+
+			"[Piranesi]. schema.md §1.1's owed enrichment is the credited names "+
 			"reaching search_fts.people; an empty result means the column is still "+
 			"being written blank and no user can find a book by its author", got)
 	}
@@ -230,7 +230,7 @@ func TestAChangedCreditUpdatesTheDocument(t *testing.T) {
 
 // TestARepeatCreditImportRebuildsNothing is the cost half of the same decision.
 //
-// schema.md §6.1 left this enrichment owed because folding names in means "a
+// schema.md §1.1 left this enrichment owed because folding names in means "a
 // second FTS write per item, in the transaction the 100 ms batch window exists
 // to keep short". The answer is that it is a second write only when a name
 // actually changed: step 3 deletes and re-inserts every credit row

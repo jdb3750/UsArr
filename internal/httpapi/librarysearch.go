@@ -16,7 +16,7 @@ import (
 // as one flat list (ARCHITECTURE.md §8.2, §17.4, docs/reference/search.md §3-§4).
 //
 // IT IS THE ENDPOINT THE PERFORMANCE TABLE WAS WRITTEN FOR. ARCHITECTURE.md
-// §2073 budgets `GET /api/v1/search?q=…` (FTS hybrid + rerank) at p50 < 15 ms
+// §13 budgets `GET /api/v1/search?q=…` (FTS hybrid + rerank) at p50 < 15 ms
 // and p99 < 50 ms. It can hold that because it is a local read and nothing else
 // (principle 1): two SQLite statements, no upstream call, no metadata provider,
 // no image fetch. The Prowlarr indexer fan-out used to live on this path and
@@ -128,7 +128,7 @@ func (s *Server) handleLibrarySearch(w http.ResponseWriter, r *http.Request) err
 		return errStatus(http.StatusUnauthorized, CodeUnauthorized, "this request has no session")
 	}
 
-	// ONE PARAMETER NAME, `q`, and it is the one ARCHITECTURE.md §2073's budget
+	// ONE PARAMETER NAME, `q`, and it is the one ARCHITECTURE.md §13's budget
 	// row names. The release endpoint accepts `query` as well as `q` for
 	// historical reasons; this one does not, because two spellings of the same
 	// parameter is a contract a client has to guess at.
