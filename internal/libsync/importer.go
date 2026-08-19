@@ -73,6 +73,12 @@ type DeclinedContainer struct {
 type Report struct {
 	InstanceID int64
 	StartedAt  time.Time
+
+	// FinishedAt is stamped on EVERY return path, the failed ones included, so
+	// Duration() means something on a partial import too. It is why FullImport's
+	// returns are named — see its doc comment — and it is in memory only:
+	// nothing persists it and no endpoint carries it
+	// (docs/reference/http-api.md §3.5).
 	FinishedAt time.Time
 
 	ContainersSeen     int
@@ -282,9 +288,25 @@ func (im *Importer) publish(p Progress) {
 //
 // It is a background replication write and takes no access scope; see
 // internal/store/catalogue.go's header.
-func (im *Importer) FullImport(ctx context.Context, instanceID int64) (Report, error) {
-	rep := Report{InstanceID: instanceID, StartedAt: im.now()}
-	defer func() { rep.FinishedAt = im.now() }()
+//
+// # Why the returns are named
+//
+// The defer below stamps rep.FinishedAt, and a defer can only reach the value a
+// caller receives through a NAMED result. With unnamed returns the `return rep,
+// …` copied rep into the result before the defer ran, so every caller got the
+// ZERO TIME in FinishedAt and 0 from Duration() — including the success log,
+// which printed `duration=0s` for the whole life of this function. Do not
+// un-name them.
+func (im *Importer) FullImport(ctx context.Context, instanceID int64) (rep Report, err error) {
+	rep = Report{InstanceID: instanceID, StartedAt: im.now()}
+	// GUARDED, so the success path can stamp the finish before it logs the
+	// duration and the logged instant is the one the caller gets, rather than
+	// two readings of the clock that differ.
+	defer func() {
+		if rep.FinishedAt.IsZero() {
+			rep.FinishedAt = im.now()
+		}
+	}()
 
 	containers, err := im.Source.Containers(ctx)
 	if err != nil {
@@ -396,6 +418,10 @@ func (im *Importer) FullImport(ctx context.Context, instanceID int64) (Report, e
 		InstanceID: instanceID, Phase: "done",
 		ItemsRead: rep.ItemsRead, Applied: rep.ItemsApplied,
 	})
+	// STAMPED BEFORE THE LOG, not left to the defer: the defer runs after this
+	// statement, so a duration read here off an unstamped field is 0 no matter
+	// how the returns are declared.
+	rep.FinishedAt = im.now()
 	im.log().Info("full import finished",
 		"instance_id", instanceID,
 		"items", rep.ItemsApplied,
