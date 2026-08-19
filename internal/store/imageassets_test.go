@@ -454,15 +454,25 @@ func TestLookupImageAssetPlanIsThreeSeeks(t *testing.T) {
 // FIRING THE GUARD. Three arms, one per index, each running the SAME
 // imageAssetPlanFaults the assertion above runs.
 //
-// ⚠️ THE PLAN IS MEASURED ON THE WRITE CONNECTION IN THESE ARMS, AND THAT IS
-// NOT AN ARBITRARY CHOICE. Measured on this tree: after a DROP INDEX on the
-// write connection, `EXPLAIN QUERY PLAN` for a statement the READ pool has
-// already explained keeps returning the pre-drop plan — three consecutive runs,
-// deterministically, and two EXPLAINs in a row both stale. A guard that measured
-// there would report the old plan and pass while the index was gone, which is
-// precisely the vacuous green this arm exists to rule out. The write connection
-// is the one that executed the DROP, so it cannot be behind it; the plan is a
-// function of the schema and the statement, not of which connection asks.
+// ⚠️ THE DROP GOES THROUGH dropIndexesAndConfirm (store_test.go), NEVER A BARE
+// DROP, AND THE PLAN IS MEASURED ON THE READ POOL — the connection the shipped
+// read uses, and the one the assertion above measures. Those are one decision,
+// not two: `EXPLAIN QUERY PLAN` on the read pool is STALE after a DROP INDEX
+// issued on the write connection — three consecutive runs on this tree, all
+// re-printing the pre-drop plan — so an arm that dropped and then EXPLAINed on
+// a reader without clearing that would report the HEALTHY plan and pass with
+// the index gone, which is precisely the vacuous green this arm exists to rule
+// out. The helper's sqlite_master read is both the proof the drop landed and
+// the unrelated read that clears the staleness; its doc carries the
+// measurement and the caveat that the cure holds only for a single-goroutine
+// driver, which these arms are.
+//
+// ⚠️ These arms used to EXPLAIN on the WRITE connection, which sidesteps the
+// staleness rather than clearing it: correct, but a second mechanism for a
+// hazard the package already had one for, and it left the pin above and the
+// arms below measuring two different connections. The `before` plan below is
+// taken on the read pool, which PRIMES it — priming is what arms the staleness
+// trap — so these arms now exercise the cure rather than avoid the hazard.
 func TestLookupImageAssetPlanGuardFires(t *testing.T) {
 	for _, index := range []string{"ix_img_cache_key", "ix_work_poster", "ix_work_backdrop"} {
 		t.Run(index+" dropped", func(t *testing.T) {
@@ -471,19 +481,14 @@ func TestLookupImageAssetPlanGuardFires(t *testing.T) {
 
 			// The pre-drop measurement, on the same connection the post-drop
 			// one uses, so the arm compares like with like.
-			before := imageAssetPlan(t, s.DB().Writer(), OwnerScope(1))
+			before := imageAssetPlan(t, s.DB().Read(), OwnerScope(1))
 			if faults := imageAssetPlanFaults(before); len(faults) > 0 {
 				t.Fatalf("the plan was already faulty before the drop:\n  %s", before)
 			}
 
-			if err := s.DB().Write(t.Context(), func(ctx context.Context, tx *sql.Tx) error {
-				_, err := tx.ExecContext(ctx, `DROP INDEX `+index)
-				return err
-			}); err != nil {
-				t.Fatalf("drop %s: %v", index, err)
-			}
+			dropIndexesAndConfirm(t, s, index)
 
-			after := imageAssetPlan(t, s.DB().Writer(), OwnerScope(1))
+			after := imageAssetPlan(t, s.DB().Read(), OwnerScope(1))
 			faults := imageAssetPlanFaults(after)
 			if len(faults) == 0 {
 				t.Fatalf("the guard passed a plan with %s dropped:\n  %s", index, after)
