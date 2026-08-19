@@ -149,11 +149,20 @@ const (
 //
 // Three actions rather than one with a phase field, because CONFIGURATION.md
 // §3.4 step 5 asks for one entry per phase and the phases are what an operator
-// reconstructing an interrupted rotation needs to see in order: a prepare with
-// no rewrap after it says the new key file was written and nothing else
-// happened; a rewrap with no promote says the key files were never touched.
-// A single action name would put all three in one bucket and make that reading
-// a matter of parsing metadata.
+// reconstructing an interrupted rotation needs to see in order.
+//
+// What each phase's row does and does NOT tell you, stated exactly, because the
+// looser version of this comment was wrong and an operator would have acted on
+// it: a prepare with no rewrap after it says the new key file was written; it
+// says NOTHING about how many rows were re-wrapped afterwards, because the
+// rewrap row is appended once, after the whole pass, so a run killed part-way
+// through leaves rows already moved to the new id and no audit row naming a
+// single one of them. Reconstruct that from service_instance.kek_id, not from
+// here. A rewrap with no promote is the stronger reading and does hold: the key
+// files were never touched, since promotion and its row are adjacent.
+//
+// A single action name would put all three in one bucket and make even that
+// much a matter of parsing metadata.
 //
 // Metadata on these rows carries COUNTS AND KEY IDS ONLY. A key id is public —
 // it is already in every envelope header and in service_instance.kek_id — and

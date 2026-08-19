@@ -6272,7 +6272,11 @@ itself is bounded by the KEK being HKDF output over 32 bytes of `crypto/rand`, w
 brute-forceable at any hash speed.
 
 The id is **not** secret and is not treated as one: it is printed by `usarr key rotate`, logged at
-startup, and written into audit metadata. It must never become an authentication input.
+startup (`cmd/usarr/app.go`, the `keyring ready` line, with the whole active set beside it), and
+written into audit metadata. It must never become an authentication input. ⚠️ **The startup half of
+that sentence was aspirational when this ADR landed** and was made true afterwards — until then the
+id reached a log only on the interrupted-rotation path, which is the one start where it is *least*
+representative. See `REVIEW-LOG.md` RK-06.
 
 ### Consequences
 

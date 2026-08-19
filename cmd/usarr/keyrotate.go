@@ -77,6 +77,23 @@ func runKeyRotate(ctx context.Context, cfg *config.Config, log *slog.Logger, bui
 			"docs/CONFIGURATION.md §3.5", cfg.SecretKeyFile, cfg.SecretKeyPath())
 	}
 
+	// An empty config directory has no key to rotate, and buildApp below would
+	// happily make one: its ladder GENERATES a master key when the file is
+	// absent and nothing is sealed, which is exactly right for a first server
+	// start and exactly wrong here. Left alone, `usarr key rotate` on a fresh
+	// directory printed "a new master key was generated — BACK IT UP NOW" and
+	// then rotated that key away in the same run, so the notice named material
+	// that was already superseded by the time the operator read it.
+	//
+	// os.Stat rather than ResolveMasterKey: the only question is whether the
+	// file this command manages exists at all. A file that exists but holds a
+	// bad value is buildApp's error to report, in buildApp's words.
+	if _, err := os.Stat(cfg.SecretKeyPath()); errors.Is(err, os.ErrNotExist) {
+		return fmt.Errorf("there is no master key to rotate: %s does not exist. "+
+			"UsArr generates one on its first start, so run the server once before rotating",
+			cfg.SecretKeyPath())
+	}
+
 	// The ordinary startup sequence, deliberately: it applies migrations and it
 	// runs the same fail-closed ladder a server start runs, so a missing
 	// kek.salt with sealed rows present refuses HERE too, with the same error.
@@ -133,6 +150,7 @@ func runKeyRotate(ctx context.Context, cfg *config.Config, log *slog.Logger, bui
 	if err != nil {
 		return err
 	}
+
 	if err := auditRotation(ctx, a.store, store.AuditActionKeyRotatePromote, map[string]any{
 		"old_kek_id": oldID, "new_kek_id": newID,
 		"verified": verified, "dropped_kek_ids": dropped,
@@ -140,9 +158,69 @@ func runKeyRotate(ctx context.Context, cfg *config.Config, log *slog.Logger, bui
 		return err
 	}
 
+	// The last window, and the one the verify pass cannot cover: a row sealed
+	// under the old key AFTER verifyEverything read the table. See the
+	// post-promote note in strandedAfterPromote.
+	//
+	// It runs after the promote audit row rather than before it, and the row
+	// deliberately does not carry the number. That row records what PROMOTION
+	// did — the rename, and which ids left the ring — and all of that was true
+	// the moment promoteRotation returned. What this count finds is a different
+	// actor's writes, observed afterwards; folding it into the promote row would
+	// make one entry answer two questions. The durable record of a stranded row
+	// is the row itself: service_instance.kek_id names an id no key derives, and
+	// startup reports it on every start (warnStrandedCredentials).
+	stranded, err := a.store.ListCredentialsOutsideKEKIDsIncludingDeleted(ctx, []uint32{newID})
+	if err != nil {
+		return err
+	}
+	if len(stranded) > 0 {
+		return strandedAfterPromote(cfg, newID, stranded, out)
+	}
+
 	say(out, "\nrotation complete. Back up %s now — the previous key no longer opens anything.\n",
 		cfg.SecretKeyPath())
 	return nil
+}
+
+// strandedAfterPromote reports credentials that appeared at another key id
+// after the verify pass had already read the table, and returns the non-zero
+// exit that goes with them.
+//
+// WHY THIS RUNS AFTER PROMOTION RATHER THAN BLOCKING IT. verifyEverything closes
+// the window for every row that existed when it ran, but there is no
+// single-instance lock (REVIEW-LOG.md FI-06), so a server still running against
+// this config directory can seal a credential under ITS primary — the old key —
+// between the verify pass and the rename, or at any point after it. Those rows
+// name a key id that is no longer on disk once the old file is replaced.
+//
+// Refusing before promotion would be the wrong trade and is deliberately not
+// what happens: at this point the rotation itself is sound and complete, every
+// pre-existing row is re-wrapped and verified, and the key file is the one the
+// operator must now back up. Rolling that back to protect a row written by a
+// process that was told to be stopped would put the whole install back on a key
+// the operator rotated because it was compromised.
+//
+// So the rotation stands and the command fails LOUDLY instead: the affected
+// instances are named, because "n credentials are unopenable" is not something
+// an operator can act on, and the exit is non-zero, because a rotation that
+// stranded a credential is not a success and must not look like one to a
+// script.
+func strandedAfterPromote(cfg *config.Config, newID uint32, stranded []store.StrandedCredential, out io.Writer) error {
+	say(out, "\n!! the rotation completed, but %d credential(s) were written under another key "+
+		"WHILE it ran\n", len(stranded))
+	for _, c := range stranded {
+		label := ""
+		if c.Deleted {
+			label = " (deleted)"
+		}
+		say(out, "   service_instance %d %q%s is at kek id %d, not %d\n", c.ID, c.Name, label, c.KEKID, newID)
+	}
+	return fmt.Errorf("%d credential(s) were sealed under a superseded key while the rotation ran and "+
+		"cannot be opened by %s — a UsArr server was running against %s. "+
+		"The rotation itself is complete and every other credential survived it: back up %s. "+
+		"Then stop the server, start it again, and re-enter the API key for the instance(s) listed above",
+		len(stranded), cfg.SecretKeyPath(), cfg.ConfigDir, cfg.SecretKeyPath())
 }
 
 // prepareRotation establishes the new key material and registers it, returning
