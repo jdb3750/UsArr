@@ -22972,13 +22972,18 @@ means is *"nothing credential-shaped was added and the two Go files still build,
 
 **Measured, with the tool and the tree named, as this project requires:**
 
-- `make check` → banner `check: OK`, **exit 0**. Run **twice** — once pre-commit on the working tree,
-  and again on the merged tree — green both times.
-- `govulncheck`: `/root/go/bin/govulncheck`, **v1.7.0**, asserted against the `Makefile` pin
-  (`GOVULNCHECK_VERSION ?= v1.7.0`); **18 Go packages** scanned against `vuln.go.dev`; **0
-  vulnerabilities**.
+- `make check` → banner `check: OK`, **exit 0**. Run **twice** — once pre-commit on the tree carrying
+  this entry, and again on the merged tree — green both times.
+- Pinned tools, each asserted against the `Makefile` pin by the gate itself rather than read off
+  `$PATH`: `/root/go/bin/gofumpt` **v0.11.0**, `/root/go/bin/golangci-lint` **2.12.2**,
+  `/root/go/bin/gitleaks` **v8.30.1**, `/root/go/bin/govulncheck` **v1.7.0**.
+- `govulncheck`: **18 Go packages** scanned against `vuln.go.dev`; **0 vulnerabilities**.
 - `pnpm audit` against the npm registry: **no known vulnerabilities**.
-- Web suite: **859 tests across 21 files**.
+- Web suite: **859 tests across 21 files** on the pre-commit tree; **862 across 21** on the merged
+  tree, another lane having landed three between the two runs. ⚠️ **Both numbers are given with the tree
+  they were measured on**, because a bare count would be wrong against one of them within the hour —
+  which is `FI-13`'s rule (*"a gate result without a commit sha attached is not a result"*) applied to
+  the arithmetic rather than to the verdict.
 
 🔍 **The verification is therefore manual, and is listed so it can be repeated at any tip:**
 `git show 2ae7830` for the four-file diff; `git log -1 --format='%H %ad %s' 7e5934d` and
