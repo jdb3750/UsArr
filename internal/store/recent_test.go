@@ -597,7 +597,11 @@ func TestRecentWorksScopedPlanKeepsTheIndex(t *testing.T) {
 	if faults := recentWorksPlanFaults(joined); len(faults) > 0 {
 		t.Errorf("the scoped plan is wrong:\n  plan: %s\n  %s", joined, strings.Join(faults, "\n  "))
 	}
-	if !strings.Contains(joined, "SEARCH sil") || !strings.Contains(joined, "ix_sil_work") {
+	// The inner alias is derived from the correlated column (scopeLinkAlias),
+	// so this derives it too: a literal `sil` is a prefix of every derived alias
+	// and would keep matching without covering anything.
+	if !strings.Contains(joined, "SEARCH "+scopeLinkAlias("w.id")) ||
+		!strings.Contains(joined, "ix_sil_work") {
 		t.Errorf("the scope EXISTS is not a seek on ix_sil_work: %s", joined)
 	}
 	if strings.Contains(joined, "SCAN sil") {
