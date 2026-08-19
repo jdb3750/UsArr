@@ -1785,6 +1785,39 @@ paths you are about to touch, not by what your thread is called.
 §8.x amendments alongside it; and `docs/reference/` follows whichever change drove it. The map says
 who to talk to, not who is permitted to type.
 
+**And that is the weak half on its own, so here is the other one.** *"Leads, not ownership"* answers
+who to talk to. It does not answer whether you may start typing, and read alone it has been taken as
+saying you may. **Ruled by the project manager on 2026-08-19**, and written down here rather than kept
+as a convention for one reason: **a rule in this file can be quoted into a dispatch brief, while a
+convention that lives only in a memory note reaches an agent only if it happens to be recalled.**
+
+* **Announce before you touch a file outside your area — not before you push it.** The *Working
+  alongside other threads* bullet above says *announce before pushing*; that is the same rule arriving
+  too late, because by then the edit exists and the other lane's only choices are to accept it or to
+  redo its own work. Announce when you decide to open the file.
+* **One writer per file while it is held.** Two lanes editing one file from branches cut off the same
+  base is the collision that merges cleanly and ships nonsense, and no arm of `make check` can see it.
+  Hold it, write it, land it, and **say when you have released it** — an unreleased hold that has
+  actually finished blocks work just as effectively as a real one.
+* **A missing row is not an absence of an owner.** The map above is keyed by area, and areas are
+  coarse: it names no package individually and it never will. **Finding no row for the package you are
+  about to edit means the map does not resolve your case — it does not mean the package is unowned.**
+  That is the case to ask about, not the case to proceed on.
+
+⚠️ **This deliberately stops short of a package-to-lane roster, and the omission is the decision, not a
+gap in it.** Such a table is stale the day a package is added, and it fails in the worst direction: the
+newest code, which is where lanes actually collide, is the code the table has no row for, so it reads
+as unowned exactly where ownership matters most. The precedent is ADR-0039 dropping
+`write_queue.state`'s `CHECK` **entirely rather than widening it** — an enumeration of a growing
+vocabulary is a maintenance burden that silently goes wrong, and the fix is to stop enumerating, not to
+enumerate harder. The three rules above hold for a package no table mentions, which is the whole point
+of writing them as rules.
+
+ℹ️ **The ruling names two id collisions as its occasion — `ADR-0054` and `SD-08`.** Neither is visible
+as a collision in the merged tree, and that is not a counter-example: an id collision is caught and
+reconciled in dispatch, so what it costs is duplicated work and a reconciliation nobody records, not a
+diff you can go and read. **The ruling is the record.**
+
 ---
 
 ## 12. Deploying to a server — build, install, restart
