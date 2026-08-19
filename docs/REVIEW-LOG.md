@@ -19907,6 +19907,15 @@ and recomputes the metadata score; **none of those writes `books.updatedAt`**, a
 `replaceAuthorsInExecutor` (`:369`) have the same shape. **No SQL trigger exists anywhere** —
 `grep -rli "create trigger" server/ --include=*.sql` returns no match — so nothing compensates.
 
+🔻 **Cite drift, 2026-08-19 — original text stands; the corrected pin is recorded so the next reader
+is not chasing it:** `replaceAuthorsInExecutor` is at **`:370`**, not `:369`. The correction was
+established by the dated rider on [ADR-0052](./DECISIONS.md#adr-0052) §2's re-measurement table, at
+content commit `eff6474`, which cites the executor as
+`server/src/modules/metadata/metadata.service.ts:370`. That row descends from this paragraph, so the
+two had come to disagree by one line. **Nothing else here is re-verified** — the executor's shape,
+`replaceGenresInExecutor` (`:480`), `replaceTagsInExecutor` (`:513`) and the absence of any SQL
+trigger all stand as written.
+
 🚩 **So a tag, genre or author edit does not move `books.updated_at`.** The 2026-08-17 finding's
 **strong** form is correct. ✅ **The one thing that does hold, and it is worth recording because it is
 the opposite of the fear:** core metadata edits are covered by an **explicit** touch —
