@@ -439,6 +439,17 @@ Items marked 🛑 **STOPPED** are the different case: those are stopped by the d
       `internal/httpapi/library_test.go`, and `reference/http-api.md` §1 and §9.4. **Its
       neighbouring sentence — that the pipeline has never run against a cover from a running
       service — is still correct, and is kept as a separate claim rather than folded in.**
+      🔻 **FALSIFIED 2026-08-19 by the owner's report that the library grid shows cover art.**
+      Both own-voice claims above — *"NOTHING HAS EVER PUT A REAL COVER THROUGH IT"* and *"its
+      neighbouring sentence … is still correct"* — were true when written and are not true now; they
+      are left legible rather than rewritten. The report establishes only that the path ran **once**,
+      end to end, against **BookOrbit**: fetch, decode, `renderAll`, `PutPosterAsset`, `/img` serving
+      from cache. ⚠️ **It is an install fact with no falsifier in this repository** — no test reaches
+      that machine — and it narrows **none** of the three gaps: coverage is unmeasured
+      (`items_skipped` unanswered for covers), **§4.4.1's cold start is untouched** (`thumbhash`,
+      `dominant_color`, `etag`, `last_modified`, `expires_at` still have no writer — `PutPosterAsset`'s
+      INSERT names none of the five), and `coverGate` has never been known to be contended.
+      `internal/imagepipeline`'s package doc carries the same correction and is the site of record.
       ⚠️ **§16 puts this and the library grid in ONE line item** — the sentence in **§16's v0.1
       entry** reading *"Library grid with "Load more" + `content-visibility` on grid rows carrying
       explicit ARIA roles (§4.5), keyset pagination, image pipeline **including the §4.4.1

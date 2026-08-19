@@ -7,11 +7,35 @@
 // PosterKeyExpr has a key to ship.
 //
 // ⚠️ STATUS, STATED HERE BECAUSE A GREEN TEST SUITE WILL OTHERWISE BE THE ONLY
-// THING A READER SEES. This pipeline has been TESTED AGAINST A FAKE FETCHER AND
-// NEVER AGAINST A REAL COVER. Every image it has ever processed was fabricated
-// by its own tests; no byte from a running BookOrbit has been through it. That
-// is the same register as deploy/Dockerfile's written-not-built, and it is not a
-// hedge about quality — it is a fact about what has been executed.
+// THING A READER SEES. This paragraph read "TESTED AGAINST A FAKE FETCHER AND
+// NEVER AGAINST A REAL COVER — every image it has ever processed was fabricated
+// by its own tests" until 2026-08-19, when the owner reported that the library
+// grid shows cover art on his install. That is the first real cover through this
+// pipeline, so the admission is retired rather than hedged.
+//
+// WHAT THE REPORT ESTABLISHES, AND NO MORE: the whole path ran end to end at
+// least once on real bytes, against the BookOrbit adapter — fetch, decode,
+// renderAll, PutPosterAsset, and `GET /img/{key}` serving the result out of
+// cache. A grid rendering covers is not reachable with any of those links
+// broken, which is the entire strength of the evidence.
+//
+// ⚠️ IT IS AN INSTALL FACT AND THIS REPOSITORY CANNOT FALSIFY IT. The source is
+// the owner's own observation, dated 2026-08-19, on a machine no test reaches;
+// nothing here re-derives it and no fixture stands in for it. Dated by the
+// REPORT, because the import it describes has no date this tree can read.
+//
+// ⚠️ WHAT IT DOES NOT ESTABLISH — three gaps, still open and NOT narrowed by it:
+//
+//   - COVERAGE. "Ran once" is not "ran for every work". The skipped-count
+//     question is unanswered and `items_skipped` is unmeasured for covers, so
+//     the fraction of works that got a poster is unknown.
+//   - §4.4.1's COLD START is untouched. `thumbhash`, `dominant_color`, `etag`,
+//     `last_modified` and `expires_at` still have NO writer anywhere —
+//     PutPosterAsset's INSERT names none of the five — so no cold-start progress
+//     may be read into a working grid.
+//   - CONTENTION. internal/libsync's coverGate has never been KNOWN to be
+//     contended. An import that never saturated a min(NumCPU, 4) semaphore has
+//     not exercised the bound, and the report says nothing either way.
 //
 // WHY BUILDING IT NOW IS LEGITIMATE ANYWAY: the producer is REAL.
 // internal/bookorbit's Client.Cover landed in `1eee6fa` and satisfies CoverSource
@@ -29,9 +53,12 @@
 // concurrency bound this package declines to build — see Poster — and its gate
 // refuses rather than queueing.
 //
-// What has NOT changed is the status above it: the pipeline has still never
-// been run against a real cover. It now has a caller that would, on an install
-// with a BookOrbit; nothing in this repository's tests supplies one.
+// AND THAT CALLER HAS NOW RUN. The 2026-08-19 report in the status block is a
+// report about this path — covers.go phase D, on an install with a BookOrbit —
+// so the sentence that used to sit here, "the pipeline has still never been run
+// against a real cover", went with the admission it restated. Its second half
+// stands unchanged: nothing in this repository's tests supplies a real cover,
+// and none of the three gaps above is closed by the report.
 //
 // # What is deliberately NOT here
 //
