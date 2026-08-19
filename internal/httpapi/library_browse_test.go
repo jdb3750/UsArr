@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -339,9 +340,21 @@ func TestBrowseEndpointEchoesTheQuery(t *testing.T) {
 		return env
 	}
 
-	env := envelope("?media_type=comics&sort=sort_title")
+	env := envelope("?media_type=comics&sort=sort_title&lib=manga")
 	if env["media_type"] != "comics" || env["sort"] != "sort_title" {
 		t.Errorf("the envelope does not echo the query: %v", env)
+	}
+	// `lib` is a LIST on the wire, because the chip is a multi-select and a
+	// comma-joined string would make the client re-parse what it just sent.
+	if got, want := env["lib"], []any{"manga"}; !reflect.DeepEqual(got, want) {
+		t.Errorf("the envelope does not echo lib: got %#v, want %#v\n%v", got, want, env)
+	}
+
+	// Echoed in the order sent and trimmed to the slugs that were resolved, so a
+	// client restoring a deep link can light the chips straight from it.
+	env = envelope("?lib=%20books%20,manga")
+	if got, want := env["lib"], []any{"books", "manga"}; !reflect.DeepEqual(got, want) {
+		t.Errorf("multi-select lib echo: got %#v, want %#v", got, want)
 	}
 
 	env = envelope("")
@@ -351,6 +364,9 @@ func TestBrowseEndpointEchoesTheQuery(t *testing.T) {
 	}
 	if _, ok := env["sort"]; ok {
 		t.Errorf("a page with no sort echoes one: %s", body)
+	}
+	if _, ok := env["lib"]; ok {
+		t.Errorf("a page with no library scope echoes one: %s", body)
 	}
 }
 
@@ -413,4 +429,107 @@ func TestBrowseEndpointNeedsASession(t *testing.T) {
 	if w.Code != http.StatusUnauthorized {
 		t.Errorf("status %d, want 401: %s", w.Code, w.Body.String())
 	}
+}
+
+// browseEnvelope decodes one browse response into a bare map, so that an
+// OMITTED key is distinguishable from a zero-valued one. A struct with
+// `omitempty` cannot tell those apart on the way back in, and the whole point of
+// the echo is that absence carries a meaning.
+func browseEnvelope(t *testing.T, s *Server, query string) (int, map[string]any) {
+	t.Helper()
+	code, body := callBrowseWorks(t, s, query)
+	// A FRESH map every time: json.Unmarshal MERGES into a non-empty map, so
+	// reusing one would make an omitted key look present.
+	env := map[string]any{}
+	if err := json.Unmarshal([]byte(body), &env); err != nil {
+		t.Fatalf("%s: %v\n%s", query, err, body)
+	}
+	return code, env
+}
+
+// ⚠️ AN OMITTED `lib` MEANS "NO LIBRARY SCOPE WAS APPLIED", WITH NO SECOND
+// READING — and this test pins the property the echo DEPENDS on rather than the
+// echo itself.
+//
+// The echo is only worth having because every way of naming a scope that the
+// server will not apply is a 400 (resolveBrowseLibraries: an unknown slug, a
+// slug the caller cannot see, the reserved `unfiled`, an empty `?lib=`, and more
+// than browseMaxLibrarySlugs of them). If any one of those ever became a silent
+// drop instead, this endpoint would answer 200 with `lib` omitted over the WHOLE
+// catalogue — and the omission a client reads as "you asked for no scope" would
+// have come to also mean "you asked for a scope and did not get it". The echo
+// exists to remove that ambiguity, so it must not be the thing that introduces
+// it.
+//
+// The invariant, stated once and asserted over every spelling: FOR ANY REQUEST
+// THAT CARRIED `lib`, THE ANSWER IS EITHER A 400 OR A 200 WHOSE ENVELOPE ECHOES
+// `lib`. There is no third outcome, and in particular no 200 with the key
+// missing.
+func TestBrowseEnvelopeOmitsLibOnlyWhenNoScopeWasApplied(t *testing.T) {
+	s := newTestServer(t, nil)
+	seedLibraryCorpus(t, s)
+
+	tooMany := make([]string, 0, browseMaxLibrarySlugs+1)
+	for i := 0; i <= browseMaxLibrarySlugs; i++ {
+		tooMany = append(tooMany, "books")
+	}
+
+	// Every spelling of `lib` the endpoint knows, servable and refused alike.
+	// The refused half is the half that matters: each one is a request that
+	// named a scope and must not be answered over the whole catalogue.
+	for _, q := range []string{
+		"?lib=books",
+		"?lib=books,manga",
+		"?lib=%20books%20,%20manga%20",
+		"?lib=nope",
+		"?lib=books,nope",
+		"?lib=unfiled",
+		"?lib=",
+		"?lib=%20",
+		"?lib=,",
+		"?lib=,,",
+		"?lib=" + strings.Join(tooMany, ","),
+	} {
+		code, env := browseEnvelope(t, s, q)
+		switch code {
+		case http.StatusBadRequest:
+			// A refusal. The scope was not applied and the caller was told so.
+		case http.StatusOK:
+			if _, ok := env["lib"]; !ok {
+				t.Errorf("%s answered 200 with no `lib` in the envelope, which a client "+
+					"reads as `no scope was asked for` — the ambiguity the echo removes: %v",
+					q, env)
+			}
+		default:
+			t.Errorf("%s returned %d, which is neither the refusal nor a page", q, code)
+		}
+	}
+
+	// The other half of the invariant: a request that carried no `lib` at all is
+	// the ONLY thing that omits it.
+	code, env := browseEnvelope(t, s, "")
+	if code != http.StatusOK {
+		t.Fatalf("the unscoped browse returned %d", code)
+	}
+	if _, ok := env["lib"]; ok {
+		t.Errorf("a request that named no library echoed one: %v", env)
+	}
+	// …and it really is unscoped, so "omitted" is not quietly covering a scope
+	// that was applied from somewhere other than the query.
+	everything := len(browseTitles(t, mustBody(t, s, "")))
+	scoped := len(browseTitles(t, mustBody(t, s, "?lib=books")))
+	if scoped >= everything {
+		t.Errorf("?lib=books returned %d works and the unscoped page returned %d, so the "+
+			"echoed scope is not filtering anything", scoped, everything)
+	}
+}
+
+// mustBody is browse's body for a query that must answer 200.
+func mustBody(t *testing.T, s *Server, query string) string {
+	t.Helper()
+	code, body := callBrowseWorks(t, s, query)
+	if code != http.StatusOK {
+		t.Fatalf("%s returned %d: %s", query, code, body)
+	}
+	return body
 }

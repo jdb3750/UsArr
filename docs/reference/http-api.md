@@ -1342,6 +1342,7 @@ the tree today (`REVIEW-LOG.md` LS-213).
   "limit": 50,
   "media_type": "comics",
   "sort": "sort_title",
+  "lib": ["manga"],
   "next_cursor": "MXR2My5iZXJzZXJr"
 }
 ```
@@ -1353,10 +1354,33 @@ service-side appears here either.
 `limit` is **authoritative** and works exactly as §1.2 says: a client pages against this number,
 never against the one it sent. The clamp table in §1.2 governs both endpoints; it is written once.
 
-`media_type` and `sort` are **echoed, and omitted when the request did not name them**, so absence
-stays distinguishable from `"movies"` and from `"added_at"`. They are echoed because they are part
-of what the cursor *means* (§7.5): a client restoring a deep link has to know which query its stored
-cursor belongs to.
+`media_type`, `sort` and `lib` are **echoed, and omitted when the request did not name them**, so
+absence stays distinguishable from `"movies"`, from `"added_at"` and from a scope of one library.
+They are echoed because they are part of what the cursor *means* (§7.5): a client restoring a deep
+link has to know which query its stored cursor belongs to.
+
+`lib` is a **JSON array of slugs**, not the comma-joined string the request used — the chip is a
+multi-select, and joining would make the client re-parse what it had just sent. The slugs come back
+in the order sent, whitespace trimmed, and every one of them **resolved**: an unresolvable slug is a
+`400` (§7.3), never a silent drop.
+
+⚠️ **An omitted `lib` means "no library scope was applied", with no second reading — and that rests
+on §7.3's refusals rather than on the echo.** If any way of naming a scope the server will not apply
+ever became a silent drop, this key would go missing on a page served over the whole catalogue, and
+*"you asked for no scope"* and *"you asked for a scope and did not get it"* would share a spelling.
+The invariant is: **for any request that carried `lib`, the answer is a `400` or a `200` that echoes
+it.** There is no third outcome, and
+`TestBrowseEnvelopeOmitsLibOnlyWhenNoScopeWasApplied` (`internal/httpapi/library_browse_test.go`)
+fails if one appears.
+
+🚩 **The cursor binds to `sort` alone, and the three echoed fields are how a client sees that.**
+Replaying a cursor under a changed `media_type` or a changed `lib` does **not** error the way a
+changed `sort` does (§7.5): `store.WorksCursor` carries the sort discriminator and the row
+position, and no other part of the query — so the position decodes and the page is served over a
+**different corpus**, silently skipping or repeating
+rows. The echo does not fix the binding — it makes the mismatch **observable from the side that can
+act on it**: the echoed field changed while the cursor did not, so a client can drop the cursor
+rather than page through a corpus its position was never taken in.
 
 ### 7.5 Paging, and why a cursor is not portable
 
