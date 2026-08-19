@@ -308,31 +308,31 @@ func TestMediaKindVocabularyMatchesTheSource(t *testing.T) {
 		t.Errorf("comicFormats has %d members, transcribed from a source with %d", len(comicFormats), len(wantComic))
 	}
 	for _, f := range wantAudio {
-		if got := mediaKindOf(f); got != MediaKindAudiobook {
-			t.Errorf("mediaKindOf(%q) = %q, want audiobook", f, got)
+		if got := MediaKindOf(f); got != MediaKindAudiobook {
+			t.Errorf("MediaKindOf(%q) = %q, want audiobook", f, got)
 		}
 		// isAudioFormat lowercases before it looks up, so this must too.
-		if got := mediaKindOf(strings.ToUpper(f)); got != MediaKindAudiobook {
-			t.Errorf("mediaKindOf(%q) = %q, want audiobook — the source lowercases first", strings.ToUpper(f), got)
+		if got := MediaKindOf(strings.ToUpper(f)); got != MediaKindAudiobook {
+			t.Errorf("MediaKindOf(%q) = %q, want audiobook — the source lowercases first", strings.ToUpper(f), got)
 		}
 	}
 	for _, f := range wantComic {
-		if got := mediaKindOf(f); got != MediaKindComic {
-			t.Errorf("mediaKindOf(%q) = %q, want comic", f, got)
+		if got := MediaKindOf(f); got != MediaKindComic {
+			t.Errorf("MediaKindOf(%q) = %q, want comic", f, got)
 		}
 	}
 	// The DEFAULT branch: anything not audio and not comic is an ebook, even a
 	// format nobody listed. That is getBookMediaKind's own last line and it is
 	// why 'pdf' needs no entry anywhere.
 	for _, f := range []string{"epub", "pdf", "mobi", "azw3", "fb2", "djvu", "wat"} {
-		if got := mediaKindOf(f); got != MediaKindEbook {
-			t.Errorf("mediaKindOf(%q) = %q, want ebook (the default branch)", f, got)
+		if got := MediaKindOf(f); got != MediaKindEbook {
+			t.Errorf("MediaKindOf(%q) = %q, want ebook (the default branch)", f, got)
 		}
 	}
 	// And the only two ways to reach 'unknown'.
 	for _, f := range []string{"", "   "} {
-		if got := mediaKindOf(f); got != MediaKindUnknown {
-			t.Errorf("mediaKindOf(%q) = %q, want unknown", f, got)
+		if got := MediaKindOf(f); got != MediaKindUnknown {
+			t.Errorf("MediaKindOf(%q) = %q, want unknown", f, got)
 		}
 	}
 	if got := (Book{}).MediaKind(); got != MediaKindUnknown {

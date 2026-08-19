@@ -248,7 +248,27 @@ type bookCardDTO struct {
 	// books_status_chk).
 	Status string `json:"status"`
 
-	Subtitle      *string       `json:"subtitle"`
+	Subtitle *string `json:"subtitle"`
+
+	// Authors and Narrators are BookCard.authors and BookCard.narrators —
+	// `string[]`, not objects (packages/types/src/book.ts:129, :154). They are
+	// NOT nullable on the wire: assembleBookCards emits
+	// `authorsByBook.get(row.id) ?? []` and `narratorsByBook.get(row.id) ?? []`
+	// (assemble-book-cards.ts:207, :228), so a book with neither carries two
+	// empty arrays rather than two nulls.
+	//
+	// ⚠️ THAT THEY ARE DECLARED IS NOT THAT THEY ARE POPULATED, and on this one
+	// the two really do come apart. assembleBookCards takes narratorRows with a
+	// `= []` DEFAULT (assemble-book-cards.ts:96), so a caller that omits the
+	// argument gets a card whose `narrators` is empty for every book — and one
+	// caller does exactly that (scanner.service.ts:331). The route this walk
+	// uses is not that caller: POST /libraries/:id/books → queryBooks →
+	// BookService.queryForLibrary → executeBooksQuery passes authorRows,
+	// narratorRows and fileRows straight out of BookRepository.findCards
+	// (library.controller.ts:42-46, book.service.ts:1033-1046, :1127-1148).
+	Authors   []string `json:"authors"`
+	Narrators []string `json:"narrators"`
+
 	Files         []bookFileDTO `json:"files"`
 	PublishedYear *int64        `json:"publishedYear"`
 	Language      *string       `json:"language"`
@@ -258,28 +278,83 @@ type bookCardDTO struct {
 
 	// HardcoverID is the ONLY identifier field on the card this adapter writes;
 	// isbn13 and hardcoverEditionId are on the card too and are deliberately not
-	// decoded. Both are EDITION identifiers, external_id's CHECK requires exactly
-	// one of work_id / edition_id, and slice 1 writes no edition rows — so there
-	// is nowhere correct to put them and the honest answer is to not carry them.
+	// decoded. Both are EDITION identifiers and external_id's CHECK requires
+	// exactly one of work_id / edition_id, so neither may be written against a
+	// work.
+	//
+	// ⚠️ THIS COMMENT USED TO CLOSE ON *"and slice 1 writes no edition rows"*,
+	// AND THAT HALF IS NOW FALSE — internal/libsync/bookorbitfiles.go writes one
+	// primary edition per book. The conclusion is unchanged and the surviving
+	// reason is a different one: there is still no PATH by which an adapter can
+	// write an edition-scoped external_id. The edition is minted inside
+	// internal/store's file writer, which returns no edition id, and
+	// store.FileSet carries files and a format and no identifier. Adding that
+	// path is a change to the shared write path, not a field this DTO is waiting
+	// on.
 	HardcoverID *string `json:"hardcoverId"`
 }
 
-// bookFileDTO is BookFileRef.
+// bookFileDTO is BookFileRef (packages/types/src/book.ts:75-80).
 type bookFileDTO struct {
 	ID     int64   `json:"id"`
 	Format *string `json:"format"`
 	Role   string  `json:"role"`
+
+	// SizeBytes is BookFileRef.sizeBytes, `number | null` on the wire because
+	// `bookFiles.sizeBytes` is a nullable bigint (db/schema/books.ts:63).
+	// findCards reads it straight onto the card (book.repository.ts:640-644).
+	SizeBytes *int64 `json:"sizeBytes"`
 }
 
 // BookFile is the allowlisted projection of one file reference.
 //
-// sizeBytes is on the wire and is not carried: media_file is slice 2's, and a
-// size with no row to sit on is a field that would go stale before it had a
-// reader.
+// ⚠️ THIS COMMENT USED TO READ *"sizeBytes is on the wire and is not carried:
+// media_file is slice 2's, and a size with no row to sit on is a field that
+// would go stale before it had a reader"*. Slice 2 is here and the row exists,
+// so the size is carried.
+//
+// # Role is a FIVE-value vocabulary on the card, not the four the table stores
+//
+// `book_files_role_chk` is `role in ('content','cover','metadata','supplement')`
+// (db/schema/books.ts:92), and scanner/lib/classify.ts:17 declares those same
+// four as FILE_ROLES. THE CARD ADDS A FIFTH. assembleBookCards elects one file
+// to speak for the book — books.primaryFileId, else role 'primary', else role
+// 'content', else files[0] — and REWRITES that file's role to the literal
+// 'primary' on the wire (assemble-book-cards.ts:174-186). So a card carries at
+// most one 'primary' entry, and it is a per-response label rather than a stored
+// fact. PrimaryFile and RoleCarriesContent both read it.
 type BookFile struct {
 	ID     int64  `json:"id"`
 	Format string `json:"format"`
 	Role   string `json:"role"`
+
+	// SizeBytes is 0 when BookOrbit reported none — the column is nullable and
+	// stays null for a file the scanner could not stat. 0 is not a size a file
+	// can have, so "absent" and "zero" need no distinguishing here; media_file's
+	// writer stores the value as it stands.
+	SizeBytes int64 `json:"size_bytes,omitempty"`
+}
+
+// contentRoles is the set of BookFile.Role values meaning "these are the book's
+// own bytes", as against the ones that decorate it.
+//
+// IT IS TWO MEMBERS OUT OF FIVE, AND THE OTHER THREE ARE NOT FILES A READER
+// HOLDS. classifyFile assigns them (scanner/lib/classify.ts:26-34): an .opf or
+// .nfo is 'metadata', a cover.jpg is 'cover', any other image or unrecognised
+// extension is 'supplement'. Counting those as media_file rows would put a
+// cover thumbnail into work.have_count — the number §6.3's availability blob
+// renders as how much of the thing the user holds — which is a wrong number on
+// a screen rather than a harmless extra row.
+//
+// 'primary' is in the set because it IS a content role: it is the card's label
+// for whichever file BookOrbit elected, and that election prefers role
+// 'content' before it falls back at all (see BookFile).
+var contentRoles = map[string]bool{"primary": true, "content": true}
+
+// RoleCarriesContent reports whether a file in this role is one of the book's
+// own bytes. See contentRoles.
+func RoleCarriesContent(role string) bool {
+	return contentRoles[strings.ToLower(strings.TrimSpace(role))]
 }
 
 // Book is the allowlisted projection of one BookCard.
@@ -294,6 +369,23 @@ type Book struct {
 	Status string `json:"status"`
 
 	Files []BookFile `json:"files,omitempty"`
+
+	// Authors and Narrators are the card's own arrays, trimmed, with blanks
+	// dropped, IN THE UPSTREAM'S ORDER. That order is BookOrbit's declared
+	// billing order rather than an accident of the query: findCards reads
+	// authors `.orderBy(bookAuthors.displayOrder)` and narrators
+	// `.orderBy(bookNarrators.displayOrder)` (book.repository.ts:634-639,
+	// :653-658), and assembleBookCards appends row by row into a per-book list
+	// (:101-106, :138-143), so each book's slice arrives in displayOrder.
+	//
+	// THEY ARE NAMES AND NOTHING ELSE. BookOrbit has an `authors` table with an
+	// id and the card carries none of it — `select({ name: authors.name })` is
+	// the whole projection — so there is no upstream person id to key a credit
+	// on, and internal/libsync dedupes on the normalized name exactly as it does
+	// for Kavita, which reports a PersonDto id and still cannot be trusted to
+	// mean the same person as another source's.
+	Authors   []string `json:"authors,omitempty"`
+	Narrators []string `json:"narrators,omitempty"`
 
 	// PublishedYear is 0 when BookOrbit reported none. Year 0 is not a book.
 	PublishedYear int64 `json:"published_year,omitempty"`
@@ -339,6 +431,18 @@ const (
 	// returns null for an empty list. It is a real answer and not an error.
 	MediaKindUnknown MediaKind = "unknown"
 )
+
+// NormalizeFormat is the one comparison rule for a format token: the
+// `format?.trim().toLowerCase()` getBookMediaKind opens with
+// (packages/types/src/book.ts:98).
+//
+// It is exported and shared rather than repeated because a caller that
+// classified with MediaKindOf and then compared the raw token against a literal
+// would be normalising twice by two rules — and it is the SECOND one that would
+// silently be wrong on an upstream that ever emitted "PDF" or " epub".
+func NormalizeFormat(format string) string {
+	return strings.ToLower(strings.TrimSpace(format))
+}
 
 // audioFormats and comicFormats are AUDIO_FORMATS and COMIC_FORMATS, transcribed
 // verbatim from packages/types/src/book.ts@73b7877d.
@@ -390,18 +494,36 @@ func (b Book) PrimaryFile() (BookFile, bool) {
 // nominated — its own getBookMediaProfile exposes hasEbook/hasAudio/hasComic
 // beside primaryMediaKind for exactly that case, and this deliberately reads
 // only the latter. UsArr's ebook-versus-audiobook distinction lives on
-// edition.format (ADR-0031), which is slice 2's to write; carrying a second
-// opinion here before there is a row for it would be a field with no reader.
+// edition.format (ADR-0031).
+//
+// ⚠️ THIS COMMENT USED TO END *"which is slice 2's to write; carrying a second
+// opinion here before there is a row for it would be a field with no reader"*,
+// and slice 2 has since landed. What did NOT change is the answer: the file
+// pass gives the work ONE primary edition and derives its format from this same
+// primary-file token (internal/libsync/bookorbitfiles.go), so UsArr and
+// BookOrbit still cannot disagree about which file speaks for the book. What
+// the mixed case costs is stated where it is paid — a book holding an .epub
+// beside an .m4b gets one edition, not two.
 func (b Book) MediaKind() MediaKind {
 	f, ok := b.PrimaryFile()
 	if !ok {
 		return MediaKindUnknown
 	}
-	return mediaKindOf(f.Format)
+	return MediaKindOf(f.Format)
 }
 
-func mediaKindOf(format string) MediaKind {
-	n := strings.ToLower(strings.TrimSpace(format))
+// MediaKindOf is getBookMediaKind over a bare format token
+// (packages/types/src/book.ts:97-103).
+//
+// IT IS EXPORTED BECAUSE THE FILE PASS HAS THE TOKEN AND NOT THE BOOK. The
+// primary file's format is stored verbatim on service_item_link.remote_subtype
+// during the item walk and carried back to the file pass on FileRequest, so the
+// edition's format is settled without a second read — and it must be settled by
+// THIS function rather than by a second format table in internal/libsync, which
+// would be free to disagree with the classification that decided whether the
+// book was imported at all.
+func MediaKindOf(format string) MediaKind {
+	n := NormalizeFormat(format)
 	switch {
 	case n == "":
 		return MediaKindUnknown
@@ -442,12 +564,32 @@ func toBook(d bookCardDTO) Book {
 	}
 	for _, f := range d.Files {
 		b.Files = append(b.Files, BookFile{
-			ID:     f.ID,
-			Format: strings.ToLower(text(deref(f.Format))),
-			Role:   text(f.Role),
+			ID:        f.ID,
+			Format:    strings.ToLower(text(deref(f.Format))),
+			Role:      text(f.Role),
+			SizeBytes: derefInt(f.SizeBytes),
 		})
 	}
+	b.Authors = names(d.Authors)
+	b.Narrators = names(d.Narrators)
 	return b
+}
+
+// names trims a card's `string[]` and drops the entries that say nothing.
+//
+// A BLANK IS DROPPED RATHER THAN CARRIED AS A CREDIT WITH NO NAME. `authors.name`
+// is NOT NULL upstream, so a blank should not arrive, but a name that is only
+// whitespace is indistinguishable from an absent one by the time it reaches
+// work_credit — where it would become a 'person' work titled "" that every
+// later nameless credit then deduped onto.
+func names(in []string) []string {
+	var out []string
+	for _, n := range in {
+		if n = strings.TrimSpace(n); n != "" {
+			out = append(out, n)
+		}
+	}
+	return out
 }
 
 func deref(p *string) string {

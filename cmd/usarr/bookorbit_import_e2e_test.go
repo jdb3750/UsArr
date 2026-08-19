@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"strings"
 	"testing"
 )
 
@@ -68,8 +69,20 @@ func TestAddingABookOrbitProducesACatalogue(t *testing.T) {
 			// that gave it its own kind would split one user's library in two
 			// and §6.4's cascade forbids those ever merging.
 			boBook(201, "Project Hail Mary", map[string]any{
-				"files":       []map[string]any{boFile(2011, "m4b", "primary")},
+				"files": []map[string]any{
+					boFile(2011, "m4b", "primary"),
+					// A cover rides the same card. It must NOT become a
+					// media_file row: have_count is COUNT(media_file) and a
+					// thumbnail counted as a held file is a wrong number on a
+					// screen.
+					boFile(2012, "jpg", "cover"),
+				},
 				"hardcoverId": "hc-42",
+				// authors and narrators ride the card the walk already fetched,
+				// which is what makes the credit pass cost no HTTP at all.
+				"authors":       []string{"Andy Weir"},
+				"narrators":     []string{"Ray Porter"},
+				"publishedYear": 2021,
 			}),
 		},
 	}
@@ -133,6 +146,120 @@ func TestAddingABookOrbitProducesACatalogue(t *testing.T) {
 	}
 	if subtype != "m4b" {
 		t.Errorf("remote_subtype = %q, want m4b", subtype)
+	}
+
+	// ── THE AUDIOBOOK IS AN AUDIOBOOK, and a user can find it ───────────────
+	//
+	// 🚩 THIS IS THE ASSERTION THE FILE AND CREDIT PASSES EXIST FOR, and until
+	// they landed it failed at the last step while every check above it passed.
+	// The adapter always read the m4b correctly — MediaKind classified it,
+	// remote_subtype stored the token, and the block above proves both. What was
+	// missing was the ROW: store.mediaTypeOf splits Ebooks from Audiobooks on
+	// `MIN(edition.format = 'audiobook')` and browseAudiobookPredicate seeks
+	// `edition.format = 'audiobook'`, BookOrbitSource implemented no FileSource,
+	// so no edition existed — and mediaTypeOf's documented answer for a work
+	// with no editions is Ebooks. Every BookOrbit book rendered as an Ebook and
+	// /library/audiobooks returned none of them.
+	//
+	// It is asserted through the REAL HTTP SURFACE and not against the edition
+	// table, because a row that no query reaches is the same defect one layer
+	// down. /library/audiobooks is the SPA route; `?media_type=audiobooks` is
+	// the request it makes.
+	var audiobooks struct {
+		Items []struct {
+			Title     string `json:"title"`
+			MediaType string `json:"media_type"`
+			Kind      string `json:"kind"`
+			Year      *int64 `json:"year"`
+		} `json:"items"`
+	}
+	env.do(t, "GET", "/api/v1/library?media_type=audiobooks", nil, &audiobooks)
+	if len(audiobooks.Items) != 1 {
+		t.Fatalf("/library/audiobooks returned %d works, want 1 — Project Hail Mary: %+v",
+			len(audiobooks.Items), audiobooks.Items)
+	}
+	got := audiobooks.Items[0]
+	if got.Title != "Project Hail Mary" || got.MediaType != "audiobooks" {
+		t.Errorf("the audiobooks grid holds %+v, want Project Hail Mary as audiobooks", got)
+	}
+	if got.Kind != "book" {
+		t.Errorf("kind = %q, want book — an audiobook is an EDITION of a book work "+
+			"(ADR-0031); work.kind has no 'audiobook' member and a build that gave it "+
+			"one would split the user's library in two", got.Kind)
+	}
+	// The year rides the credit set, which is the same card the walk read. A
+	// build that dropped it renders the Year column empty for every book.
+	if got.Year == nil || *got.Year != 2021 {
+		t.Errorf("year = %v, want 2021 — publishedYear is on the card", got.Year)
+	}
+
+	// And the OTHER side of the split, which is what makes the first half mean
+	// something: the two ebooks are on the Ebooks grid and the audiobook is not.
+	var ebooks struct {
+		Items []struct {
+			Title string `json:"title"`
+		} `json:"items"`
+	}
+	env.do(t, "GET", "/api/v1/library?media_type=ebooks", nil, &ebooks)
+	if len(ebooks.Items) != 2 {
+		t.Fatalf("/library/ebooks returned %d works, want 2: %+v", len(ebooks.Items), ebooks.Items)
+	}
+	for _, it := range ebooks.Items {
+		if it.Title == "Project Hail Mary" {
+			t.Error("the audiobook is on the Ebooks grid as well; a build that wrote no " +
+				"edition at all passes the audiobooks check only by returning nothing, " +
+				"so this is the half that catches the reverse mistake")
+		}
+	}
+
+	// ── the rows underneath, so a failure above is diagnosable ──────────────
+	if n := countIn(t, env, `SELECT COUNT(*) FROM edition WHERE format = 'audiobook'`); n != 1 {
+		t.Errorf("audiobook editions = %d, want exactly 1", n)
+	}
+	if n := countIn(t, env, `SELECT COUNT(*) FROM edition WHERE format = 'ebook'`); n != 2 {
+		t.Errorf("ebook editions = %d, want 2", n)
+	}
+	if n := countIn(t, env, `SELECT COUNT(*) FROM edition`); n != 3 {
+		t.Errorf("edition rows = %d, want 3 — ONE PRIMARY EDITION PER BOOK. `edition` has "+
+			"no unique index, so a writer that inserted unconditionally would add a row "+
+			"per import forever", n)
+	}
+
+	// The cover on the audiobook's card is not a file the reader holds.
+	if n := countIn(t, env, `SELECT COUNT(*) FROM media_file`); n != 3 {
+		t.Errorf("media_file rows = %d, want 3 — one content file per book. The audiobook's "+
+			"card also carries a cover, and work.have_count is COUNT(media_file)", n)
+	}
+	if n := countIn(t, env,
+		`SELECT COUNT(*) FROM media_file WHERE path = 'bookorbit:bookfile:2012'`); n != 0 {
+		t.Errorf("the cover produced %d media_file rows; a cover is not content", n)
+	}
+	if n := countIn(t, env,
+		`SELECT COUNT(*) FROM media_file WHERE path LIKE '%/%' OR path LIKE '%\%'`); n != 0 {
+		t.Errorf("%d media_file rows carry a path separator; v0.1 stores an OPAQUE "+
+			"SURROGATE and never a host filesystem path", n)
+	}
+
+	// ── the credits, from the same card and with no second request ──────────
+	if n := countIn(t, env, `SELECT COUNT(*) FROM work_credit WHERE role = 'author'`); n != 1 {
+		t.Errorf("author credits = %d, want 1 — Andy Weir", n)
+	}
+	if n := countIn(t, env, `SELECT COUNT(*) FROM work_credit WHERE role = 'narrator'`); n != 1 {
+		t.Errorf("narrator credits = %d, want 1 — Ray Porter. This is the FIRST writer of "+
+			"work_credit.role's 'narrator' member in the schema", n)
+	}
+	if n := countIn(t, env,
+		`SELECT COUNT(*) FROM work WHERE kind = 'person' AND title = 'Ray Porter'`); n != 1 {
+		t.Errorf("'person' works named Ray Porter = %d, want 1 — a credit points at a work", n)
+	}
+	// The credit and file passes issue NO requests of their own. Anything else
+	// would mean the card was read twice, which is the premise this whole slice
+	// rests on.
+	for _, r := range bo.requests() {
+		if strings.Contains(r.Path, "/books/") {
+			t.Errorf("the import made a per-book read (%s %s); credits, files and the year "+
+				"all ride the card the walk already fetched", r.Method, r.Path)
+		}
 	}
 
 	// has_file comes from books.status, which is a first-class three-valued
