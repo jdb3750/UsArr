@@ -1362,6 +1362,22 @@ paragraph describing a repo that no longer exists.
   measured here**: one worker's `git add` swept the other's files into its commit, and both appended
   to `docs/REVIEW-LOG.md` at EOF and collided on merge. **Read-only agents are safe alongside
   anything** — the hazard is writers, and specifically writers sharing an index and a branch ref.
+* **A worktree you lint and then delete leaves its findings in the cache your next run reads.**
+  `GOLANGCI_LINT_CACHE` — `/root/.cache/golangci-lint` by default — is shared by every worktree in
+  one session's container, and the key is the package's import path plus its files' *content*, with
+  the module directory stripped out of each filename, while the cached diagnostics themselves still
+  carry the absolute paths they were recorded at (read in golangci-lint v2.12.2,
+  `internal/cache/cache.go`, `computePkgHash`; that is the pinned gate binary at
+  `/root/go/bin/golangci-lint`). So a dead tree's findings are a cache *hit* for the identical files
+  in the live one: on 2026-08-19 two of one session's own deleted scratch worktrees replayed into
+  **11 phantom issues and a red `lint-go`** on an otherwise unmodified tree, cleared only by removing
+  23 cache entries — and sibling agents linting at the same time write that one cache too. This is a
+  hazard inside your own session, not one another thread can inflict on you; threads share `origin`,
+  not a filesystem. So: if you run a lint gate inside a throwaway worktree, point
+  `GOLANGCI_LINT_CACHE` at a directory inside that worktree or do not run the gate there at all, and
+  end the worktree with `git worktree remove` rather than deleting the directory, so nothing is left
+  registered or half-referenced. **The symptom is `lint-go` reporting issues at paths that do not
+  exist**, on a tree where those same files lint clean.
 * **A sequential id read out of a file is a race, not a lookup.** `M5-NN` entry ids, `M5.N` subsection
   numbers, ADR numbers and migration numbers are all allocated by reading the highest one already
   present, and **two agents that read at the same moment both get the right answer and both are wrong
