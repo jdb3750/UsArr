@@ -1,0 +1,52 @@
+---
+# SYNTHETIC — hand-authored from bookorbit/bookorbit@73b7877d
+# (magic-link.service.ts's loginWithToken and
+# common/filters/http-exception.filter.ts's envelope). NOT a wire capture.
+#
+# THE MESSAGE IS THE SAME FOR FIVE DIFFERENT CAUSES AND THAT IS DELIBERATE
+# UPSTREAM. loginWithToken throws UnauthorizedException('Invalid or expired magic
+# link') for: no row with that hash, revokedAt set, isActive false, expiresAt in
+# the past, and user missing or inactive. It logs which one it was to ITS OWN log
+# and tells the caller nothing. So the client must report the ambiguity rather
+# than picking one of the five and sending the operator to the wrong screen.
+#
+# The envelope is GlobalExceptionFilter's, which is the ONLY error shape
+# BookOrbit produces: it is registered with a bare @Catch() and main.ts installs
+# it as the only global filter. `path` echoes request.url back, which is why
+# every byte of it goes through ssrf.RedactText on the way into an APIError.
+version: 2
+interactions:
+    - id: 0
+      request:
+        proto: HTTP/1.1
+        proto_major: 1
+        proto_minor: 1
+        content_length: -1
+        host: bookorbit.test:3000
+        headers:
+            Accept:
+                - application/json
+            Content-Type:
+                - application/json
+        url: http://bookorbit.test:3000/api/v1/auth/magic-links/login
+        method: POST
+        body: '{"token":"<redacted>"}'
+      response:
+        proto: HTTP/1.1
+        proto_major: 1
+        proto_minor: 1
+        content_length: -1
+        headers:
+            Content-Type:
+                - application/json; charset=utf-8
+        status: 401 Unauthorized
+        code: 401
+        duration: 1ms
+        body: |-
+            {
+              "statusCode": 401,
+              "message": "Invalid or expired magic link",
+              "path": "/api/v1/auth/magic-links/login",
+              "timestamp": "2026-08-19T09:12:00.000Z",
+              "requestId": "req-4f2a"
+            }
