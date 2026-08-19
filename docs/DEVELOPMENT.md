@@ -1460,6 +1460,33 @@ paragraph describing a repo that no longer exists.
     security.md's present tense claimed guards nothing reaches"*, 193 insertions and 89 deletions in
     `docs/reference/security.md`. Cite `0ca1be6` when repeating this, and leave the entry's own text
     standing — it is a dated record, and the bullet above governs how it gets corrected.
+* **ADR and migration numbers are allocated by the coordinator at dispatch, never discovered by
+  reading the highest number in a merged file.** Write a placeholder — `ADR-XXXX`, `000NN_` — and ask
+  for the id. **The reason is not bookkeeping, and without it this reads as bureaucracy:** an id read
+  from a merged file is not free, because the number that invalidates it may be sitting on a branch
+  the reader cannot see, and no amount of care with `git log` on your own checkout will surface it.
+  The highest merged number is evidence about what has landed, never about what has been *claimed*.
+  Measured at `36d7f71`, where the highest ADR in `docs/DECISIONS.md` on `main` was **0051**: **two
+  unmerged branches had each independently allocated `ADR-0052`** off that reading —
+  `docs/dd-8.1-sidebar-facets` as *"All six media types are always in the sidebar; per-type hiding is
+  closed until a facet read exists"*, and `docs/adr0052-bookorbit-20260819` as *"v0.1's catalogue
+  source is **BookOrbit**; Kavita is sunset"*. Both threads read `main` correctly and neither could
+  see the other. **The race resolved while this bullet was being written**: `840233d` merged the
+  BookOrbit ADR as 0052, so at that tip the sidebar branch still carries a second, conflicting
+  `ADR-0052` and now has to renumber a merged-and-cited id out of its own history. The cost lands on
+  whoever merges second, and it is not paid by the thread that caused it.
+  * ⚠️ **A gap in either sequence is correct, and nobody renumbers to close one.** Closing a gap
+    rewrites ids that other documents, commit messages and code comments already cite, and it is
+    exactly the shared-counter operation this rule exists to avoid — the cure is the disease.
+    `docs/REVIEW-LOG.md` already says so of its own ids: *"a gap in either is fine and nobody closes
+    one"*.
+  * 🔍 **The migrations half of the rule is stated, not evidenced here.** A `00008`→`00009` renumber
+    was reported as the same race in `internal/db/migrations/`; it does not reproduce at `36d7f71`.
+    Every migration from `00001` to `00009` was added once, at its final name — `git log --all
+    --diff-filter=A --name-only -- internal/db/migrations` lists those nine and nothing else, and the
+    same log with `--diff-filter=R` is empty. The rule still covers migration numbers, because they
+    are the same shared counter carrying a stronger no-edit rule on top; that instance is simply not
+    offered as fact.
 * **Key the worktree decision to the operation, not to the size of your change.** Any *whole-tree*
   git operation — `git add -A`, a `git commit` of an index somebody else may have added to,
   `git checkout <branch>` — belongs in a detached worktree of your own. Targeted single-path
