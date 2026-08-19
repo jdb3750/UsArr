@@ -61,14 +61,60 @@
 > re-read** · §2's **`search.md` §4 re-rank** item · §2's **Docker / backup** item, the observation
 > appended under it **only** · §3's **BookOrbit adapter** box. **No other line moved, no sweep
 > happened, and every other line citation in this file is still unvetted.**
+>
+> **Extended 2026-08-19 by the two-stale-opens pass, to exactly FOUR places and to NOTHING ELSE:**
+> §2's **image-pipeline fetch-half** item — its headline, done-when legs 2 and 3, the obligations
+> block's opening and Obligations 1 and 3, the tint paragraph's rider, and the *what is still owed*
+> block it added; **Obligation 2 and every LS-260 paragraph were NOT re-read** · §2's closed
+> **image-SERVING-half** item, the two paragraphs on it that asserted no writer exists **and nothing
+> else on that box** · §2's **Docker / backup** item, rewritten whole and ticked against its own
+> *Done when* · §3's **ADR-0039 `write_queue` validator** row. **No other line moved, no sweep
+> happened, and every other line citation in this file is still unvetted.** This pass cited symbols and section numbers throughout
+> and added no `file:<n>` citation of its own.
 
-**Last re-derived against:** `origin/main` `a51d3c3` (2026-08-19).
-⚠️ **Advanced from `0085676` by the facet / image / BookOrbit catch-up pass, which re-derived SEVEN
-things and NOTHING ELSE**, and **the range is large and is emphatically not documentation-only** —
-it carries a migration, `internal/`, `cmd/` and `web/src/` — so **read every box this pass does not
-name as attested at `0085676`**, not at the baseline line above.
+**Last re-derived against:** `origin/main` `4d95d36` (2026-08-19).
+⚠️ **Advanced from `a51d3c3` by the two-stale-opens pass, which re-derived FIVE things and NOTHING
+ELSE**, and **the range is large and is emphatically not documentation-only** — it carries
+`internal/imagepipeline` (a whole new package), `internal/store`, `internal/libsync`, `cmd/` and
+`deploy/` — so **read every box this pass does not name as attested at `a51d3c3`**, not at the
+baseline line above.
 
-**FIRED at `a51d3c3` by this pass, and this is the whole list:**
+**FIRED at `4d95d36` by this pass, and this is the whole list:**
+- **The image writer:** `INSERT INTO image_asset` across all Go outside `_test.go` (one hit,
+  `internal/store/imagewrite.go`); `PosterAsset.validate`'s calls to `ValidImageFormat` and
+  `checkImageSourceURL`; `PutPosterAsset`'s `INSERT` column list; `ssrf.IsCredentialParam`.
+- **The call site:** `Importer.fetchCovers` (`internal/libsync/covers.go`), its one call site in
+  `internal/libsync/importer.go`, `PosteredItems` (`internal/store/posterpresence.go`), and
+  `coverPipeline` (`cmd/usarr/import.go`). Content commits `7e5934d` and `c4a3277`, each read as a
+  diff rather than as a subject.
+- **What is NOT written:** `dominant_color`, `thumbhash`, `etag`, `last_modified` and `expires_at`
+  across the whole tree, against `00005_library_sync.sql`'s `image_asset` block and
+  `ARCHITECTURE.md` §4.4.1, read directly.
+- **`deploy/`:** its file list; `deploy/Dockerfile`'s header; the `docker` recipe in `Makefile`;
+  `docs/DEVELOPMENT.md` §4's target table, §12's opening and §12's known-gaps bullet; `000ac52` and
+  `ea7c855` as diffs; and the newest **non-merge** commit per area (`deploy/` · `internal/` · `cmd/`
+  · `docs/` · `web/src/`).
+- **The `write_queue` validator:** `internal/store/writequeue.go`, every non-`_test.go` reference to
+  `ValidWriteQueueState` (two files), `internal/db/spike/fixture.go`'s build tag, and
+  `writequeuelint_test.go`'s header.
+
+**NOT fired by this pass, and therefore inherited:** no `ARCHITECTURE.md` read **except §4.4.1** · no
+`REVIEW-LOG.md` read, so **every LS-260 paragraph on the image item is inherited unread** · no
+`DECISIONS.md` read, so **no ADR text was re-verified** · **no migration read except `00005`'s
+`image_asset` block** · no `web/src/` read · no Go outside the files named above · **no §2 box this
+pass does not name** · **no line-citation sweep, again.** ⚠️ **This pass was handed two hypotheses
+and told to treat them as hypotheses; it verified both and found a third thing neither named** —
+`internal/httpapi/images.go`'s package header is itself now stale, and is flagged on the image item
+rather than fixed, because that file is not this pass's to edit.
+
+**INHERITED from the `a51d3c3` baseline. Its own attestation follows, unchanged and NOT re-fired:**
+⚠️ **That baseline advanced from `0085676` by the facet / image / BookOrbit catch-up pass, which
+re-derived SEVEN things and NOTHING ELSE**, and **the range is large and is emphatically not
+documentation-only** — it carries a migration, `internal/`, `cmd/` and `web/src/` — so **read every
+box that pass does not name as attested at `0085676`**, not at its baseline line.
+
+**FIRED at `a51d3c3` by THAT pass — inherited verbatim, and *"this pass"* below means the facet /
+image / BookOrbit catch-up pass, not the one that advanced the baseline:**
 - **The facet read:** `internal/httpapi/facets.go` and its registration in
   `internal/httpapi/server.go`; `TYPE_NAV` in `web/src/routes/+layout.svelte`; every `facet` mention
   under `web/src/`; [ADR-0059](./DECISIONS.md#adr-0059), read directly in `DECISIONS.md`.
@@ -331,16 +377,45 @@ Items marked 🛑 **STOPPED** are the different case: those are stopped by the d
       *Done when:* the state is rendered in `web/src/routes` off a column that exists in
       `internal/db/migrations`.
 
-- [ ] **The image pipeline's FETCH HALF, including the §4.4.1 cold-start plan — and this item is
-      SMALLER than it was, because the serving half landed as its own line.**
+- [ ] **The image pipeline's FETCH HALF — NARROWER AGAIN. The writer, the renderer and the import
+      call site all landed; what is left is §4.4.1's cold-start plan and a first run against a real
+      cover.**
       ⚠️ **THE HEADLINE USED TO READ *"~~`image_asset` is in the schema; nothing in `internal/` or
-      `cmd/` writes or serves it~~"*, AND THE *SERVES* CLAUSE IS NOW FALSE.** `GET /img/{key}` is
+      `cmd/` writes or serves it~~"*, AND THE *SERVES* CLAUSE WENT FALSE FIRST.** `GET /img/{key}` is
       registered in `internal/httpapi/server.go` and handled by `internal/httpapi/images.go`
       (`34a277f`), and `ffebec7` puts `poster_key` on **every response that renders a work row**.
-      **The *writes* clause still holds, re-fired at the baseline above, and it is now the WHOLE of
-      this item:** nothing outside `_test.go` writes an `image_asset` row, so nothing fetches,
-      decodes or stores a cover — **every `/img` request answers `not_cached` and every row's
-      `poster_key` is absent on every real install.**
+      ⚠️ **FALSIFIED 2026-08-19 — THE *WRITES* CLAUSE IS NOW FALSE TOO, AND SO IS EVERY
+      CONSEQUENCE THIS ITEM DREW FROM IT.** The old text is kept visible because it is what a reader
+      would otherwise still believe: *"~~The **writes** clause still holds … nothing outside
+      `_test.go` writes an `image_asset` row, so nothing fetches, decodes or stores a cover — every
+      `/img` request answers `not_cached` and every row's `poster_key` is absent on every real
+      install.~~"* **Every clause of that is wrong on the baseline above**, and the checks that
+      falsified it are leg 2 and Obligations 1 and 3.
+      **What actually exists, read off the tree rather than off a commit subject:** `PutPosterAsset`
+      (`internal/store/imagewrite.go`) is a **non-test** `INSERT INTO image_asset`, and it is called
+      by `Pipeline.Poster` (`internal/imagepipeline/pipeline.go`), which fetches the cover, decodes
+      it, renders one JPEG per allowlisted width (`renderAll`, `internal/imagepipeline/render.go`)
+      and writes the bytes through `internal/imagecache` before recording the row. **Content commit
+      `7e5934d`**, cited rather than the merge that carried it, per this file's standing rule.
+      **And it has a production caller.** `Importer.fetchCovers` (`internal/libsync/covers.go`) is
+      **phase D** of a full import — a bounded loop over `Poster` that runs **between committed
+      batches** and never inside one, skipping items `store.PosteredItems` says already carry
+      artwork — called from `FullImport` in `internal/libsync/importer.go`; and
+      `cmd/usarr/import.go`'s `coverPipeline` builds the fetcher from the instance's **own**
+      BookOrbit client, returning `nil` (pass disabled) for any other kind or with no image-cache
+      directory. **Content commit `c4a3277`.**
+      🛑 **DO NOT READ THAT AS *"COVERS WORK"*. NOTHING HAS EVER PUT A REAL COVER THROUGH IT**,
+      and the package says so about itself rather than letting a green test suite be the only signal
+      — `internal/imagepipeline`'s package doc: *"This pipeline has been TESTED AGAINST A FAKE
+      FETCHER AND NEVER AGAINST A REAL COVER. Every image it has ever processed was fabricated by its
+      own tests; no byte from a running BookOrbit has been through it."* It draws the comparison
+      itself, and this file endorses it: **that is the same register as `deploy/Dockerfile`'s
+      written-not-built.**
+      ⚠️ **A STALE COMMENT IN THE TREE, RECORDED SO THE NEXT READER IS NOT MISLED BY IT — and it
+      is not this file's to fix.** `internal/httpapi/images.go`'s package header still says *"What no
+      code does is CALL it during an import"*. `c4a3277` is what made that false; the header was
+      written at `7e5934d`, when it was true, and was not revisited. **Its neighbouring sentence —
+      that the pipeline has never run against a cover from a running service — is still correct.**
       ⚠️ **§16 puts this and the library grid in ONE line item** — the sentence in **§16's v0.1
       entry** reading *"Library grid with "Load more" + `content-visibility` on grid rows carrying
       explicit ARIA roles (§4.5), keyset pagination, image pipeline **including the §4.4.1
@@ -425,30 +500,32 @@ Items marked 🛑 **STOPPED** are the different case: those are stopped by the d
          `grep -nE 'mux\.Handle(Func)?\("[A-Z]+ /(api/v1/)?(img|image|cover)' internal/httpapi/server.go`
          returns `mux.Handle("GET /img/{key}", …)`. ⚠️ **This leg used to read "Fired on the
          baseline tree: exit 1, no output — RED today", and that is no longer the tree.**
-      2. **A non-test writer stores a REAL format, not NULL.**
-         `grep -rn 'INSERT INTO image_asset' --include=*.go internal/ cmd/ | grep -v _test.go`
-         returns a hit, **and that same file references** `store.ValidImageFormat` or
-         `store.ImageFormatJPEG`. 🔴 **RE-FIRED at the baseline above: exit 1 on the first half —
-         STILL RED.** Every file in the tree matching `INSERT INTO image_asset` is a `_test.go`
-         (`internal/db/migrate_test.go`, `internal/httpapi/images_test.go`,
-         `internal/httpapi/library_test.go`, `internal/httpapi/librarysearch_test.go`,
-         `internal/store/imageassets_test.go`, `internal/store/imagelint_test.go`), and the only
-         non-test references to the format vocabulary anywhere are its own declarations in
-         `internal/store/images.go`.
+      2. **A non-test writer stores a REAL format, not NULL.** ✅ **DISCHARGED 2026-08-19** by
+         `7e5934d`. `grep -rn 'INSERT INTO image_asset' --include=*.go internal/ cmd/ | grep -v
+         _test.go` returns `internal/store/imagewrite.go:296`, and that same file **calls**
+         `ValidImageFormat` — in `PosterAsset.validate`, on the value actually being stored, not
+         merely mentioning it in a comment. ⚠️ **This leg used to read *"~~RE-FIRED at the baseline
+         above: exit 1 on the first half — STILL RED … Every file in the tree matching `INSERT INTO
+         image_asset` is a `_test.go`~~"*, and that is no longer the tree.**
       3. **Bytes actually come back.** Against a running instance,
          `curl -sS -o /dev/null -w '%{http_code} %{content_type} %{size_download}\n' '<base>/img/<key>?w=342'`
          answers `200`, an `image/*` content type and a **non-zero** size. (This container has no
          `sqlite3` CLI, so this leg is deliberately a request rather than a query.)
-         🔴 **RED — AND RED FOR LEG 2'S REASON RATHER THAN FOR ONE OF ITS OWN.** The route is in the
-         mux and the handler is written; **there is no `<key>` to put in that URL**, because nothing
-         writes a row for one to name. This leg **cannot** go green before leg 2 does. **It is kept
-         separate anyway**, for the reason the split was written: a writer that stores a row the
-         serving path cannot turn back into bytes satisfies leg 2 alone, and leg 3 is what refuses
-         it.
+         🔴 **STILL RED — AND NOW RED FOR ITS OWN REASON, WHICH IS THE POINT OF THE SPLIT.** It used
+         to be red *for leg 2's reason*: there was no `<key>` to put in the URL because nothing wrote
+         a row. **That blocker is gone and the leg did not go green with it.** Nothing has run the
+         pipeline against a real service — `internal/imagepipeline`'s own package doc says so — so
+         no install has a rendered cover to request, and **this leg is unfired rather than failed**:
+         it needs a host with a BookOrbit and a completed `usarr import`, which the agent container
+         is not. **It stays open until somebody fires it and records what came back.**
+         ⚠️ **A green `make check` does not touch this leg and must not be read as touching it.**
+         Every image the suite has ever put through the pipeline was fabricated by the suite.
 
-      ✅ **SO THE THREE-LEG SPLIT NOW READS ONE GREEN, TWO RED — AND IT EARNED THE SPLIT.** Leg 1
-      went green on a commit that **fetches nothing**; had this item carried a single done-check, that
-      commit would have closed it. Legs 2 and 3 are what hold it open.
+      ✅ **SO THE THREE-LEG SPLIT NOW READS TWO GREEN, ONE RED — AND IT HAS NOW EARNED THE SPLIT
+      TWICE.** Leg 1 went green on a commit that **fetches nothing**. Leg 2 then went green on a
+      commit that fetches, decodes and renders — but **still on fabricated bytes only**. Had this
+      item carried a single done-check, either commit would have closed it. **Leg 3 is the one that
+      cannot be satisfied by writing code**, and it is what holds this item open.
 
       **The clause that stops this being weakened back:** the three legs exist because **a writer
       that fetches nothing, decodes nothing and serves nothing satisfies a bare SQL grep exactly** —
@@ -462,19 +539,71 @@ Items marked 🛑 **STOPPED** are the different case: those are stopped by the d
       the reason in the clause above. Two misses on one line is a pattern, not luck: **a done-check
       for a pipeline has to name the pipeline's OUTPUT, never one of its INSERTs.**
 
-      **WHAT THE FIRST WRITER OWES: THREE OBLIGATIONS AND ONE DESIGN DECISION.** They are kept
-      together here rather than scattered, because this file is where someone will look to find out
-      what is actually owed. Every one was verified against the tree at the baseline above.
+      **SO WHAT IS ACTUALLY STILL OWED ON THIS ITEM. Four things, and §4.4.1 is three of them.**
+      Fired against the tree at the baseline above.
+      1. **THE FIRST REAL RUN — leg 3, and it is the only one that cannot be closed by writing
+         code.** Covered above; it needs a host with a BookOrbit and a completed `usarr import`.
+      2. **§4.4.1's COLD START IS UNBUILT IN FULL, and the columns for it have been in the schema
+         since `00005`.** `image_asset.thumbhash` and `image_asset.dominant_color` are declared at
+         `00005_library_sync.sql`'s `image_asset` block — the `dominant_color` line carries the
+         comment *"available BEFORE thumbhash; see ARCHITECTURE §4.4.1"* — and **nothing writes
+         either.** `PutPosterAsset`'s `INSERT` names ten columns (`source_url`, `origin_class`,
+         `origin_service_instance_id`, `role`, `width`, `height`, `cache_key`, `format`,
+         `fetched_at`, `state`) and neither of those two is among them. Outside the migration and
+         `internal/db/testdata/schema.sql`, the only mention of either token anywhere in the tree is
+         `internal/store/imageassets.go`'s comment saying they are deliberately **absent from the
+         serving read**. So, leg by leg against §4.4.1's four rules: **rule 1 (viewport-prioritised
+         fetching)** — no priority queue and no client hint endpoint; `fetchCovers` walks the
+         import's own item order behind a flat permit gate. **Rule 2 (smallest size first)** —
+         `renderAll` encodes every allowlisted width in one pass, so there is no 92px-first stage to
+         hang a ThumbHash off. **Rule 3 (`dominant_color`, and the contrast rule)** — unwritten, and
+         with it the assertion §4.4.1 says in terms is **owed to `make check`**: *"a test that
+         recomputes the ratio for every `(dominant_color, foreground)` pair the pipeline emits and
+         fails below 4.5:1."* **Rule 4 (progressive rendering)** is the grid's half and is not this
+         item's to close.
+      3. **REVALIDATION AND EXPIRY HAVE COLUMNS AND NO WRITER.** `etag`, `last_modified` and
+         `expires_at` are all on `image_asset` in `00005`, and `grep` over non-test Go finds only
+         `imageassets.go`'s comment — no `If-None-Match`, no `If-Modified-Since`, no sweep. ⚠️ **The
+         cover pass does not need them to be correct today** — `store.PosteredItems` makes it skip
+         any work that already carries a poster, so a re-import re-fetches nothing — **but that is
+         *never refresh* rather than *revalidate*, and a cover that changes upstream is never
+         picked up.** `ix_img_state(state, expires_at)` therefore still has no reader, which
+         `00005` already flags against itself.
+      4. **THE TINT, which is the design decision below and is unbuilt.** `store.PosterAsset` carries
+         no colour field of any kind.
+      🔍 **Inference, labelled: one further gap that is a shape question rather than a missing
+      line.** The pass's only production trigger is `FullImport` — `grep -n fetchCovers
+      internal/libsync/importer.go` finds one call site, in phase D. There is no per-work trigger and
+      no standalone backfill command, so on an install whose catalogue was imported before `c4a3277`
+      the way to get artwork is to **re-run the import**, which `PosteredItems` makes cheap for the
+      works that already have it. Whether that is sufficient or whether a backfill deserves its own
+      entry point is **not a question this file should answer for the owner** — `internal/imagepipeline`'s
+      package doc already names the per-work trigger as a shape it deliberately left to its caller.
 
-      **Obligation 1 — the format vocabulary.**
+      **WHAT THE FIRST WRITER OWED: THREE OBLIGATIONS AND ONE DESIGN DECISION — AND THE WRITER
+      HAS SINCE ARRIVED AND DISCHARGED TWO OF THEM.** ⚠️ **This block used to open *"~~WHAT THE FIRST
+      WRITER OWES … Every one was verified against the tree at the baseline above~~"*, in the future
+      tense throughout, because no writer existed. `7e5934d` is that writer.** The list is kept whole
+      rather than pruned, because **which obligations a writer met, and how, is the thing a second
+      writer needs** — the tint pass and any second catalogue source will each write this table
+      again. Every verdict below was re-fired against the tree at the baseline above.
+
+      **Obligation 1 — the format vocabulary. ✅ DISCHARGED, AND BY A CALL RATHER THAN BY A
+      MENTION.** `PosterAsset.validate` (`internal/store/imagewrite.go`) **calls**
+      `ValidImageFormat` on the value being stored and refuses the row with `ErrInvalidImageAsset`,
+      and the file's own header says why the distinction matters: the lint below *"can only see the
+      reference, so the reference alone would satisfy a test and not the rule."* The obligation and
+      its mechanism are kept here because **the mechanism is what binds the NEXT writer**, and it is
+      no longer vacuous.
       - **Any future `image_asset` writer must reference `store.ValidImageFormat` (or
         `store.ImageFormatJPEG`), or `make check` goes RED.**
         `TestImageWritesValidateTheFormatVocabulary` (`internal/store/imagelint_test.go`) is an AST
         walk over non-test code that matches `INSERT` / `INSERT OR IGNORE` / `REPLACE` / `UPDATE`
         against `image_asset`, including quoted, backticked and `main.`-qualified spellings, and it
-        **fires its own matcher against known strings before trusting it**. It is **vacuous today**
-        because no writer exists, and **it flips the moment one does — including a writer that
-        stores only NULL.** [ADR-0050](./DECISIONS.md#adr-0050) and
+        **fires its own matcher against known strings before trusting it**. ⚠️ **It used to be
+        *"~~vacuous today because no writer exists~~"*; it is not vacuous any more** — it has a real
+        writer under it, and it still flips for the next one, **including a writer that stores only
+        NULL.** [ADR-0050](./DECISIONS.md#adr-0050) and
         `internal/db/migrations/00008_image_asset_format.sql` both name it as the thing that keeps
         ADR-0039's never-written validator from repeating.
 
@@ -495,12 +624,25 @@ Items marked 🛑 **STOPPED** are the different case: those are stopped by the d
         above. The point being made survives the correction intact — **the colour field still lands
         on the library grid, which is the screen tinted tiles are for**; only the count was wrong.
 
-      **Obligation 3 — REJECT A `source_url` THAT STILL CARRIES A CREDENTIAL. ⚠️ THIS WAS
-      DOCUMENTED AS SHIPPED WHEN IT IS NOT, AND THAT IS WHY IT IS ON THIS LIST.**
-      - **It does not exist.** There is no image pipeline, and **`source_url` appears in non-test Go
-        exactly once, in a comment** — `internal/ssrf/redact.go:14`. Fired on the baseline tree:
-        `grep -rn 'source_url\|SourceURL' --include=*.go internal/ cmd/ | grep -v _test.go` returns
-        that one line and nothing else.
+      **Obligation 3 — REJECT A `source_url` THAT STILL CARRIES A CREDENTIAL. ✅ DISCHARGED
+      2026-08-19 by `7e5934d`. ⚠️ IT SPENT A WHILE DOCUMENTED AS SHIPPED WHEN IT WAS NOT, WHICH IS
+      WHY IT IS ON THIS LIST AND WHY THE WHOLE ARC IS KEPT.**
+      - **It exists now, as `checkImageSourceURL` and `ErrCredentialInSourceURL`
+        (`internal/store/imagewrite.go`)**, run from `PosterAsset.validate` **before** anything
+        reaches a prepared statement's arguments, and it consults `internal/ssrf`'s one deny-list
+        through `ssrf.IsCredentialParam` rather than copying the names. It refuses `userinfo` in the
+        URL as well as a credential query parameter.
+        ⚠️ **IT REFUSES; IT DOES NOT STRIP — WHICH IS THE OPPOSITE OF WHAT THIS ITEM ASKED FOR, AND
+        DELIBERATELY SO.** The bullet below still reads *"strip credential parameters"*, kept
+        visible because the divergence is the interesting part. `imagewrite.go`'s own header argues
+        the case: *"Stripping silently would store a correct row and leave the caller still
+        constructing credentialed URLs — into log lines, into an HTTP cache key, into the next table
+        that has no such check. A refusal surfaces it once, at the moment it is introduced."*
+        **`security.md` §5 asked for an assertion, and an assertion is what landed.**
+      - ⚠️ **This bullet used to read *"~~It does not exist. There is no image pipeline, and
+        `source_url` appears in non-test Go exactly once, in a comment — `internal/ssrf/redact.go:14`
+        …~~"*, and both halves are now false** — there is a pipeline, and `SourceURL` is a field on
+        `store.PosterAsset`.
       - **`docs/reference/security.md` §5 and `docs/reference/schema.md` §12 BOTH ASSERTED IT IN THE
         PRESENT TENSE** — *"an ingest assertion rejects writing a `source_url` …"* — so **a reader
         who checked `security.md` yesterday would have believed UsArr already had this guard.** It
@@ -517,10 +659,19 @@ Items marked 🛑 **STOPPED** are the different case: those are stopped by the d
         ingest path that writes these rows **owes** that assertion"*, and §12 the same. **Both
         reference files are correct as of the baseline above; the obligation is still unmet in
         code.**
-      - **The obligation on the writer:** strip credential parameters before the row is written,
-        with the names taken from `credentialParams` and **never restated locally** — and note
-        `cache_key = sha256(source_url)[:16]`, so getting this wrong does not merely leak, it makes
-        a provider-key rotation silently invalidate the whole image cache.
+      - **The obligation as it was written, kept verbatim so the divergence above is legible:**
+        *"strip credential parameters before the row is written, with the names taken from
+        `credentialParams` and **never restated locally** — and note `cache_key =
+        sha256(source_url)[:16]`, so getting this wrong does not merely leak, it makes a
+        provider-key rotation silently invalidate the whole image cache."* **The deny-list clause
+        held exactly** — `ssrf.IsCredentialParam` is consulted, nothing is restated — and the
+        `cache_key` consequence is quoted back in `ErrCredentialInSourceURL`'s own header. **Only
+        *strip* became *refuse*.**
+      - **It binds the NEXT writer too, and by construction rather than by this paragraph:**
+        `PutPosterAsset` is the only non-test path to an `image_asset` row, so a second catalogue
+        source that goes through it inherits the assertion. One that does not go through it inherits
+        nothing — which is what makes `TestImageWritesValidateTheFormatVocabulary` (Obligation 1)
+        the load-bearing half of the pair.
 
       **The design decision — and it is the tint.**
       ⚠️ **The *"zero-fetch tinted placeholder as a real first slice"* framing DIED WITH THE KAVITA
@@ -539,6 +690,11 @@ Items marked 🛑 **STOPPED** are the different case: those are stopped by the d
       much as **not independent**. This pipeline already fetches, decodes and downscales every
       cover, so **averaging a colour during a decode that is happening anyway is a small rider on
       this item — one extra field written during that decode**, not a separate slice.
+      ✅ **THE PREMISE OF THAT INFERENCE IS NOW A FACT RATHER THAN A PLAN.** `7e5934d`'s decode is
+      real: `renderAll` (`internal/imagepipeline/render.go`) already holds the decoded source image
+      in memory to downscale it. **The rider is still unwritten** — `store.PosterAsset` has no
+      colour field and `PutPosterAsset`'s `INSERT` names no colour column — so what changed is that
+      the decode it was waiting on exists, not that anything of the tint was built.
       **Sync's measurement stands and is carried, not re-derived:** ~**90%** of the tinted-tile
       design is adapter-independent — the writer, the credential-free URL discipline, idempotency,
       the wire field and the guards — and **survives a backend switch untouched.** It simply lands
@@ -863,11 +1019,13 @@ Items marked 🛑 **STOPPED** are the different case: those are stopped by the d
       `image_asset.format` and never sniffed, `Cache-Control: private` as a constant no
       `origin_class` branches on, and `internal/imagecache` for the width allowlist and the on-disk
       layout.
-      ⚠️ **THE FETCH HALF IS STILL OPEN and is the item above.** Nothing writes `image_asset`, so
-      every `/img` request answers `not_cached` and every row's `poster_key` is absent on every real
-      install. The serving half is deliberately ahead of the bytes: it makes the fetcher a small
-      piece the moment a catalogue adapter produces cover URLs, rather than a pipeline tested only
-      against fixtures.
+      ⚠️ **THE FETCH HALF IS STILL OPEN and is the item above — but NOT for the reason written
+      here, and the reason is where this paragraph went stale.** It used to read *"~~Nothing writes
+      `image_asset`, so every `/img` request answers `not_cached` and every row's `poster_key` is
+      absent on every real install~~"*; `7e5934d` and `c4a3277` falsified that, and the item above
+      carries the whole correction — **this is a pointer to it, not a second opinion.** What is still
+      true is the sentence after: the serving half was deliberately ahead of the bytes, and that bet
+      paid — **the fetcher did land as a small piece behind it.**
       ⚠️ **`reference/http-api.md` §7.1's sentence — shipping `poster_asset_id` *"would be an id the
       client cannot turn into anything"* — IS NOW FALSE and is corrected in place**, along with the
       two Svelte route comments and `$lib/library`'s header that had copied the same explanation.
@@ -877,10 +1035,13 @@ Items marked 🛑 **STOPPED** are the different case: those are stopped by the d
       than conditional, and the structural half is that publicness is not expressible on the private
       route. Nothing produces provider artwork, and an unauthenticated route with nothing behind it
       is a hole waiting for content.
-      ⚠️ **NO `image_asset` WRITER WAS INTRODUCED.** `store.ValidImageFormat`'s AST lint is still
+      ⚠️ **NO `image_asset` WRITER WAS INTRODUCED — TRUE OF THIS COMMIT, AND NO LONGER TRUE OF THE
+      TREE.** This paragraph used to continue *"~~`store.ValidImageFormat`'s AST lint is still
       vacuous by its own `_test.go` exemption, and the credential-stripped `source_url` assertion
-      (`security.md` §5) is still owed by nothing that exists. Both obligations travel with the
-      fetch half.
+      (`security.md` §5) is still owed by nothing that exists~~"*. **Both obligations travelled with
+      the fetch half exactly as this line said they would, and `7e5934d` discharged both** — see
+      Obligations 1 and 3 on the item above. The lint is no longer vacuous and the assertion exists
+      as `ErrCredentialInSourceURL`.
       *Authority:* §16's v0.1 entry, §4.4, §13's budget table, `reference/http-api.md` §9.
 
 - [x] **A relevance score on the wire.**
@@ -1040,27 +1201,55 @@ Items marked 🛑 **STOPPED** are the different case: those are stopped by the d
       ⚠️ `docs/reference/http-api.md:774-801` still describes this gap as open and is now stale; the
       thread that owns that file is to correct it.
 
-- [ ] **The Docker image, and `VACUUM INTO` backups as a shipped path.** `cmd/usarr/backup.go` exists;
-      there is no `Dockerfile` anywhere in the tree.
+- [x] **FALSIFIED 2026-08-19 — ~~The Docker image, and `VACUUM INTO` backups as a shipped path.
+      `cmd/usarr/backup.go` exists; there is no `Dockerfile` anywhere in the tree.~~ THIS ITEM'S OWN
+      *Done when* IS DISCHARGED, AND THE BOX IS TICKED AGAINST THAT CHECK AND AGAINST NOTHING
+      WIDER.** The old text is kept visible because a reader who trusted it would go looking for a
+      file that is there.
       *Authority:* §15, §16 v0.1 entry.
-      *Done when:* a `Dockerfile` exists.
-      📉 **AN OBSERVATION ABOUT THIS AREA — NOT A ROUTED ITEM, AND NOT A BLOCKER ON ANYTHING.**
-      **`deploy/` has not moved since 2026-08-17.** The newest commit whose diff **contains** a
-      `deploy/` change is `3b951cf` (*"fix(deploy): status.sh said UNVERIFIED on healthy long-running
-      hosts"*, 20:18Z) — cited rather than the merge that carried it, per this file's standing rule.
-      At the baseline above, `internal/`, `cmd/` and `docs/` had each moved **within minutes** of it
-      and `web/src/` within about an hour, so the gap is **close to two days against an otherwise
-      hourly tree.**
-      `deploy/` holds two files, `update.sh` and `status.sh`, and **this item and the `VACUUM INTO`
-      backup path are what would land there next.**
-      ⚠️ **NOTHING IS BLOCKED ON IT, and that framing is the whole reason this is an observation
-      rather than an item.** No box in this file waits on `deploy/`, and §4's *"Run
-      `deploy/update.sh`"* step works today. It is recorded as a **stall signal for whoever allocates
-      attention**, never as a dependency, and it routes nowhere by itself.
-      🔍 Inference, labelled: a directory sitting still for two days while every neighbouring area
-      moves hourly is more likely **unallocated** than **finished**. This pass measured commit dates
-      and nothing else — it read no `deploy/` file and formed no view on whether the two scripts are
-      complete.
+      *Done when:* a `Dockerfile` exists. ✅ **`deploy/Dockerfile`, from `000ac52`** (*"feat: add
+      deploy/Dockerfile — distroless, non-root, static binary"*) — content commit, cited rather than
+      the merge that carried it. The same commit added `.dockerignore`, a `make docker` target that
+      **refuses a `BASE_IMAGE` that is not digest-pinned**, and the `README`/`DEVELOPMENT.md` text
+      around them.
+      ✅ **The `VACUUM INTO` half is shipped twice over.** `backupBeforeMigrate`
+      (`cmd/usarr/backup.go`) has taken an automatic pre-migration snapshot since `3cde773`, and
+      **`ea7c855`** (*"feat(cli): add `usarr backup` …"*) is what made it **a shipped path a person
+      can invoke** — `cmd/usarr/backupcmd.go`, registered in `cmd/usarr/main.go`. Both go through the
+      same `VACUUM INTO` helper in `backup.go`, which is a `VACUUM INTO` and not a `cp` for the WAL
+      reason the file states.
+      🛑 **THE IMAGE IS WRITTEN, NOT BUILT — AND THIS TICK MUST NOT BE READ AS *"THE IMAGE
+      WORKS"*. THE PREREQUISITE IS A DOCKER DAEMON, WHICH THIS ENVIRONMENT DOES NOT HAVE.** Recorded
+      here as an **outstanding obligation** rather than left to be inferred from the box:
+      - **What is owed:** one successful `make docker` on a host with a daemon, and somebody
+        recording what it produced. Until then the container path is **unverified**, and a `docker`
+        target that has never run is indistinguishable from one that cannot.
+      - **The tree already says so in four places, and they agree** — this item is a pointer to them,
+        never a second opinion. `deploy/Dockerfile`'s own header carries an **HONESTY NOTE**: *"This
+        file has NOT been built in the environment it was written in: the agent container carries no
+        Docker daemon (docs/DEVELOPMENT.md §8), so `make docker` cannot run here … Treat a green
+        build as unverified until then."* `docs/DEVELOPMENT.md` **§4**'s target table says the image
+        is *"unbuilt and unverified"*; **§12**'s opening paragraph says the container path *"stays
+        unverified"* and flags the README's Compose block **illustrative only**; and §12's
+        known-gaps list says **`make docker` has not been made to succeed on any checkout**. The
+        `Makefile`'s own `docker` recipe fails closed on a missing daemon and points at §8.
+      - ⚠️ **THE SAME SHAPE AS THIS FILE'S OTHER OPEN LEG, AND WORTH NOTICING TWICE IN ONE PASS.**
+        §2's image-pipeline item has a leg that **cannot be satisfied by writing code** — a first run
+        against a real cover — and `internal/imagepipeline`'s package doc names
+        `deploy/Dockerfile`'s written-not-built as its own comparison. **A *Done when* that a text
+        editor can satisfy is the failure mode both of them found**, and this box is ticked knowing
+        that its check was the weak kind.
+      📉 **THE *`deploy/` HAS STALLED* OBSERVATION UNDER THIS ITEM IS FALSIFIED TOO, AND IT WAS
+      FALSIFIED BY THIS ITEM'S OWN COMMIT.** It used to read: *"~~`deploy/` has not moved since
+      2026-08-17. The newest commit whose diff contains a `deploy/` change is `3b951cf` … the gap is
+      close to two days against an otherwise hourly tree~~"*, with the labelled inference that a
+      directory sitting still *"is more likely **unallocated** than **finished**."* **`000ac52`
+      landed 2026-08-19 14:38Z**, so `deploy/` now holds three files — `Dockerfile`, `update.sh`,
+      `status.sh` — and on the baseline above the newest non-merge commit per area is `deploy/`
+      14:38Z, `cmd/` and `web/src/` 16:49Z, `internal/` 18:10Z, `docs/` 18:51Z. **Hours, not two
+      days.** ⚠️ **The inference was not wrong so much as answered:** the directory was unallocated,
+      it has since been allocated, and **an observation about attention has a shelf life measured in
+      hours on this tree** — which is the reason it was written as an observation and not as an item.
 
 - [ ] **The arm64 RSS spike.** §16 calls it a day-one spike. `internal/db/spike/` exists; whether the
       arm64 measurement was taken is not readable from the tree.
@@ -1097,7 +1286,7 @@ Items marked 🛑 **STOPPED** are the different case: those are stopped by the d
 | **The Kavita adapter code itself — RE-SEQUENCED, NOT CUT** | **Nothing.** It **STAYS IN THE TREE**: `internal/kavita`, `internal/libsync`'s Kavita path, `00006_kavita_subtypes.sql` and the recorded fixtures all remain, because **other people run Kavita** and principle 3 (*pluggable by default*) is the reason the adapter exists at all. **What the sunset stops is INVESTMENT, not the code** — no deletion, no deprecation notice, no migration. Read any Kavita item in §2 as *"unfunded, still standing"*, never as *"dead"*. |
 | **Re-keying the design mockups' v0.1 DATA off BookOrbit** — a real design change, and a different thing from the label swap | **The owner's mixed-library answer, and the two ADRs the sync lane has pre-allocated for its structural findings.** ⚠️ **Both gates are relayed from other threads and are NOT readable in this tree** — recorded as sequencing, not as status. **The label swap already landed and is not this**: `a1995f9` moved the install switcher on all five screens to *"v0.1: BookOrbit, Prowlarr"*, while `mockups/README.md`'s v0.1 figures were **deliberately left un-re-keyed** — they are arithmetically derived from the Kavita-era install, and that section now **states its provenance where a reader meets the numbers** rather than letting a BookOrbit label sit over Kavita-shaped arithmetic. Re-deriving them changes what the drawings assert about a real install, which is why it is a decision rather than a rename. ⚠️ **[ADR-0052](./DECISIONS.md#adr-0052) marks its own mockup re-draw DISCHARGED by that commit** (`cad0563`), and that mark is about **the rendered label**, not the figures under it — reading it as covering both is the mistake this row exists to prevent. ⚠️ **No ADR number is cited: none is allocated** — and **none is to be guessed from a maximum written here**, because reading one out of *this* file is exactly what mis-allocated an ADR once already (see the baseline block). [`DECISIONS.md`](./DECISIONS.md) is authoritative for the next free number. ⚠️ **The design thread is CLOSED, so this has NO OWNER at slotting time**, and naming one is part of slotting it: **a closed thread's sections do not pass to whoever next touches them.** |
 | The minimal write path — `monitor`, `unmonitor`, `delete`, `add`, the queue worker and its settlement loop | **v0.2**, with the first \*Arr adapter ([ADR-0042](./DECISIONS.md#adr-0042), [ADR-0045](./DECISIONS.md#adr-0045)). `write_queue` stays in the schema with **no writer for the whole of v0.1** — that is the seam, and it costs no migration ([ADR-0039](./DECISIONS.md#adr-0039)). |
-| [ADR-0039](./DECISIONS.md#adr-0039)'s outstanding Go `state`-vocabulary declaration and validation | The first `write_queue` writer, which is v0.2's. |
+| ~~[ADR-0039](./DECISIONS.md#adr-0039)'s outstanding Go `state`-vocabulary declaration and validation~~ — **the DECLARATION landed; what is sequenced is now only its USE** | **The validator EXISTS**: `internal/store/writequeue.go` declares the six states and `ValidWriteQueueState`, landed `007e58e` (content commit, not the merge). ⚠️ **BUT *"has a non-test caller"* AND *"is in use in production"* DIVERGE HERE, AND THE DISTINCTION IS THE WHOLE ENTRY.** Its only caller outside `_test.go` is `internal/db/spike/fixture.go`, whose first line is `//go:build bench` — **a bench fixture, not a runtime path**; `internal/httpapi/grabs.go` names it in a comment only. A grep for a non-test caller therefore comes back green over a symbol **no shipped binary ever calls**. **The durable claim, which does not go stale either way: the first production `write_queue` writer cannot be written without validating** — `writequeuelint_test.go` is an AST walk that fires `make check` RED on any non-test `INSERT` / `REPLACE` / `UPDATE` against `write_queue` in a file that does not reference the vocabulary, and it re-measures its own matcher against the five spellings that walked past `imagelint_test.go`'s first version. That first writer is still **v0.2's**, and `write_queue` still has **no** non-test writer. |
 | The minimal match-correction UI — the remedy for the badge in §2 | **v0.2** ([ADR-0043](./DECISIONS.md#adr-0043), [ADR-0045](./DECISIONS.md#adr-0045)). v0.1 ships the defect's badge without its remedy for a whole milestone, and §16 states that cost rather than burying it. |
 | A request destination on a library binding | A service that advertises `Add` under §8.3's capability filter. **No service v0.1 connects does** — Prowlarr's grab path posts to Prowlarr's own download client — so §17.8 drops the column for v0.1. It returns with Sonarr and Radarr at v0.2. |
 | The queue-state column on Requests' `Recent grabs` block | The first `write_queue` writer — a v0.2 addition, not a v0.1 gap. |
