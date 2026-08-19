@@ -1389,8 +1389,8 @@ func TestAQualifiedNameThatIsItselfTakenFallsBackRatherThanInventingARule(t *tes
 		t.Fatalf("the fallback must still bind, not skip: %+v", skipped)
 	}
 	if n, _ := libraryNameSlug(t, s, sib["1"].LibraryID); n != "Fiction (2)" {
-		t.Errorf("the taken qualifier fell back to %q, want \"Fiction (2)\" — the ordinal loop "+
-			"is the behaviour that was already there, and nothing here rules on the collision", n)
+		t.Errorf("the taken qualifier fell back to %q, want \"Fiction (2)\" — the qualifier "+
+			"is itself taken, so none is left to be meaningful and the ordinal is correct here", n)
 	}
 }
 
