@@ -11,8 +11,14 @@
 >
 > **No dates and no estimates appear here, ever**, at the owner's standing instruction. Where a line
 > is inference rather than something read off §16, an ADR or the tree, it is marked 🔍.
+>
+> **Citation policy, applied 2026-08-19 to §2's per-type-grid item and the two items after it —
+> AND TO NOTHING ELSE:** prefer function and symbol names over `file:<n>` line citations for any
+> file that moves, Go and Svelte especially. A wrong line number still resolves to a plausible
+> line, so it fails invisibly and reads as checked. Line citations elsewhere in this file were
+> **not vetted in this pass** — no sweep happened; do not read them as verified.
 
-**Last re-derived against:** `origin/main` `047a060` (2026-08-19) — code identical to `9689e56`; what sits above it is this file's own history.
+**Last re-derived against:** `origin/main` `01bdb19` (2026-08-19) — code identical to `1c13afd`, the browse merge; what sits above it is docs only.
 
 ---
 
@@ -132,34 +138,83 @@ Ordered roughly by what the rest depends on, not by size.
       set* in Go, so there is no keyset position a cursor could name — `reference/http-api.md` §6.5
       publishes exactly that, and `web/src/lib/search.test.ts:74-82` asserts no second page exists.
       **Lifting that cap would be a store redesign contradicting a published contract, and needs an
-      ADR first. It is not a missing feature.** What the falsification did surface is the next two
-      items.
+      ADR first. It is not a missing feature.** What the falsification did surface is the grid item
+      that follows.
 
-- [ ] **The PER-TYPE library grid, `/library/{type}` — and it is BACKEND-BLOCKED.** Not one
-      all-types screen: navigation is §17.2's **six-value media-type enum**, one sidebar entry per
-      type (`ARCHITECTURE.md:3037`, enum table :3046-3052), and item routes are already
-      `/library/{type}/{id}` (`web/src/lib/library.ts:269`). §16 puts it in v0.1 **in the same
-      sentence as the image pipeline** (:2649-2651), so it is that line's other half. The §4.5
-      primitives ship (see the falsified item above); **the screen does not** — `web/src/routes/`
-      holds `libraries/`, which is §17.8's row view, and no grid route.
-      **Nothing on the wire can back it.** §13 budgets `GET /api/v1/library?kind=…` and `?lib=…`
-      (:2101-2102), but **neither is a registered route**: `internal/httpapi/server.go:274`
-      registers `GET /api/v1/library/recent` and that is the only library read there. Its handler
-      parses **only `cursor` and `limit`** (`internal/httpapi/library.go:158,220`), over SQL
-      hard-ordered `ORDER BY w.added_at DESC, w.id DESC` (`internal/store/recent.go:264`) — no kind
-      facet, no library scope, no sort.
-      ⚠️ **The interim `/library` table is a SLICE of this line item and NEVER a tick.** A frontend
-      thread is building a single `/library` table over `/library/recent`, the one catalogue read
-      that exists; it is **not on `origin/main` at the baseline above**, so nothing here reports it
-      as shipped, and when it lands it discharges no part of this item. **Its missing type filter
-      and sort control are a DECISION, with a reason.** Over an endpoint with no kind facet and one
-      fixed order, either control could only act on the rows already loaded, and a control that
-      silently operates on the loaded window is precisely §17's dishonesty — the rule that already
-      keeps §17.8's screen free of controls no endpoint backs. **A later review files both absences
-      as intentional, not as a gap.**
-      *Authority:* §16 v0.1 entry, §17.2, §17, §13's budget table, §4.5.
-      *Done when:* `GET /api/v1/library` is a registered route carrying a kind facet, **and** a
-      `/library/{type}` route renders over it.
+- [ ] **The PER-TYPE library grid, `/library/{type}` — the SCREEN. It is no longer backend-blocked.**
+      Not one all-types screen: navigation is §17.2's **six-value media-type enum**, one sidebar
+      entry per type *that has content*, and item routes are already `/library/{type}/{id}` — named
+      in the `RecentItem.id` doc comment in `web/src/lib/library.ts`. §16 puts the grid in v0.1 **in
+      the same sentence as the image pipeline** (§16's v0.1 entry), so it is that line's other half.
+      The §4.5 primitives ship (see the falsified item above).
+      ✅ **THE BROWSE READ SHIPPED** — `f80097f`, merged as `1c13afd`. `GET /api/v1/library` is a
+      registered route, served by **`handleBrowseWorks`** (`internal/httpapi/library.go`) over
+      **`store.ListWorks`** / `browseWorksSQL` (`internal/store/browse.go`). It takes `media_type`,
+      `lib`, `sort`, `limit` and `cursor` (`reference/http-api.md` §7.1); an unrecognised value of
+      any of them is a `400`, never a silently unfiltered page, and `?lib=` slugs resolve through
+      **`resolveBrowseLibraries`**. Three orders are live in **`browseSorts`** — `added_at`,
+      `sort_title`, `popularity` — with `year` refused and never substituted;
+      [ADR-0051](./DECISIONS.md#adr-0051)'s 2026-08-19 amendment owns that gap.
+      ⚠️ **THE FILTER PARAMETER IS `media_type`, NOT `kind`, and the two were separated on
+      purpose.** `kind` is a real column with twelve members that ships on this wire **in every row
+      under its own name**, beside `media_type`; the nav enum has six. Two of the six (**Ebooks**
+      and **Audiobooks**) are the *same* kind split by `edition.format`. §13's budget rows and
+      `reference/http-api.md` §7.2 both spell the parameter `media_type`, and ARCHITECTURE §13
+      carries a dated ⚠️ recording that its own `?kind=movie` row was the same mistake.
+      ⚠️ **THREE CLAIMS HERE WERE FALSIFIED BY THE BROWSE MERGE and are corrected above.** This item
+      read *"BACKEND-BLOCKED"*, *"neither is a registered route"*, and that
+      `internal/httpapi/server.go` *"registers `GET /api/v1/library/recent` and that is the only
+      library read there"*. The mux registers **both** reads today. It also read that the interim
+      `/library` table was *"not on `origin/main`"* — it is: `web/src/routes/library/+page.svelte`.
+      **What is still missing is the FRONTEND.** `web/src/routes/` holds `library/` — one unified
+      newest-first table that still reads **only** `/api/v1/library/recent` — plus `libraries/`,
+      which is §17.8's row view. **There is no `/library/{type}` route and no grid.**
+      ⚠️ **The interim `/library` table is a SLICE of this line item and NEVER a tick.** Its missing
+      type filter and sort control were justified here by *"an endpoint with no kind facet and one
+      fixed order"* — **that premise has expired**: the facet and three orders now exist. The
+      controls are simply not wired yet. 🔍 Inference: the §17 honesty rule that justified their
+      absence no longer applies once a control can act on the whole table, so the next move is to
+      wire them, not to re-argue them.
+      *Authority:* §16's v0.1 entry, §17.2, §17, §13's budget table, §4.5,
+      `reference/http-api.md` §7.
+      *Done when:* a `/library/{type}` route exists under `web/src/routes/` and renders over
+      `GET /api/v1/library`.
+
+- [ ] **A facet-counts read — until there is one, a data-driven sidebar has NO honest source.**
+      `reference/http-api.md` §7.1 closes the wire question: *"There are **no facet counts** beside
+      the chips; each is its own aggregate and its own read."* `design/DESIGN-DIRECTION.md` §8.1
+      decided the opposite shape — *"one sidebar entry per type **that has content**"* — and §17.2's
+      nav table repeats it. The sidebar the design asks for cannot be built over the wire as it is.
+      ⚠️ **The frontend's interim answer is to ship NO media-type entries — not six placeholders —
+      and that is DELIBERATE, not a gap.** `web/src/routes/+layout.svelte`'s file header records the
+      reason: §17.2's hard rule is that a type the user does not have is *not shown AT ALL*, so six
+      placeholder rows would break that rule in the one place it is most visible. `NAV_GROUPS` in
+      that file therefore ships the fixed entry set only, and labels `/library` **"Recently added"**
+      rather than "Library" so the row does not promise the screen §16 specifies.
+      🔍 Inference: §13 already budgets **"1 keyset page + 6 sidebar `COUNT(*)`"** at < 15 ms p50, so
+      the cost is priced — but nothing decides whether the counts ride the browse response or their
+      own endpoint, and that closes off an alternative, so it needs an ADR.
+      *Authority:* `reference/http-api.md` §7.1, `design/DESIGN-DIRECTION.md` §8.1, §17.2, §13.
+      *Done when:* per-media-type counts reach the client from a documented read **and** `NAV_GROUPS`
+      is driven from them — **or** an ADR records the alternative.
+
+- [ ] **The COVERS / POSTER half of §16's grid line — there is NO image route at all.**
+      The browse merge covered only the row-grid half of §16's v0.1 sentence. **Searched
+      `internal/httpapi/server.go` for `img`, `image`, `cover`, `poster`, `thumb` and `MediaCover`:
+      the only hits are two comment lines in the middleware chain, and nothing registers a route
+      under any of them.** No handler in `internal/httpapi/` matches `handle*(Image|Cover|Poster|Img)`
+      either. §13 budgets `GET /img/{k}?w=342` at < 3 ms p50 on a cache hit; that route does not
+      exist.
+      The schema is ahead of the wire — `image_asset`, `work.poster_asset_id` and
+      `work.backdrop_asset_id` are in `internal/db/migrations/00005_library_sync.sql` — which is why
+      `reference/http-api.md` §7.1 says shipping `poster_asset_id` today *"would be an id the client
+      cannot turn into anything"*, and why the browse response does not ship it.
+      ⚠️ **This is the SERVING half only.** Producing the bytes is the image-pipeline item above, and
+      the undecided output codec that blocks the encoder is the item after it. One §16 line, three
+      separate checks.
+      *Authority:* §16's v0.1 entry, §4.4, §13's budget table, `reference/http-api.md` §7.1.
+      *Done when:* an image route is registered in `internal/httpapi/server.go`'s mux **and** the
+      browse response carries an id that resolves through it.
 
 - [ ] **A relevance score on the wire.** §17.4 rule 2 orders grouped results *"by the group's
       best-scoring hit, descending"*, and §6.2 publishes no score — *"**`items` is ordered by

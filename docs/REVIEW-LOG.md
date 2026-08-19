@@ -18836,7 +18836,66 @@ own live-verification servers, which is a fair simulation of a slower box.
 **Fix shape:** have the test wait for the queued probe to land before flipping the double, or give
 the test app a registry with no background prober, so the synchronous `probe` call is the only writer
 of that snapshot. Recorded because a flake that is silently re-run until green is a gate nobody can
-trust (`DEVELOPMENT.md` §11).
+trust (`DEVELOPMENT.md` §11). ✅ **The follow-up was taken up 2026-08-19 and the flake is fixed** —
+the second of the two shapes; see the subsection below.
+
+### ✅ RESOLVED 2026-08-19 — the recorded mechanism was the real one, and it is the test's race
+
+**The premise was re-read before it was fixed, not taken on trust.** Both call sites are as recorded:
+`newTestApp` launches `RunProber` in a goroutine (`cmd/usarr/e2e_test.go`), and
+`POST /api/v1/services` calls `ProbeNow` after sealing the row
+(`internal/httpapi/services.go`). One correction to the record's address: the test is
+`cmd/usarr/probe_redact_test.go`, not `internal/httpapi` — the whole race lives inside package
+`main`'s test binary.
+
+**⚠️ THE RACE IS THE TEST'S, NOT THE BINARY'S,** which is what kept the change small. `registry.probe`
+has exactly **one** production caller — `RunProber`, directly and through `probeAll`, both on the
+prober goroutine — so two probes of one instance never overlap in a running UsArr. The only
+concurrency is a test calling `probe` itself while the prober goroutine drains a queued `ProbeNow`.
+No production file changed.
+
+**Made deterministic first, and watched fail.** Forty green runs proved the flake pre-existing; they
+could not prove a fix, so the interleaving was forced rather than waited for. A scratch harness put a
+gate in front of the Prowlarr double: it proxies every request, and the first `/system/status` that
+arrives while armed has its **healthy** response read from the double and then **held** until the
+test releases it — which is precisely RK-11's window, a round-trip that began before `failStatusWith`
+and a `recordProbe` that lands after the synchronous probe's. Ordering: arm → `ProbeNow` (the same
+production path `services.go` uses) → block until the held response is confirmed → `failStatusWith`
+→ synchronous `probe` → release. **3 of 3 runs failed, with the signature this section recorded from
+the wild:**
+
+```
+REPRO: a queued background probe is holding a HEALTHY /system/status response
+REPRO: the synchronous probe wrote Error="servarr SystemStatus: GET /api/v1/system/status -> 500:
+        Indexer 'Working Tracker' failed: …passkey=REDACTED returned 403"
+REPRO: the background probe clobbered it — AppVersion:2.1.3.5150 Error:""
+--- FAIL: the probe reported no error, so nothing was under test
+```
+
+**The fix: the prober is never started for this one test.** `newTestApp` takes options and gains
+exactly one, `withoutProber`; `TestProbeErrorIsRedactedBeforeItIsStored` takes it. **Not one
+assertion was weakened, skipped or quarantined** — the test still drives the real `registry.probe`
+over real HTTP against the double, still requires the upstream message to have reached
+`health.Error` (`tracker.example` and `403` both present, so it cannot pass vacuously), and still
+checks the snapshot, the persisted `service_instance.last_error` and the
+`GET /api/v1/services/health` body. What changed is that the snapshot now has **one** writer.
+
+⚠️ **The other recorded shape — "wait for the queued probe to land" — was considered and rejected**,
+as was the tempting variant of cancelling the prober after it starts. `select` chooses freely between
+`ctx.Done()` and a queued id, so a cancel racing a queued `ProbeNow` can still run one last probe:
+that shape narrows the window instead of closing it, which is how a flake comes back at 1-in-500
+instead of 1-in-20. Not starting the goroutine removes the second writer outright.
+
+**Then the reproduction was re-run against the fix and no longer fires.** With `withoutProber` the
+gate is never reached — the harness reports *"no queued background probe reached the double in 10s,
+so nothing but this test writes the snapshot"* — and the assertions pass. **3 of 3.** Flipping the
+harness back to a prober-running app fails 3 of 3 again, so the harness is still measuring something.
+`TestProbeErrorIsRedactedBeforeItIsStored` itself: **5 of 5 green**, and `make check: OK`.
+
+**The harness is not shipped.** It is a diagnostic, and as a permanent test it would cost a 10-second
+wait on a gate that has no CI to absorb it, to assert the absence of a goroutine the harness itself
+declines to start. The mechanism above is written down precisely enough to rebuild it, which is what
+this entry is for.
 
 ---
 
