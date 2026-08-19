@@ -106,6 +106,8 @@ because no ADR ever decided it. Annotating leaves that failure mode nowhere to h
 | [0052](#adr-0052) | v0.1's catalogue source is **BookOrbit**; **Kavita is sunset** and its adapter **stays in the tree** | **Accepted** — **owner-decided 2026-08-19**; **amends [ADR-0041](#adr-0041)** clause 1 (*"v0.1's catalogue source is **Kavita**"*) — ADR-0041's clauses 2 and 3 are **confirmed**, and its clause 4 (channels **1, 3b and 4**) is **REOPENED as an open question, not re-answered**, because BookOrbit has had no equivalent of [ADR-0035](#adr-0035) §2a's live probe; **amends ARCHITECTURE §16.1's v0.1 entry**, edited in the same change because §16 is scope authority; the decision is **the owner's, not an agent's** — he is sunsetting Kavita entirely, BookOrbit takes everything, his word is **"phenomenal"**, and the repo's own one-day-older record of the same direction is `ROADMAP.md` §3's *"in my heart i kind of want to migrate to book orbit"*; ⚠️ **it REVERSES `ROADMAP.md` §3's standing recommendation** *"do NOT switch UsArr's first adapter off Kavita"*, because **two of the three findings that produced it were re-measured on 2026-08-19 against BookOrbit `main` and are FALSE** — headless auth needs **no password** (`server/src/modules/auth/magic-link.service.ts`; SHA-256-hashed token, `loginWithToken()` validates no password), and **comics ARE covered** (a shipped ComicVine provider), leaving only **manga and anime** identifiers absent (zero hits for `mangabaka`/`anilist`/`myanimelist` repo-wide); 🚩 **and a third claim reached the ADR in relay and was REFUSED on primary source** — *"no watermark, so full resync with no delta channel"* is **false in its strong form**, since `packages/types/src/query.ts` admits `"updatedAt"` as a sort key with page/size paging, which is exactly channel 3b's shape, so writing it in would have foreclosed v0.1 work on a premise the source refutes; what is **genuinely unsettled** is whether that timestamp moves on tag, genre and author edits, since `$onUpdateFn` is **application-level, not a DB trigger** and those live off the book row — §7.1a's **reconciliation-only** fallback is the named failure branch, **not** this ADR's decision; **"sunset" explicitly does NOT mean delete** — `internal/kavita`, `internal/libsync/kavita.go`, both vendored specs and [ADR-0046](#adr-0046)'s contract guard stay and stay green, investment stops, and **no milestone for further Kavita work is invented**, on [ADR-0042](#adr-0042)'s refusal-to-number precedent; **MangaBaka is NOT a dependency** — the owner's *"in the near future"* is **his expectation, nobody's commitment**, native support is an **open PR with no maintainer signoff**, and the adapter is designed against what BookOrbit ships **today**; ⚠️ **MangaBaka data may be fetched at runtime and NEVER vendored, shipped or cached as a dump** — **CC BY-NC-SA 4.0**, verified at `mangabaka.org/data/database`, is **not AGPL-3.0-compatible**, and the dump additionally carries third-party terms it does not license; ✅ **identity needs NO migration and NO new mechanism, which INVERTS this ADR's own first draft** — the draft called BookOrbit's series-level identity a structural degradation and warned of a migration, and a schema check against the tree falsified it: `external_id`'s `source` is plain `TEXT` with **no `CHECK`** and it carries `confidence` (`00005_library_sync.sql:444`), a series **IS a work row** (`work.kind` admits `'series'` and `'comic'`, `:242`) so `work_id` **already is** the series-level column, and `kavitaExternalIDs` **already writes seven series-level ids** including **`mangabaka` at 0.90** (`internal/libsync/kavita.go`, `weblinkid.go:111,162`) — because Kavita's own series ids are **weblink-parsed from what the user tagged**, exactly as BookOrbit's would come from a user-populated custom field, so the two are **the same arrangement** and 0.90 is already the right grade; the one recorded wrinkle is that BookOrbit's custom fields are **book-scoped** (`custom-metadata.ts`, `bookId` FK, no series variant) so the id needs a hoist — **which Kavita also needs and does lossily**; 🚫 **`work_relation` is cited nowhere and must not be added** — it is **absent from the tree** and `internal/db/migrate_test.go` fails if it appears; ⚠️ **ships NO code by design** — it gates the adapter |
 | [0053](#adr-0053) | All six media types are **always** in the sidebar; per-type hiding is closed until a facet read exists | **Accepted** — 2026-08-19; **amends [ADR-0027](#adr-0027)** for its sidebar clause **only** — that ADR's *"a type with zero items is not rendered anywhere"* stands for Block A and for search groups, both of which are unaffected — and amends ARCHITECTURE §17.2 and `design/DESIGN-DIRECTION.md` §8.1 to match the shipped shell; the data-driven sidebar those two specified **cannot be built over the wire UsArr serves**, because `reference/http-api.md` §7.1 states there are *"no facet counts beside the chips; each is its own aggregate and its own read"* and no read answers per-type presence at all; so **all six render unconditionally, no row carries a count**, and the honesty moves to the per-type screen, where `browseEmptyState` names which of three reasons the grid is empty; ⚠️ **the rejected alternative that looks like compliance is hiding a type on a count nobody measured** — it fails silently and removes the very row that would have explained the absence; **adds no endpoint, no migration and no backend change**; ⚠️ **reopens on exactly one condition** — a read answering which of the six types have rows under the current scope, in one statement — at which point the seam is one predicate on `TYPE_NAV`, and §13 has already priced the shape at *"1 keyset page + 6 sidebar `COUNT(*)`"* < 15 ms p50 without deciding whether it rides the browse response or its own endpoint |
 | [0054](#adr-0054) | The search response publishes a per-hit relevance `score`, and the ORDER stays the contract | **Accepted** — 2026-08-19; **amends [`reference/http-api.md`](./reference/http-api.md) §6.2**, which said *"No score is published"*; **unblocks ARCHITECTURE §17.4 rule 2**, whose grouped results are ordered *"by the group's best-scoring hit"* — a comparison **no ordering can answer**, because a row's ordinal position says nothing about the distance between two groups' best rows; the withheld field was stopping the screen from being built, not stopping the misuse it was withheld for, so the misuse is **documented and tested against instead**: §6.2.1 lists two permitted uses and five forbidden ones, each with its mechanism; ⚠️ **the order is still authoritative and is NOT score order** — the media-type diversity injection promotes a row without re-scoring it, so a client re-sorting by the published number silently produces a **worse** list than the one it was given; **adds no migration, no column and no query** — the value was already computed per hit and discarded at the boundary |
+| [0057](#adr-0057) | The circuit breaker is **one package with an injected open sentinel**, not a copy per client | **Accepted** — 2026-08-19; **taken at the trigger the tree itself named** — `internal/kavita/breaker.go` carried the standing instruction *"worth taking the first time a THIRD client needs one: lift this file into `internal/breaker` with an injected sentinel … two copies is cheaper than a package that exists to serve two callers; three is not"*, and `internal/bookorbit` is that third client; **closes off each client keeping its own copy of the state machine**, which was the live alternative and would have made three; the open sentinel is a **constructor argument**, which is the one reason the copy ever existed — `errors.Is(err, kavita.ErrBreakerOpen)` and `errors.Is(err, servarr.ErrBreakerOpen)` keep meaning exactly what they meant, and a Kavita failure never reads `servarr: circuit breaker open`; **`internal/kavita` and `internal/servarr` keep their exported names as type aliases** (`BreakerState`, `BreakerConfig`, `Breaker`, the three state constants, `NewBreaker`), so **`internal/releases` and `internal/libsync` are untouched** — verified, neither appears in `568ddbc`'s diff at all; **the only test change outside the new package is one line**, `BreakerConfig{}.withDefaults()` → `.WithDefaults()` in `internal/kavita/client_test.go`, and `internal/servarr/breaker_test.go` was not touched; **the §7.5 tuning does not move** (5 failures to open, 5 s → 15 m capped, ±20% jitter) and is pinned in **three** packages — `internal/breaker`'s own `TestDefaultsAreTheArchitectureNumbers`, plus a client-side assertion in `internal/kavita/client_test.go` and `internal/bookorbit/client_test.go`, while `internal/servarr` pins the same numbers **behaviourally** through its five untouched breaker tests — and the client-side assertions deliberately stay in the client packages, which is why `withDefaults` becomes the exported `WithDefaults`; ⚠️ **the line ledger is a deduplication, not a net saving, and this ADR states the measured numbers rather than the headline** — the commit deletes **347** lines (346 of them the two copied state machines, the 347th that one test line), the two client files go from **202** and **192** lines to **52** and **49** (101 lines of alias wrapper, **53** of them newly written), and the new package costs **245** lines plus a **103**-line test; what is bought is **one** state machine instead of two, not a smaller tree; **adds no dependency, no migration, no behaviour change and no exported-API break** |
+| [0058](#adr-0058) | UsArr **grades the scope a stored service credential actually carries**, and **reports rather than refuses** | **Accepted** — 2026-08-19; **discharges [ADR-0052](#adr-0052)'s §14 credential-scope gate** — ⚠️ a **discharge is not an amendment**, so ADR-0052 gains a dated inline note pointing here and **nothing in its text is struck**; **closes off assuming a service account is minimal** because it was created as a service account — the grading is done **in code, not in prose**, so `TestEveryBookOrbitPermissionIsClassified` notices a 24th permission upstream where a paragraph could not; all **23** members of BookOrbit's `Permission` enum are classified **elevated** (14: write or admin reach beyond a catalogue read) or **unneeded** (9: harmless but more than UsArr uses), with the superuser flag (elevated), a non-`shared` `provisioningMethod` (unneeded) and an inactive account (unneeded) as **separate findings** rather than permissions; ⚠️ **an unrecognised permission grades ELEVATED, never harmless** — chosen, not fallen into, so the verdict gets *more* conservative on its own when BookOrbit's vocabulary grows, at the named cost that a genuinely harmless upstream addition is over-flagged until someone classifies it (the grading is a **maintenance obligation**, not a self-maintaining one); **costs ZERO extra requests** — `AuthService.buildUserResponse` ships `permissions`, `isSuperuser` and `provisioningMethod` in the same body as the `accessToken`, which is why the verdict can be recomputed on **every** mint; **the client REPORTS and WARNS, it does not REFUSE**, because refusing leaves an operator with a service that will not talk to them and no visible reason — the opposite of principle 3, and the §14 finding would be **less** visible, not more; ⚠️ **what ships is the mechanism, not the gate's enforcement** — ADR-0052's condition is on the **catalogue read**, so the first `StreamItems` in slice 1 must consult `ScopeVerdict.Elevated()`, and slice 0 ships the thing it will consult; **adds no migration, no column, no crypto and no new HKDF label** — the secret rides the existing versioned AAD-bound `service_instance` envelope |
 
 ---
 
@@ -7114,6 +7116,18 @@ catalogue read UsArr needs, since §14 treats an over-scoped stored credential t
 an \*Arr API key. **Closes in the adapter thread, before the first credential is stored**, not in a
 later pass.
 
+✅ **Discharged 2026-08-19 by [ADR-0058](#adr-0058).** `internal/bookorbit/scope.go` (landed at
+`568ddbc`) enumerates BookOrbit's 23-member permission vocabulary against §14 and computes the
+verdict on every credential mint at **zero extra cost**, because the login response already carries
+`permissions`, `isSuperuser` and `provisioningMethod`. **This is a note and not an amendment:
+nothing in the paragraph above is falsified.** The gate named a thing that had to happen before a
+catalogue read; the thing happened. A discharged gate is a task finished, not a claim overturned, so
+the text above stands exactly as written and is now *satisfied* rather than *outstanding*.
+⚠️ **Discharged is not vacated.** The condition ADR-0052 states is on the **catalogue read**, which
+belongs to slice 1: slice 0 ships the mechanism slice 1 must consult (`ScopeVerdict.Elevated()`),
+not a refusal to connect. If a catalogue read ever lands without consulting it, this gate is open
+again.
+
 ### Alternatives considered
 
 - **(a) Keep Kavita as v0.1's source and treat BookOrbit as a later adapter.** ⚠️ **The strongest
@@ -7479,3 +7493,273 @@ rides through the sort and through `diversify`'s promotion. `internal/httpapi/li
 `TestSearchScoreDoesNotDescribeAnythingButTheHit` and the amended
 `TestSearchResponseKeysAreTheAllowlist` in `internal/httpapi` — each one fired by neutering what it
 protects and watching it go red.
+
+---
+
+<a id="adr-0057"></a>
+## ADR-0057 — The circuit breaker is one package with an injected open sentinel, not a copy per client
+
+**Status:** Accepted · **2026-08-19** · Landed with the BookOrbit adapter's slice 0 at `568ddbc` ·
+**Executes a standing instruction the tree already carried**, in `internal/kavita/breaker.go`, at
+exactly the condition that instruction named · **Closes off each client keeping its own copy of the
+state machine** · **Adds no dependency, no migration, no configuration key and no behaviour change**
+· **Breaks no exported API** — `internal/kavita` and `internal/servarr` keep every exported name ·
+**Does not touch ARCHITECTURE §7.5's tuning**, which is the thing a shared breaker most plausibly
+puts at risk
+
+### Context
+
+`internal/servarr` wrote the per-instance circuit breaker first. `internal/kavita` needed one and
+**copied it verbatim** rather than importing it, for one specific reason: `Allow()` returns the
+package's own `ErrBreakerOpen`, and callers match on it with `errors.Is`. Importing
+`internal/servarr` from `internal/kavita` would have put the string `servarr: circuit breaker open`
+inside a Kavita error, in a package whose `doc.go` declares it *"UsArr's single client for the \*Arr
+family"* — and Kavita is not in that family.
+
+That copy was made deliberately and it **wrote down the condition for undoing itself**, verbatim in
+`internal/kavita/breaker.go`:
+
+> *"The seam for removing the copy is clean and is worth taking the first time a **THIRD** client
+> needs one: lift this file into `internal/breaker` with an injected sentinel, and have both
+> packages wrap it. **Two copies is cheaper than a package that exists to serve two callers; three
+> is not.**"*
+
+`internal/bookorbit` is the third client. So the question this ADR answers is not *"should the
+breaker be shared"* in the abstract — the tree answered that in advance, with a trigger — but
+whether the trigger has fired and whether the lift is taken now or one commit later.
+
+### Decision
+
+> **The state machine lives once, in `internal/breaker`, and the open sentinel is a constructor
+> argument.** `breaker.New(cfg, openErr, now, rnd)` takes the error each client wants `Allow()` to
+> return, so `errors.Is(err, kavita.ErrBreakerOpen)`, `errors.Is(err, servarr.ErrBreakerOpen)` and
+> `errors.Is(err, bookorbit.ErrBreakerOpen)` all keep meaning what they meant. A nil sentinel
+> **panics** at construction, because a nil there would make an open breaker indistinguishable from
+> a closed one at every call site.
+>
+> **`internal/kavita` and `internal/servarr` keep their exported names as type aliases** —
+> `BreakerState`, `BreakerConfig`, `Breaker`, `BreakerClosed`/`BreakerOpen`/`BreakerHalfOpen`, and
+> `NewBreaker` — so nothing outside those two packages changes. **The clients that assert the
+> ARCHITECTURE §7.5 defaults keep that assertion in their own package** rather than delegating it to
+> the shared suite, which is why `withDefaults` becomes the exported `Config.WithDefaults`.
+>
+> **The lift is taken at the trigger, not after it.** Writing a third verbatim copy and lifting
+> later is the alternative this closes.
+
+### Alternatives rejected
+
+- **Write a third verbatim copy in `internal/bookorbit`.** This is the alternative the decision
+  exists to close, and it is not a straw man — it is the *cheapest single commit* of the three, and
+  it is exactly what the first two clients did. It loses on the condition the tree already set: the
+  drift risk is not linear in the number of copies, because the copies are held consistent by
+  **three separate defaults tests** that a reviewer must notice are meant to agree. Two copies were
+  priced and accepted; a third was priced in advance and refused.
+- **Have `internal/bookorbit` import `internal/servarr`'s breaker.** The same error-identity problem
+  that produced the first copy, one package further along: `bookorbit` failures would report as
+  `servarr:` errors, and `internal/libsync` matches `kavita.ErrBreakerOpen` with `errors.Is` in
+  production (`credits.go`, `files.go`) to distinguish "the request never left the process" from a
+  real upstream failure — so the two families would become confusable in the place the distinction
+  is actually read.
+- **Return a shared `breaker.ErrOpen`, and have each client wrap it in its own sentinel.** This is
+  the closest rejected alternative and it *nearly* works. It fails on two counts. First, the error
+  message goes service-agnostic — `breaker: circuit breaker open` names no service, and the whole
+  reason the copy existed was that a Kavita failure must not read like a `servarr` one. Second, it
+  preserves per-client `errors.Is` **only if every client remembers to wrap**, and a client that
+  forgets produces an error that matches nothing and reads as an ordinary upstream failure. The
+  constructor argument makes the sentinel impossible to forget: `New` panics without one.
+- **Lift the breaker and delete the per-client defaults tests**, keeping one in `internal/breaker`.
+  Cheaper and worse. The §7.5 numbers are the thing a shared implementation most easily drifts on,
+  and the value of three suites failing rather than one is that a change made for one client's
+  convenience cannot land quietly.
+
+### Consequences
+
+- **The measured ledger is a deduplication, not a net line saving, and this ADR states the numbers
+  rather than the headline.** `568ddbc` deletes **347** lines: **177** from
+  `internal/kavita/breaker.go`, **169** from `internal/servarr/breaker.go` — that is the duplicated
+  state machine, twice — and **one** from `internal/kavita/client_test.go`. The two client files go
+  from **202** and **192** lines to **52** and **49**: 394 lines of duplicated state machine become
+  101 lines of alias wrapper, **53** of them newly written and most of those the comments explaining
+  why the wrapper exists. Against that, the new package costs **245** lines plus a **103**-line test.
+  Counted honestly, **the tree is not smaller**. What is bought is **one** state machine to reason
+  about, review and fix instead of two — which is what the original instruction asked for, and it
+  never claimed a line saving.
+- **`internal/releases` and `internal/libsync` were untouched, and that is the aliases' whole
+  return.** Both consume breakers: `internal/releases` builds a per-indexer breaker through
+  `servarr.NewBreaker` (`service.go`), and `internal/libsync` matches `kavita.ErrBreakerOpen` with
+  `errors.Is` (`credits.go`, `files.go`). ⚠️ **One inherited comment overstates this and is worth
+  correcting here rather than repeating:** `internal/servarr/breaker.go` says *"`internal/releases`
+  matches on it with `errors.Is` to render `OutcomeBreakerOpen`"*, and it does not — `runLeg` treats
+  any non-nil `Allow()` as breaker-open without inspecting the sentinel, and the only `errors.Is`
+  against `servarr.ErrBreakerOpen` in that package is in `grab_outcome_test.go`. The sentinel
+  argument still holds on `internal/libsync`, which does match in production. Neither package appears
+  in the commit's diff. Verified against the tree:
+  `568ddbc` touches five Go files outside `internal/bookorbit`, all of them in
+  `internal/breaker`, `internal/kavita` or `internal/servarr`.
+- **The only test change outside the new package is one line.** `internal/kavita/client_test.go`'s
+  `TestBreakerDefaultsMatchTheArchitectureNumbers` calls `BreakerConfig{}.WithDefaults()` where it
+  called `.withDefaults()`; three comment lines were added beside it saying why the method is
+  exported now. `internal/servarr/breaker_test.go` — five tests including the jitter bound and the
+  independence check — was **not touched at all** and passes unchanged against the shared
+  implementation, which is the strongest available evidence that the lift is behaviour-preserving.
+- **`Config.WithDefaults` is exported for a reason that is not aesthetic.** The §7.5 numbers must be
+  pinned from the client packages, and an unexported method is unreachable from there. The export is
+  the price of keeping three suites honest rather than one.
+- **`internal/breaker` is not a general-purpose resilience package and must not grow into one.** It
+  is a per-service-instance circuit breaker with one tuning, ARCHITECTURE §7.5's. Retries, hedging,
+  rate limiting and bulkheads are not owed a home here on this ADR's authority.
+- **A breaker is per instance and never global**, and centralising the implementation does not
+  centralise the *instances*. One Kavita being down must not stop a Prowlarr grab; a second Kavita
+  counts its own failures; each Prowlarr indexer fan-out leg keeps its own. Nothing in this change
+  creates a shared instance, and a future package-level singleton would be a reversal of this ADR,
+  not an extension of it.
+
+### What is built
+
+`internal/breaker/breaker.go` — `State`, `Config`, `Config.WithDefaults`, `Breaker`, `New`, `Allow`,
+`Success`, `Failure`, `State()`, `RetryAt()`. `internal/breaker/breaker_test.go` —
+`TestAllowReturnsTheInjectedSentinel`, `TestNewRefusesANilSentinel`,
+`TestDefaultsAreTheArchitectureNumbers`, `TestHalfOpenAdmitsExactlyOneProbe`,
+`TestBackoffDoublesAndCaps`. `internal/kavita/breaker.go` and `internal/servarr/breaker.go` are now
+alias wrappers whose file comments carry this argument where an implementer meets it.
+`internal/bookorbit` constructs its breaker through the same package with its own sentinel. The
+pre-existing `internal/servarr/breaker_test.go` and `internal/kavita/client_test.go` breaker tests
+are the regression evidence, and they were run against the shared implementation unchanged but for
+the one line above.
+
+---
+
+<a id="adr-0058"></a>
+## ADR-0058 — UsArr grades the scope a stored service credential actually carries, and reports rather than refuses
+
+**Status:** Accepted · **2026-08-19** · Landed with the BookOrbit adapter's slice 0 at `568ddbc` ·
+**Discharges [ADR-0052](#adr-0052)'s §14 credential-scope gate** — ⚠️ **a discharge is not an
+amendment**: ADR-0052 gains a dated inline note pointing here, **nothing in its text is struck**,
+and none of the three amendment marks is owed · **Closes off assuming a service account is minimal
+because it was created as a service account** · **Adds no migration, no column, no crypto and no new
+HKDF label** — the stored secret rides the existing versioned AAD-bound `service_instance` envelope
+· **Costs zero extra requests** · **Ships the mechanism the gate will be enforced with, not the
+enforcement** — that is slice 1's
+
+### Context
+
+ADR-0052 left the credential question as a **named gate** rather than an open end: the BookOrbit
+adapter *"may not read a catalogue under a shared-account credential until the scope that account
+grants has been enumerated against §14 — specifically whether it confers write or admin reach beyond
+the catalogue read UsArr needs"*, closing *"in the adapter thread, before the first credential is
+stored"*. This ADR is the answer to it.
+
+The §14 rule the gate invokes is the one the project applies to \*Arr API keys: an over-scoped
+stored credential is treated as a full-admin credential, because that is what it is. BookOrbit's
+magic-link auth removes the *password* from the picture, which is real, but it does not tell UsArr
+what the account behind the link can **do**.
+
+**The enumeration was done against source** (`bookorbit/bookorbit@73b7877d`), and it found that the
+correct credential is a shared account with an **empty** permission set and an explicit `libraryIds`
+grant: authorization is three ordered `APP_GUARD`s, permissions are additive and default to none,
+and every route this adapter needs declares no `@RequirePermission`. That is a good answer — and it
+is exactly the kind of answer that rots. **A paragraph saying "an empty permission set is
+sufficient" cannot notice when BookOrbit adds a 24th permission.**
+
+### Decision
+
+> **UsArr grades the permissions its stored credential actually carries. It does not assume a
+> service account is minimal because someone created it as one.** All **23** members of BookOrbit's
+> `Permission` enum are classified in code as either **elevated** — write or admin reach beyond a
+> catalogue read, which is the exact test §14 applies and the exact words ADR-0052's gate uses — or
+> **unneeded**: harmless, but more than a catalogue replica uses. The superuser flag, a
+> `provisioningMethod` other than `shared`, and an inactive account are **separate findings**, not
+> permissions.
+>
+> **An unrecognised permission grades ELEVATED. Never harmless.**
+>
+> **The client reports and warns. It does not refuse.** The verdict is computed on every credential
+> mint, exposed through `Client.Scope()`, returned by `Client.Authenticate`, and logged at WARN with
+> the account name and the findings — never the token.
+>
+> **The gate ADR-0052 states is on the catalogue read**, so slice 1's first `StreamItems` must
+> consult `ScopeVerdict.Elevated()` before it reads. Slice 0 ships the thing it will consult.
+
+### Alternatives rejected
+
+- **Document the required scope and trust the operator to configure it.** This is the option the
+  enumeration itself produced, and it is why the decision is worth writing down: the finding
+  *"an empty permission set is sufficient"* is true and is not self-checking. It fails silently in
+  both directions — an operator who pastes a superuser token gets no signal, and an upstream that
+  grows a permission gets no signal either.
+- **Refuse to connect on an elevated credential.** Superficially the stricter, safer choice, and it
+  is the one this ADR most deliberately turns down. Refusing leaves the operator with a service that
+  will not talk to them and **no visible reason why** — the exact opposite of principle 3's *"says
+  what is missing and why, rather than rendering an empty screen that looks broken"*. It also makes
+  the §14 finding **less** visible, not more: a connection that fails is indistinguishable from ten
+  other causes, whereas a connection that works and carries a warning puts the finding in front of
+  the person who can fix it. And it would be enforcement in the wrong place — ADR-0052's condition
+  is on the catalogue read, not on the handshake.
+- **Spend a request on `GET /users/me` (or equivalent) to enumerate scope.** Unnecessary. The
+  magic-link login response already carries `permissions`, `isSuperuser` and `provisioningMethod` in
+  the same body as the `accessToken`, so the verdict is free. A verdict that costs a request would
+  have to be computed rarely, and one computed rarely goes stale against an account whose
+  permissions changed.
+- **Grade only the permissions that are obviously dangerous, and ignore the rest.** This collapses
+  into "unknown is harmless" for everything the classifier has not thought about, which is the
+  default the next decision closes.
+- **Treat an unrecognised permission as harmless (`unneeded`) until someone classifies it.** The
+  quiet default, and the one that looks like nothing happening. See the Consequences.
+
+### Consequences
+
+- **`unrecognised → ELEVATED` is a decision, and it is where the design pays for itself.** It was
+  **chosen**, not fallen into. The alternative — treating a permission this build has never heard of
+  as harmless — is the one that produces no output, no test failure and no log line on the day
+  BookOrbit ships a 24th permission, which is precisely the day the classification was built for.
+  The rule **fails toward refusing rather than permitting**: when the vocabulary grows upstream,
+  UsArr's verdict gets *more* conservative on its own, with no code change and without anyone having
+  noticed the vocabulary moved. ⚠️ **The cost is named rather than argued away: a genuinely harmless
+  upstream addition will still grade elevated until a human classifies it.** So the grading is a
+  **maintenance obligation, not a self-maintaining mechanism** — an operator may see an elevated
+  verdict that says only *"this build cannot judge what it grants"*, and the remedy is a person
+  adding a line to `elevatedPermissions` or `unneededPermissions`, not a smarter default. Anyone
+  weighing a change to this default should weigh those two paragraphs against each other, in that
+  order.
+- **The vocabulary is machine-checked, which is the reason it is in code at all.**
+  `TestEveryBookOrbitPermissionIsClassified` iterates all 23 and fails if one is unclassified;
+  `TestPermissionVocabularyMatchesTheSource` pins the transcription. A 24th permission upstream turns
+  the suite red — and until it does, `unrecognised → ELEVATED` is what protects the runtime.
+- **The bias is towards flagging, and two entries are broader than the scoping note that preceded
+  the code.** `library_download` is graded elevated *even though downloading is a read*, because a
+  stored credential that can pull every byte of every visible library is exfiltration reach and
+  UsArr does not need it — covers come from `/books/:id/cover` and `/books/:id/thumbnail`, neither
+  of which declares a permission. `manage_icons` is elevated because it is an app-settings write
+  like its siblings. A false flag costs the operator one sentence on the Services screen; a missed
+  one is a full-admin-equivalent credential stored under a scheme that says it is not.
+- **The three non-permission findings are separate on purpose, and are not all elevated.** The
+  superuser flag is **elevated** — it is every permission there is, and since `MagicLinkService`
+  only mints links for shared accounts it means the account was promoted after its link was created.
+  A non-`shared` `provisioningMethod` and an inactive account are **unneeded**: both say the account
+  changed under the link, neither is extra reach, and the link still works. Grading them by severity
+  rather than by category is what keeps `Elevated()` meaning one thing.
+- **`Elevated()` is the predicate the gate turns on, and slice 1 owes the call.** ADR-0052's
+  condition is on the *catalogue read*. If a `StreamItems` lands without consulting the verdict, the
+  gate is open again and this ADR does not cover it.
+- **A superuser is reported once, not twice.** `buildUserResponse` emits both `isSuperuser` and the
+  literal `["*"]` in the permission array; reporting both would read as two problems. The wildcard
+  *without* the flag is still reported, because that combination is not one BookOrbit produces.
+- **This is a pattern, not a BookOrbit special case, and it is not retrofitted here.** The same
+  question — *what does the credential we stored actually let us do* — applies to every service UsArr
+  holds a key for, and §14 already treats an \*Arr API key as full-admin. Nothing in this ADR grades
+  an \*Arr key, and no such work is scheduled by it.
+
+### What is built
+
+`internal/bookorbit/scope.go`: the `Permission` vocabulary (23 constants, transcribed with their
+wire string values and their source's grouping), `SuperuserPermission` for the literal `"*"`,
+`elevatedPermissions` (14) and `unneededPermissions` (9), `ScopeSeverity`, `ScopeFinding`,
+`ScopeVerdict` with `Elevated()` and `Minimal()`, and `classifyScope`, which never mutates and never
+calls out. `internal/bookorbit/auth.go`: the verdict is computed on every mint, held on the cached
+session, logged at WARN when non-minimal, and read back through `Client.Scope()` and
+`Client.Authenticate`. The guards are `TestEveryBookOrbitPermissionIsClassified`,
+`TestPermissionVocabularyMatchesTheSource`, `TestTheCorrectCredentialIsMinimal`,
+`TestScopeClassification`, `TestSuperuserIsReportedOnceNotTwice`,
+`TestScopeIsPopulatedByTheMintAtNoExtraCost` and `TestAccountViewIsAnAllowlist` in
+`internal/bookorbit/scope_test.go`. **There is no UI half and no schema half:** nothing renders the
+verdict yet, and nothing persists it — it is recomputed from the login response on every mint.
