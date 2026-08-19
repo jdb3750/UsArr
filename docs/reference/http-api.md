@@ -21,6 +21,33 @@ does not say by itself.
 `action` is omitted when there is nothing actionable. `error` is a code from
 `internal/httpapi/errorcodes.go` and is the field to switch on; `message` is prose and may change.
 
+**An unrecognised query parameter is IGNORED, not refused — on every endpoint in this file.** A
+request carrying a name the server does not know is served exactly as if the name were absent: no
+`400`, and no trace of it in the response. It is **case-sensitive**, so `?LIB=` and `?Media_Type=`
+are unrecognised names rather than the parameters they resemble.
+
+This is a wire contract and not an implementation detail, because **rejection would break forward
+compatibility in both directions**: a newer client sending a parameter this server has not learned
+yet would get a `400` instead of a degraded-but-correct page, and nothing could ever be added to a
+request without a version negotiation this API does not have. §6.1 states the same rule for one
+parameter from the other side — *"`q` is the only spelling; `query=` is not accepted here"* — and
+what makes `query=` "not accepted" is precisely that it is read by nothing and refused by nothing.
+
+⚠️ **The cost is real and is paid somewhere else.** A typo'd filter name is not caught: `?mediatype=`
+is `200` with an unfiltered first page, which looks like it worked. Two things answer that, and
+neither is rejection:
+
+* **A recognised parameter carrying an unrecognised VALUE is a `400`** — `?media_type=comix`,
+  `?sort=nope`, `?lib=nope` (§7.2, §7.3, §7.6). So the only thing a typo can silently lose is a
+  whole parameter, never a filter that was asked for and could not be applied.
+* **The response echoes what the server APPLIED** (§7.4), so a client that asked for a scope and got
+  an envelope back without one can see that it did.
+
+`TestUnrecognisedQueryParametersAreIgnoredNotRefused`
+(`internal/httpapi/library_browse_test.go`) pins it on the library grid, which has the most
+parameters to typo. A new endpoint inherits this rule; adopting a different one is a decision to
+write down here first.
+
 ---
 
 ## 1 · `GET /api/v1/library/recent` — Home's Block C
@@ -39,8 +66,10 @@ provider, no image fetch. Requires an authenticated session; without one it is `
 | `limit` | integer | `50` | The page size **requested**. See §1.2 — it is a clamp, not a validated range, and the response says what was actually applied. |
 | `cursor` | opaque string | — | A token minted by a previous response's `next_cursor`. Never construct one; never edit one. A token that will not parse is `400 bad_request`, never a silent reset to page one. |
 
-There is **no `?lib=` scope** and no per-type filter. Both are later commits; §17.2's library chip is
-a join this read does not carry.
+There is **no `?lib=` scope here and no per-type filter here** — and both exist, on §7. §17.2 closes
+Block C at one table, one order and *no* filters, so this endpoint refuses the chip by design rather
+than by backlog; a client that wants the scope calls §7. Unrecognised parameters are **ignored, not
+refused**, so `?lib=…` sent here is `200` over the whole catalogue rather than a `400`.
 
 ### 1.2 `limit` is a clamp, not a validated range — and the echoed `limit` is authoritative
 
@@ -1075,7 +1104,9 @@ Requires an authenticated session; without one it is `401 unauthorized`.
 
 **`q` is the only spelling.** `query=` is *not* accepted here, even though `GET
 /api/v1/releases/search` accepts both; two spellings of one parameter is a contract a client has to
-guess at.
+guess at. "Not accepted" means what the preamble says it means API-wide: `query=` is **ignored**, not
+refused — so `?query=berserk` alone is not a `400` naming the wrong spelling, it is the `400` that
+says `q` is missing.
 
 **There is no `?lib=` scope chip and no per-type filter.** The scope this applies is the caller's
 *access* scope, derived from the session, and a query parameter cannot widen it. A user-chosen
@@ -1265,6 +1296,11 @@ There is **no cover art**: there is no image endpoint, so shipping `poster_asset
 the client cannot turn into anything. There are **no facet counts** beside the chips; each is its
 own aggregate and its own read.
 
+**Any other parameter is ignored, not refused** — the preamble's API-wide rule, pinned on this
+endpoint by `TestUnrecognisedQueryParametersAreIgnoredNotRefused`. So `?mediatype=comics` is a `200`
+with an unfiltered first page, while `?media_type=comix` is a `400`: the four names above are
+case-sensitive and every value they take is checked.
+
 ### 7.2 The parameter is `media_type`, and its vocabulary is **not** `work.kind`
 
 🚩 **`kind` is a real column with twelve members and it ships on this wire, in every row, under its
@@ -1340,6 +1376,7 @@ the tree today (`REVIEW-LOG.md` LS-213).
   "limit": 50,
   "media_type": "comics",
   "sort": "sort_title",
+  "lib": ["manga"],
   "next_cursor": "MXR2My5iZXJzZXJr"
 }
 ```
@@ -1351,10 +1388,33 @@ service-side appears here either.
 `limit` is **authoritative** and works exactly as §1.2 says: a client pages against this number,
 never against the one it sent. The clamp table in §1.2 governs both endpoints; it is written once.
 
-`media_type` and `sort` are **echoed, and omitted when the request did not name them**, so absence
-stays distinguishable from `"movies"` and from `"added_at"`. They are echoed because they are part
-of what the cursor *means* (§7.5): a client restoring a deep link has to know which query its stored
-cursor belongs to.
+`media_type`, `sort` and `lib` are **echoed, and omitted when the request did not name them**, so
+absence stays distinguishable from `"movies"`, from `"added_at"` and from a scope of one library.
+They are echoed because they are part of what the cursor *means* (§7.5): a client restoring a deep
+link has to know which query its stored cursor belongs to.
+
+`lib` is a **JSON array of slugs**, not the comma-joined string the request used — the chip is a
+multi-select, and joining would make the client re-parse what it had just sent. The slugs come back
+in the order sent, whitespace trimmed, and every one of them **resolved**: an unresolvable slug is a
+`400` (§7.3), never a silent drop.
+
+⚠️ **An omitted `lib` means "no library scope was applied", with no second reading — and that rests
+on §7.3's refusals rather than on the echo.** If any way of naming a scope the server will not apply
+ever became a silent drop, this key would go missing on a page served over the whole catalogue, and
+*"you asked for no scope"* and *"you asked for a scope and did not get it"* would share a spelling.
+The invariant is: **for any request that carried `lib`, the answer is a `400` or a `200` that echoes
+it.** There is no third outcome, and
+`TestBrowseEnvelopeOmitsLibOnlyWhenNoScopeWasApplied` (`internal/httpapi/library_browse_test.go`)
+fails if one appears.
+
+🚩 **The cursor binds to `sort` alone, and the three echoed fields are how a client sees that.**
+Replaying a cursor under a changed `media_type` or a changed `lib` does **not** error the way a
+changed `sort` does (§7.5): `store.WorksCursor` carries the sort discriminator and the row
+position, and no other part of the query — so the position decodes and the page is served over a
+**different corpus**, silently skipping or repeating
+rows. The echo does not fix the binding — it makes the mismatch **observable from the side that can
+act on it**: the echoed field changed while the cursor did not, so a client can drop the cursor
+rather than page through a corpus its position was never taken in.
 
 ### 7.5 Paging, and why a cursor is not portable
 

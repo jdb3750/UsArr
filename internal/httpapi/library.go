@@ -32,17 +32,38 @@ import (
 // is how a client came to model `limit` as the value it sent rather than the
 // value the server echoed — a doc comment is not reachable from a browser tab.
 //
-// WHAT IT DOES NOT DO YET, stated so a caller does not assume it:
+// THIS HANDLER READS `limit` AND `cursor` AND NOTHING ELSE — the parameter
+// table is docs/reference/http-api.md §1.1. Unrecognised parameters are ignored
+// rather than refused, so `?lib=…` sent here does not 400; it answers 200 over
+// the whole catalogue. "This endpoint has no such filter" is therefore a silent
+// answer, and only legible to a caller who knows where the filter does live:
 //
-//   - No `?lib=` library scope. §17.2's chip is a multi-select over user-defined
-//     libraries and it is carried on routes that already exist; adding it here
-//     is a join to library_member, whose key leads with sort_title rather than
-//     added_at, so it is a different plan and a different commit. The seam is
-//     that the scope is a parameter of the store call, not of the SQL string.
-//   - No cover art. There is no image endpoint, so shipping poster_asset_id
-//     would be an id the client cannot turn into anything.
+//   - `?lib=` IS BUILT, on handleBrowseWorks below — GET /api/v1/library,
+//     http-api.md §7.3. Slugs are resolved by store.LibraryIDsBySlug and
+//     applied as store.WorksFilter.LibraryIDs. ⚠️ This bullet used to read
+//     "No `?lib=` library scope", and gave as its reason that the scope would
+//     be "a join to library_member, whose key leads with sort_title rather
+//     than added_at, so it is a different plan and a different commit". Both
+//     halves went stale: the commit landed, and ADR-0051 made the scope a
+//     WORK-DRIVEN EXISTS over library_member rather than a join, which is
+//     order-independent and so was never blocked by this endpoint's order.
+//     Block C carries no chip because §17.2 gives it one table, one order and
+//     no filters — not because the scope could not be built here.
+//
+//     Should Block C ever be given the chip, it MUST reuse that resolver and
+//     that EXISTS, and it MUST refuse an unresolvable slug rather than drop it:
+//     §7.3's rule is that dropping a slug WIDENS the page, so a filter has no
+//     safe direction to fail in the way `limit` does. The seam is unchanged —
+//     the scope is a parameter of the store call, not of the SQL string.
+//
+// WHAT IS GENUINELY NOT BUILT ANYWHERE, checked one item at a time rather than
+// asserted as a list:
+//
+//   - No cover art, here or on the grid. server.go routes no image endpoint at
+//     all, so shipping poster_asset_id would be an id the client cannot turn
+//     into anything.
 //   - No Block A and no Block B. Those are a per-type rollup and an attention
-//     list; each is its own read.
+//     list; each is its own read, and server.go routes neither.
 
 // recentWorkResponse is one Block C row as it crosses to a browser.
 //
@@ -377,6 +398,14 @@ func (s *Server) toRecentWorkResponse(w store.RecentWork) recentWorkResponse {
 // THE WIRE CONTRACT IS IN docs/reference/http-api.md §7, where a consumer can
 // find it. This comment is not reachable from a browser tab.
 //
+// ⚠️ A PARAMETER NAME THIS HANDLER DOES NOT READ IS IGNORED, NOT REFUSED, and
+// that is an API-WIDE contract — http-api.md's preamble, not a quirk of this
+// endpoint. Adding a "reject unknown parameters" loop here would be a wire
+// change that breaks forward compatibility in both directions, and it is what
+// TestUnrecognisedQueryParametersAreIgnoredNotRefused exists to catch. The typo
+// hazard it leaves is answered instead by refusing a bad VALUE on a name this
+// handler does read, and by the envelope echoing what was applied.
+//
 // WHAT IT DOES NOT DO YET: no cover art (there is no image endpoint, so
 // poster_asset_id would be an id the client cannot turn into anything), and no
 // facet counts beside the chips (each is its own aggregate and its own read).
@@ -397,15 +426,45 @@ type browseWorksResponse struct {
 	// against the one it sent.
 	Limit int `json:"limit"`
 
-	// MediaType and Sort are ECHOED because they are part of what the cursor
-	// means. A cursor is minted under one sort and refused under another
+	// MediaType, Sort and Lib are ECHOED because they are what the cursor was
+	// minted under. A cursor is minted under one sort and refused under another
 	// (store.ErrCursorSortMismatch), so a client that has stored a cursor has
 	// to be able to recover the query it belongs to — and a UI that restores a
-	// deep link needs to know which chip to light up. Both are absent when the
-	// request did not name them, so absence stays distinguishable from "movies"
-	// and from "added_at".
+	// deep link needs to know which chips to light up. All three are absent
+	// when the request did not name them, so absence stays distinguishable
+	// from "movies", from "added_at" and from a scope of one library.
+	//
+	// 🚩 THE CURSOR BINDS TO `sort` ALONE, AND THESE THREE FIELDS ARE HOW A
+	// CLIENT SEES THAT. Replaying a cursor under a changed `media_type` or a
+	// changed `lib` does not error — store.WorksCursor carries the sort
+	// discriminator and the row position and no other part of the query, so the
+	// position decodes and the page is served over a DIFFERENT corpus, silently
+	// skipping or repeating rows. The
+	// echo does not fix that binding. It makes it observable from the side that
+	// can act on it: the echo changes while the cursor the client sent did not,
+	// which is exactly the mismatch, and a client can drop the cursor rather
+	// than page through a corpus its position was never taken in.
 	MediaType string `json:"media_type,omitempty"`
 	Sort      string `json:"sort,omitempty"`
+
+	// Lib is the `?lib=` slug list, in the order sent and trimmed to the slugs
+	// that RESOLVED — which is all of them, because an unresolvable slug is a
+	// 400 (resolveBrowseLibraries) rather than a silent drop.
+	//
+	// ⚠️ THAT REFUSAL IS WHAT MAKES AN OMITTED `lib` MEAN ONE THING. If any way
+	// of naming a scope the server will not apply ever became a silent drop,
+	// this key would go missing on a page served over the whole catalogue, and
+	// "you asked for no scope" and "you asked for a scope and did not get it"
+	// would share a spelling. The echo exists to remove that ambiguity and must
+	// not become a source of it, so
+	// TestBrowseEnvelopeOmitsLibOnlyWhenNoScopeWasApplied pins the property
+	// rather than the field: for any request that carried `lib`, the answer is
+	// a 400 or a 200 that echoes it, and there is no third outcome.
+	//
+	// It is a LIST rather than the comma-joined string the request used: the
+	// chip is a multi-select, and joining would make the client re-parse what
+	// it had just sent.
+	Lib []string `json:"lib,omitempty"`
 
 	// NextCursor is absent when this page is the last one, and its absence is
 	// the "Load more" button's off switch.
@@ -535,7 +594,8 @@ func (s *Server) handleBrowseWorks(w http.ResponseWriter, r *http.Request) error
 		}
 	}
 
-	if err := s.resolveBrowseLibraries(r, a, &filter); err != nil {
+	libs, err := s.resolveBrowseLibraries(r, a, &filter)
+	if err != nil {
 		return err
 	}
 
@@ -581,6 +641,7 @@ func (s *Server) handleBrowseWorks(w http.ResponseWriter, r *http.Request) error
 		Items:     make([]recentWorkResponse, 0, len(rows)),
 		Limit:     effective,
 		MediaType: filter.MediaType,
+		Lib:       libs,
 	}
 	if filter.Sort != "" {
 		out.Sort = string(filter.Sort)
@@ -596,7 +657,10 @@ func (s *Server) handleBrowseWorks(w http.ResponseWriter, r *http.Request) error
 }
 
 // resolveBrowseLibraries turns `?lib=` slugs into the library ids the filter
-// takes.
+// takes, and returns the slugs it resolved so the envelope can echo them. It
+// returns a nil slice exactly when the request carried no `lib` at all — every
+// other outcome is either a resolved non-empty list or an error, which is the
+// property browseWorksResponse.Lib's meaning rests on.
 //
 // ⚠️ AN UNKNOWN SLUG IS A 400, FOR THE SAME REASON AN UNKNOWN media_type IS.
 // Dropping it silently widens the page, and dropping every slug removes the
@@ -610,7 +674,7 @@ func (s *Server) handleBrowseWorks(w http.ResponseWriter, r *http.Request) error
 // exist.
 func (s *Server) resolveBrowseLibraries(
 	r *http.Request, a authSession, filter *store.WorksFilter,
-) error {
+) ([]string, error) {
 	// ⚠️ PRESENCE, NOT EMPTINESS, IS WHAT DECIDES "no scope was asked for".
 	// Get returns "" both for a parameter that was never sent and for `?lib=`,
 	// so testing the VALUE here — above the split — would let `?lib=` and
@@ -620,7 +684,7 @@ func (s *Server) resolveBrowseLibraries(
 	// Every empty spelling now reaches the one refusal below.
 	query := r.URL.Query()
 	if !query.Has("lib") {
-		return nil
+		return nil, nil
 	}
 
 	slugs := make([]string, 0, 4)
@@ -634,13 +698,13 @@ func (s *Server) resolveBrowseLibraries(
 		// asked for a scope and named nothing. Answering with the whole
 		// catalogue would be the silent widening this function exists to
 		// prevent.
-		return errStatus(http.StatusBadRequest, CodeBadRequest,
+		return nil, errStatus(http.StatusBadRequest, CodeBadRequest,
 			"lib was sent with no library in it").
 			withAction("send lib as one or more library slugs separated by commas, " +
 				"or omit it for every library")
 	}
 	if len(slugs) > browseMaxLibrarySlugs {
-		return errStatus(http.StatusBadRequest, CodeBadRequest,
+		return nil, errStatus(http.StatusBadRequest, CodeBadRequest,
 			fmt.Sprintf("lib names more libraries than this endpoint accepts (%d)",
 				browseMaxLibrarySlugs)).
 			withAction("select fewer libraries, or omit lib for every library")
@@ -648,11 +712,14 @@ func (s *Server) resolveBrowseLibraries(
 
 	ids, err := s.store.LibraryIDsBySlug(r.Context(), storeScope(a), slugs)
 	if err != nil {
-		return errStatus(http.StatusBadRequest, CodeBadRequest,
+		return nil, errStatus(http.StatusBadRequest, CodeBadRequest,
 			"lib names a library that does not exist").
 			withAction("reload the Libraries screen — a library may have been renamed or removed").
 			wrapping(err)
 	}
 	filter.LibraryIDs = ids
-	return nil
+	// The slugs are echoed rather than the ids: a slug is the library's public
+	// URL identity (migration 0005 keeps it durable across a rename), and an id
+	// is an internal row number the caller never sent and cannot use.
+	return slugs, nil
 }

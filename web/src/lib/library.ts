@@ -17,9 +17,13 @@
  * provider, no image fetch. Nothing in this module belongs on a path that waits
  * for an upstream, and there is no upstream behind it to wait for.
  *
- * WHAT THE SERVER DOES NOT SERVE YET, so that nothing here codes against it:
- * `?lib=` library scoping, cover art, and Blocks A and B of §17.2. All three
- * are named as absent in `internal/httpapi/library.go`'s own header.
+ * WHAT THIS ENDPOINT DOES NOT SERVE, so that nothing here codes against it:
+ * cover art and Blocks A and B of §17.2, neither of which server.go routes at
+ * all, and no `?lib=` library scope — but ⚠️ that last one is a property of
+ * THIS endpoint and not of the server. `?lib=` is served by
+ * `GET /api/v1/library` (`http-api.md` §7.3), which this module does not call;
+ * a client wanting the §17.8 scope chip goes there, not here. `library.go`'s
+ * header carries the same split at its own declaration.
  */
 
 import { ApiError, getJson } from './api';

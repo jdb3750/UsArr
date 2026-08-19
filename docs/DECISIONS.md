@@ -579,10 +579,15 @@ sources only; **nothing below 0.85 confidence is stored**, and there is no revie
   the measurement**: a wrong link is far worse than a missing one, the design itself concedes that
   title-similarity guessing is *"a false-positive machine"*, and a false-positive-management UI is a
   second product this project cannot staff. If Wikidata does not know about an adaptation, UsArr does
-  not claim one. **The fuzzy ladder is deferred, not rejected** — `work_relation` already carries the
-  `confidence` and `evidence` columns it would populate, so adding it later is writing lower-confidence
-  rows plus a surface, with no change to how edges are read, grouped or rendered
-  ([`FUTURE.md`](./FUTURE.md) §5).
+  not claim one. **The fuzzy ladder is deferred, not rejected** — `work_relation` ~~already carries~~
+  **is designed to carry** the `confidence` and `evidence` columns it would populate, so adding it
+  later is writing lower-confidence rows plus a surface, with no change to how edges are read,
+  grouped or rendered ([`FUTURE.md`](./FUTURE.md) §5).
+  **[Tense corrected 2026-08-19; the decision is untouched.]** The DDL is
+  [`reference/schema.md`](./reference/schema.md) §11 *Cross-media edges · **v0.3***, which is the
+  design of record. ⚠️ **The table is deferred to v0.3 and no shipped migration creates it** —
+  `TestDeferredTablesAreAbsent` (`internal/db/migrate_test.go`) fails the build if one does — so the
+  seam is a designed shape to build to, not a column pair sitting in the schema waiting.
 - **The weekly dump pipeline is dropped.** It committed a one-person project to ingesting tens of GB
   of Wikidata dumps and republishing an artifact forever, unpaid, with the feature quietly rotting if
   it lapsed — and the original ADR quoted the artifact's size three incompatible ways ("a few MB", "a
@@ -726,8 +731,20 @@ Three layers — **`work` (kind-scoped) / `edition` / `media_file`** — and:
 - The `edition` layer looks degenerate for movies and TV — but it is what makes the Portuguese
   translation *Sonhos e Comboios* the same work as *Train Dreams* (a title match would never
   find it), and it is what ADR-0014's 1080p/4K case rides on.
-- `work_relation` carries **`evidence` (JSON) and `status`**, not just a confidence float,
-  because the review inbox is unusable without being able to explain *why* two things linked.
+- ~~`work_relation` carries **`evidence` (JSON) and `status`**, not just a confidence float,
+  because the review inbox is unusable without being able to explain *why* two things linked.~~
+  **`work_relation` is designed to carry `evidence` (JSON)**, not just a confidence float, for that
+  reason.
+  **[Corrected 2026-08-19 on two counts, neither of which reopens this ADR's decision.]**
+  **(1) Tense.** The DDL is [`reference/schema.md`](./reference/schema.md) §11
+  *Cross-media edges · **v0.3***, which is the design of record; ⚠️ **the table is deferred to v0.3
+  and no shipped migration creates it**, and `TestDeferredTablesAreAbsent`
+  (`internal/db/migrate_test.go`) fails the build if one does.
+  **(2) `status` is no longer part of the design at all** — [ADR-0007](#adr-0007) revision 2 removed
+  the review inbox (see [ADR-0019](#adr-0019)'s user-scoped list, which strikes its verdicts for the
+  same reason), and §11 says in as many words that `status`, `reviewed_by` and `reviewed_at` are
+  **not** in this table. The stated reason — the inbox being unusable without an explanation — is the
+  reason for `evidence`, which survives; the inbox it named does not.
 
 ### Alternatives rejected
 - **One work with two editions** — produces a table where most columns are null for most rows
@@ -3237,8 +3254,18 @@ speculative:
   added**. It does not change the schema; it changes which kind the adapter writes.
 - **A human who is both a music artist and a book author is two `work` rows in v0.1**, joined by
   nothing. That is a real loss, it is smaller than filing every novelist under Music, and the seam
-  for fixing it already exists: `work_relation` carries typed edges with `confidence` and `evidence`
-  (ADR-0009), so a `same_person` edge is an added edge type rather than a schema change.
+  for fixing it already exists: `work_relation` ~~carries~~ **is designed to carry** typed edges with
+  `confidence` and `evidence` (ADR-0009), so a `same_person` edge is an added edge type rather than a
+  new table.
+  **[Corrected 2026-08-19; the decision is untouched.]** The DDL is
+  [`reference/schema.md`](./reference/schema.md) §11 *Cross-media edges · **v0.3***. ⚠️ **The table
+  is deferred to v0.3 and no shipped migration creates it** — `TestDeferredTablesAreAbsent`
+  (`internal/db/migrate_test.go`) fails the build if one does — so this seam is a designed shape, and
+  "the seam for fixing it **already exists**" is true of the design and not of the schema. "Rather
+  than a schema change" is narrowed to "rather than a new table" for a second reason found while
+  checking the first: §11's `rel_type` is a `CHECK` over thirteen named values and `same_person` is
+  not among them, so the edge type arrives in whichever migration creates the table, or in a later
+  one that rewrites the `CHECK`.
 - **§13's reference library gains a `person` row (~6,000)** and its top-level total stays 27,500
   rather than becoming ~33,500. 🔍 The figure is chosen, not measured, and it is the one row in that
   table where being wrong by 2× changes no budget, because it is excluded from every budget it could

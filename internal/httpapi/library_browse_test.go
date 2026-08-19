@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -339,9 +340,21 @@ func TestBrowseEndpointEchoesTheQuery(t *testing.T) {
 		return env
 	}
 
-	env := envelope("?media_type=comics&sort=sort_title")
+	env := envelope("?media_type=comics&sort=sort_title&lib=manga")
 	if env["media_type"] != "comics" || env["sort"] != "sort_title" {
 		t.Errorf("the envelope does not echo the query: %v", env)
+	}
+	// `lib` is a LIST on the wire, because the chip is a multi-select and a
+	// comma-joined string would make the client re-parse what it just sent.
+	if got, want := env["lib"], []any{"manga"}; !reflect.DeepEqual(got, want) {
+		t.Errorf("the envelope does not echo lib: got %#v, want %#v\n%v", got, want, env)
+	}
+
+	// Echoed in the order sent and trimmed to the slugs that were resolved, so a
+	// client restoring a deep link can light the chips straight from it.
+	env = envelope("?lib=%20books%20,manga")
+	if got, want := env["lib"], []any{"books", "manga"}; !reflect.DeepEqual(got, want) {
+		t.Errorf("multi-select lib echo: got %#v, want %#v", got, want)
 	}
 
 	env = envelope("")
@@ -351,6 +364,9 @@ func TestBrowseEndpointEchoesTheQuery(t *testing.T) {
 	}
 	if _, ok := env["sort"]; ok {
 		t.Errorf("a page with no sort echoes one: %s", body)
+	}
+	if _, ok := env["lib"]; ok {
+		t.Errorf("a page with no library scope echoes one: %s", body)
 	}
 }
 
@@ -412,5 +428,208 @@ func TestBrowseEndpointNeedsASession(t *testing.T) {
 	}
 	if w.Code != http.StatusUnauthorized {
 		t.Errorf("status %d, want 401: %s", w.Code, w.Body.String())
+	}
+}
+
+// browseEnvelope decodes one browse response into a bare map, so that an
+// OMITTED key is distinguishable from a zero-valued one. A struct with
+// `omitempty` cannot tell those apart on the way back in, and the whole point of
+// the echo is that absence carries a meaning.
+func browseEnvelope(t *testing.T, s *Server, query string) (int, map[string]any) {
+	t.Helper()
+	code, body := callBrowseWorks(t, s, query)
+	// A FRESH map every time: json.Unmarshal MERGES into a non-empty map, so
+	// reusing one would make an omitted key look present.
+	env := map[string]any{}
+	if err := json.Unmarshal([]byte(body), &env); err != nil {
+		t.Fatalf("%s: %v\n%s", query, err, body)
+	}
+	return code, env
+}
+
+// ⚠️ AN OMITTED `lib` MEANS "NO LIBRARY SCOPE WAS APPLIED", WITH NO SECOND
+// READING — and this test pins the property the echo DEPENDS on rather than the
+// echo itself.
+//
+// The echo is only worth having because every way of naming a scope that the
+// server will not apply is a 400 (resolveBrowseLibraries: an unknown slug, a
+// slug the caller cannot see, the reserved `unfiled`, an empty `?lib=`, and more
+// than browseMaxLibrarySlugs of them). If any one of those ever became a silent
+// drop instead, this endpoint would answer 200 with `lib` omitted over the WHOLE
+// catalogue — and the omission a client reads as "you asked for no scope" would
+// have come to also mean "you asked for a scope and did not get it". The echo
+// exists to remove that ambiguity, so it must not be the thing that introduces
+// it.
+//
+// The invariant, stated once and asserted over every spelling: FOR ANY REQUEST
+// THAT CARRIED `lib`, THE ANSWER IS EITHER A 400 OR A 200 WHOSE ENVELOPE ECHOES
+// `lib`. There is no third outcome, and in particular no 200 with the key
+// missing.
+func TestBrowseEnvelopeOmitsLibOnlyWhenNoScopeWasApplied(t *testing.T) {
+	s := newTestServer(t, nil)
+	seedLibraryCorpus(t, s)
+
+	tooMany := make([]string, 0, browseMaxLibrarySlugs+1)
+	for i := 0; i <= browseMaxLibrarySlugs; i++ {
+		tooMany = append(tooMany, "books")
+	}
+
+	// Every spelling of `lib` the endpoint knows, servable and refused alike.
+	// The refused half is the half that matters: each one is a request that
+	// named a scope and must not be answered over the whole catalogue.
+	for _, q := range []string{
+		"?lib=books",
+		"?lib=books,manga",
+		"?lib=%20books%20,%20manga%20",
+		"?lib=nope",
+		"?lib=books,nope",
+		"?lib=unfiled",
+		"?lib=",
+		"?lib=%20",
+		"?lib=,",
+		"?lib=,,",
+		"?lib=" + strings.Join(tooMany, ","),
+	} {
+		code, env := browseEnvelope(t, s, q)
+		switch code {
+		case http.StatusBadRequest:
+			// A refusal. The scope was not applied and the caller was told so.
+		case http.StatusOK:
+			if _, ok := env["lib"]; !ok {
+				t.Errorf("%s answered 200 with no `lib` in the envelope, which a client "+
+					"reads as `no scope was asked for` — the ambiguity the echo removes: %v",
+					q, env)
+			}
+		default:
+			t.Errorf("%s returned %d, which is neither the refusal nor a page", q, code)
+		}
+	}
+
+	// The other half of the invariant: a request that carried no `lib` at all is
+	// the ONLY thing that omits it.
+	code, env := browseEnvelope(t, s, "")
+	if code != http.StatusOK {
+		t.Fatalf("the unscoped browse returned %d", code)
+	}
+	if _, ok := env["lib"]; ok {
+		t.Errorf("a request that named no library echoed one: %v", env)
+	}
+	// …and it really is unscoped, so "omitted" is not quietly covering a scope
+	// that was applied from somewhere other than the query.
+	everything := len(browseTitles(t, mustBody(t, s, "")))
+	scoped := len(browseTitles(t, mustBody(t, s, "?lib=books")))
+	if scoped >= everything {
+		t.Errorf("?lib=books returned %d works and the unscoped page returned %d, so the "+
+			"echoed scope is not filtering anything", scoped, everything)
+	}
+}
+
+// mustBody is browse's body for a query that must answer 200.
+func mustBody(t *testing.T, s *Server, query string) string {
+	t.Helper()
+	code, body := callBrowseWorks(t, s, query)
+	if code != http.StatusOK {
+		t.Fatalf("%s returned %d: %s", query, code, body)
+	}
+	return body
+}
+
+// ⚠️ AN UNRECOGNISED QUERY PARAMETER IS IGNORED, NOT REFUSED — AND THAT IS AN
+// API-WIDE WIRE CONTRACT RATHER THAN A QUIRK OF THIS ENDPOINT.
+//
+// It is pinned here because the library grid has the most parameters to typo,
+// but the rule is the package's. `GET /api/v1/search` already has the same
+// shape stated for one parameter — http-api.md §6.1's "`q` is the only spelling;
+// `query=` is not accepted here" — and what makes `query=` "not accepted" is
+// exactly this: it is read by nothing and refused by nothing. The rule is
+// written down once, in http-api.md's preamble, so the NEXT endpoint inherits it
+// deliberately instead of re-deciding it.
+//
+// WHY IGNORE RATHER THAN REJECT, since a typo'd filter is a real hazard here:
+// rejection is a wire-contract change that breaks forward compatibility in BOTH
+// directions. A newer client sending a parameter this server has not learned yet
+// would get a 400 instead of a degraded-but-correct page, and an older client
+// would be unable to send anything an even older server did not know. The hazard
+// is answered a different way instead — a RECOGNISED parameter carrying an
+// unrecognised VALUE is a 400 (`?media_type=comix`, `?sort=nope`, `?lib=nope`),
+// so the only thing a typo can silently lose is the whole parameter, and the
+// echo (§7.4) is what lets a client notice that: it asked for a scope, and the
+// envelope came back without one.
+//
+// ⚠️ THIS TEST IS A CHARACTERISATION TEST, so it passes the moment it is written
+// and would keep passing if the handler were deleted around it. It was therefore
+// FIRED before it was trusted, per DEVELOPMENT.md §11 rule 1: a throwaway
+// `for k := range q { if !known[k] { return 400 } }` at the top of
+// handleBrowseWorks made every case below fail, and was then removed.
+func TestUnrecognisedQueryParametersAreIgnoredNotRefused(t *testing.T) {
+	s := newTestServer(t, nil)
+	seedLibraryCorpus(t, s)
+
+	unfiltered := mustBody(t, s, "")
+	comics := mustBody(t, s, "?media_type=comics")
+
+	// Alone: each of these is a request whose ONLY parameter the server does not
+	// know. Every one must answer the unfiltered first page — not a 400, and not
+	// a page that somehow honoured it.
+	for _, q := range []string{
+		"?mediatype=comics",  // the underscore dropped
+		"?media-type=comics", // the separator wrong
+		"?Media_Type=comics", // ⚠️ parameter names are CASE-SENSITIVE
+		"?LIB=books",         // …including this one, which is why it is here
+		"?type=comics",       // a plausible name from another API
+		"?sort_by=title",     // a plausible name from another API
+		"?page=2",            // offset paging, which this endpoint does not have
+		"?q=berserk",         // §6's parameter, sent to §7
+		"?utm_source=email",  // whatever a link shortener bolted on
+	} {
+		code, body := callBrowseWorks(t, s, q)
+		if code != http.StatusOK {
+			t.Errorf("%s returned %d, want 200 — an unknown parameter is ignored, "+
+				"never refused: %s", q, code, body)
+			continue
+		}
+		if body != unfiltered {
+			t.Errorf("%s changed the page, so something read it:\n got: %s\nwant: %s",
+				q, body, unfiltered)
+		}
+	}
+
+	// Alongside a recognised one: the known parameter still applies and the
+	// unknown one still does nothing. A rejection here would break the request
+	// that is MOST likely to be a newer client talking to an older server.
+	for _, q := range []string{
+		"?media_type=comics&facets=1",
+		"?facets=1&media_type=comics",
+		"?media_type=comics&media-type=movies",
+	} {
+		code, body := callBrowseWorks(t, s, q)
+		if code != http.StatusOK {
+			t.Errorf("%s returned %d, want 200: %s", q, code, body)
+			continue
+		}
+		if body != comics {
+			t.Errorf("%s is not ?media_type=comics:\n got: %s\nwant: %s", q, body, comics)
+		}
+	}
+
+	// It is IGNORED, which means it is not echoed either. The envelope carries
+	// what the server applied (§7.4); a key it did not read must not appear
+	// there, or a client would read its own typo back as a confirmation.
+	_, env := browseEnvelope(t, s, "?mediatype=comics&facets=1&utm_source=email")
+	for _, k := range []string{"mediatype", "facets", "utm_source"} {
+		if _, ok := env[k]; ok {
+			t.Errorf("the envelope echoed the unrecognised %q back: %v", k, env)
+		}
+	}
+
+	// The other half of the rule, and the half that keeps "ignore" honest: a
+	// parameter the server DOES know, carrying a value it does not, is a
+	// refusal. Ignoring is what happens to a name nobody claimed — never to a
+	// filter that was asked for and could not be applied.
+	for _, q := range []string{"?media_type=comix", "?sort=nope", "?lib=nope"} {
+		if code, body := callBrowseWorks(t, s, q); code != http.StatusBadRequest {
+			t.Errorf("%s returned %d, want 400 — a known parameter with an unknown "+
+				"value is refused, not ignored: %s", q, code, body)
+		}
 	}
 }

@@ -1872,11 +1872,15 @@ false-positive machine, and this project will not staff a false-positive-managem
 > link manually (`source='manual'`, confidence 1.0) and delete any link from the item detail page.
 > **If Wikidata does not know about an adaptation, UsArr does not claim one.**
 
-**The seam that keeps the fuzzy ladder cheap later:** `work_relation` already carries **`confidence`
-and `evidence`** even though v1 only ever writes 0.90–1.00 from authoritative sources. Those two
-columns are exactly what a fuzzy tier would populate, and `evidence` is what makes a review UI usable
-rather than a guessing game. `status`, `reviewed_by` and `reviewed_at` are dropped from migration
-0001 and are re-addable. (That also resolves a contradiction where verdicts were declared per-user in
+**The seam that keeps the fuzzy ladder cheap later:** `work_relation` **is designed to carry**
+**`confidence` and `evidence`** — the DDL is [`reference/schema.md`](./reference/schema.md) §11
+*Cross-media edges · **v0.3***, which is the design of record — even though v1 would only ever write
+0.90–1.00 from authoritative sources. ⚠️ **The table is deferred to v0.3 and no shipped migration
+creates it**; `TestDeferredTablesAreAbsent` (`internal/db/migrate_test.go`) fails the build if one
+does, so this is a designed shape to build to and not a column pair sitting in the schema waiting.
+Those two columns are exactly what a fuzzy tier would populate, and `evidence` is what makes a review
+UI usable rather than a guessing game. `status`, `reviewed_by` and `reviewed_at` are **not** in §11's
+DDL and are re-addable. (That also resolves a contradiction where verdicts were declared per-user in
 prose and stored globally in the DDL. When manual links meet multi-user they will need `user_id`;
 recorded as a v1.0 obligation in the schema reference.)
 
