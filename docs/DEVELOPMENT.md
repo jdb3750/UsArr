@@ -1577,7 +1577,7 @@ paragraph describing a repo that no longer exists.
   hedge**, because the claim existed to draw a real distinction and a hedge loses it: **state the
   boundary.** `internal/bookorbit/scope_test.go`'s header called its test *"the ONLY mechanism in
   this package that notices BookOrbit growing a permission"*, which vendoring `packages/types`
-  falsified. The honest form names where it holds — *the only mechanism **in the gate**;
+  falsified. The header now names the boundary instead — *the only mechanism **in the gate**;
   `make spec-drift` also notices, but only when a person runs it with network access and the opt-in
   variable set* — which stays true when a third mechanism appears, and keeps the point the original
   was making: a gate arm runs on every commit whether or not anyone is thinking about it, an opt-in
