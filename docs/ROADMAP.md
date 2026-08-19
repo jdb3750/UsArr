@@ -47,6 +47,8 @@ documentation-only passes before it**.
 **FIRED on this tree, at the baseline above:**
 - **ADRs**, read directly: [ADR-0052](./DECISIONS.md#adr-0052) and [ADR-0053](./DECISIONS.md#adr-0053).
   `grep -o '^## ADR-[0-9]*' docs/DECISIONS.md | tail -3` → **`0053` is the highest on `main`**.
+  ⚠️ **True of the baseline and not of `main` any more:** [ADR-0054](./DECISIONS.md#adr-0054) landed
+  after it, with §2's *relevance score on the wire* item. Re-run the grep rather than reading this.
 - **Scope**, read directly: `ARCHITECTURE.md` §16's v0.1 entry and §16.1's sequencing table.
 - **Screen checks:** `web/src/routes/` and `web/src/routes/library/`; `TYPE_NAV` and `NAV_GROUPS` in
   `web/src/routes/+layout.svelte`; `MEDIA_TYPES` in `web/src/lib/library.ts`; the exports of
