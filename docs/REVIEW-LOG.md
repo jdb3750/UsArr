@@ -21329,3 +21329,134 @@ two-hunk diff, the Makefile target list, `check.mjs`'s two touch points, and the
 
 **`SD-07` is the next free id in the `SD-` series** (`SD-06` was the last allocated). The `LS-`,
 `DS-` and `RK-` series run on their own threads; a gap in any of them is fine and nobody closes one.
+
+---
+
+# SD-08 — four `CLAUDE.md` changes that need the owner exist only in a chat thread. **Raised and not applied; this entry is the register that was missing.**
+
+**The finding is about where a withheld change lives, not about any one of the four.** `CLAUDE.md`
+is the project's instruction file and is deliberately not edited on an agent's say-so — `DS-10`
+above records the standing position, *"note `CLAUDE.md` is the project's instruction file, and Round
+2 (§2.2) already established it is **left for the owner** rather than edited on an agent's
+say-so"*, and `H-29` states the operational form, *"**This pass may not edit `CLAUDE.md`**"*.
+**That is a good rule and this entry does not touch it.** Its cost is that every finding against
+`CLAUDE.md` becomes a thing *put to Joe* rather than a thing *committed*, and a thing put to Joe has
+nowhere to live. Four such changes have been put to him and are recorded **nowhere in the
+repository**. 🚩 **That is the same failure mode as the stale dispositions this file has had to
+correct twice tonight, coming from the opposite direction**: `SD-04`'s rescue found verdicts that
+went false because the tree moved under a record; this one is a set of proposals with no record to
+go stale in the first place. A reader cannot re-verify what is not written down, and cannot tell an
+item still awaiting the owner from one that was dropped.
+
+**Measured at [`76ae692`](https://github.com/jdb3750/UsArr/commit/76ae692), in the same worktree as
+`SD-07`.** All four absences were re-verified here rather than taken from the report that raised
+them; each row quotes what was actually found.
+
+## Why these need the owner, when `c6ce265` edited `CLAUDE.md` anyway
+
+**The boundary is not "never edit `CLAUDE.md`", and getting that wrong is how a register like this
+turns into a backlog nobody can act on.** [`c6ce265`](https://github.com/jdb3750/UsArr/commit/c6ce265),
+*"docs: work_relation 'already carries' columns in a table no migration creates"*, did edit it — a
+`+2 −2` hunk turning *"`work_relation` **already carries** confidence and evidence columns"* into
+*"`work_relation` **is designed to** carry"*. It is an ancestor of `origin/main` and the sentence on
+`main` today reads with the fix. **A sentence that is false gets corrected**; the file cannot be
+allowed to state a falsehood while waiting for a reply. **An addition — a new row, a new pointer, a
+new claim — is the owner's**, because it changes what the file *instructs*, and nobody but Joe
+decides what instructions his agents receive. Every one of the four below is an addition, which is
+why all four are still outstanding and why the `work_relation` item is **split**: its correction
+landed and its enrichment did not.
+
+## The four, re-verified
+
+| # | The change | Re-verified at `76ae692` | Where the drafted text lives |
+|---|---|---|---|
+| **1** | Add a **`docs/ROADMAP.md`** row to the *Where things live* table | ✅ **Absent.** `docs/ROADMAP.md` exists (75,587 bytes) and is cited by `docs/DECISIONS.md` and `docs/REVIEW-LOG.md`. `grep -c 'ROADMAP' CLAUDE.md` returns **0**. The only matches for *roadmap* at all are lowercase and about a different document: the `docs/ARCHITECTURE.md` row's *"§16 is the authoritative roadmap"*, and the `## Roadmap in one line each` heading. **An agent following the table cannot find the file** | ⚠️ **Nowhere until this entry.** Drafted below |
+| **2** | Add a **`docs/design/`** row to the same table | ✅ **Absent.** `grep -n 'docs/design\|design/' CLAUDE.md` returns **nothing at all** — the visual system is not mentioned in the instruction file in any form | 📎 **`H-29`, above, and not restated here.** It carries the exact row to paste, the reason (`DESIGN-DIRECTION.md`, `tokens.css` and the mockups are normative for UI work and are cited by §17), and the mitigation already applied (README's documentation table gained the equivalent row). It also appears in that pass's *"Recorded, not applied"* count of **1** and as item **5** of its routing table. **Cross-referenced, because a second copy of a drafted row is a second thing to keep in step** |
+| **3** | The **`work_relation` seam enrichment** — name `docs/reference/schema.md` §11 as the DDL of record, the **v0.3** deferral, and `TestDeferredTablesAreAbsent` as the guard | ✅ **Absent, and the split is exactly as `SD-03` describes it.** `grep -n work_relation CLAUDE.md` returns **one** line, in the *Build the base with intentional space* paragraph: *"the search retriever is pluggable behind one boundary, `work_relation` **is designed to carry** confidence and evidence columns"*. The tense fix from `c6ce265` is there; **§11, v0.3 and the test name are not**, so the sentence is true and unsupported | 📎 **`SD-03`'s amended-dispositions table, above**, whose last row reads *"The `CLAUDE.md` **enrichment** half — the §11 citation, the v0.3 deferral and the test name — remains **drafted and handed to Joe, not committed**, and that is the one thing in `SD-03` still genuinely outstanding."* **Cross-referenced, not duplicated.** ⚠️ Note the consequence for `SD-03`'s own bookkeeping: that row is the single reason `SD-03` is not fully closed, so closing it closes `SD-03` |
+| **4** | A **wire-vocabulary / storage-vocabulary pointer** in the *Working practice* section | ✅ **Absent.** `grep -in 'vocabular\|wire' CLAUDE.md` returns **nothing**. `docs/DEVELOPMENT.md` is cited three times (§11 for gate mechanics, §8 for the CI constraint, and the table row) and **§11's naming rule is not among them** | ⚠️ **Nowhere until this entry.** Drafted below |
+
+📎 **`DS-10` rides the same table and is not duplicated here.** Its site is the `docs/reference/`
+row — *"Vendored upstream specs and captured API reference material"* — which is still the live text
+at `76ae692`, while the vendored specs are under `api/specs/`. It is **already recorded**, already
+carries its fix shape, and is listed here only so that whoever takes this table to the owner takes
+**five** corrections to it rather than four and does not discover the fifth afterwards.
+🚩 **Four of the five items in this entry are edits to one eleven-line table.** Routing them
+separately would mean asking the owner about the same table up to five times; that is the practical
+argument for the register, independent of the record-keeping one.
+
+## The two with no drafted text anywhere, drafted here
+
+**Written out in full because *"it needs a row"* is not a change the owner can approve.** These are
+proposals, not applied text, and nothing in `CLAUDE.md` moves on this entry's account.
+
+**Item 1**, for the *Where things live* table, sitting after the `docs/ARCHITECTURE.md` row:
+
+> `| `docs/ROADMAP.md` | Milestone-by-milestone delivery detail. §16 of `ARCHITECTURE.md` stays authoritative for which milestone owns a thing. |`
+
+⚠️ **The second sentence is the load-bearing half and is an inference, marked as one.** `CLAUDE.md`
+already says *"`docs/ARCHITECTURE.md` §16 is authoritative for what lands in which milestone"* twice,
+and a bare new row named *ROADMAP* invites a reader to treat it as the authority instead. The row
+has to name the file **and** subordinate it, or it trades an omission for a contradiction. Whether
+that is the right precedence is the owner's to confirm — this pass did not audit `ROADMAP.md`
+against §16 and makes no claim about whether they currently agree.
+
+**Item 4**, for the *Working practice* section, as a sentence appended to the existing **The same
+standard applies to the repo's own gates** paragraph, which already ends by pointing at
+`docs/DEVELOPMENT.md` §11:
+
+> **A wire vocabulary and a storage vocabulary never share a term.** `docs/DEVELOPMENT.md` §11
+> carries the rule and the three instances that earned it — **every one of which compiled clean**.
+
+**Why it belongs in `CLAUDE.md` at all, rather than staying in `DEVELOPMENT.md` where it already
+is.** The class is defined by being invisible to every gate: §11's own words are *"Three instances
+of this, and **every one of them compiled clean** — which is the whole reason it is a convention. A
+collision the build catches needs no rule. This class is invisible to `go build`, to `go vet` and to
+a reading eye, because both sides are spelled correctly and only the meaning differs."* The three
+are re-readable there: `outcomeSentUnknown` declared twice in `internal/httpapi` with the audit
+spelling and the wire spelling, where `go build` named two of three uses and the third rebound
+silently (repaired in `0cb1a18` by prefixing the wire set); a **prose** instance, §13's perf-budget
+row spending `?kind=movie` when the parameter's vocabulary is §17.2's media-type enum (corrected to
+`?media_type=movies` in `f80097f`, reaching `main` in `1c13afd`) — *"Prose is compiled by nothing at
+all"*; and `series` as a `work.kind` against `tv` as a media type, pinned by
+`TestBrowseWorksUnknownMediaTypeIsAnError`. 📌 **A convention no tool can enforce is exactly the kind
+that has to be in the file every agent reads first**, which is the argument for the pointer and not
+for copying §11 into `CLAUDE.md` — the detail stays where it lives, per that file's own *"Do not
+duplicate design detail into this file. Link to the document that owns it."*
+
+## Status of all five, stated so nobody has to infer it
+
+⏭️ **All five are RAISED AND NOT APPLIED.** They have been put to the owner; none is committed; none
+is refused. **Nothing in this entry authorises applying any of them** — a later pass that finds this
+register and edits `CLAUDE.md` off the back of it has misread it, because the withholding is the
+rule, not an accident of scope. What this entry changes is only that the five are now **findable and
+re-verifiable by someone who is not the person who raised them**: each has its site, the exact
+absence measured at a named tip, and either drafted text or a pointer to where the draft already
+lives. ℹ️ **The re-verification is cheap and is the point** — four greps and a `git show` reproduce
+every row above, so the next reader can establish in a minute which of the five are still owed
+rather than re-deriving the set.
+
+## Why one entry and not four
+
+**The file's convention supports both, and this is the case for folding.** `SD-04` carries a
+nine-row site table under one id; `SD-06` carries three added deny-list names under one. The test
+those pass is whether the rows share a **finding**, not merely a **file**. These do: the finding is
+*"a change to `CLAUDE.md` that needs the owner has no home in the repo, so it lives in a chat
+thread"*, and each of the four is one instance of it. Four ids would give the register four places
+to be updated and would still leave the class itself unnamed. 📌 **`H-29` and `DS-10` are the proof
+the class is real and was already recurring** — both are this exact shape, both were correctly
+recorded when they were found, and **neither was findable from the other**, which is how the count
+of outstanding `CLAUDE.md` changes was three-fifths knowable and nobody could have said so.
+
+**`SD-08` is the next free id after `SD-07`**, which this pass allocated to the generated-file drift.
+Both were assigned at dispatch rather than discovered — `SD-05` records why that matters, *"the merge
+that invalidates the answer lands between the read and the commit"* — and the `LS-`, `DS-` and `RK-`
+series are untouched by either.
+
+## What a green gate is worth on this entry
+
+**The same as on `SD-07`, and it is worth repeating for this entry specifically because every claim
+in it is an absence.** `make check` reaches `docs/` through **`gitleaks` alone**, so a green attests
+*"no credential-shaped string was added"* and says nothing about whether these four things are
+really missing from `CLAUDE.md`. **An absence cannot be proved by a gate that never reads the file
+in question** — it is proved by the greps quoted in the table, every one of which was run at
+`76ae692` and every one of which anyone can re-run.
