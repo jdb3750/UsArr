@@ -555,8 +555,15 @@ exists were **all unverified** — the project wiki failed to render and the fac
 sources. Verify before scoping.
 
 **The seam.** The provider registry (§1). A Tier 0 provider is a factory; the sync engine never names
-a concrete type. `Caps` already carries the ability to advertise `LibrarySync` without `Add`, which is
-exactly Suwayomi's shape.
+a concrete type. `Caps` **is designed to** advertise `LibrarySync` independently of `Add`, which is
+exactly Suwayomi's shape — and load-bearing rather than incidental, because ARCHITECTURE §8.3's sink rule
+(restated in `00005_library_sync.sql:558`) makes an instance that does not advertise `Add` ineligible
+as a library's request sink, which is the *"never a request sink"* property above. The design of
+record is [`reference/providers.md`](./reference/providers.md) §2, which labels its own §1–§2
+**"designed, not implemented"**. ⚠️ **Neither the registry nor `Caps` exists in `internal/` today** —
+there is no `ProviderFactory`, no `LibrarySyncer` and no `Caps` type, and while the column that would
+hold the probe result ships (`00001_initial.sql:159`, *"JSON `Caps`, probed live"*), nothing writes
+it. So this is a designed shape to build to, not a switch already sitting in the tree.
 
 **Trigger.** A user running Suwayomi *without* Komga or Kavita, so it is the only comics catalogue
 they have.
