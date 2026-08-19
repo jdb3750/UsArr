@@ -1570,6 +1570,22 @@ paragraph describing a repo that no longer exists.
     per-thread prefix removes the cross-thread collision without making the number after it
     readable. **The trigger and the timing are stated by the lane that hit it; what is measured here
     is only that `SD-04` is on `main`, landed by `60c9286`.**
+* **A claim that something is the *only* mechanism names the boundary it is true within, rather than
+  asserting that nothing else exists.** *"Only"* is a closed-set claim — a prediction about everything
+  that will ever exist, made by someone who can see only what does — so it is falsified by whoever
+  adds the alternative, and it ages badly by construction. **The fix is not to delete the word and
+  hedge**, because the claim existed to draw a real distinction and a hedge loses it: **state the
+  boundary.** `internal/bookorbit/scope_test.go`'s header called its test *"the ONLY mechanism in
+  this package that notices BookOrbit growing a permission"*, which vendoring `packages/types`
+  falsified. The header now names the boundary instead — *the only mechanism **in the gate**;
+  `make spec-drift` also notices, but only when a person runs it with network access and the opt-in
+  variable set* — which stays true when a third mechanism appears, and keeps the point the original
+  was making: a gate arm runs on every commit whether or not anyone is thinking about it, an opt-in
+  network check runs when a person remembers. **Three instances, cited rather than retold, because
+  the stories belong in the review log:** `SW-18`, the indexer-flag vocabulary believed closed at
+  seven and *"nine today and open forever"*; `LS-378`, the same `scope_test.go` header corrected on
+  its neighbouring clause; and one with **no review-log id at all** — *"no arm can go silently
+  green"*, retracted in `158aeaa`'s message when an independence-shaped assertion turned out able to.
 * **Key the worktree decision to the operation, not to the size of your change.** Any *whole-tree*
   git operation — `git add -A`, a `git commit` of an index somebody else may have added to,
   `git checkout <branch>` — belongs in a detached worktree of your own. Targeted single-path
