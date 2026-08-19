@@ -1260,19 +1260,34 @@ or merely invisible from where it was standing.
   package count cannot distinguish a package that was opened from one that was skipped**, which is
   the same shape as a check whose success condition is an absence: both report the same number
   whether the work happened or not. Quote it as a floor guard, never as the scope of a lint run.
-* **`git rev-list --count` measures the clone's visible depth, not the commit.** One object,
-  commit `2ce8ed9`, was counted in three containers on the same night and gave three different
-  answers. **811** is measured here, in a clone that is not shallow by any probe available:
-  `git rev-parse --is-shallow-repository` is `false`, there is no `shallow` and no `info/grafts`
-  under `git rev-parse --git-common-dir`, and `git replace -l` is empty. The other two figures are
-  **reported, not measured here** — **366** from another clone, said to be shallow with two graft
-  points, and **146** from a third whose shallow status nobody has probed, so its cause is
-  unestablished and should not be guessed at. Every reading was correct about its own tree and
-  none was about the repository. So **any commit count quoted across containers carries its
-  clone's shallow status beside it, or it means nothing.** The cost that earned this rule: an
-  unqualified count was broadcast as a general warning that other threads' gate greens were weaker
-  than they thought, and it took a read-only agent in another container to disprove the general
-  form of it. The local number was real; the generalisation was not.
+* **`git rev-list --count` measures the clone's visible depth, not the commit.** One tip, `2ce8ed9`,
+  counted in three containers on one night: **811** in a clone that is not shallow, **366** in one
+  reported shallow with two graft points, and **146** in one reported shallow with four. Only the
+  first is measured here — `git rev-parse --is-shallow-repository` is `false`, there is no `shallow`
+  and no `info/grafts` under `git rev-parse --git-common-dir`, and `git replace -l` is empty; the
+  other two figures and their graft counts are **reported, not measured here**. Every reading was
+  correct about its own tree and none was about the repository. Three things follow, and the last
+  two cost more than the count did:
+
+  * **Quote a commit count across containers with the clone's shallow status beside it, or not at
+    all.** An unqualified count was broadcast as a general warning that other threads' gate greens
+    were weaker than they thought, and it took a read-only agent in another container to disprove
+    the general form of it. The local number was real; the generalisation was not.
+  * **An unresolvable SHA in an agent container is evidence of a shallow cut, not evidence the SHA
+    is wrong.** `git cat-file -t 9eec372` is reported to return *"fatal: Not a valid object name"*
+    in the four-graft clone; here the same command returns `commit`, and
+    `git merge-base --is-ancestor` puts that commit on `origin/main`. SHAs near the tip resolve
+    and anything past the frontier is absent, so absence there is a fact about the clone rather
+    than about the SHA. Before disbelieving a SHA an agent reports it cannot confirm, run
+    `git rev-parse --is-shallow-repository`; drawing the other conclusion has already cost hours.
+  * **The count is not stable even within one container.** That clone is reported to have read 103
+    earlier the same night and 146 later, because a shallow fetch appends grafts and the frontier
+    moves. A count therefore carries an argument neither between containers nor across time inside
+    one.
+
+  What does travel, stated positively: **ahead/behind against your own `origin/…`**, and
+  **file-level diffs between two commits both ends can resolve**. Each is measured against something
+  the other side also holds, which is precisely why it survives the trip.
 
 ### Consistency is a property of the read, not only of the write
 
