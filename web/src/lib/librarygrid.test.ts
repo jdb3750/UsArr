@@ -23,6 +23,8 @@ import { cursorRejected, MEDIA_TYPES, type MediaType, type RecentPage } from './
 import { findContentSizedTracks } from './list';
 import {
 	appendBrowsePage,
+	BROWSE_AZ_UNAVAILABLE,
+	BROWSE_AZ_UNAVAILABLE_MULTI_KIND,
 	browseEchoDrift,
 	browseEmptyState,
 	browseFeedFor,
@@ -31,6 +33,7 @@ import {
 	browseParams,
 	browseRequestUrl,
 	browseRoute,
+	browseSortNote,
 	browseSortsFor,
 	DEFAULT_BROWSE_SORT,
 	emptyBrowseFeed,
@@ -164,6 +167,123 @@ describe('A to Z is offered exactly where the store can serve it', () => {
 			'?sort=sort_title was dropped on comics, where it is legal — this guard would pass ' +
 				'on a function that dropped every sort'
 		).toBe('sort_title');
+	});
+});
+
+describe('the absence of A to Z is stated on this screen too, in UsArr own words', () => {
+	/*
+	 * ⚠️ MUSIC USED TO DROP IT SILENTLY. `browseSortsFor` has always kept
+	 * `sort_title` off this control for music — the store refuses it whenever the
+	 * media type is not exactly one `work.kind`, and `browseKinds` maps `music`
+	 * onto `artist` AND `album` — but nothing said so, so the screen showed two
+	 * options where its five siblings show three and gave no reason for the
+	 * difference. The all-types screen states the same refusal; this one did not.
+	 */
+	it('gives music a non-empty note and renders it', () => {
+		const note = browseSortNote(query({ mediaType: 'music' }));
+		expect(
+			note,
+			'music has no A to Z note again, so the option is missing from the control with ' +
+				'nothing on screen to say why'
+		).toBeDefined();
+		expect(
+			(note ?? '').length,
+			'the music A to Z note is empty or a stub, so every absence assertion over it ' +
+				'passes over nothing'
+		).toBeGreaterThan(20);
+		expect(
+			note,
+			'the music note is not the exported string, so a test cannot hold its wording'
+		).toBe(BROWSE_AZ_UNAVAILABLE_MULTI_KIND);
+		expect(
+			MARKUP,
+			`${ROUTE} no longer renders the note, so the missing option is unexplained on screen`
+		).toContain('{sortNote}');
+	});
+
+	/*
+	 * ⚠️ THE SERVER'S 400 TEXT MUST NOT BE THE THING THE READER SEES, here for the
+	 * same reason as on the all-types screen. `handleBrowseWorks` answers an
+	 * unservable sort with ONE shared sentence for TWO refusals: "sort_title needs
+	 * a media_type of one kind — not music — and there is no index behind year at
+	 * all; added_at and popularity work everywhere". It names a wire parameter and
+	 * a column with no index to a reader who asked about neither.
+	 *
+	 * ⚠️ THE ABSENCE ASSERTIONS ARE PRECEDED BY A PRESENCE ONE, because an absence
+	 * assertion over an empty string passes and proves nothing.
+	 */
+	it('renders none of the words the server 400 uses', () => {
+		expect(
+			BROWSE_AZ_UNAVAILABLE_MULTI_KIND.length,
+			'the music A to Z note is empty, so every absence assertion below passes over nothing'
+		).toBeGreaterThan(20);
+
+		// Fragments of `internal/httpapi/library.go`'s ErrUnservableSort arm, quoted
+		// from it rather than paraphrased.
+		for (const leak of [
+			'sort_title',
+			'media_type',
+			'no index',
+			'music',
+			'year',
+			'added_at',
+			'popularity'
+		]) {
+			expect(
+				BROWSE_AZ_UNAVAILABLE_MULTI_KIND.toLowerCase(),
+				`the music A to Z note contains "${leak}", which is the server's own 400 wording ` +
+					'reaching a reader. That sentence answers two refusals at once and names a wire ' +
+					'parameter, a media type and a column to somebody who asked about none of them.'
+			).not.toContain(leak);
+		}
+	});
+
+	/*
+	 * ⚠️ TWO SCREENS, TWO SENTENCES. The all-types note opens "this view spans
+	 * every media type", which is false of a view that spans exactly one, so
+	 * reusing it here would print a claim the screen contradicts. Neither may
+	 * collapse into the other.
+	 */
+	it('does not reuse the all-types sentence', () => {
+		expect(
+			BROWSE_AZ_UNAVAILABLE.length,
+			'the all-types note is empty, so the comparison below proves nothing'
+		).toBeGreaterThan(20);
+		expect(
+			browseSortNote(query({ mediaType: 'music' })),
+			'music now prints the all-types sentence, which tells a reader on one media type ' +
+				'that this view spans every media type'
+		).not.toBe(BROWSE_AZ_UNAVAILABLE);
+		expect(
+			browseSortNote({ sort: 'added_at', libraries: [] }),
+			'the all-types view stopped printing its own sentence'
+		).toBe(BROWSE_AZ_UNAVAILABLE);
+	});
+
+	/*
+	 * ⚠️ THE POSITIVE HALF. A note that printed everywhere would pass every
+	 * assertion above, so the five single-kind types are checked to have all three
+	 * orders and nothing to explain.
+	 */
+	it('leaves every single-kind type with three sorts and no note', () => {
+		const single = MEDIA_TYPES.filter((t) => t !== 'music');
+		expect(single.length, 'the single-kind list is empty, so this guard proves nothing').toBe(5);
+		for (const type of single) {
+			expect(
+				browseSortsFor(type),
+				`${type} no longer offers all three orders, and this screen would need a note it ` +
+					'does not have'
+			).toEqual([...BROWSE_SORTS]);
+			expect(
+				browseSortNote(query({ mediaType: type })),
+				`${type} prints an A to Z note while offering A to Z, so the note fires on the ` +
+					'wrong condition'
+			).toBeUndefined();
+		}
+		expect(
+			browseSortsFor('music').length,
+			'music offers three orders now, so the note above explains an absence that is not there'
+		).toBe(2);
 	});
 });
 
