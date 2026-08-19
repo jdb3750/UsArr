@@ -1337,7 +1337,11 @@ export async function testNewService(
 				kind: input.kind,
 				base_url: input.baseUrl.trim(),
 				...urlBaseField(input.urlBase),
-				api_key: input.apiKey
+				// Trimmed for the same reason as the two lines above, and it used
+				// to be the one field here that was not. handleTestUnsaved trims
+				// too now, but a paste artefact that never leaves the browser is
+				// one the server cannot be blamed for either.
+				api_key: input.apiKey.trim()
 			},
 			signal
 		)
@@ -1356,7 +1360,7 @@ export async function createService(input: NewService): Promise<ServiceInstance>
 			name: input.name.trim(),
 			base_url: input.baseUrl.trim(),
 			...urlBaseField(input.urlBase),
-			api_key: input.apiKey
+			api_key: input.apiKey.trim()
 		})
 	);
 	if (!created) {
@@ -1410,7 +1414,9 @@ export async function updateService(id: number, edit: ServiceEdit): Promise<Serv
 	// the key back for it would be a rule this codebase does not have.
 	if (edit.urlBase !== undefined) body.url_base = edit.urlBase.trim();
 	if (edit.enabled !== undefined) body.enabled = edit.enabled;
-	if (key !== '') body.api_key = edit.apiKey;
+	// `key`, not `edit.apiKey`: the gate above already trimmed, and sending the
+	// untrimmed field after gating on the trimmed one is how the two disagreed.
+	if (key !== '') body.api_key = key;
 
 	const updated = toServiceInstance(await sendJson('PATCH', url, body));
 	if (!updated) throw new ApiError('the service was saved but did not come back', 200, url);
@@ -1446,7 +1452,7 @@ export async function testService(
 	// through stringOr(), where an empty string means "use the stored sub-path".
 	// Sending "" could not clear it and would only look as if it might.
 	Object.assign(body, urlBaseField(edit.urlBase));
-	if (key !== '') body.api_key = edit.apiKey;
+	if (key !== '') body.api_key = key;
 	return toTestResult(await postJson(url, body, signal));
 }
 

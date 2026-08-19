@@ -17,11 +17,15 @@
 	 * `poster_asset_id` "would be an id the client cannot turn into anything".
 	 * Both halves are gone — `GET /img/{key}` is routed, and the browse response
 	 * carries `poster_key`, which `$lib/library`'s `posterUrl` turns into a URL.
-	 * What is missing now is the BYTES: the fetch half of the pipeline is not
-	 * built, nothing writes `image_asset`, so every poster key is absent on every
-	 * real install and a poster view would draw an empty grid. It arrives with
-	 * the fetcher, and calling this line item finished would still be the
-	 * invented status CLAUDE.md forbids.
+	 * What is missing now is the VIEW rather than the bytes. ⚠️ THIS USED TO SAY
+	 * the fetch half of the pipeline was not built and nothing wrote
+	 * `image_asset`; `internal/store`'s `PutPosterAsset` writes it, called once
+	 * per imported book by `internal/libsync`'s phase D on a BookOrbit import. A
+	 * key is still absent for every other adapter, for any work imported before
+	 * that pass and for any cover that 404'd, so a grid drawn today would be part
+	 * artwork and part blank rather than empty — and this screen draws none of
+	 * it. Calling this line item finished would still be the invented status
+	 * CLAUDE.md forbids.
 	 *
 	 * ⚠️ AND IT IS NOT `/library`. That screen is THE SAME READ WITH NO
 	 * `media_type` ON IT: every media type at once, sorted and scoped by the same
