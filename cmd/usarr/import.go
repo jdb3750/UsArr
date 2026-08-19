@@ -134,6 +134,12 @@ func (g *registry) runImport(ctx context.Context, instanceID int64) (libsync.Rep
 		// import, because a shortfall measured against library one is still true
 		// when the walk dies on library three.
 		g.recordCompleteness(ctx, instanceID, bo.Completeness(), log)
+		// Same rule a third time. A comic that took a residue default in library
+		// one took it whether or not library three then failed, and ADR-0068
+		// decision 4 wants the FIRST real import to produce these numbers — an
+		// import that has to succeed before it measures anything would postpone
+		// the measurement past exactly the runs most worth measuring.
+		g.recordComicResidue(ctx, instanceID, bo.Comics(), log)
 	}
 	return rep, importErr
 }
@@ -227,12 +233,22 @@ const (
 // a table cell whose overflow policy is a wrap, so it is one clause — the same
 // constraint completenessReason is written against. Everything the operator
 // needs and the cell cannot hold is in the effect, which does not travel.
+//
+// ⚠️ BOTH USED TO NAME COMICS AND NEITHER MAY ANY MORE. skipReason read *"UsArr
+// maps prose books only; a comic or an unclassified file has no row"* and
+// skipEffect carried *"A comic-format book has no settled unit of work in
+// UsArr"*. ADR-0068 gave comics a unit of work and this binary imports them, so
+// the only remaining reason a BookOrbit book is skipped is the one BookOrbit
+// itself cannot classify. A row's own prose is what an operator reads out of the
+// database months later; leaving the comics clause in would have it explain a
+// count that is now structurally zero.
 const (
-	skipReason = "UsArr maps prose books only; a comic or an unclassified file has no row"
+	skipReason = "a file BookOrbit itself cannot classify has no row"
 	skipEffect = "those books have no work row, and this library's item count is short by " +
-		"that many; every other book in the library was imported. A comic-format book has " +
-		"no settled unit of work in UsArr, and a book whose primary file has no format is " +
-		"one BookOrbit itself classifies as 'unknown'"
+		"that many; every other book in the library was imported. A book whose primary " +
+		"file has no format — or that has no files at all — is one BookOrbit itself " +
+		"classifies as media kind 'unknown', which is a fact about the upstream scan " +
+		"rather than about UsArr's coverage"
 )
 
 // recordSkippedItems writes the durable half of "UsArr did not take all of your
@@ -377,6 +393,142 @@ func (g *registry) recordCompleteness(
 			log.Warn("cannot record how much of this library UsArr could see; the import itself stands",
 				"library_id", c.RemoteID, "err", err)
 		}
+	}
+}
+
+// The two sync_report kinds ADR-0068 decision 4 asks for, and the scope pair
+// every one of their rows carries.
+//
+// ⚠️ THEY ARE UNEXPORTED LITERALS, on syncReportCoverPassIncomplete's stated
+// rule: `sync_report.kind` carries no CHECK, and a store constant exists only
+// where the kind has a READER in another package. Nothing reads these yet — they
+// are written so the owner's first real import can be measured — so a second
+// exported spelling would be "a promise with no second side". The day a screen
+// reads one, it moves to internal/store beside SyncReportItemsSkipped.
+const (
+	syncReportComicSeriesSynthesized = "comic_series_synthesized"
+	syncReportComicSeriesDeclined    = "comic_series_memberships_declined"
+)
+
+// residueCovers and residueDoesNotCover are the scope of the claim, written into
+// EVERY residue row on SkipNote's rule — a number with no scope invites the
+// reading it does not support, and the operator reading this out of the database
+// does not have this file open.
+const (
+	residueCovers = "how many of this container's comics were ingested on a " +
+		"residue default rather than on a series BookOrbit itself named, and how " +
+		"many series memberships were recorded without being acted on"
+	residueDoesNotCover = "whether the default was the RIGHT answer for any " +
+		"particular comic. It is a count of how often UsArr fell back, not a " +
+		"quality verdict on the upstream's metadata, and a high number is a " +
+		"sizing input rather than a fault"
+)
+
+// comicResidueNote is the JSON contract of sync_report.detail for both residue
+// kinds.
+//
+// ⚠️ EVERY STRING IN IT IS USARR'S OWN PROSE AND EVERY UPSTREAM VALUE IN IT IS A
+// NUMBER, which is store.SkipNote's rule made structural rather than remembered:
+// reference/security.md §5 keeps upstream response bodies out of this column, and
+// a series NAME is an upstream response body. `Name` is the container's name,
+// which SkipNote already carries into this column on the same terms — it is what
+// makes a row readable by someone who has only sync_report in front of him.
+type comicResidueNote struct {
+	Name string `json:"name,omitempty"`
+
+	// SynthesizedSeries and MultiSeries/ExtraMemberships are BOTH written into
+	// BOTH rows. The row kind says which number the row is ABOUT; carrying the
+	// other one costs a field and saves the reader a join against a row he may
+	// not have.
+	SynthesizedSeries int `json:"synthesized_series"`
+	MultiSeries       int `json:"multi_series_books"`
+	ExtraMemberships  int `json:"declined_memberships"`
+
+	// Sample is up to libsync's cap of the declined memberships, ids only. It is
+	// absent on a synthesized-series row: there is nothing to sample there — the
+	// declined set for a comic with no series is empty by definition.
+	Sample []libsync.DeclinedMembership `json:"sample,omitempty"`
+
+	// SampleCapped reports that Sample is shorter than ExtraMemberships because
+	// the cap bit, so a reader cannot mistake a truncated list for the whole one.
+	SampleCapped bool `json:"sample_capped,omitempty"`
+
+	Effect       string `json:"effect,omitempty"`
+	Covers       string `json:"covers,omitempty"`
+	DoesNotCover string `json:"does_not_cover,omitempty"`
+}
+
+// The two effect sentences. They are operator-facing and do not travel to a
+// browser.
+const (
+	synthesizedEffect = "each of these comics reported no series, so it was ingested as " +
+		"an issue under a single-issue series named for the book, with is_oneshot set. It " +
+		"is visible on /library/comics as one series with one issue; it was neither " +
+		"dropped nor promoted to a series work in its own right"
+	declinedEffect = "each of these comics belongs to more than one series upstream. It " +
+		"was bound to BookOrbit's own primary series and the remaining memberships were " +
+		"recorded here and not acted on: no second parent, no second membership and no " +
+		"work_relation edge was written. The tier that would adjudicate them is v0.3"
+)
+
+// recordComicResidue writes the durable half of "these comics did not arrive the
+// straightforward way".
+//
+// # TWO ROWS PER CONTAINER PER IMPORT, ZERO OR NOT
+//
+// ADR-0063's rule, and recordSkippedItems and recordCompleteness both already
+// follow it: "none" and "nobody looked" must not render identically. A zero row
+// here is what makes a later zero readable — ADR-0068 decision 4 exists to
+// MEASURE how often each default fires, and a measurement whose zero is an
+// absence measures nothing.
+//
+// ⚠️ THE ROWS CARRY NO REASON SENTENCE WHEN THE COUNT IS ZERO, on
+// recordSkippedItems's rule: an effect sentence on a row recording that nothing
+// happened asserts a cause for a non-event.
+//
+// A FAILURE TO RECORD DOES NOT FAIL THE IMPORT, on the same reasoning as its two
+// neighbours: the catalogue rows are committed and correct, and losing the note
+// about how they got there is worth a warning, not a rollback.
+func (g *registry) recordComicResidue(
+	ctx context.Context, instanceID int64, comics []libsync.ContainerComics, log *slog.Logger,
+) {
+	for _, c := range comics {
+		synth := comicResidueNote{
+			Name:              c.Name,
+			SynthesizedSeries: c.SynthesizedSeries,
+			MultiSeries:       c.MultiSeries,
+			ExtraMemberships:  c.ExtraMemberships,
+			Covers:            residueCovers,
+			DoesNotCover:      residueDoesNotCover,
+		}
+		if c.SynthesizedSeries > 0 {
+			synth.Effect = synthesizedEffect
+		}
+		g.writeResidueRow(ctx, instanceID, syncReportComicSeriesSynthesized, c.RemoteID, synth, log)
+
+		declined := synth
+		declined.Effect = ""
+		declined.Sample = c.Sample
+		declined.SampleCapped = len(c.Sample) < c.ExtraMemberships
+		if c.MultiSeries > 0 {
+			declined.Effect = declinedEffect
+		}
+		g.writeResidueRow(ctx, instanceID, syncReportComicSeriesDeclined, c.RemoteID, declined, log)
+	}
+}
+
+func (g *registry) writeResidueRow(
+	ctx context.Context, instanceID int64, kind, ref string,
+	note comicResidueNote, log *slog.Logger,
+) {
+	detail, err := json.Marshal(note)
+	if err != nil {
+		log.Warn("cannot encode the comic residue note", "kind", kind, "library_id", ref, "err", err)
+		return
+	}
+	if err := g.st.RecordSyncReport(ctx, instanceID, kind, "library", ref, string(detail)); err != nil {
+		log.Warn("cannot record how this library's comics were bound; the import itself stands",
+			"kind", kind, "library_id", ref, "err", err)
 	}
 }
 

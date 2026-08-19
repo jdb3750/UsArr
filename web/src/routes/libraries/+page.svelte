@@ -502,7 +502,14 @@
 			</div>
 		{/if}
 	{:else if column.id === 'state'}
-		{@const marks = libraryStates(library, health)}
+		<!--
+			THE WHOLE LIST IS PASSED, for one cross-reference: a skip belongs to an
+			upstream CONTAINER, and since ADR-0066 decision 5 two libraries can
+			stand over one. Both rows then carry the same count, and the row has to
+			say they are one event rather than two. This screen has no
+			container-level slot to say it in once.
+		-->
+		{@const marks = libraryStates(library, health, libraries)}
 		{#if marks.length === 0}
 			<span class="muted">{NOTHING.empty}</span>
 		{:else}

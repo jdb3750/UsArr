@@ -93,13 +93,14 @@ describe('left_out says the number and the why, on the row', () => {
 			skipped: {
 				state: 'left_out',
 				items: 42,
-				reason: 'UsArr maps prose books only',
+				reason: 'a file BookOrbit itself cannot classify has no row',
 				recorded_at: '2026-08-19T10:24:00Z'
 			}
 		});
 		expect(marks(l)).toContainEqual({
 			word: 'Some items were left out',
-			detail: '42 items were read and not mapped; UsArr maps prose books only'
+			detail:
+				'42 items were read and not mapped; a file BookOrbit itself cannot classify has no row'
 		});
 	});
 
@@ -125,6 +126,72 @@ describe('left_out says the number and the why, on the row', () => {
 		});
 		const mark = libraryStates(l, HEALTH_UNREAD).find((m) => m.key === 'items-left-out');
 		expect(mark?.at).toBe('2026-08-19T10:24:00Z');
+	});
+
+	/* ── the shared container, on the row ──────────────────────────────────────
+	 *
+	 * ⚠️ THE COUNT IS NOT SPLIT AND NOT APPORTIONED. A skip is a fact about the
+	 * upstream container, and since ADR-0066 decision 5 a `book` library and a
+	 * `comic` library can stand over one. Both rows fold the same `sync_report`
+	 * row and both are TRUE. What would be false is the reader adding them, and
+	 * §17.8 has no container-level slot to state the fact in once instead — so
+	 * the row says it.
+	 */
+
+	const fiction = () =>
+		parse({ id: 2, name: 'Fiction', skipped: { state: 'left_out', items: 1, reason: 'r' } });
+	const comics = () =>
+		parse({
+			id: 3,
+			name: 'Fiction (Comics)',
+			kind: 'comic',
+			skipped: { state: 'left_out', items: 1, reason: 'r' }
+		});
+
+	it('names the sibling that reports the same skip over the same container', () => {
+		const rows = [fiction(), comics()];
+		const mark = libraryStates(rows[1], HEALTH_UNREAD, rows).find(
+			(m) => m.key === 'items-left-out'
+		);
+		expect(mark?.detail).toBe(
+			'1 item was read and not mapped; r; the same skip is reported by Fiction over the same upstream container, so it is one skip shown on both rows'
+		);
+	});
+
+	it('says it on BOTH rows, because neither of them owns the skip', () => {
+		const rows = [fiction(), comics()];
+		const mark = libraryStates(rows[0], HEALTH_UNREAD, rows).find(
+			(m) => m.key === 'items-left-out'
+		);
+		expect(mark?.detail).toContain('the same skip is reported by Fiction (Comics)');
+	});
+
+	it('keeps the count whole on each row rather than halving it between them', () => {
+		const rows = [fiction(), comics()];
+		for (const r of rows) {
+			const mark = libraryStates(r, HEALTH_UNREAD, rows).find((m) => m.key === 'items-left-out');
+			expect(mark?.detail).toContain('1 item was read and not mapped');
+			expect(mark?.detail).not.toContain('0.5');
+		}
+	});
+
+	it('says nothing about a sibling when no other row reads the same container', () => {
+		const other = parse({
+			id: 3,
+			name: 'Other',
+			sources: [{ ...(wire().sources as Record<string, unknown>[])[0], container_ref: '13' }],
+			skipped: { state: 'left_out', items: 5, reason: 'r' }
+		});
+		const rows = [fiction(), other];
+		const mark = libraryStates(rows[0], HEALTH_UNREAD, rows).find(
+			(m) => m.key === 'items-left-out'
+		);
+		expect(mark?.detail).toBe('1 item was read and not mapped; r');
+	});
+
+	it('omits the clause when the caller passes no list, and changes nothing else', () => {
+		const mark = libraryStates(fiction(), HEALTH_UNREAD).find((m) => m.key === 'items-left-out');
+		expect(mark?.detail).toBe('1 item was read and not mapped; r');
 	});
 });
 
@@ -164,12 +231,57 @@ describe('the sentence above the table', () => {
 	});
 
 	it('sums across libraries and counts them', () => {
+		// ⚠️ TWO DIFFERENT CONTAINERS, AND THE `container_ref` IS THE POINT. The
+		// base fixture is one BookOrbit library, so two copies of it are two rows
+		// over ONE container — which is the shared-skip case below, not this one.
+		// A summing test built from the same container would assert that a
+		// double-count happens.
 		const note = skippedNote([
-			parse({ skipped: { state: 'left_out', items: 40, reason: 'r' } }),
-			parse({ skipped: { state: 'left_out', items: 2, reason: 'r' } })
+			parse({ id: 2, skipped: { state: 'left_out', items: 40, reason: 'r' } }),
+			parse({
+				id: 3,
+				sources: [{ ...(wire().sources as Record<string, unknown>[])[0], container_ref: '13' }],
+				skipped: { state: 'left_out', items: 2, reason: 'r' }
+			})
 		]);
 		expect(note).toContain('42 items');
 		expect(note).toContain('2 libraries');
+	});
+
+	/* ── the shared container: one skip, two rows ──────────────────────────────
+	 *
+	 * ADR-0066 decision 5 puts a `book` library and a `comic` library over ONE
+	 * upstream container, and the server folds that container's `sync_report`
+	 * rows into BOTH of them. The skip happened to the container, once. Neither
+	 * sibling owns it, so it is never split and never apportioned — and the
+	 * screen must not let the reader add it to itself.
+	 */
+
+	it('counts a container once when two libraries stand over it', () => {
+		const note = skippedNote([
+			parse({ id: 2, name: 'Fiction', skipped: { state: 'left_out', items: 1, reason: 'r' } }),
+			parse({
+				id: 3,
+				name: 'Fiction (Comics)',
+				kind: 'comic',
+				skipped: { state: 'left_out', items: 1, reason: 'r' }
+			})
+		]);
+		expect(note).toContain('1 item');
+		expect(note).not.toContain('2 items');
+		expect(note).toContain('the same skip is reported on each of them and is counted once here');
+	});
+
+	it('says nothing about sharing when every row stands over its own container', () => {
+		const note = skippedNote([
+			parse({ id: 2, skipped: { state: 'left_out', items: 40, reason: 'r' } }),
+			parse({
+				id: 3,
+				sources: [{ ...(wire().sources as Record<string, unknown>[])[0], container_ref: '13' }],
+				skipped: { state: 'left_out', items: 2, reason: 'r' }
+			})
+		]);
+		expect(note).not.toContain('same skip');
 	});
 
 	// ⚠️ GATED ON THE FIRST ARM, DELIBERATELY. "N libraries are not counted this

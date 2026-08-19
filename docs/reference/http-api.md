@@ -370,7 +370,7 @@ express. There is nothing to clamp, so unlike §1 there is no `400` path at all.
       "skipped": {
         "state": "left_out",
         "items": 42,
-        "reason": "UsArr maps prose books only; a comic or an unclassified file has no row",
+        "reason": "a file BookOrbit itself cannot classify has no row",
         "recorded_at": "2026-08-19T10:24:00Z"
       }
     },
@@ -548,7 +548,7 @@ unit of work for part of it — and **neither is evidence for the other**. Like 
 
 ```jsonc
 "skipped": { "state": "left_out", "items": 42,
-             "reason": "UsArr maps prose books only; a comic or an unclassified file has no row",
+             "reason": "a file BookOrbit itself cannot classify has no row",
              "recorded_at": "2026-08-19T10:24:00Z" }
 ```
 

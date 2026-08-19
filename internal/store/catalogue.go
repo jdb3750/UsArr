@@ -77,6 +77,19 @@ type CatalogueBinding struct {
 	// so a caller that wants to report "joined X as a second source" needs to be
 	// able to tell them apart.
 	Created bool
+
+	// UserID and ContainerName are what a SIBLING library over the same
+	// container ref needs, and they are carried on the binding rather than added
+	// to ApplyCatalogueBatch's parameter list for one reason: `library` is
+	// user-scoped and every library minted from this container must be owned by
+	// the same user and named after the same upstream container, so the two
+	// facts belong to the binding rather than to a batch.
+	//
+	// ⚠️ ONLY THE PARENT PATH READS THEM (ADR-0066 decision 5, activated by
+	// ADR-0068). A binding built by hand with both zero still files items
+	// exactly as it always did; what it cannot do is mint a comic library.
+	UserID        int64
+	ContainerName string
 }
 
 // SkippedContainer is one upstream container that could NOT be bound to a
@@ -119,6 +132,48 @@ type AltTitle struct {
 	Normalized string
 	Kind       string // original|translated|alias|acronym|sort
 	Language   string
+}
+
+// CatalogueParent is the TOP-LEVEL work a child item is minted under.
+//
+// It is the two-level seam ADR-0068 needed and this type is the whole of it: a
+// child kind — `comic_issue` today, `episode` and `track` the day an adapter
+// reports them — is never a top-level item, so it cannot be filed, indexed or
+// browsed on its own terms and must arrive with the work it hangs under.
+//
+// ⚠️ THE PARENT IS RESOLVED, WRITTEN AND FILED BEFORE THE CHILD, in the same
+// transaction. `parent_work_id` is never left null on a child this writer
+// creates, which is ADR-0068 decision 1 and the one part of the shape §6.4's
+// cascade makes unfixable later.
+type CatalogueParent struct {
+	// RemoteKind and RemoteID identify the parent in service_item_link, and they
+	// are what makes the parent RESOLVE rather than be re-minted per child.
+	// Every child of one series carries the same pair, so the second child of a
+	// series finds the work the first one created.
+	//
+	// ⚠️ RemoteID MAY BE SYNTHESIZED. A one-shot has no upstream series, so the
+	// adapter mints a deterministic id for it (ADR-0068 decision 2). Determinism
+	// is the requirement: a re-import must resolve the same series work rather
+	// than mint a second one.
+	RemoteKind string
+	RemoteID   string
+
+	// Kind is the parent's work.kind — 'comic' for a comic series. It is
+	// DIFFERENT from the binding's kind whenever a mixed upstream container is
+	// involved, and that difference is what mints the sibling library (ADR-0066
+	// decision 5).
+	Kind string
+
+	Title           string
+	SortTitle       string
+	NormalizedTitle string
+	NormVersion     int64
+
+	// Synthesized reports that no upstream parent exists and this one was minted
+	// for a single child. It changes NO write here — the row is an ordinary
+	// series work, deliberately, so that /library/comics counts one thing — and
+	// exists so the adapter can count the residue for ADR-0068 decision 4.
+	Synthesized bool
 }
 
 // CatalogueItem is one replicated top-level work, as an adapter projected it.
@@ -183,6 +238,22 @@ type CatalogueItem struct {
 	// ReadingDirection lands on work_comic.reading_direction. NULL is a real
 	// answer and the common one.
 	ReadingDirection sql.NullString
+
+	// Parent, when non-nil, makes this a CHILD work rather than a top-level one.
+	// See CatalogueParent, and applyOneItem step 0 for what changes.
+	Parent *CatalogueParent
+
+	// NumberText and NumberSort land on work_comic_issue. ANY INTEGER COLUMN
+	// HERE WOULD BE WRONG (ADR-0030, and migration 00006's own header): issue
+	// numbers are '1.MU', '-1', '0', 'Annual 1', '1A', so the text is the
+	// upstream's own token and the sort key is a REAL.
+	NumberText sql.NullString
+	NumberSort sql.NullFloat64
+
+	// IsOneshot lands on work_comic_issue.is_oneshot, and it is WRITTEN rather
+	// than left to the column's DEFAULT 0 — ADR-0068 decision 2: "a column with
+	// a DEFAULT 0 and no writer is a deaf column".
+	IsOneshot bool
 
 	ExternalIDs []ExternalIdentifier
 }
@@ -348,7 +419,7 @@ func (s *Store) BindContainers(
 			if _, err := tx.ExecContext(ctx, "SAVEPOINT "+sp); err != nil {
 				return fmt.Errorf("savepoint %s: %w", sp, err)
 			}
-			b, bindErr := bindOneContainer(ctx, tx, instanceID, userID, c)
+			b, bindErr := bindOneContainer(ctx, tx, instanceID, userID, c, bindFromContainerList)
 			if bindErr == nil {
 				if _, err := tx.ExecContext(ctx, "RELEASE SAVEPOINT "+sp); err != nil {
 					return fmt.Errorf("release savepoint %s: %w", sp, err)
@@ -411,11 +482,120 @@ func isSkippableBindError(err error) bool {
 	return errors.Is(err, sqlite3.CONSTRAINT)
 }
 
+// SyncReportContainerKindChanged is sync_report.kind for a container whose
+// ADAPTER-DECIDED kind is not the kind it was bound at last time, so this import
+// binds it to a DIFFERENT library than the last one did.
+//
+// ⚠️ IT EXISTS BECAUSE THE ALTERNATIVE IS ITEMS MOVING BETWEEN LIBRARIES WITH NO
+// RECORD. bindOneContainer's step 1 matches on (container, kind); a container
+// retyped upstream — a Kavita library switched from Manga to Book — therefore
+// misses its old library and gets one of the right kind instead. That is the
+// correct outcome (§6.4: the kind decision is UsArr's, made once at ingest, and
+// a library holding items of a kind it does not declare is the worse state), but
+// from the Libraries screen it looks like a library that emptied itself and a
+// second one that appeared. One row per occurrence is what makes it readable
+// afterwards.
+//
+// ⚠️ IT IS NOT WRITTEN FOR THE ADR-0066 DECISION 5 SIBLING MINT, and that
+// distinction is the whole reason bindReason exists. A `comic` library minted
+// beside a `book` one over the same container is a container bound at a second
+// kind, which is indistinguishable in the schema from a container whose kind
+// changed — but it is not a change, nothing moved, and a row for it would fire
+// on every mixed BookOrbit library on the first comic it reaches.
+//
+// It needs no migration: sync_report.kind carries no CHECK (migration 00005) and
+// `detail` is untyped JSON. Same seam container_declined and
+// container_bind_failed use.
+const SyncReportContainerKindChanged = "container_kind_changed"
+
+// bindReason is WHO is asking for a binding, and it exists for exactly one
+// decision: whether a container already bound at a different kind is a CHANGE
+// (worth a sync_report row) or an EXPECTED SECOND KIND inside one container
+// (ADR-0066 decision 5, worth nothing). The schema cannot tell those apart —
+// both are two library_source rows on one container ref — so the caller says.
+type bindReason int
+
+const (
+	// bindFromContainerList is BindContainers walking the adapter's container
+	// list. Exactly one kind per container per import, so a different existing
+	// kind means the adapter's DECISION moved.
+	bindFromContainerList bindReason = iota
+
+	// bindSiblingKind is parentBinding minting the second library a mixed
+	// container needs. A different existing kind is the precondition, not news.
+	bindSiblingKind
+)
+
+// kindQualifier is the parenthetical a SIBLING library carries so its name says
+// what it holds rather than when it was made.
+//
+// ⚠️ NEVER AN ORDINAL. `Fiction (2)` encodes creation order, which is an
+// implementation fact no reader can interpret: it says a second library exists
+// and not one word about why. `Fiction (Comics)` says which of the two this is,
+// and the qualifier's PRESENCE is itself the signal that a container was split.
+//
+// ⚠️ PARENTHESES RATHER THAN A SEPARATOR GLYPH. The name travels through a
+// terminal, a CSV and a URL, and `(` `)` survive all three unescaped; a middot
+// does not survive the first.
+//
+// ⚠️ ONLY THE NEW SIBLING IS QUALIFIED. The library that was already there keeps
+// its name — renaming it to `Fiction (Books)` for symmetry would rewrite a name
+// the user has already seen, and library.slug is durable by design, so the pair
+// would agree in the list and disagree in every permalink.
+//
+// An unknown kind returns "", and the caller then falls through to the ordinal
+// loop rather than inventing a word for it. library.kind is CHECK-constrained to
+// exactly these seven (migration 00005), so "" is unreachable today and is
+// handled anyway: the CHECK is the schema's list and this is a second copy of
+// it, which is the pair that drifts.
+func kindQualifier(kind string) string {
+	switch kind {
+	case "movie":
+		return "Movies"
+	case "series":
+		return "Series"
+	case "artist":
+		return "Artists"
+	case "album":
+		return "Albums"
+	case "book":
+		return "Books"
+	case "comic":
+		return "Comics"
+	case "game":
+		return "Games"
+	default:
+		return ""
+	}
+}
+
 func bindOneContainer(
 	ctx context.Context, tx *sql.Tx, instanceID, userID int64, c CatalogueContainer,
+	why bindReason,
 ) (CatalogueBinding, error) {
-	// Step 1: is this exact container already bound? If so nothing about the
-	// library changes — a rename upstream must not re-propose or re-slug it.
+	// Step 1: is this exact container already bound AT THIS KIND? If so nothing
+	// about the library changes — a rename upstream must not re-propose or
+	// re-slug it.
+	//
+	// ⚠️ `AND l.kind = ?` IS LOAD-BEARING AND WAS ADDED FOR ADR-0066 DECISION 5.
+	// `library_source`'s uniqueness is (library_id, service_instance_id,
+	// container_kind, container_ref), so ONE container ref may legitimately name
+	// TWO libraries — a `book` library and a `comic` library over the same
+	// BookOrbit library, which is exactly what a mixed container becomes once
+	// comics have a unit of work (ADR-0068). Without the kind predicate this
+	// QueryRow matches BOTH and takes whichever row SQLite happens to return
+	// first, so on the second import the prose container could bind to the comic
+	// library and every book in it would be written into a library of the wrong
+	// kind. That is not a hypothetical the sibling mint below creates: it is the
+	// state the FIRST import leaves behind.
+	//
+	// ⚠️ AND IT CHANGES ONE PRE-EXISTING BEHAVIOUR, stated rather than hidden. A
+	// container whose ADAPTER-DECIDED kind changes between imports — a Kavita
+	// library retyped from Manga to Book — used to keep its old library and have
+	// its items written into it under the new kind. It now falls through to
+	// steps 2 and 3 and gets a library of the right kind instead. §6.4 is that
+	// "the kind decision is UsArr's, made once at ingest", and a library holding
+	// items of a kind it does not declare was already the worse of the two.
 	var libID int64
 	var kind string
 	err := tx.QueryRowContext(ctx, `
@@ -424,19 +604,34 @@ func bindOneContainer(
 		  JOIN library l ON l.id = ls.library_id
 		 WHERE ls.service_instance_id = ?
 		   AND ls.container_kind = 'remote_library'
-		   AND ls.container_ref = ?`, instanceID, c.RemoteID).Scan(&libID, &kind)
+		   AND ls.container_ref = ?
+		   AND l.kind = ?`, instanceID, c.RemoteID, c.Kind).Scan(&libID, &kind)
 	switch {
 	case err == nil:
 		// The container is back: clear any missing_since the sweep set.
+		// DELIBERATELY NOT LIBRARY-SCOPED. Where one container ref names two
+		// libraries, the container coming back un-misses BOTH of them: it is one
+		// upstream container and one fact about it, and `container_identity` is
+		// the same upstream name on both rows by construction.
 		if _, err := tx.ExecContext(ctx, `
 			UPDATE library_source SET missing_since = NULL, container_identity = ?
 			 WHERE service_instance_id = ? AND container_kind = 'remote_library' AND container_ref = ?`,
 			c.Name, instanceID, c.RemoteID); err != nil {
 			return CatalogueBinding{}, fmt.Errorf("refresh source: %w", err)
 		}
-		return CatalogueBinding{LibraryID: libID, Kind: kind}, nil
+		return CatalogueBinding{
+			LibraryID: libID, Kind: kind, UserID: userID, ContainerName: c.Name,
+		}, nil
 	case !errors.Is(err, sql.ErrNoRows):
 		return CatalogueBinding{}, fmt.Errorf("look up existing source: %w", err)
+	}
+
+	// Step 1b: THIS CONTAINER IS NOT BOUND AT THIS KIND. Is it bound at another
+	// one? The answer is needed twice below and read once here, before anything
+	// is written, so both readings are of the state the LAST import left.
+	prior, err := containerBoundKinds(ctx, tx, instanceID, c.RemoteID)
+	if err != nil {
+		return CatalogueBinding{}, err
 	}
 
 	// Step 2: join a library of the same name AND the same kind, if one exists.
@@ -458,7 +653,12 @@ func bindOneContainer(
 		if err := insertLibrarySource(ctx, tx, got.id, instanceID, c); err != nil {
 			return CatalogueBinding{}, err
 		}
-		return CatalogueBinding{LibraryID: got.id, Kind: got.kind}, nil
+		if err := noteKindChange(ctx, tx, instanceID, c, why, prior, got.id); err != nil {
+			return CatalogueBinding{}, err
+		}
+		return CatalogueBinding{
+			LibraryID: got.id, Kind: got.kind, UserID: userID, ContainerName: c.Name,
+		}, nil
 	}
 
 	// Step 3: create, under a name and slug that are BOTH free.
@@ -477,8 +677,38 @@ func bindOneContainer(
 	// still a row in ux_library_name and ux_library_slug, so an upstream
 	// library actually named "Unfiled" collided with it. Reserving a name
 	// against joining is not the same as pretending it is free.
+	// AND THE FIRST CANDIDATE IS A KIND QUALIFIER, NOT AN ORDINAL, WHENEVER THE
+	// NAME IS HELD BY A LIBRARY OF A DIFFERENT KIND. That is precisely the
+	// collision step 2 just refused to join across, and it is the shape ADR-0066
+	// decision 5 makes ordinary: one BookOrbit container becomes a `book` library
+	// and a `comic` library, and the second of them used to be called
+	// `Fiction (2)`. `Fiction (Comics)` says which one it is; `Fiction (2)` says
+	// only that it was made second. See kindQualifier for the rest of the reasons.
+	//
+	// ⚠️ THE ORDINAL LOOP BELOW IS NOT REPLACED, AND ITS SURVIVING JOB IS A
+	// DIFFERENT COLLISION. `Sci-Fi` and `Sci Fi` are two book libraries that
+	// reduce to one slug; a kind qualifier there would read `Sci Fi (Books)`
+	// beside a `Sci-Fi` that is also books, which states a difference that does
+	// not exist. The qualifier answers a KIND collision; the ordinal answers
+	// everything else.
+	//
+	// ⚠️ AND THE QUALIFIED NAME CAN ITSELF BE TAKEN — library names are UNIQUE
+	// per user (ux_library_name, migration 00005), so an upstream container
+	// genuinely named `Fiction (Comics)` collides with the derived one. Nothing
+	// here invents a rule for that: the candidate is simply not free, and the
+	// pre-existing ordinal loop runs from `base` exactly as it did before this
+	// change. What that case SHOULD do is an open design question and is recorded
+	// as one rather than settled by whichever branch happened to reach it.
 	base := name
 	slug := slugify(name)
+	if held, ok := existing.joinable[libraryNameKey(name)]; ok && held.kind != c.Kind {
+		if q := kindQualifier(c.Kind); q != "" {
+			cand := fmt.Sprintf("%s (%s)", base, q)
+			if candSlug := slugify(cand); !existing.names[libraryNameKey(cand)] && !existing.slugs[candSlug] {
+				name, slug = cand, candSlug
+			}
+		}
+	}
 	for n := 2; existing.names[libraryNameKey(name)] || existing.slugs[slug]; n++ {
 		name = fmt.Sprintf("%s (%d)", base, n)
 		slug = slugify(name)
@@ -497,7 +727,83 @@ func bindOneContainer(
 	if err := insertLibrarySource(ctx, tx, id, instanceID, c); err != nil {
 		return CatalogueBinding{}, err
 	}
-	return CatalogueBinding{LibraryID: id, Kind: c.Kind, Created: true}, nil
+	if err := noteKindChange(ctx, tx, instanceID, c, why, prior, id); err != nil {
+		return CatalogueBinding{}, err
+	}
+	return CatalogueBinding{
+		LibraryID: id, Kind: c.Kind, Created: true, UserID: userID, ContainerName: c.Name,
+	}, nil
+}
+
+// containerBoundKinds is every (kind, library) this container is ALREADY bound
+// to, read before this bind writes anything.
+//
+// It is ordered by kind so the sync_report detail below is stable between runs:
+// a report whose field reorders is a report a reader cannot diff.
+func containerBoundKinds(
+	ctx context.Context, tx *sql.Tx, instanceID int64, remoteID string,
+) ([]libraryRow, error) {
+	rows, err := tx.QueryContext(ctx, `
+		SELECT l.kind, l.id
+		  FROM library_source ls
+		  JOIN library l ON l.id = ls.library_id
+		 WHERE ls.service_instance_id = ?
+		   AND ls.container_kind = 'remote_library'
+		   AND ls.container_ref = ?
+		 ORDER BY l.kind, l.id`, instanceID, remoteID)
+	if err != nil {
+		return nil, fmt.Errorf("look up bound kinds for container %q: %w", remoteID, err)
+	}
+	defer func() { _ = rows.Close() }()
+
+	var out []libraryRow
+	for rows.Next() {
+		var r libraryRow
+		if err := rows.Scan(&r.kind, &r.id); err != nil {
+			return nil, fmt.Errorf("look up bound kinds for container %q: scan: %w", remoteID, err)
+		}
+		out = append(out, r)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("look up bound kinds for container %q: %w", remoteID, err)
+	}
+	return out, nil
+}
+
+// noteKindChange writes the SyncReportContainerKindChanged row, or does nothing.
+//
+// It does nothing in the two ordinary cases: a container nobody has bound before
+// (prior is empty, which is every container of every first import) and the
+// ADR-0066 decision 5 sibling mint, which is a second kind by design.
+//
+// It writes exactly one row when BindContainers — the adapter's own container
+// list, one kind per container per import — asks for a kind this container was
+// not bound at, because that means the adapter DECIDED differently than it did
+// last time and this container's items land in a different library from now on.
+// The detail carries both sides: a reader who finds a library that emptied
+// itself needs to know where its items went, and a reader who finds a library
+// that appeared needs to know it is not new data.
+func noteKindChange(
+	ctx context.Context, tx *sql.Tx, instanceID int64, c CatalogueContainer,
+	why bindReason, prior []libraryRow, boundTo int64,
+) error {
+	if why != bindFromContainerList || len(prior) == 0 {
+		return nil
+	}
+	was := make([]map[string]any, 0, len(prior))
+	for _, r := range prior {
+		was = append(was, map[string]any{"kind": r.kind, "library_id": r.id})
+	}
+	detail, err := json.Marshal(map[string]any{
+		"name": c.Name,
+		"was":  was,
+		"now":  map[string]any{"kind": c.Kind, "library_id": boundTo},
+	})
+	if err != nil {
+		return fmt.Errorf("encode kind change for container %q: %w", c.RemoteID, err)
+	}
+	return recordSyncReport(ctx, tx, instanceID,
+		SyncReportContainerKindChanged, "library", c.RemoteID, string(detail))
 }
 
 type libraryRow struct {
@@ -634,6 +940,10 @@ func (s *Store) ApplyCatalogueBatch(
 	}
 	err := s.write(ctx, func(ctx context.Context, tx *sql.Tx) error {
 		res = BatchResult{}
+		// ONE CACHE PER BATCH, not per process: it is scoped to the transaction
+		// whose writes made its entries true, so a rolled-back batch cannot leave
+		// a work id behind for the next one to hand a child to.
+		parents := parentCache{}
 		for _, it := range items {
 			b, ok := bindings[it.ContainerID]
 			if !ok {
@@ -644,7 +954,7 @@ func (s *Store) ApplyCatalogueBatch(
 				// the whole import.
 				continue
 			}
-			one, err := applyOneItem(ctx, tx, instanceID, b, it, now)
+			_, one, err := applyOneItem(ctx, tx, instanceID, b, it, now, parents)
 			if err != nil {
 				return fmt.Errorf("apply %s %s from service_instance %d: %w",
 					it.RemoteKind, it.RemoteID, instanceID, err)
@@ -665,13 +975,54 @@ func (s *Store) ApplyCatalogueBatch(
 // invisible. The order is the algorithm, which is why the complexity linters are
 // answered rather than obeyed here.
 //
+// It returns the work id it wrote as well as the tally, because a CHILD item's
+// parent is written through this same function and the child needs the id back.
+//
 //nolint:gocyclo,maintidx // see above: the order is the algorithm
 func applyOneItem(
 	ctx context.Context, tx *sql.Tx, instanceID int64,
-	b CatalogueBinding, it CatalogueItem, now time.Time,
-) (BatchResult, error) {
+	b CatalogueBinding, it CatalogueItem, now time.Time, parents parentCache,
+) (int64, BatchResult, error) {
 	var res BatchResult
 	nowStr := FormatTime(now)
+
+	// ── 0. THE PARENT, when this item is a child. It is written FIRST and in
+	// this same transaction, so `parent_work_id` below is never null and never
+	// points at a row a later failure could roll back out from under it
+	// (ADR-0068 decision 1).
+	//
+	// The parent is an ordinary top-level item and is written by an ordinary
+	// recursive call — one level deep and no deeper, because parentItem() clears
+	// Parent. Writing it any other way would mean a second, parallel
+	// implementation of the ten steps below, and the two would drift.
+	var parentWorkID int64
+	if it.Parent != nil {
+		pb, err := parentBinding(ctx, tx, instanceID, b, it.ContainerID, *it.Parent)
+		if err != nil {
+			return 0, res, err
+		}
+		key := parentKey{
+			containerID: it.ContainerID,
+			remoteKind:  it.Parent.RemoteKind,
+			remoteID:    it.Parent.RemoteID,
+		}
+		if id, ok := parents[key]; ok {
+			// ALREADY WRITTEN IN THIS BATCH. Ninety thousand issues sit under
+			// three thousand series (ARCHITECTURE §13), so re-running the parent's
+			// ten steps — including a full search-document delete-and-rebuild —
+			// once per ISSUE would be thirty times the work for an identical row.
+			parentWorkID = id
+		} else {
+			id, pres, err := applyOneItem(ctx, tx, instanceID, pb, parentItem(it), now, parents)
+			if err != nil {
+				return 0, res, fmt.Errorf("apply parent %s %s: %w",
+					it.Parent.RemoteKind, it.Parent.RemoteID, err)
+			}
+			parentWorkID = id
+			parents[key] = id
+			res.add(pres)
+		}
+	}
 
 	// ── 1. An existing link pins the work. The upstream id is authoritative for
 	// which work this is, so identity resolution does not re-run for it.
@@ -681,7 +1032,7 @@ func applyOneItem(
 		 WHERE service_instance_id = ? AND remote_kind = ? AND remote_id = ?`,
 		instanceID, it.RemoteKind, it.RemoteID).Scan(&workID)
 	if err != nil && !errors.Is(err, sql.ErrNoRows) {
-		return res, fmt.Errorf("look up link: %w", err)
+		return workID, res, fmt.Errorf("look up link: %w", err)
 	}
 
 	// ── 2. Tier 1 of the §6.4 cascade: an exact strong external id, SAME KIND.
@@ -704,7 +1055,7 @@ func applyOneItem(
 				continue
 			}
 			if err != nil {
-				return res, fmt.Errorf("tier-1 identity lookup on %s=%s: %w", x.Source, x.Value, err)
+				return workID, res, fmt.Errorf("tier-1 identity lookup on %s=%s: %w", x.Source, x.Value, err)
 			}
 			workID = candidate
 			res.WorksReused++
@@ -716,27 +1067,34 @@ func applyOneItem(
 	switch workID {
 	case 0:
 		r, err := tx.ExecContext(ctx, `
-			INSERT INTO work (kind, title, sort_title, normalized_title, norm_version,
+			INSERT INTO work (kind, parent_work_id, title, sort_title, normalized_title, norm_version,
 			                  original_title, overview, added_at, created_at, updated_at)
-			VALUES (?,?,?,?,?,?,?,?,?,?)`,
-			it.Kind, it.Title, it.SortTitle, it.NormalizedTitle, it.NormVersion,
+			VALUES (?,?,?,?,?,?,?,?,?,?,?)`,
+			it.Kind, nullInt64(parentWorkID), it.Title, it.SortTitle, it.NormalizedTitle, it.NormVersion,
 			nullString(it.OriginalTitle), nullString(it.Overview),
 			nullTime(it.AddedAt), nowStr, nowStr)
 		if err != nil {
-			return res, fmt.Errorf("insert work: %w", err)
+			return workID, res, fmt.Errorf("insert work: %w", err)
 		}
 		if workID, err = r.LastInsertId(); err != nil {
-			return res, fmt.Errorf("insert work: id: %w", err)
+			return workID, res, fmt.Errorf("insert work: id: %w", err)
 		}
 		res.WorksCreated++
 	default:
+		// parent_work_id is written on the UPDATE too, and by COALESCE rather
+		// than by assignment: a re-import must be able to REPAIR a child whose
+		// parent is missing, and must never blank a parent an earlier import set
+		// because this particular pass happens to carry no CatalogueParent.
 		if _, err := tx.ExecContext(ctx, `
 			UPDATE work SET title = ?, sort_title = ?, normalized_title = ?, norm_version = ?,
-			                original_title = ?, overview = ?, updated_at = ?, deleted_at = NULL
+			                original_title = ?, overview = ?,
+			                parent_work_id = COALESCE(?, parent_work_id),
+			                updated_at = ?, deleted_at = NULL
 			 WHERE id = ?`,
 			it.Title, it.SortTitle, it.NormalizedTitle, it.NormVersion,
-			nullString(it.OriginalTitle), nullString(it.Overview), nowStr, workID); err != nil {
-			return res, fmt.Errorf("update work %d: %w", workID, err)
+			nullString(it.OriginalTitle), nullString(it.Overview),
+			nullInt64(parentWorkID), nowStr, workID); err != nil {
+			return workID, res, fmt.Errorf("update work %d: %w", workID, err)
 		}
 		res.WorksUpdated++
 	}
@@ -749,30 +1107,55 @@ func applyOneItem(
 			INSERT INTO work_book (work_id, page_count) VALUES (?,?)
 			ON CONFLICT (work_id) DO UPDATE SET page_count = excluded.page_count`,
 			workID, it.PageCount); err != nil {
-			return res, fmt.Errorf("upsert work_book %d: %w", workID, err)
+			return workID, res, fmt.Errorf("upsert work_book %d: %w", workID, err)
 		}
 	case "comic":
 		if _, err := tx.ExecContext(ctx, `
 			INSERT INTO work_comic (work_id, reading_direction) VALUES (?,?)
 			ON CONFLICT (work_id) DO UPDATE SET reading_direction = excluded.reading_direction`,
 			workID, it.ReadingDirection); err != nil {
-			return res, fmt.Errorf("upsert work_comic %d: %w", workID, err)
+			return workID, res, fmt.Errorf("upsert work_comic %d: %w", workID, err)
+		}
+	case "comic_issue":
+		// is_oneshot IS IN THE COLUMN LIST AND IN THE DO UPDATE, which is the
+		// whole of ADR-0068 decision 2's "the flag is WRITTEN, not merely
+		// tolerated". Leaving it to `DEFAULT 0` would make a one-shot
+		// indistinguishable from an unimported issue, and the column would have
+		// no writer at all — "a column with a DEFAULT 0 and no writer is a deaf
+		// column, and this project has found several".
+		//
+		// The four columns this does NOT write — volume_label, volume_sort,
+		// is_special, special_version — have no source on a BookOrbit card and
+		// are left to their defaults rather than guessed at. `special_version`
+		// enumerates 'one-shot' and is deliberately not written from is_oneshot:
+		// they are different facts (a flag versus an edition label) and ADR-0030
+		// allocated both.
+		if _, err := tx.ExecContext(ctx, `
+			INSERT INTO work_comic_issue (work_id, number_text, number_sort, is_oneshot, page_count)
+			VALUES (?,?,?,?,?)
+			ON CONFLICT (work_id) DO UPDATE SET
+			  number_text = excluded.number_text,
+			  number_sort = excluded.number_sort,
+			  is_oneshot  = excluded.is_oneshot,
+			  page_count  = excluded.page_count`,
+			workID, it.NumberText, it.NumberSort, it.IsOneshot, it.PageCount); err != nil {
+			return workID, res, fmt.Errorf("upsert work_comic_issue %d: %w", workID, err)
 		}
 	default:
-		return res, fmt.Errorf("no subtype table for work.kind %q", it.Kind)
+		return workID, res, fmt.Errorf("no subtype table for work.kind %q", it.Kind)
 	}
 
 	// ── 5. Alternate titles. Replaced wholesale for this work: an upstream that
 	// drops a localised name must not leave the old one searchable forever.
 	if _, err := tx.ExecContext(ctx, `DELETE FROM work_alt_title WHERE work_id = ?`, workID); err != nil {
-		return res, fmt.Errorf("clear alt titles for work %d: %w", workID, err)
+		return workID, res, fmt.Errorf("clear alt titles for work %d: %w", workID, err)
 	}
 	for _, a := range it.AltTitles {
 		if _, err := tx.ExecContext(ctx, `
 			INSERT INTO work_alt_title (work_id, title, normalized, kind, language)
 			VALUES (?,?,?,?,?)`,
 			workID, a.Title, a.Normalized, a.Kind, nullString(a.Language)); err != nil {
-			return res, fmt.Errorf("insert alt title %q for work %d: %w", a.Title, workID, err)
+			return workID, res, fmt.Errorf("insert alt title %q for work %d: %w", a.Title, workID, err)
 		}
 	}
 
@@ -780,7 +1163,7 @@ func applyOneItem(
 	for i, x := range it.ExternalIDs {
 		sp := fmt.Sprintf("extid_%d", i)
 		if _, err := tx.ExecContext(ctx, "SAVEPOINT "+sp); err != nil {
-			return res, fmt.Errorf("savepoint %s: %w", sp, err)
+			return workID, res, fmt.Errorf("savepoint %s: %w", sp, err)
 		}
 		_, insErr := tx.ExecContext(ctx, `
 			INSERT INTO external_id (work_id, edition_id, source, value, confidence)
@@ -790,24 +1173,24 @@ func applyOneItem(
 			workID, x.Source, x.Value, x.Confidence)
 		if insErr == nil {
 			if _, err := tx.ExecContext(ctx, "RELEASE SAVEPOINT "+sp); err != nil {
-				return res, fmt.Errorf("release savepoint %s: %w", sp, err)
+				return workID, res, fmt.Errorf("release savepoint %s: %w", sp, err)
 			}
 			res.ExternalIDsWritten++
 			continue
 		}
 		// The conflict is the merge signal. Undo just this row and carry on.
 		if _, err := tx.ExecContext(ctx, "ROLLBACK TO SAVEPOINT "+sp); err != nil {
-			return res, fmt.Errorf("rollback to savepoint %s after %w: %w", sp, insErr, err)
+			return workID, res, fmt.Errorf("rollback to savepoint %s after %w: %w", sp, insErr, err)
 		}
 		if _, err := tx.ExecContext(ctx, "RELEASE SAVEPOINT "+sp); err != nil {
-			return res, fmt.Errorf("release savepoint %s: %w", sp, err)
+			return workID, res, fmt.Errorf("release savepoint %s: %w", sp, err)
 		}
 		var owner int64
 		if err := tx.QueryRowContext(ctx, `
 			SELECT work_id FROM external_id
 			 WHERE source = ? AND value = ? AND work_id IS NOT NULL AND confidence >= 1.0`,
 			x.Source, x.Value).Scan(&owner); err != nil && !errors.Is(err, sql.ErrNoRows) {
-			return res, fmt.Errorf("read conflicting external_id %s=%s: %w", x.Source, x.Value, err)
+			return workID, res, fmt.Errorf("read conflicting external_id %s=%s: %w", x.Source, x.Value, err)
 		}
 		res.IdentityConflicts = append(res.IdentityConflicts, IdentityConflict{
 			Source: x.Source, Value: x.Value,
@@ -835,12 +1218,38 @@ func applyOneItem(
 		instanceID, workID, it.RemoteID, it.RemoteKind, nullString(it.RemotePath),
 		nullString(it.ContainerID), nullString(it.RemoteSubtype), it.HasFile,
 		nullTime(it.RemoteUpdatedAt), it.remoteHash(), it.identityHash(), nowStr); err != nil {
-		return res, fmt.Errorf("upsert link: %w", err)
+		return workID, res, fmt.Errorf("upsert link: %w", err)
 	}
 	// remote_identity_hash is written AT FIRST SIGHT and never overwritten
 	// (sync.md §4 guard 1): it is the O(1) comparison that tells an id reused
 	// upstream from the same item coming back. The ON CONFLICT list above
 	// deliberately omits it.
+
+	// ── 8 AND 9 ARE THE TOP-LEVEL HALF, AND A CHILD KIND SKIPS BOTH.
+	//
+	// ⚠️ THIS IS NOT AN OPTIMISATION AND IT IS NOT OPTIONAL: writeSearchDoc
+	// RETURNS AN ERROR on an excluded kind rather than skipping it, so a
+	// `comic_issue` routed through step 9 does not degrade to an empty screen —
+	// IT FAILS THE IMPORT. corpusExcludedKinds' own doc names this caller ("the
+	// phase-B comic_issue walk is the obvious one"), and ADR-0068 is the ADR that
+	// makes it real. The guard stays exactly as it is; the caller routes around
+	// it. The membership skip travels with it for one reason rather than for
+	// convenience: `library_member` is what §17.8's item count counts and what
+	// ADR-0051's library predicate tests, so filing 90,000 issues would make a
+	// comic library's item count read issues while /library/comics reads series
+	// — one library with two different meanings for "how many".
+	//
+	// The CHILD IS NOT INVISIBLE for it: it is reachable through
+	// `parent_work_id` and ix_work_parent from a series that IS filed and IS
+	// indexed, which is the whole shape ADR-0030 chose over parentless issues.
+	//
+	// Step 10's identity count goes with them, and that is deliberate too:
+	// `Unidentified` is a figure about the top-level works this batch wrote, and
+	// every issue counting itself into it would make an import of 90,000 issues
+	// under 3,000 identified series report 90,000 unidentified works.
+	if childKinds[it.Kind] {
+		return workID, res, nil
+	}
 
 	// ── 8. Membership. Rewritten for this (library, work) pair, because
 	// sort_title leads the primary key and a retitle would otherwise leave a
@@ -848,12 +1257,12 @@ func applyOneItem(
 	if _, err := tx.ExecContext(ctx,
 		`DELETE FROM library_member WHERE library_id = ? AND work_id = ?`,
 		b.LibraryID, workID); err != nil {
-		return res, fmt.Errorf("clear membership of work %d in library %d: %w", workID, b.LibraryID, err)
+		return workID, res, fmt.Errorf("clear membership of work %d in library %d: %w", workID, b.LibraryID, err)
 	}
 	if _, err := tx.ExecContext(ctx, `
 		INSERT INTO library_member (library_id, sort_title, work_id, edition_id, added_at)
 		VALUES (?,?,?,0,?)`, b.LibraryID, it.SortTitle, workID, nowStr); err != nil {
-		return res, fmt.Errorf("file work %d into library %d: %w", workID, b.LibraryID, err)
+		return workID, res, fmt.Errorf("file work %d into library %d: %w", workID, b.LibraryID, err)
 	}
 	res.Members++
 
@@ -869,11 +1278,11 @@ func applyOneItem(
 	d := it.searchDocText()
 	people, err := creditedNames(ctx, tx, workID)
 	if err != nil {
-		return res, err
+		return workID, res, err
 	}
 	d.people = people
 	if err := writeSearchDoc(ctx, tx, workID, d); err != nil {
-		return res, err
+		return workID, res, err
 	}
 	res.SearchDocs++
 
@@ -885,12 +1294,133 @@ func applyOneItem(
 	var identified int
 	if err := tx.QueryRowContext(ctx,
 		`SELECT EXISTS (SELECT 1 FROM external_id WHERE work_id = ?)`, workID).Scan(&identified); err != nil {
-		return res, fmt.Errorf("read identity state of work %d: %w", workID, err)
+		return workID, res, fmt.Errorf("read identity state of work %d: %w", workID, err)
 	}
 	if identified == 0 {
 		res.Unidentified++
 	}
-	return res, nil
+	return workID, res, nil
+}
+
+// childKinds is the set of work.kind values that are NEVER a top-level item.
+//
+// ⚠️ IT IS THE SAME MEMBERSHIP QUESTION `corpusExcludedKinds` ASKS AND IT IS A
+// DIFFERENT LIST ON PURPOSE. That one is "what search.md §2 keeps out of the
+// corpus" and it holds 'person' — a kind that is excluded for a DESTINATION
+// reason (there is no person screen) and is not a child of anything. This one is
+// "what hangs under a parent", which is what decides whether a row is filed into
+// a library. Folding the two into one map would make the person kind stop being
+// filed, or make a comic issue searchable, depending on which list won.
+//
+// 'season' and 'track' are here for the day an adapter reports them; nothing
+// writes them today, exactly as nothing wrote 'comic_issue' before ADR-0068.
+var childKinds = map[string]bool{
+	"season": true, "episode": true, "track": true, "comic_issue": true,
+}
+
+// parentKey identifies one parent within a batch.
+//
+// ⚠️ THE CONTAINER IS PART OF THE KEY, and leaving it out is a real defect
+// rather than a redundancy. ADR-0068 is explicit that "a BookOrbit series is NOT
+// library-scoped upstream", so one series can carry issues from two containers —
+// and step 8 files membership per (library, work) pair, ADDING a row rather than
+// replacing one. A cache keyed on the upstream id alone would write the parent
+// once, for the first container, and the second container's comic library would
+// silently never gain the series. Keyed this way the parent is written once per
+// (container, series), which is exactly the granularity membership needs.
+type parentKey struct{ containerID, remoteKind, remoteID string }
+
+// parentCache is the parents already written in THIS batch, by upstream id.
+//
+// ARCHITECTURE §13 sizes the shape it exists for: ~3,000 comic series carrying
+// ~90,000 issues. Without it every issue would re-run its series' ten steps,
+// including a full search-document DELETE-and-INSERT across three tables, for a
+// row that has not changed since the previous issue wrote it.
+type parentCache map[parentKey]int64
+
+// parentItem projects a child's CatalogueParent onto the CatalogueItem the
+// recursive call writes.
+//
+// ⚠️ Parent IS CLEARED, and that is what bounds the recursion at one level.
+// UsArr's deepest cascade is three (series→season→episode), and nothing needs
+// the middle level yet; when something does, this is the function that grows a
+// second level rather than a new code path.
+//
+// It carries NO external ids, NO alt titles, NO page count and NO path. A series
+// is not the file: it has no bytes, no ISBN and no format, and inventing any of
+// them from the child's would put a fact about one issue onto the whole series.
+// HasFile is false for the same reason — §6.3's availability for a series comes
+// from the rollup over its children, never from a flag set here.
+func parentItem(it CatalogueItem) CatalogueItem {
+	p := it.Parent
+	return CatalogueItem{
+		RemoteID:        p.RemoteID,
+		RemoteKind:      p.RemoteKind,
+		ContainerID:     it.ContainerID,
+		Kind:            p.Kind,
+		Title:           p.Title,
+		SortTitle:       p.SortTitle,
+		NormalizedTitle: p.NormalizedTitle,
+		NormVersion:     p.NormVersion,
+		AddedAt:         it.AddedAt,
+	}
+}
+
+// parentBinding is the library the PARENT is filed into, which is not always the
+// library the child's container bound to.
+//
+// # ADR-0066 decision 5, activated by ADR-0068
+//
+// One upstream container may hold prose and comics. `library.kind` is exactly
+// one value, so such a container "becomes a `book` library and a `comic` library
+// over the same `library_source` container ref" — and this is where the second
+// one comes from. It needs no migration: 'comic' is already a permitted
+// `library.kind`, and `library_source`'s uniqueness is (library_id,
+// service_instance_id, container_kind, container_ref), so two libraries may name
+// the same container.
+//
+// # It is LAZY, and that is the difference between decision 5 and an empty screen
+//
+// The bind pass runs BEFORE the walk, and no upstream tells UsArr what is inside
+// a container — BookOrbit's `libraries` table has no kind column at all. Minting
+// the comic library at bind time would therefore give EVERY prose-only library a
+// permanently empty comic sibling on the Libraries screen, which is the "empty
+// screen that looks broken" principle 3 exists to prevent. Minting it on the
+// first comic actually seen is what makes decision 5's word MIXED true.
+//
+// ⚠️ NO SERIES WORK IS EVER MINTED INTO NO LIBRARY AT ALL (ADR-0068 decision 5).
+// Every failure below is an error rather than a fallback to library 0.
+func parentBinding(
+	ctx context.Context, tx *sql.Tx, instanceID int64,
+	b CatalogueBinding, containerRef string, p CatalogueParent,
+) (CatalogueBinding, error) {
+	if p.Kind == b.Kind {
+		return b, nil
+	}
+	if b.UserID == 0 && b.ContainerName == "" {
+		// A binding built without the two facts a sibling mint needs. It is a
+		// programming error at the call site rather than a state the schema can
+		// produce, and it is refused rather than defaulted: guessing a user id
+		// would put one person's library under another's.
+		return CatalogueBinding{}, fmt.Errorf(
+			"container %q needs a %q library beside its %q one and the binding carries no owner "+
+				"(store.BindContainers stamps CatalogueBinding.UserID; a hand-built binding must too)",
+			p.RemoteID, p.Kind, b.Kind)
+	}
+	return bindOneContainer(ctx, tx, instanceID, b.UserID, CatalogueContainer{
+		// THE CONTAINER REF IS THE ISSUE'S OWN, verbatim — "the `comic` library
+		// minted over the `library_source` container ref the issue's book was
+		// walked from" (ADR-0068 decision 5). A synthesized ref would be a second
+		// container that no upstream ever reported.
+		RemoteID: containerRef,
+		Name:     b.ContainerName,
+		Kind:     p.Kind,
+		// bindSiblingKind, NOT bindFromContainerList. This call is the ONE place
+		// a container is deliberately bound at a second kind, so the kind-change
+		// report must not fire here — it would fire on every mixed library, on
+		// the first comic reached, and say a change happened where the design
+		// says two kinds coexist.
+	}, bindSiblingKind)
 }
 
 // searchDocText is the TEXT of one work's search document — the five FTS
@@ -1288,6 +1818,16 @@ func formatOrEmpty(t time.Time) string {
 		return ""
 	}
 	return FormatTime(t)
+}
+
+// nullInt64 renders a work id as NULL when it is 0, so `parent_work_id` is a
+// real SQL NULL for a top-level work rather than a foreign key pointing at a row
+// id that cannot exist.
+func nullInt64(v int64) any {
+	if v == 0 {
+		return nil
+	}
+	return v
 }
 
 func nullTime(t time.Time) any {

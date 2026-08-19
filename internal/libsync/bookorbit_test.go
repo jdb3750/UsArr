@@ -289,6 +289,14 @@ func TestEveryBookOrbitLibraryBindsAsABookLibrary(t *testing.T) {
 
 // ─── the prose/comic split, which is the whole of this slice ─────────────────
 
+// TestOnlyProseIsMappedAndTheRestIsCounted.
+//
+// ⚠️ THE NAME IS NOW HALF FALSE AND IS KEPT ANYWAY. Comics ARE mapped (ADR-0068);
+// what is still true, and what this test still guards, is that they are mapped
+// AS SOMETHING ELSE — kind 'comic_issue' under a 'comic' parent, never into the
+// book cascade — and that the remaining unclassifiable books are counted rather
+// than guessed at. Renaming it would break the link to the reasoning in
+// docs/REVIEW-LOG.md and in the ADRs that cite it.
 func TestOnlyProseIsMappedAndTheRestIsCounted(t *testing.T) {
 	r := &fakeBookOrbitReader{
 		libs: []bookorbit.Library{{ID: 1, Name: "Fiction"}, {ID: 2, Name: "Audio"}},
@@ -330,14 +338,40 @@ func TestOnlyProseIsMappedAndTheRestIsCounted(t *testing.T) {
 	if read != 7 {
 		t.Errorf("read = %d, want 7 — the count is what the walk delivered, not what was mapped", read)
 	}
-	if len(mapped) != 3 {
-		t.Fatalf("mapped %d items, want 3 (epub, pdf, m4b)", len(mapped))
+	// FIVE, not three: the two comics are mapped as issues now. The two
+	// unknowns are still skipped, and that pair is what this assertion proves —
+	// a build that defaulted an unclassifiable file into SOME kind would give 7.
+	if len(mapped) != 5 {
+		t.Fatalf("mapped %d items, want 5 (epub, pdf, m4b and two comics as issues)", len(mapped))
 	}
+	byKind := map[string]int{}
 	for _, it := range mapped {
-		if it.Kind != "book" {
+		byKind[it.Kind]++
+		switch it.Kind {
+		case "book":
+			if it.Parent != nil {
+				t.Errorf("%q is a prose book and carries a parent; only a child kind may", it.Title)
+			}
+		case "comic_issue":
+			// ⚠️ THE PARENT IS THE ONE PART §6.4's CASCADE MAKES UNFIXABLE LATER
+			// (ADR-0068 decision 1), so it is asserted per row rather than in
+			// aggregate.
+			if it.Parent == nil {
+				t.Fatalf("%q is a comic issue with no parent; parent_work_id is never null "+
+					"on a row this importer writes, and a parentless issue is a row no "+
+					"shipped read can see", it.Title)
+			}
+			if it.Parent.Kind != "comic" {
+				t.Errorf("%q hangs under kind %q, want 'comic' — 'comic' is the SERIES and "+
+					"'comic_issue' the issue (ADR-0030)", it.Title, it.Parent.Kind)
+			}
+		default:
 			t.Errorf("%q mapped to kind %q; an audiobook is an EDITION of a book work "+
 				"(ADR-0031) and work.kind has no 'audiobook' member", it.Title, it.Kind)
 		}
+	}
+	if byKind["book"] != 3 || byKind["comic_issue"] != 2 {
+		t.Errorf("kinds = %v, want 3 book and 2 comic_issue", byKind)
 	}
 
 	// ⚠️ TWO TALLIES, AND THIS ASSERTION IS INVERTED RATHER THAN DELETED. It read
@@ -356,17 +390,22 @@ func TestOnlyProseIsMappedAndTheRestIsCounted(t *testing.T) {
 	if skips[1].RemoteID != "2" || skips[1].Total() != 0 {
 		t.Errorf("library 2's tally = %+v, want remote id 2 and a total of 0", skips[1])
 	}
-	if skips[0].Comics != 2 {
-		t.Errorf("comics skipped = %d, want 2 (cbz and cbr)", skips[0].Comics)
+	// ⚠️ ZERO, AND IT IS ASSERTED RATHER THAN DROPPED. ADR-0068's fourth
+	// done-check is that this field reads 0 once comics import; a test that
+	// simply stopped looking at it could not tell "comics are imported" from
+	// "the tally stopped being written".
+	if skips[0].Comics != 0 {
+		t.Errorf("comics skipped = %d, want 0 — comics are imported as issues now "+
+			"(ADR-0068), and this field's expected value is 0", skips[0].Comics)
 	}
 	if skips[0].Unknown != 2 {
 		t.Errorf("unknowns skipped = %d, want 2 — a blank format and a book with no files at all; "+
 			"neither is a comic and lumping them together hides the difference", skips[0].Unknown)
 	}
-	if skips[0].Total() != 4 {
-		t.Errorf("total skipped = %d, want 4", skips[0].Total())
+	if skips[0].Total() != 2 {
+		t.Errorf("total skipped = %d, want 2", skips[0].Total())
 	}
-	if !strings.Contains(buf.String(), "skipped_comics=2") {
+	if !strings.Contains(buf.String(), "skipped_comics=0") {
 		t.Errorf("the per-container log line does not carry the comic count:\n%s", buf.String())
 	}
 }
@@ -446,8 +485,12 @@ func TestSkippedNamesOnlyTheContainersTheWalkReached(t *testing.T) {
 			"library 3 was never walked and a row for it would say UsArr left nothing out "+
 			"of a container it never opened", skips)
 	}
-	if skips[0].RemoteID != "1" || skips[0].Comics != 1 {
-		t.Errorf("library 1's tally = %+v, want one comic", skips[0])
+	// ⚠️ THE COMIC IS NO LONGER A SKIP (ADR-0068), so library 1's tally is a
+	// MEASURED ZERO. That is exactly the state this test exists to distinguish
+	// from an absent row, and library 3's absence below is the other half.
+	if skips[0].RemoteID != "1" || skips[0].Total() != 0 {
+		t.Errorf("library 1's tally = %+v, want remote id 1 with a total of 0 — its comic "+
+			"is imported as an issue now, not skipped", skips[0])
 	}
 	// ⚠️ THE RESIDUAL, ASSERTED SO IT CANNOT BE MISTAKEN FOR A CLOSED CASE. The
 	// container the walk died INSIDE still reports, from what it had read — so a
@@ -606,7 +649,9 @@ func TestAnUnidentifiedBookIsTheOrdinaryCaseAndNotAnError(t *testing.T) {
 
 // TestBookOrbitFullImportFromCassettes is the whole slice against recorded bytes
 // and a real migrated SQLite: two containers bound, three books read from the
-// first, two of them written, one counted as a comic.
+// first, and all three written — two prose books, and the cbz as a comic ISSUE
+// under a SERIES minted into a comic library over the same container ref
+// (ADR-0068, ADR-0066 decision 5).
 func TestBookOrbitFullImportFromCassettes(t *testing.T) {
 	client, err := bookorbit.New(bookorbit.Options{
 		BaseURL:        bookOrbitBaseURL,
@@ -643,17 +688,17 @@ func TestBookOrbitFullImportFromCassettes(t *testing.T) {
 	if rep.ItemsRead != 3 {
 		t.Errorf("ItemsRead = %d, want 3 — the walk delivered three cards", rep.ItemsRead)
 	}
-	if rep.ItemsApplied != 2 {
-		t.Errorf("ItemsApplied = %d, want 2 — the cbz is skipped", rep.ItemsApplied)
+	if rep.ItemsApplied != 3 {
+		t.Errorf("ItemsApplied = %d, want 3 — the cbz is an issue now, not a skip", rep.ItemsApplied)
 	}
 
 	// ⚠️ INVERTED BY ADR-0063, NOT DELETED: this wanted *one* container back,
 	// because the other was walked clean and clean containers were dropped. Both
 	// walked containers now report, and the second one's zero is the point.
 	skips := src.Skipped()
-	if len(skips) != 2 || skips[0].Comics != 1 || skips[0].Unknown != 0 {
-		t.Fatalf("Skipped() = %+v, want both walked containers, the first with exactly "+
-			"one comic", skips)
+	if len(skips) != 2 || skips[0].Comics != 0 || skips[0].Unknown != 0 {
+		t.Fatalf("Skipped() = %+v, want both walked containers with a measured zero: "+
+			"ADR-0068's fourth done-check is that Comics reads 0 once comics import", skips)
 	}
 	if skips[1].Total() != 0 {
 		t.Errorf("the second container's tally = %+v, want a measured zero", skips[1])
@@ -673,14 +718,60 @@ func TestBookOrbitFullImportFromCassettes(t *testing.T) {
 	links = readOne(`SELECT COUNT(*) FROM service_item_link WHERE remote_kind = 'book'`)
 	extIDs = readOne(`SELECT COUNT(*) FROM external_id WHERE source = 'hardcover_book'`)
 	aliases = readOne(`SELECT COUNT(*) FROM work_alt_title WHERE kind = 'alias'`)
+	issues := readOne(`SELECT COUNT(*) FROM work WHERE kind = 'comic_issue'`)
+	orphans := readOne(
+		`SELECT COUNT(*) FROM work WHERE kind = 'comic_issue' AND parent_work_id IS NULL`)
 	if works != 2 {
 		t.Errorf("book works = %d, want 2", works)
 	}
-	if comics != 0 {
-		t.Errorf("comic works = %d, want 0 — this slice writes no comics at all", comics)
+	if comics != 1 || issues != 1 {
+		t.Errorf("comic works = %d, comic_issue works = %d, want 1 and 1 — the cbz is one "+
+			"issue under one series", comics, issues)
 	}
-	if links != 2 {
-		t.Errorf("service_item_link rows = %d, want 2", links)
+	// ⚠️ ADR-0068's FIRST DONE-CHECK, executed. A parentless issue is not a
+	// degraded comic; it is a row no shipped read can see.
+	if orphans != 0 {
+		t.Errorf("comic_issue rows with no parent = %d, want 0", orphans)
+	}
+	// The issue is filed into NO library and has NO search document, and both are
+	// asserted rather than assumed: writeSearchDoc RETURNS AN ERROR on this kind,
+	// so a build that routed the issue through the top-level path would have
+	// failed the import above — but a build that dropped the guard would pass
+	// that and fail here.
+	if n := readOne(`SELECT COUNT(*) FROM library_member lm JOIN work w ON w.id = lm.work_id
+	                  WHERE w.kind = 'comic_issue'`); n != 0 {
+		t.Errorf("comic_issue library_member rows = %d, want 0", n)
+	}
+	if n := readOne(`SELECT COUNT(*) FROM search_doc sd JOIN work w ON w.id = sd.work_id
+	                  WHERE w.kind = 'comic_issue'`); n != 0 {
+		t.Errorf("comic_issue search_doc rows = %d, want 0 — the corpus refuses the kind "+
+			"outright, and this importer routes around the guard rather than relaxing it", n)
+	}
+	// ADR-0066 decision 5, activated: the comic series is filed into a 'comic'
+	// library minted over the SAME container ref the book was walked from, and
+	// no series work is ever minted into no library at all.
+	if n := readOne(`SELECT COUNT(*) FROM library WHERE kind = 'comic' AND id <> 0`); n != 1 {
+		t.Errorf("comic libraries = %d, want 1", n)
+	}
+	if n := readOne(`SELECT COUNT(*) FROM library_source ls
+	                   JOIN library l ON l.id = ls.library_id
+	                  WHERE l.kind = 'comic' AND ls.container_ref = '1'`); n != 1 {
+		t.Errorf("the comic library names container ref '1' %d times, want 1 — decision 5's "+
+			"two libraries stand over the SAME library_source container ref", n)
+	}
+	if n := readOne(`SELECT COUNT(*) FROM library_member lm
+	                   JOIN work w ON w.id = lm.work_id
+	                   JOIN library l ON l.id = lm.library_id
+	                  WHERE w.kind = 'comic' AND l.kind = 'comic'`); n != 1 {
+		t.Errorf("comic series filed into a comic library = %d, want 1", n)
+	}
+	// One link per MAPPED book plus one for the series, under a DIFFERENT
+	// remote_kind so a book id and a series id cannot collide in ux_sil.
+	if links != 3 {
+		t.Errorf("service_item_link rows with remote_kind 'book' = %d, want 3", links)
+	}
+	if n := readOne(`SELECT COUNT(*) FROM service_item_link WHERE remote_kind = 'series'`); n != 1 {
+		t.Errorf("series links = %d, want 1", n)
 	}
 	if extIDs != 1 {
 		t.Errorf("hardcover_book ids = %d, want 1 — only the audiobook card carries one", extIDs)
@@ -779,4 +870,260 @@ func fixtureBookOrbitInstance(t *testing.T, s *store.Store) int64 {
 		t.Fatalf("CreateServiceInstance: %v", err)
 	}
 	return id
+}
+
+// ─── ADR-0068's two residue defaults ─────────────────────────────────────────
+
+// withSeries puts a book in one series, as BookOrbit's primary scalar plus the
+// displayOrder 0 membership that the upstream keeps equal to it.
+func withSeries(b bookorbit.Book, seriesID int64, name string, index float64) bookorbit.Book {
+	b.SeriesID = seriesID
+	b.SeriesName = name
+	b.SeriesIndex = &index
+	b.SeriesMemberships = append(b.SeriesMemberships, bookorbit.BookSeriesMembership{
+		SeriesID: seriesID, SeriesName: name, SeriesIndex: &index, DisplayOrder: 0,
+	})
+	return b
+}
+
+// alsoInSeries adds a NON-primary membership.
+func alsoInSeries(b bookorbit.Book, seriesID int64, name string) bookorbit.Book {
+	b.SeriesMemberships = append(b.SeriesMemberships, bookorbit.BookSeriesMembership{
+		SeriesID: seriesID, SeriesName: name, DisplayOrder: len(b.SeriesMemberships),
+	})
+	return b
+}
+
+// TestComicsBindToTheSeriesTheCardNames is ADR-0068 decision 3's happy path, and
+// it is the one that pins the two issues of ONE series onto ONE parent.
+//
+// ⚠️ THAT IS THE ADR'S SECOND DONE-CHECK IN MINIATURE: "if the series count
+// EQUALS the issue count, the per-row implementation shipped and this check MUST
+// FAIL". Two issues under one parent is the smallest shape that can tell the
+// accepted implementation from the rejected one, and it is asserted here rather
+// than left to a live import.
+func TestComicsBindToTheSeriesTheCardNames(t *testing.T) {
+	r := &fakeBookOrbitReader{
+		libs: []bookorbit.Library{{ID: 1, Name: "Comics"}},
+		books: map[int64][]bookorbit.Book{
+			1: {
+				withSeries(withFormat(proseBook(101, "Saga #1"), "cbz"), 5, "Saga", 1),
+				withSeries(withFormat(proseBook(102, "Saga #2"), "cbz"), 5, "Saga", 2),
+			},
+		},
+	}
+	src := NewBookOrbitSource(r)
+	if _, err := src.Containers(context.Background()); err != nil {
+		t.Fatalf("Containers: %v", err)
+	}
+	var mapped []store.CatalogueItem
+	if _, err := src.StreamItems(context.Background(), func(it store.CatalogueItem) error {
+		mapped = append(mapped, it)
+		return nil
+	}); err != nil {
+		t.Fatalf("StreamItems: %v", err)
+	}
+	if len(mapped) != 2 {
+		t.Fatalf("mapped %d, want 2", len(mapped))
+	}
+	parents := map[string]bool{}
+	for _, it := range mapped {
+		if it.Kind != "comic_issue" {
+			t.Fatalf("%q mapped to kind %q, want comic_issue", it.Title, it.Kind)
+		}
+		if it.IsOneshot {
+			t.Errorf("%q is in a named series and is flagged as a one-shot", it.Title)
+		}
+		if it.Parent == nil || it.Parent.Synthesized {
+			t.Fatalf("%q: parent = %+v, want the upstream series rather than a synthesized one",
+				it.Title, it.Parent)
+		}
+		if it.Parent.Title != "Saga" || it.Parent.RemoteID != "5" {
+			t.Errorf("%q hangs under %+v, want the series the card names", it.Title, it.Parent)
+		}
+		if !it.NumberSort.Valid {
+			t.Errorf("%q carries no number_sort; seriesIndex is on the card", it.Title)
+		}
+		if it.NumberText.Valid {
+			t.Errorf("%q carries number_text %q; BookOrbit has no issue-number TOKEN and "+
+				"rendering the float back into one would be UsArr inventing an upstream's "+
+				"text (§6.5 rule 3)", it.Title, it.NumberText.String)
+		}
+		parents[it.Parent.RemoteID] = true
+	}
+	if len(parents) != 1 {
+		t.Errorf("two issues of one series produced %d parents, want 1 — a parent per ROW is "+
+			"the shape ADR-0066 pre-emptively refused and ADR-0068's done-check fails on", len(parents))
+	}
+	// No residue: this is the ordinary case, and its ZERO has to be measured so
+	// a later zero cannot be mistaken for "nobody looked" (ADR-0063).
+	res := src.Comics()
+	if len(res) != 1 || res[0].Total() != 0 || res[0].ExtraMemberships != 0 {
+		t.Errorf("Comics() = %+v, want one container reporting a measured zero", res)
+	}
+}
+
+// TestAComicWithNoSeriesGetsASynthesizedOneShotSeries is ADR-0068 decision 2.
+//
+// ⚠️ is_oneshot IS ASSERTED, not merely allowed. The ADR's words are that "a
+// column with a DEFAULT 0 and no writer is a deaf column, and this project has
+// found several", so the test that matters is the one that fails when the writer
+// disappears.
+func TestAComicWithNoSeriesGetsASynthesizedOneShotSeries(t *testing.T) {
+	r := &fakeBookOrbitReader{
+		libs: []bookorbit.Library{{ID: 1, Name: "Comics"}},
+		books: map[int64][]bookorbit.Book{
+			1: {withFormat(proseBook(101, "The Sandman: Endless Nights"), "cbz")},
+		},
+	}
+	var buf bytes.Buffer
+	src := NewBookOrbitSource(r)
+	src.Log = logTo(&buf)
+	if _, err := src.Containers(context.Background()); err != nil {
+		t.Fatalf("Containers: %v", err)
+	}
+	var mapped []store.CatalogueItem
+	if _, err := src.StreamItems(context.Background(), func(it store.CatalogueItem) error {
+		mapped = append(mapped, it)
+		return nil
+	}); err != nil {
+		t.Fatalf("StreamItems: %v", err)
+	}
+	if len(mapped) != 1 {
+		t.Fatalf("mapped %d, want 1 — a comic with no series is NEVER silently dropped", len(mapped))
+	}
+	it := mapped[0]
+	if it.Kind != "comic_issue" {
+		t.Errorf("kind = %q, want comic_issue — it is never promoted to a 'comic' work in "+
+			"its own right, which would make /library/comics mean two different things "+
+			"depending on upstream metadata quality", it.Kind)
+	}
+	if !it.IsOneshot {
+		t.Error("is_oneshot is not set; ADR-0068 decision 2 WRITES the flag")
+	}
+	if it.Parent == nil || !it.Parent.Synthesized {
+		t.Fatalf("parent = %+v, want a synthesized single-issue series", it.Parent)
+	}
+	if it.Parent.Kind != "comic" || it.Parent.Title != "The Sandman: Endless Nights" {
+		t.Errorf("parent = %+v, want a 'comic' series named for the book", it.Parent)
+	}
+	// DETERMINISM IS THE REQUIREMENT. A ref derived from anything but the book id
+	// would mint a second series on every import and double /library/comics.
+	if it.Parent.RemoteID != "oneshot:101" {
+		t.Errorf("synthesized ref = %q, want a deterministic id derived from the book",
+			it.Parent.RemoteID)
+	}
+
+	res := src.Comics()
+	if len(res) != 1 || res[0].SynthesizedSeries != 1 {
+		t.Fatalf("Comics() = %+v, want one synthesized series counted", res)
+	}
+	if res[0].MultiSeries != 0 || len(res[0].Sample) != 0 {
+		t.Errorf("Comics() = %+v: a comic with no series declines nothing — the declined set "+
+			"is empty by definition", res[0])
+	}
+	if !strings.Contains(buf.String(), "synthesized_series=1") {
+		t.Errorf("the residue is not in the log:\n%s", buf.String())
+	}
+}
+
+// TestExtraSeriesMembershipsAreRecordedAndNeverResolved is ADR-0068 decision 3's
+// refusal half.
+//
+// It asserts BOTH directions, which is the only way to state "recorded, not
+// resolved": the extra membership appears in the residue, and it appears NOWHERE
+// in what reaches the store. The seam it must not build toward — work_relation
+// and the v0.3 fuzzy tier — is not reachable from a CatalogueItem at all, which
+// is what makes the second half structural; the assertion pins the first.
+func TestExtraSeriesMembershipsAreRecordedAndNeverResolved(t *testing.T) {
+	b := withSeries(withFormat(proseBook(101, "Crossover #1"), "cbz"), 5, "Saga", 1)
+	b = alsoInSeries(b, 9, "Universe Event")
+	b = alsoInSeries(b, 12, "Artist Collection")
+
+	r := &fakeBookOrbitReader{
+		libs:  []bookorbit.Library{{ID: 1, Name: "Comics"}},
+		books: map[int64][]bookorbit.Book{1: {b}},
+	}
+	src := NewBookOrbitSource(r)
+	if _, err := src.Containers(context.Background()); err != nil {
+		t.Fatalf("Containers: %v", err)
+	}
+	var mapped []store.CatalogueItem
+	if _, err := src.StreamItems(context.Background(), func(it store.CatalogueItem) error {
+		mapped = append(mapped, it)
+		return nil
+	}); err != nil {
+		t.Fatalf("StreamItems: %v", err)
+	}
+	if len(mapped) != 1 {
+		t.Fatalf("mapped %d, want 1 — three memberships are still ONE issue", len(mapped))
+	}
+	// ⚠️ THE SCALAR WINS, AND IT IS NOT memberships[0] BY ACCIDENT. BookOrbit
+	// maintains seriesId equal to the displayOrder 0 membership on every write
+	// (measured at commit 73b7877d), so binding on the scalar and binding on
+	// memberships[displayOrder = 0] are the same binding by construction.
+	if p := mapped[0].Parent; p == nil || p.RemoteID != "5" {
+		t.Fatalf("parent = %+v, want the primary series 5 and nothing else", p)
+	}
+	if mapped[0].IsOneshot {
+		t.Error("a book in three series is not a one-shot")
+	}
+
+	res := src.Comics()
+	if len(res) != 1 {
+		t.Fatalf("Comics() = %+v, want one container", res)
+	}
+	if res[0].MultiSeries != 1 || res[0].ExtraMemberships != 2 {
+		t.Errorf("residue = %+v, want one multi-series book and TWO declined memberships — "+
+			"the primary is not declined, it is the parent", res[0])
+	}
+	if len(res[0].Sample) != 1 {
+		t.Fatalf("sample = %+v, want one entry", res[0].Sample)
+	}
+	got := res[0].Sample[0]
+	if got.BookID != 101 || len(got.SeriesIDs) != 2 {
+		t.Errorf("sample = %+v, want book 101 and series 9 and 12", got)
+	}
+	for _, id := range got.SeriesIDs {
+		if id == 5 {
+			t.Error("the PRIMARY series is in the declined sample; it was acted on, not declined")
+		}
+	}
+}
+
+// TestTheResidueSampleIsBounded is the row-size guard.
+//
+// A 20,000-comic library whose operator never matched a series would otherwise
+// put 20,000 entries in one sync_report row. The cover pass refused that shape in
+// terms, and the counts — not the sample — are what ADR-0068 decision 4 asks for.
+func TestTheResidueSampleIsBounded(t *testing.T) {
+	books := make([]bookorbit.Book, 0, comicResidueSampleCap*2)
+	for i := range comicResidueSampleCap * 2 {
+		id := int64(1000 + i)
+		b := withSeries(withFormat(proseBook(id, "Issue"), "cbz"), 5, "Saga", float64(i))
+		books = append(books, alsoInSeries(b, 9, "Event"))
+	}
+	r := &fakeBookOrbitReader{
+		libs:  []bookorbit.Library{{ID: 1, Name: "Comics"}},
+		books: map[int64][]bookorbit.Book{1: books},
+	}
+	src := NewBookOrbitSource(r)
+	if _, err := src.Containers(context.Background()); err != nil {
+		t.Fatalf("Containers: %v", err)
+	}
+	if _, err := src.StreamItems(context.Background(),
+		func(store.CatalogueItem) error { return nil }); err != nil {
+		t.Fatalf("StreamItems: %v", err)
+	}
+	res := src.Comics()
+	if len(res) != 1 {
+		t.Fatalf("Comics() = %+v", res)
+	}
+	if res[0].ExtraMemberships != comicResidueSampleCap*2 {
+		t.Errorf("declined memberships = %d, want every one counted — the CAP is on the "+
+			"sample, never on the count", res[0].ExtraMemberships)
+	}
+	if len(res[0].Sample) != comicResidueSampleCap {
+		t.Errorf("sample = %d entries, want the cap of %d", len(res[0].Sample), comicResidueSampleCap)
+	}
 }

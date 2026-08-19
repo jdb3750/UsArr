@@ -12,7 +12,15 @@
 #
 #   * 101 The Hobbit  — files[0].format 'epub'  -> getBookMediaKind 'ebook'
 #   * 102 Project Hail Mary — 'm4b'             -> 'audiobook'
-#   * 103 Saga, Vol. 1 — 'cbz'                  -> 'comic', which slice 1 SKIPS
+#   * 103 Saga, Vol. 1 — 'cbz'                  -> 'comic'
+#
+# ⚠️ THE THIRD LINE USED TO END *"which slice 1 SKIPS"* AND THAT IS NOW FALSE.
+# ADR-0068 imports a comic as a `comic_issue` under a `comic` series, so card 103
+# exercises the BOUND-SERIES path: seriesId 5 with a single displayOrder 0
+# membership. The two RESIDUE paths this ADR also defines — a null seriesId, and
+# a book in several series — are NOT in this fixture and are covered against the
+# in-process fake in internal/libsync/bookorbit_test.go instead. Said out loud so
+# a green here is not read as coverage of the residue.
 #
 # The three per-user fields are present and populated on purpose — readStatus,
 # readingProgress and rating are the reading state of the BookOrbit ACCOUNT UsArr

@@ -739,6 +739,29 @@ export function completenessNote(libraries: readonly Library[]): string {
 }
 
 /**
+ * WHICH UPSTREAM CONTAINERS ONE LIBRARY STANDS OVER, as one comparable string.
+ *
+ * ⚠️ IT EXISTS BECAUSE A SKIP BELONGS TO A CONTAINER AND NOT TO A LIBRARY, and
+ * since ADR-0066 decision 5 those are no longer the same thing: a container
+ * holding prose and comics becomes a `book` library AND a `comic` library over
+ * one `library_source` container ref, and both of them read the container's
+ * `sync_report` rows. Two libraries with the same signature therefore report the
+ * SAME EVENT, not two events.
+ *
+ * The sources are sorted, so the signature does not depend on the order the
+ * server happened to serve them in. A library with no sources gets a key of its
+ * own — `sources: []` is §17.8's orphaned state and folding every orphan
+ * together would claim they share a container nobody named.
+ */
+function containerSignature(library: Library): string {
+	if (library.sources.length === 0) return `library:${library.id}`;
+	return library.sources
+		.map((s) => `${s.serviceInstanceId}\u0000${s.containerKind}\u0000${s.containerRef}`)
+		.sort()
+		.join('\u0001');
+}
+
+/**
  * THE SENTENCE ABOVE THE TABLE FOR WHAT THE IMPORT LEFT OUT, and the second half
  * is the load-bearing one.
  *
@@ -762,7 +785,24 @@ export function skippedNote(libraries: readonly Library[]): string {
 	const left = libraries.filter((l) => l.skipped?.state === 'left_out');
 	if (left.length === 0) return '';
 
-	const items = left.reduce((n, l) => n + (l.skipped?.items ?? 0), 0);
+	// ⚠️ THE TOTAL IS PER CONTAINER, NOT PER ROW, AND THE DIFFERENCE IS A WRONG
+	// NUMBER. A skip is a fact about the upstream CONTAINER — the server joins
+	// `library` → `library_source` → `sync_report` on the container ref — and
+	// ADR-0066 decision 5 puts TWO libraries over one container whenever it holds
+	// both prose and comics. Both rows then fold the same `sync_report` row and
+	// report the same count, so summing the rows counts one skipped file twice
+	// and tells the owner a number that never happened.
+	//
+	// Folding on the container signature is exact for the shape that produces
+	// this: sibling libraries carry the SAME single `library_source` row, so they
+	// fold the same evidence and their counts are identical by construction. Any
+	// library whose signature is unique — which is every library on an install
+	// with no mixed container — folds to itself and the total is unchanged.
+	const perContainer = new Map<string, number>();
+	for (const l of left) perContainer.set(containerSignature(l), l.skipped?.items ?? 0);
+	const items = [...perContainer.values()].reduce((n, v) => n + v, 0);
+	const shared = left.length - perContainer.size;
+
 	const parts = [
 		`UsArr read ${COUNT.format(items)} ${items === 1 ? 'item' : 'items'} in ${
 			left.length === 1 ? 'a library' : `${left.length} libraries`
@@ -770,6 +810,19 @@ export function skippedNote(libraries: readonly Library[]): string {
 			left.length === 1 ? 'that library’s' : 'those libraries’'
 		} count is short by that many. It is not a completeness check: it says what was left out, not that the rest arrived.`
 	];
+
+	// ⚠️ AND WHERE A COUNT IS ON TWO ROWS, THE NOTE SAYS SO IN WORDS. The rows
+	// keep their own numbers — the State cell is per row and the count IS true of
+	// each of them — so without this sentence the reader sees the same figure
+	// twice, adds it, and gets the total this function just refused to compute.
+	// §17.8 has no container-level slot to render it in instead: it is one row
+	// per library, and a grouping row is a design change rather than a wording
+	// one.
+	if (shared > 0) {
+		parts.push(
+			`${shared === 1 ? 'One of those rows shares' : `${COUNT.format(shared)} of those rows share`} an upstream container with another row, so the same skip is reported on each of them and is counted once here.`
+		);
+	}
 
 	const unobserved = libraries.filter((l) => l.skipped === undefined).length;
 	if (unobserved > 0) {
@@ -980,7 +1033,18 @@ function plural(n: number, one: string, many: string): string {
  * The array is ordered worst-first, so a truncating cell keeps the actionable
  * mark. Nothing is dropped: a row can carry several and all of them render.
  */
-export function libraryStates(library: Library, read: HealthRead): LibraryStateMark[] {
+export function libraryStates(
+	library: Library,
+	read: HealthRead,
+	/**
+	 * The other rows on the screen, used for ONE question: does another library
+	 * stand over the same upstream container and report the same skip. It is
+	 * OPTIONAL because every other mark on this row is derived from the row
+	 * alone, and a caller that has no list must not be forced to invent one —
+	 * omitting it drops the cross-reference clause and changes nothing else.
+	 */
+	siblings: readonly Library[] = []
+): LibraryStateMark[] {
 	const marks: LibraryStateMark[] = [];
 
 	if (library.sources.length === 0) {
@@ -1192,7 +1256,7 @@ export function libraryStates(library: Library, read: HealthRead): LibraryStateM
 		}
 	}
 
-	return withVisibility(library, skipMarks(library, completenessMarks(library, marks)));
+	return withVisibility(library, skipMarks(library, completenessMarks(library, marks), siblings));
 }
 
 /**
@@ -1219,9 +1283,28 @@ export function libraryStates(library: Library, read: HealthRead): LibraryStateM
  * arrived is the neighbouring measurement, and the note above the table draws
  * that boundary in words.
  */
-function skipMarks(library: Library, marks: LibraryStateMark[]): LibraryStateMark[] {
+function skipMarks(
+	library: Library,
+	marks: LibraryStateMark[],
+	siblings: readonly Library[]
+): LibraryStateMark[] {
 	const s = library.skipped;
 	if (s === undefined || s.state !== 'left_out') return marks;
+
+	// ⚠️ THE COUNT IS NOT SPLIT AND NOT APPORTIONED BETWEEN SIBLINGS, AND THE
+	// SENTENCE SAYS THEY ARE ONE EVENT. Since ADR-0066 decision 5 two libraries
+	// can stand over one upstream container, and the skip is a fact about the
+	// CONTAINER: the file was left out of it once. Neither sibling owns it, so
+	// neither may be told it did — attributing it to one is a fiction about where
+	// it happened, and halving it invents a second event.
+	//
+	// §17.8 has no container-level slot to state it in once, so it appears on
+	// both rows, and an identical number in two places with nothing joining them
+	// is exactly how a reader double-counts. This clause is what joins them.
+	const mine = containerSignature(library);
+	const alsoReporting = siblings.filter(
+		(o) => o.id !== library.id && o.skipped?.state === 'left_out' && containerSignature(o) === mine
+	);
 
 	const items = s.items ?? 0;
 	const mark: LibraryStateMark = {
@@ -1232,7 +1315,12 @@ function skipMarks(library: Library, marks: LibraryStateMark[]): LibraryStateMar
 		tone: 'none',
 		detail:
 			`${COUNT.format(items)} ${items === 1 ? 'item was' : 'items were'} read and not mapped` +
-			(s.reason !== undefined ? `; ${s.reason}` : '')
+			(s.reason !== undefined ? `; ${s.reason}` : '') +
+			(alsoReporting.length === 1
+				? `; the same skip is reported by ${alsoReporting[0].name} over the same upstream container, so it is one skip shown on both rows`
+				: alsoReporting.length > 1
+					? `; the same skip is reported by ${COUNT.format(alsoReporting.length)} other libraries over the same upstream container, so it is one skip shown on each row`
+					: '')
 	};
 	if (s.recordedAt !== undefined) mark.at = s.recordedAt;
 	marks.push(mark);
