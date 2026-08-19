@@ -119,7 +119,8 @@ integer"`, of a value that plainly is one. `recentWorksLimit` parses at 64 bits 
       "have_count": 43,
       "want_count": 17,
       "availability": {"k": "count", "have": 43, "total": null,
-                       "total_source": null, "missing": ["7", "12"]}
+                       "total_source": null, "missing": ["7", "12"]},
+      "poster_key": "0123456789abcdef"
     },
     {
       // The SAME shape with every optional key absent — and this row is not an
@@ -151,6 +152,7 @@ integer"`, of a value that plainly is one. `recentWorksLimit` parses at 64 bits 
 | `items[].have_count` | yes | Denormalised rollups. The numerator and the gap behind §17.2's `have / total · N missing` grammar. ⚠️ **`0` is also the column default, so a `0` here is not evidence on its own** — §1.4.1. |
 | `items[].want_count` | yes | |
 | `items[].availability` | **no** | The polymorphic blob — see §1.4. **Absent means *not counted*, never *none held*** — §1.4.1. |
+| `items[].poster_key` | **no** | `image_asset.cache_key` for the work's poster: the key `GET /img/{key}` takes — §9. Absent when the work has no poster asset, which ⚠️ **is every row of every install today**, because the fetch half of the image pipeline is not built. Absent rather than `""`: a renderer that treated `""` as a key would request `/img/` on every row. |
 | `limit` | yes | **Authoritative** (§1.2). |
 | `next_cursor` | **no** | Absent when this page is the last one; its absence is the "Load more" button's off switch. Absent rather than empty, because `""` reads as a cursor whose value is unknown. |
 
@@ -1139,6 +1141,7 @@ says `q` is missing.
       "have_count": 43,
       "want_count": 17,
       "availability": {"k": "count", "have": 43, "total": null},
+      "poster_key": "0123456789abcdef",  // §9's route key; omitted when there is no poster
       "score": 0.9708333333333333   // relevance WITHIN THIS ANSWER — read §6.2.1 before using it
     }
   ]
@@ -1405,8 +1408,12 @@ none. The two share the row shape and the allowlist that builds it, and they pag
 | `limit` | integer | `50` | The page size **requested**. Identical to §1.2 — a clamp, not a validated range, and the response says what was actually applied. |
 | `cursor` | opaque string | — | A token minted by a previous response's `next_cursor`. Never construct one; never edit one. See §7.5. |
 
-There is **no cover art**: there is no image endpoint, so shipping `poster_asset_id` would be an id
-the client cannot turn into anything. There are **no facet counts** beside the chips; each is its
+⚠️ **This paragraph used to open "There is no cover art: there is no image endpoint, so shipping
+`poster_asset_id` would be an id the client cannot turn into anything", AND BOTH HALVES ARE NOW
+FALSE.** `GET /img/{key}` is routed (§9), and this response carries **`poster_key`** — the same
+field §1.3's table documents, on the same row shape. What is still absent is the **bytes**: nothing
+writes `image_asset` yet, so the key is omitted on every row of every install and every `/img`
+request answers `not_cached`. There are **no facet counts** beside the chips; each is its
 own aggregate and its own read — ⚠️ **and that read now exists, as its own endpoint: §8.** The
 sentence above is unchanged and still true of *this* response; what changed is that "its own read"
 stopped being a description of something unbuilt. A client that wants the chip counts calls §8 and
@@ -1715,3 +1722,103 @@ no rows yet"* from *"the library scope excludes everything"*.
 
 There is **no `400`**, because there is no parameter to get wrong, and **no `404`**: a library with
 nothing in it is six zeroes, which is a fact about the library and not a failure.
+
+---
+
+## 9 · `GET /img/{key}` — cached artwork
+
+**Not under `/api/v1`.** `ARCHITECTURE.md` §4.1 lists this as a peer of the JSON API rather than a
+member of it: a browser puts it in an `<img src>`, not in a `fetch()`. It is served under
+`USARR_URL_BASE` like every other route.
+
+**The key is `image_asset.cache_key`** — `sha256(credential-stripped source_url)[:16]`, sixteen
+lowercase hex characters — and it is the `poster_key` §1.3 and §6.2 publish. It is **not**
+`image_asset.id`; §4.1 and §13 both spell the route `/img/{cache_key}`, and a row id would be an id
+that resolves through nothing. **Never construct one.** Anything that is not sixteen lowercase hex
+characters is `404`, and the refusal is the alphabet rather than a cleaning step: the key becomes a
+directory name on the server, so `..`, a separator and a NUL are all outside the set it admits.
+
+### 9.1 Query parameters
+
+| Parameter | Type | Default | Behaviour |
+| --- | --- | --- | --- |
+| `w` | enum | `orig` | One of `92` · `154` · `200` · `342` · `500` · `780` · `orig`. Anything else is `400 bad_request`. |
+
+⚠️ **`w` is a REFUSAL, not a clamp — the one parameter in this file that is.** Every other size-ish
+parameter here (`limit` on §1.2, §6.3, §7.1) is clamped, because serving fewer rows costs nothing.
+An unlisted width is different in kind: an arbitrary `?w=` lets one caller mint an unbounded number
+of distinct cache entries, each costing a decode, a downscale, an encode and a file, so the
+parameter would consume the resource the cache exists to protect. `ARCHITECTURE.md` §4.4 names it —
+*"arbitrary `?w=` is a cache-poisoning DoS"*, GHSA-rrr6-mvwg-9pg9. The value is **not** trimmed,
+lowercased or otherwise normalised: seven literal tokens is the whole vocabulary.
+
+`orig` is a **re-encode**, not the upstream's bytes. [ADR-0050](../DECISIONS.md#adr-0050) clause 1
+is normative that every stored width is produced by UsArr's own encoder.
+
+### 9.2 Response
+
+`200` with the image bytes and these headers:
+
+| Header | Value | Why |
+| --- | --- | --- |
+| `Content-Type` | from `image_asset.format` | **Derived from the column and from nothing else** — never sniffed from the bytes, never echoed from the upstream response the image was fetched with. The bytes are UsArr's own encoder's output in the codec the row names, so the row is the only party that knows the encoding; a sniff is a guess made from content, and an echoed upstream header is a claim by a host the user merely configured. `jpeg` → `image/jpeg` is the whole map today. |
+| `Cache-Control` | `private, max-age=31536000, immutable` | **`private` always, for every asset, whatever its `origin_class`.** A content-derived key justifies *immutability*, not *publicness*; `public` on a per-user-authorized resource tells a shared cache — a reverse proxy, a corporate middlebox, a service worker shared across browser profiles — that it may store the response and re-serve it to somebody else, which turns a correct authorization check into no check at all for every request after the first. |
+| `X-Content-Type-Options` | `nosniff` | Set on every response in the package. It stops the *browser* re-deciding, which is only safe because the value above is derived rather than observed. |
+
+⚠️ **The `immutable` promise has a precise limit.** `cache_key` is derived from the **URL**, not
+from the content — `ARCHITECTURE.md` §4.1 calls it "content-derived" and that is loose. One key
+names one `source_url` for the life of the row, and a re-render under a new codec rewrites the same
+path; but if an upstream **replaces the bytes at a URL it has already served**, the key does not
+change and a client holding this response keeps the old picture until the year is up. That is the
+trade, and it is acceptable because cover art is decoration whose staleness is visible and harmless.
+
+### 9.3 Authorization — and why `404` covers two different things
+
+**Authenticated like the rest of the API, and authorized against the OWNING ITEM.** The session says
+who is asking; the lookup says whether they are entitled to the *work* the artwork belongs to
+(`reference/security.md` §4). An `/img` that only checked for a session would serve every cover in
+the install to every account.
+
+`image_asset` has no owner column of its own — `origin_service_instance_id` names where the *bytes*
+came from, which is the fetcher's SSRF-policy input and not an entitlement — so the owning item is
+whichever `work` points at the asset through `poster_asset_id` or `backdrop_asset_id`, under that
+caller's ordinary access scope. **An asset no work points at is visible to nobody**: there is no
+item to authorize against, and failing closed costs a re-fetch where failing open would serve
+artwork whose entitlement nothing can compute.
+
+**`404 not_found` answers "no such key" and "not yours" identically, byte for byte.** A
+distinguishable *exists but not yours* is an existence oracle, and authorization here never depends
+on the key being hard to guess (`security.md` §4 rule 5).
+
+**Publishing `poster_key` is not an oracle either, and the reason is structural.** It is a column of
+a row the caller is already reading, selected under that read's own scope predicate: a work the
+scope hides has no row, so it has no key, and there is no way to ask for the key without asking for
+the work.
+
+### 9.4 `not_cached` is a different answer from `not_found`
+
+| Status | `error` | When |
+| --- | --- | --- |
+| `400` | `bad_request` | `?w=` is not one of the seven. The rejected value is not echoed; the allowlist is, in `action`. |
+| `401` | `unauthorized` | no session. |
+| `404` | `not_found` | the key names no row, **or** names one this caller may not see. |
+| `404` | `not_cached` | the caller **may** see the asset and this server does not hold its bytes at that width — including a `pending` row, a row whose `format` is `NULL`, and a row naming a codec this binary cannot serve. |
+| `500` | `internal` | the local read failed, or the cache directory is unreadable (as distinct from empty). |
+
+The split exists so a client can render `ARCHITECTURE.md` §4.4.1's **cold start** honestly: a
+placeholder for a cover that has not been fetched yet, and a broken-link state for a key that names
+nothing. It discloses nothing extra — the caller got the key from a response it was entitled to
+read, so *this asset exists* is not news to it.
+
+⚠️ **Today `not_cached` is the answer for every request.** Nothing in the tree writes `image_asset`
+and nothing renders an image: the fetch half of §4.4's pipeline needs catalogue rows carrying cover
+URLs and no adapter produces them. That is an honest empty cache, not a fault.
+
+### 9.5 There is no `/img/public/*`, and its absence is deliberate
+
+`security.md` §4 requires that genuinely public provider artwork live on a **distinct path**, "so
+the distinction is structural, not conditional". That path is **not registered**: nothing produces
+provider artwork yet, and an unauthenticated route with nothing behind it is a hole waiting for
+content. The structural requirement is met from the other side — publicness is not expressible on
+`/img/{key}`, so there is nothing for a later change to flip. A public surface, when it is wanted,
+is a new registration and a new handler.

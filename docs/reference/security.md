@@ -439,12 +439,24 @@ requirements on whatever builds them.
    enumerable in a few thousand round trips (gateway.md §3).
 
 **An authenticated `/img/*` is owed by the image pipeline**, authorized against the owning item
-and served `Cache-Control: private, max-age=31536000, immutable`. Neither route exists today, and
-neither does the pipeline behind them. A content-derived cache key justifies *immutability*, not
-*publicness* — those are different properties, and `public` on a per-user-authorized resource
-tells shared caches (a reverse proxy, a corporate middlebox, a service
+and served `Cache-Control: private, max-age=31536000, immutable`. A content-derived cache key
+justifies *immutability*, not *publicness* — those are different properties, and `public` on a
+per-user-authorized resource tells shared caches (a reverse proxy, a corporate middlebox, a service
 worker shared across profiles) to store and re-serve it across users. Genuinely public provider
 artwork belongs on a distinct `/img/public/*` path so the distinction is structural.
+
+⚠️ **This paragraph used to end "Neither route exists today, and neither does the pipeline behind
+them", and the first half is now false.** `GET /img/{key}` is registered in
+`internal/httpapi/server.go` and `internal/httpapi/images.go` serves it: authorized through
+`store.LookupImageAsset` against whichever `work` points at the asset, `private` as a constant that
+no `origin_class` branches on, and one `404` for "no such key" and "not yours" alike. `/img/public/*`
+is still not registered, deliberately — nothing produces provider artwork, and an unauthenticated
+route with nothing behind it is a hole waiting for content — and the structural half of the
+requirement holds from the other side: publicness is not expressible on the private route, so there
+is nothing for a later change to flip. **The pipeline BEHIND the route is still absent**: nothing
+fetches, encodes or writes an `image_asset` row, so every request answers `not_cached`.
+`reference/http-api.md` §9 is the wire contract; read the route table for what exists, per this
+document's own header.
 
 **A backup endpoint and any UI download owe** a gate on `admin.system.backup`, an audit row with
 actor and IP, a rate limit, and reachability **only** through the cookie-session path — never a
@@ -527,6 +539,10 @@ silently change which resource a redirect resolves to. The tracker-specific name
 - **URLs stored in the database are in scope too**: `image_asset.source_url` and the `http_cache`
   keys store the **credential-stripped** URL, and no row may be written whose `source_url` still
   carries a credential parameter — the ingest path that writes these rows owes that assertion.
+  ⚠️ **It is still owed and is owed by nothing that exists**: measured on this tree, no production
+  code writes `image_asset` at all, so there is no writer to carry the check and none to test it
+  against. The serving half of the pipeline (`/img`, §4) landed without one because it writes
+  nothing. This is a requirement on the first writer, not a description of a guard.
   **Which names those are is `internal/ssrf/redact.go`'s `credentialParams` to say, not this
   bullet's** — a shorter list restated here is the second deny-list, and the one that drifts is the
   one that leaks. TMDB v3, Fanart.tv and Comic Vine all authenticate by query parameter, so without

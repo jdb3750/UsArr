@@ -3273,25 +3273,7 @@ func TestMigrate0010IndexShapes(t *testing.T) {
 					tc.index)
 			}
 
-			rows, err := d.Read().QueryContext(ctx,
-				`SELECT name FROM pragma_index_info(?) ORDER BY seqno`, tc.index)
-			if err != nil {
-				t.Fatal(err)
-			}
-			var cols []string
-			for rows.Next() {
-				var c string
-				if err := rows.Scan(&c); err != nil {
-					_ = rows.Close()
-					t.Fatal(err)
-				}
-				cols = append(cols, c)
-			}
-			if err := rows.Err(); err != nil {
-				_ = rows.Close()
-				t.Fatal(err)
-			}
-			_ = rows.Close()
+			cols := indexColumns(t, ctx, d, tc.index)
 			if got, want := strings.Join(cols, ","), tc.column; got != want {
 				t.Errorf("%s is on (%s), want (%s)", tc.index, got, want)
 			}
@@ -3487,4 +3469,28 @@ func TestMigrate0010DownAndUp(t *testing.T) {
 	if again != at10 {
 		t.Error("a Down followed by an Up did not reproduce the schema 0010 creates")
 	}
+}
+
+// indexColumns reads an index's columns in seqno order.
+func indexColumns(t *testing.T, ctx context.Context, d *DB, index string) []string {
+	t.Helper()
+	rows, err := d.Read().QueryContext(ctx,
+		`SELECT name FROM pragma_index_info(?) ORDER BY seqno`, index)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = rows.Close() }()
+
+	var cols []string
+	for rows.Next() {
+		var c string
+		if err := rows.Scan(&c); err != nil {
+			t.Fatal(err)
+		}
+		cols = append(cols, c)
+	}
+	if err := rows.Err(); err != nil {
+		t.Fatal(err)
+	}
+	return cols
 }

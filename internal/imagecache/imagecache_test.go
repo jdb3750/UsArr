@@ -144,7 +144,6 @@ func TestOpenMissesHonestly(t *testing.T) {
 			}
 		})
 	}
-
 }
 
 // An empty root must not resolve against the WORKING DIRECTORY, which is what

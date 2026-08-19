@@ -48,9 +48,12 @@
 	 * `media_type`, `added_at` and `popularity` rather than with anything the
 	 * reader can see or click.
 	 *
-	 * COVERS ARE ABSENT AND THAT HAS NOT CHANGED: there is no image endpoint
-	 * anywhere in `internal/httpapi/server.go`'s route table, so a poster view
-	 * would have nothing to draw.
+	 * COVERS ARE ABSENT, AND ⚠️ THE REASON HAS CHANGED. This used to say there
+	 * was no image endpoint in `internal/httpapi/server.go`'s route table; there
+	 * is one — `GET /img/{key}` — and this response now carries `poster_key`,
+	 * which `$lib/library`'s `posterUrl` turns into a URL. What is missing is
+	 * the BYTES: nothing writes `image_asset` yet, so the key is absent on every
+	 * row of every real install and a poster view would draw an empty grid.
 	 *
 	 * A LOCAL SQLITE READ, so principle 1 holds all the way through: one statement
 	 * per page plus at most one small statement to resolve `?lib=` slugs, no *Arr,

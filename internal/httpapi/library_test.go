@@ -81,6 +81,26 @@ func seedLibraryCorpus(t *testing.T, s *Server) {
 		`INSERT INTO edition (id, work_id, format) VALUES (1, 3, 'ebook')`,
 		`INSERT INTO edition (id, work_id, format) VALUES (2, 4, 'audiobook')`)
 
+	// ONE POSTER, ON BERSERK. Written here rather than by the import because
+	// NOTHING writes image_asset yet — the fetch half of the pipeline is not
+	// built — so without this every row's poster_key is legitimately absent and
+	// every assertion about it would pass VACUOUSLY, which is the empty-green
+	// the seed above already has a paragraph about.
+	//
+	// ⚠️ THIS INSERT IS TEST-ONLY. internal/store's format lint exempts
+	// `_test.go` and stays vacuous; the ValidImageFormat call and the
+	// credential-stripped `source_url` assertion (security.md §5) attach to the
+	// first PRODUCTION writer, which is not this.
+	//
+	// Berserk deliberately, because it is the row every key-set assertion here
+	// inspects: it is newest, so it is items[0] on Block C and on the grid's
+	// default order, and it already carries every other optional key.
+	stmts = append(stmts,
+		`INSERT INTO image_asset (id, source_url, origin_class, role, cache_key, format, state)
+		   VALUES (1, 'http://kavita.example/cover/1', 'configured', 'poster',
+		           'aaaaaaaaaaaaaaaa', 'jpeg', 'ready')`,
+		`UPDATE work SET poster_asset_id = 1 WHERE id = 1`)
+
 	if err := s.store.DB().Write(t.Context(), func(ctx context.Context, tx *sql.Tx) error {
 		for _, q := range stmts {
 			if _, err := tx.ExecContext(ctx, q); err != nil {
@@ -197,7 +217,7 @@ func TestRecentWorksResponseKeysAreTheAllowlist(t *testing.T) {
 	// every optional key is present on it. Every OTHER row is a subset of this.
 	want := []string{
 		"added_at", "availability", "have_count", "id", "kind",
-		"media_type", "title", "want_count", "year",
+		"media_type", "poster_key", "title", "want_count", "year",
 	}
 	if got := keysOf(items[0]); strings.Join(got, ",") != strings.Join(want, ",") {
 		t.Errorf("row keys = %v\n         want %v", got, want)

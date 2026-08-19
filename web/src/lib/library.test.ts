@@ -12,8 +12,10 @@ import {
 	nextRequest,
 	recentRequestUrl,
 	toAvailability,
+	posterUrl,
 	toRecentItem,
 	toRecentPage,
+	IMAGE_WIDTHS,
 	type RecentFeed,
 	type RecentItem
 } from './library';
@@ -39,6 +41,7 @@ function wireRow(over: Record<string, unknown> = {}): Record<string, unknown> {
 		added_at: '2026-08-10T10:00:00Z',
 		have_count: 43,
 		want_count: 17,
+		poster_key: 'aaaaaaaaaaaaaaaa',
 		...over
 	};
 }
@@ -88,7 +91,8 @@ describe('a row off the wire', () => {
 			year: 1989,
 			addedAt: '2026-08-10T10:00:00Z',
 			haveCount: 43,
-			wantCount: 17
+			wantCount: 17,
+			posterKey: 'aaaaaaaaaaaaaaaa'
 		});
 	});
 
@@ -495,5 +499,55 @@ describe('the paging stop rule', () => {
 		}
 		expect(presses).toBe(4);
 		expect(feed.items.map((i) => i.id)).toEqual([1, 2, 3, 4]);
+	});
+});
+
+/**
+ * THE POSTER KEY AND THE URL BUILT FROM IT — ARCHITECTURE.md §4.4's serving
+ * half, client side.
+ *
+ * ⚠️ EVERY ROW OF EVERY REAL INSTALL IS THE ABSENT CASE TODAY. The fetch half of
+ * the image pipeline is not built, so nothing writes `image_asset` and the
+ * server omits `poster_key` everywhere. That makes the absent path the one that
+ * actually runs, and the one a renderer must handle first.
+ */
+describe('the poster key', () => {
+	it('is absent, not empty, when the server omits it', () => {
+		const item = toRecentItem(wireRow({ poster_key: undefined }));
+		expect(item).toBeDefined();
+		expect('posterKey' in (item as RecentItem)).toBe(false);
+		expect(posterUrl(item as RecentItem)).toBeUndefined();
+	});
+
+	it('builds the /img URL the server routes', () => {
+		const item = toRecentItem(wireRow()) as RecentItem;
+		expect(posterUrl(item)).toBe('/img/aaaaaaaaaaaaaaaa?w=orig');
+		expect(posterUrl(item, '342')).toBe('/img/aaaaaaaaaaaaaaaa?w=342');
+	});
+
+	it('offers exactly the seven widths the server accepts', () => {
+		// internal/imagecache's allowlist, verbatim. A width invented here is a
+		// 400 and a broken image, not a resized one.
+		expect([...IMAGE_WIDTHS]).toEqual(['92', '154', '200', '342', '500', '780', 'orig']);
+	});
+
+	it('refuses to build a URL from a value that is not a cache key', () => {
+		// The server validates at the read AND at the response boundary, so
+		// none of these can arrive from it. They are re-checked because "the
+		// server validated it" is a claim about a different process, and this
+		// value becomes a URL path segment.
+		for (const bad of [
+			'',
+			'..',
+			'../../etc/passwd',
+			'AAAAAAAAAAAAAAAA',
+			'aaaaaaaaaaaaaaa',
+			'aaaaaaaaaaaaaaaaa',
+			'aaaaaaaaaaaaaaa/',
+			'aaaaaaaaaaaaaa%00'
+		]) {
+			const item = toRecentItem(wireRow({ poster_key: bad })) as RecentItem;
+			expect(posterUrl(item)).toBeUndefined();
+		}
 	});
 });

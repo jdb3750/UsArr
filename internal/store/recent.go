@@ -120,6 +120,19 @@ type RecentWork struct {
 	HaveCount    int64
 	WantCount    int64
 	Availability sql.NullString
+
+	// PosterKey is `image_asset.cache_key` for the work's poster — the key
+	// `GET /img/{key}` addresses — and it is INVALID when the work has no
+	// poster asset, which is every work on this tree because nothing writes
+	// `image_asset` yet.
+	//
+	// It is here rather than on a second read for the reason §4.5's "never load
+	// full item records" rule does NOT forbid: it is one correlated primary-key
+	// lookup per row, on a read that already returns the row, against a second
+	// round trip per cover. See PosterKeyExpr for why it is the cache_key and
+	// not the asset id, and for why publishing it discloses nothing the caller
+	// could not already see.
+	PosterKey sql.NullString
 }
 
 // RecentWorksCursor is one keyset position in Block C's ordering.
@@ -256,7 +269,8 @@ func recentWorksSQL(scope Scope, cur RecentWorksCursor, limit int) (string, []an
 	return `
 		SELECT w.id, w.kind, w.title, w.year, w.added_at,
 		       w.have_count, w.want_count, w.availability,
-		       (SELECT MIN(e.format = ?) FROM edition e WHERE e.work_id = w.id)
+		       (SELECT MIN(e.format = ?) FROM edition e WHERE e.work_id = w.id),
+		       ` + PosterKeyExpr + `
 		  FROM work w
 		 WHERE w.deleted_at IS NULL
 		   AND +w.kind IN (` + placeholders(len(recentWorkKinds)) + `)
@@ -355,7 +369,8 @@ func (s *Store) recentWorksPage(
 		// allAudiobook is the MIN() above: NULL for a work with no editions.
 		var allAudiobook sql.NullInt64
 		if err := rows.Scan(&w.ID, &w.Kind, &w.Title, &w.Year, &w.AddedAt,
-			&w.HaveCount, &w.WantCount, &w.Availability, &allAudiobook); err != nil {
+			&w.HaveCount, &w.WantCount, &w.Availability, &allAudiobook,
+			&w.PosterKey); err != nil {
 			return nil, fmt.Errorf("read recently added: scan: %w", err)
 		}
 		w.MediaType = mediaTypeOf(w.Kind, allAudiobook)

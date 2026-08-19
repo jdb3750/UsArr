@@ -293,6 +293,18 @@ served `Cache-Control: private, max-age=31536000, immutable`. A content-derived 
 re-serve it across users. Genuinely public provider artwork lives at `/img/public/*` so the
 distinction is structural, not conditional.
 
+⚠️ **"Content-derived" is loose, and the imprecision matters to what `immutable` promises.**
+`cache_key` is `sha256(credential-stripped source_url)[:16]` — derived from the **URL**, not from
+the bytes (§4.4's own bullet says so). One key therefore names one `source_url` for the life of the
+row, which is what carries the immutability claim, and `image_asset.source_url` being UNIQUE is
+where that property actually lives. What it does **not** promise: if an upstream replaces the bytes
+at a URL it has already served, the key does not change and a client keeps the old picture until the
+year is up. Acceptable — cover art is decoration whose staleness is visible and harmless — but it is
+a consequence of the key being URL-derived, and an argument that leans on "content-derived" is
+leaning on something that is not true of this key. **The same is true of `image_asset.id`**, so the
+key shape is not what earns the directive; the uniqueness of `source_url` is.
+`reference/http-api.md` §9 states the limit to a consumer.
+
 **Health.** `live` = process up. **`ready` = migrations applied and the listener accepting** — the
 app can serve from an empty or partial library. **Sync state is not a readiness signal**; it is
 reported at `/api/v1/system/sync` and on the Services screen (§17.3). Gating readiness on initial

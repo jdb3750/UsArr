@@ -11,12 +11,16 @@
 	 * wearing a type's name.
 	 *
 	 * ⚠️ IT IS THE TABLE HALF OF §16'S LINE ITEM AND NOT THE WHOLE OF IT. §16
-	 * names a grid with COVERS. There is no image endpoint anywhere in
-	 * `internal/httpapi/server.go`'s route table — checked, not assumed — so a
-	 * poster view would have nothing to draw and `poster_asset_id` is not on this
-	 * wire either (http-api.md §7.1 says why: it would be an id the client cannot
-	 * turn into anything). This is the row grid; the poster view arrives with the
-	 * endpoint that can feed it, and calling this line item finished would be the
+	 * names a grid with COVERS, and this draws rows. ⚠️ THE REASON HAS CHANGED
+	 * AND THE OLD ONE IS FALSE: this comment used to say there was no image
+	 * endpoint in `internal/httpapi/server.go`'s route table and that
+	 * `poster_asset_id` "would be an id the client cannot turn into anything".
+	 * Both halves are gone — `GET /img/{key}` is routed, and the browse response
+	 * carries `poster_key`, which `$lib/library`'s `posterUrl` turns into a URL.
+	 * What is missing now is the BYTES: the fetch half of the pipeline is not
+	 * built, nothing writes `image_asset`, so every poster key is absent on every
+	 * real install and a poster view would draw an empty grid. It arrives with
+	 * the fetcher, and calling this line item finished would still be the
 	 * invented status CLAUDE.md forbids.
 	 *
 	 * ⚠️ AND IT IS NOT `/library`. That screen is THE SAME READ WITH NO

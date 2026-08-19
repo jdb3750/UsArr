@@ -117,6 +117,14 @@ type searchHitResponse struct {
 	// stored text is unusable (logged, because that is a writer bug).
 	Availability json.RawMessage `json:"availability,omitempty"`
 
+	// PosterKey is recentWorkResponse.PosterKey — `image_asset.cache_key` for
+	// the work's poster, absent when there is none. It travels here because the
+	// Search screen renders the SAME row component as Home and the grid do
+	// (`$lib/search.ts` imports `RecentItem`), so a cover on one is a cover on
+	// all three. TestSearchItemKeysAreRecentWorkKeysPlusScore is what makes that
+	// a rule rather than an intention.
+	PosterKey string `json:"poster_key,omitempty"`
+
 	// Score is store.SearchHit.Score, forwarded unrounded, and §6.2.1 is its
 	// whole contract. It is UNCONDITIONAL — never omitempty — because every hit
 	// has one: rerank writes it for every candidate and the rrf component is
@@ -282,5 +290,6 @@ func (s *Server) toSearchHitResponse(h store.SearchHit) searchHitResponse {
 		}
 	}
 	out.Availability = s.availabilityFor(h.ID, h.Availability)
+	out.PosterKey = posterKeyFor(s, h.ID, h.PosterKey)
 	return out
 }

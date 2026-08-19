@@ -689,6 +689,18 @@ func browseWorksPlanFaults(index, plan string) []string {
 	if strings.Contains(plan, "COVERING INDEX "+index) {
 		faults = append(faults, "is a COVERING INDEX, so this is not the shipped SELECT list")
 	}
+	// PosterKeyExpr is a correlated subquery that runs ONCE PER ROW of the page,
+	// so it has to be a rowid seek and nothing else. It is written as
+	// `ia.id = w.poster_asset_id` against an INTEGER PRIMARY KEY, which SQLite
+	// answers with `SEARCH ia USING INTEGER PRIMARY KEY (rowid=?)`; anything
+	// else — a scan, or a seek on some other index — means the expression was
+	// rewritten, and fifty full scans of image_asset per page is what that
+	// costs.
+	if strings.Contains(plan, "ia ") || strings.Contains(plan, "SCAN ia") {
+		if !strings.Contains(plan, "SEARCH ia USING INTEGER PRIMARY KEY (rowid=?)") {
+			faults = append(faults, "the poster-key subquery is not a rowid seek on image_asset")
+		}
+	}
 	return faults
 }
 

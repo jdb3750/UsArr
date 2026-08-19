@@ -18,12 +18,20 @@
  * for an upstream, and there is no upstream behind it to wait for.
  *
  * WHAT THIS ENDPOINT DOES NOT SERVE, so that nothing here codes against it:
- * cover art and Blocks A and B of §17.2, neither of which server.go routes at
- * all, and no `?lib=` library scope — but ⚠️ that last one is a property of
+ * Blocks A and B of §17.2, which server.go does not route, and no `?lib=`
+ * library scope — but ⚠️ that last one is a property of
  * THIS endpoint and not of the server. `?lib=` is served by
  * `GET /api/v1/library` (`http-api.md` §7.3), which this module does not call;
  * a client wanting the §17.8 scope chip goes there, not here. `library.go`'s
  * header carries the same split at its own declaration.
+ *
+ * ⚠️ COVER ART USED TO BE ON THAT LIST AND IS NOT ANY MORE. This endpoint
+ * serves `poster_key` — `image_asset.cache_key`, the key `GET /img/{key}`
+ * addresses — and `posterUrl` below builds the URL. What is still absent is the
+ * BYTES: the fetch half of the image pipeline is not built, nothing writes
+ * `image_asset`, so the key is omitted on every row of every real install.
+ * A renderer must handle the absent case first, because today it is the only
+ * case.
  */
 
 import { ApiError, getJson } from './api';
@@ -306,6 +314,50 @@ export interface RecentItem {
 	 * `toAvailability`, and note that absence is ordinary rather than an error:
 	 * http-api.md §1.4.1 makes it *"not counted"*, never *"none held"*. */
 	availability?: Availability;
+	/**
+	 * `image_asset.cache_key` for the work's poster: the key `GET /img/{key}`
+	 * addresses. `posterUrl` turns it into a URL; nothing else may.
+	 *
+	 * ⚠️ GENUINELY OPTIONAL, and today it is absent on EVERY row of every real
+	 * install: the fetch half of the image pipeline is not built, so nothing
+	 * writes `image_asset`. A renderer treats absence as "this work has no
+	 * artwork" and draws whatever it draws for that — it must never substitute
+	 * an empty string and build `/img/` from it.
+	 */
+	posterKey?: string;
+}
+
+/**
+ * The `?w=` allowlist from ARCHITECTURE.md §4.4, as `internal/imagecache`
+ * publishes it.
+ *
+ * ⚠️ IT IS AN ALLOWLIST BECAUSE THE SERVER REFUSES ANYTHING ELSE — an arbitrary
+ * `?w=` is a cache-poisoning DoS (GHSA-rrr6-mvwg-9pg9) — so a width invented
+ * here produces a 400 and a broken image, not a resized one.
+ */
+export const IMAGE_WIDTHS = ['92', '154', '200', '342', '500', '780', 'orig'] as const;
+
+export type ImageWidth = (typeof IMAGE_WIDTHS)[number];
+
+/**
+ * The URL for one poster at one width, or `undefined` when the item has no
+ * artwork.
+ *
+ * RETURNING `undefined` RATHER THAN A PLACEHOLDER URL IS THE POINT. A caller
+ * that gets a string always would render an `<img>` that 404s on every row of
+ * every install today, which is worse than the text-only row it replaced. The
+ * absent case is the caller's to draw.
+ *
+ * The key is NOT escaped and does not need to be: `internal/store` refuses
+ * anything that is not sixteen lowercase hex characters, at the read AND at the
+ * response boundary, so a value that reached here is already URL-safe. It is
+ * re-checked anyway, because "the server validated it" is a claim about a
+ * different process.
+ */
+export function posterUrl(item: RecentItem, width: ImageWidth = 'orig'): string | undefined {
+	const key = item.posterKey;
+	if (key === undefined || !/^[0-9a-f]{16}$/.test(key)) return undefined;
+	return `/img/${key}?w=${width}`;
 }
 
 /**
@@ -339,6 +391,11 @@ export function toRecentItem(value: unknown): RecentItem | undefined {
 	if (addedAt !== '') item.addedAt = addedAt;
 	const availability = toAvailability(value.availability);
 	if (availability !== undefined) item.availability = availability;
+	// Assigned only when the server sent one. `str()` yields '' for an absent
+	// key, and '' is not a poster key — it is the absence, which must stay
+	// distinguishable so `posterUrl` can return undefined rather than `/img/`.
+	const posterKey = str(value.poster_key);
+	if (posterKey !== '') item.posterKey = posterKey;
 	return item;
 }
 

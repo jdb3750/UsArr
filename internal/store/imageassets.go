@@ -102,6 +102,36 @@ var imageCacheKeyPattern = regexp.MustCompile(`^[0-9a-f]{16}$`)
 // LookupImageAsset's answer, and it is the answer that carries the access scope.
 func ValidImageCacheKey(s string) bool { return imageCacheKeyPattern.MatchString(s) }
 
+// PosterKeyExpr is the SELECT-list expression that turns a work's
+// `poster_asset_id` into the key `GET /img/{key}` addresses, for the reads that
+// render a row with a cover on it.
+//
+// IT IS A CONSTANT SHARED BY THREE QUERIES — Home's Block C, the library grid
+// and library search — because those three render ONE row shape and a fourth
+// spelling of this subquery is a fourth thing to keep in step. It takes no
+// argument, so a caller splices it in without touching its own argument list.
+//
+// ⚠️ IT SHIPS THE cache_key, NOT `image_asset.id`, AND THAT IS THE ROUTE'S
+// CHOICE RATHER THAN THIS QUERY'S. ARCHITECTURE.md §4.1 and §13 both spell the
+// route `/img/{cache_key}`, so the key is what a client can turn into a URL; the
+// row id would be an id that resolves through nothing. The id would also be
+// enumerable, which is not a defence on its own — security.md §4 rule 5 is
+// emphatic that authorization must never depend on ID secrecy — but the route's
+// authorization check is what actually protects the asset, and a non-enumerable
+// key is free on top of it.
+//
+// ⚠️ IT IS NOT AN EXISTENCE ORACLE, AND THE REASON IS STRUCTURAL RATHER THAN
+// CAREFUL. This expression is a column of a row the caller is already reading,
+// under that read's own access-scope predicate: a work the scope hides has no
+// row, so it has no poster key either, and there is no way to ask for the key
+// without asking for the work. The correlated subquery adds no predicate of its
+// own and therefore cannot widen anything — it can only turn an id the caller
+// already sees into a name for the same thing.
+//
+// A work with no artwork yields SQL NULL, which is every work on this tree:
+// nothing writes `image_asset`. The renderer treats absence as absence.
+const PosterKeyExpr = `(SELECT ia.cache_key FROM image_asset ia WHERE ia.id = w.poster_asset_id)`
+
 // imageAssetSQL renders the LookupImageAsset statement and its arguments.
 //
 // It is a function rather than a literal inlined below so the query-plan test

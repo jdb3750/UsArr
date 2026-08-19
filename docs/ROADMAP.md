@@ -357,10 +357,14 @@ Items marked 🛑 **STOPPED** are the different case: those are stopped by the d
       *Authority:* §4.4, §16's v0.1 entry.
 
       *Done when — **ALL THREE** legs. The first two run from a clean checkout:*
-      1. **A registered image route exists.**
+      1. **A registered image route exists.** ✅ **DISCHARGED 2026-08-19** by the serving-half item
+         below, which is a separate line and is now closed.
          `grep -nE 'mux\.Handle(Func)?\("[A-Z]+ /(api/v1/)?(img|image|cover)' internal/httpapi/server.go`
-         returns a hit. **Fired on the baseline tree: exit 1, no output — RED today.** The mux
-         registers no route under `img`, `image`, `cover`, `poster` or `thumb`.
+         returns `mux.Handle("GET /img/{key}", …)`. ⚠️ **This leg used to read "Fired on the
+         baseline tree: exit 1, no output — RED today", and that is no longer the tree.** The other
+         two legs are untouched and are what still holds this item open — which is exactly what the
+         three-leg split was written for: a route that serves nothing satisfies leg 1 alone, and
+         legs 2 and 3 are what refuse it.
       2. **A non-test writer stores a REAL format, not NULL.**
          `grep -rn 'INSERT INTO image_asset' --include=*.go internal/ cmd/ | grep -v _test.go`
          returns a hit, **and that same file references** `store.ValidImageFormat` or
@@ -580,8 +584,10 @@ Items marked 🛑 **STOPPED** are the different case: those are stopped by the d
       *Was done when:* a `/library/{type}` route exists under `web/src/routes/` and renders over
       `GET /api/v1/library`. **Both hold.**
       *What this box does NOT cover, and each is its own line below:* the covers half of §16's grid
-      sentence (there is still no image route), the **all-types scoped view** a Libraries row should
-      open, the **link** from a Libraries row into it, and the **`?lib=` chip** that writes scope.
+      sentence — ⚠️ **the parenthetical here used to read *"there is still no image route"* and is
+      false: `GET /img/{key}` is routed and `poster_key` is on this response; what is missing is the
+      bytes** — the **all-types scoped view** a Libraries row should open, the **link** from a
+      Libraries row into it, and the **`?lib=` chip** that writes scope.
 
 - [ ] **A facet read — until there is one, per-type hiding cannot come back and Home's Block A has
       no source.** `reference/http-api.md` §7.1 closes the wire question: *"There are **no facet
@@ -725,27 +731,38 @@ Items marked 🛑 **STOPPED** are the different case: those are stopped by the d
       sets `?lib=` to a slug the screen did not arrive with, **or** a recorded finding that §8.1's
       remainder is smaller than the chip it specifies.
 
-- [ ] **The COVERS / POSTER half of §16's grid line — there is NO image route at all.**
-      The browse merge covered only the row-grid half of §16's v0.1 sentence. **Searched
-      `internal/httpapi/server.go` for `img`, `image`, `cover`, `poster`, `thumb` and `MediaCover`:
-      the only hits are two comment lines in the middleware chain, and nothing registers a route
-      under any of them.** No handler in `internal/httpapi/` matches `handle*(Image|Cover|Poster|Img)`
-      either. §13 budgets `GET /img/{k}?w=342` at < 3 ms p50 on a cache hit; that route does not
-      exist.
-      The schema is ahead of the wire — `image_asset`, `work.poster_asset_id` and
-      `work.backdrop_asset_id` are in `internal/db/migrations/00005_library_sync.sql` — which is why
-      `reference/http-api.md` §7.1 says shipping `poster_asset_id` today *"would be an id the client
-      cannot turn into anything"*, and why the browse response does not ship it.
-      ⚠️ **This is the SERVING half only.** Producing the bytes is the image-pipeline item above.
-      ⚠️ **The third check on this §16 line is now a FALSIFIED box, not an open one:** the *"undecided
-      output codec"* item above is closed by [ADR-0050](./DECISIONS.md#adr-0050), so the encoder is
-      no longer blocked on a decision. One §16 line, three separate checks, one of them discharged.
-      🛑 **Nothing in THIS item is stopped by §1's sunset.** The route, its key, the `Content-Type`
-      derived from `image_asset.format` and the id on the browse response are all
-      source-independent. What §1 stopped is the Kavita **fetch** half, which is the item above.
-      *Authority:* §16's v0.1 entry, §4.4, §13's budget table, `reference/http-api.md` §7.1.
-      *Done when:* an image route is registered in `internal/httpapi/server.go`'s mux **and** the
-      browse response carries an id that resolves through it.
+- [x] **The COVERS / POSTER half of §16's grid line — the SERVING half.**
+      **Landed 2026-08-19.** `GET /img/{key}` is registered in `internal/httpapi/server.go`
+      (`images.go` serves it), and both browse responses carry `poster_key` — the
+      `image_asset.cache_key` the route is keyed on — which `$lib/library`'s `posterUrl` turns into
+      a URL. `reference/http-api.md` §9 is the wire contract. The done-when is discharged as
+      written: a route in the mux, and a key on the browse response that resolves through it,
+      proven end to end by `TestThePosterKeyOnTheBrowseResponseResolvesThroughImg`.
+      What landed with it: migration `00010_image_serving_indexes.sql` (three indexes — the route
+      key, and one per arm of the owning-work EXISTS), `store.LookupImageAsset` authorized against
+      the owning item per `reference/security.md` §4, `Content-Type` derived from
+      `image_asset.format` and never sniffed, `Cache-Control: private` as a constant no
+      `origin_class` branches on, and `internal/imagecache` for the width allowlist and the on-disk
+      layout.
+      ⚠️ **THE FETCH HALF IS STILL OPEN and is the item above.** Nothing writes `image_asset`, so
+      every `/img` request answers `not_cached` and every row's `poster_key` is absent on every real
+      install. The serving half is deliberately ahead of the bytes: it makes the fetcher a small
+      piece the moment a catalogue adapter produces cover URLs, rather than a pipeline tested only
+      against fixtures.
+      ⚠️ **`reference/http-api.md` §7.1's sentence — shipping `poster_asset_id` *"would be an id the
+      client cannot turn into anything"* — IS NOW FALSE and is corrected in place**, along with the
+      two Svelte route comments and `$lib/library`'s header that had copied the same explanation.
+      ⚠️ **The key is the `cache_key`, not `image_asset.id`.** §4.1 and §13 both spell the route
+      `/img/{cache_key}`; a row id would be an id that resolves through nothing.
+      ⚠️ **`/img/public/*` is deliberately NOT registered.** §4 wants the split structural rather
+      than conditional, and the structural half is that publicness is not expressible on the private
+      route. Nothing produces provider artwork, and an unauthenticated route with nothing behind it
+      is a hole waiting for content.
+      ⚠️ **NO `image_asset` WRITER WAS INTRODUCED.** `store.ValidImageFormat`'s AST lint is still
+      vacuous by its own `_test.go` exemption, and the credential-stripped `source_url` assertion
+      (`security.md` §5) is still owed by nothing that exists. Both obligations travel with the
+      fetch half.
+      *Authority:* §16's v0.1 entry, §4.4, §13's budget table, `reference/http-api.md` §9.
 
 - [x] **A relevance score on the wire.**
       **Landed 2026-08-19.** Resolved the first of the three ways this item named — a published

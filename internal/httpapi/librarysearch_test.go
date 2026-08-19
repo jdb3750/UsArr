@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -73,13 +74,28 @@ func seedSearchCorpus(t *testing.T, s *Server) {
 	// empty-green this repo has a rule about. The blob is the shape a writer
 	// will produce (schema.md §1, "count" discriminator), applied after the
 	// fact so the response has something to omit or carry.
+	//
+	// The poster is here for the same reason and with the same consequence:
+	// nothing writes `image_asset`, so without it `poster_key` is absent from
+	// every row and every assertion about it is vacuous. ⚠️ The INSERT is
+	// test-only — internal/store's format lint exempts `_test.go` and stays
+	// vacuous, and the writer obligations attach to the fetch half.
 	if err := s.store.DB().Write(ctx, func(ctx context.Context, tx *sql.Tx) error {
-		_, err := tx.ExecContext(ctx,
+		for _, q := range []string{
 			`UPDATE work SET year = 2020,
-			                 availability = '{"k":"count","have":43,"total":null}'`)
-		return err
+			                 availability = '{"k":"count","have":43,"total":null}'`,
+			`INSERT INTO image_asset (id, source_url, origin_class, role, cache_key, format, state)
+			   VALUES (1, 'http://kavita.example/cover/1', 'configured', 'poster',
+			           'aaaaaaaaaaaaaaaa', 'jpeg', 'ready')`,
+			`UPDATE work SET poster_asset_id = 1 WHERE title = 'Berserk'`,
+		} {
+			if _, err := tx.ExecContext(ctx, q); err != nil {
+				return fmt.Errorf("%s: %w", q, err)
+			}
+		}
+		return nil
 	}); err != nil {
-		t.Fatalf("seed year and availability: %v", err)
+		t.Fatalf("seed year, availability and poster: %v", err)
 	}
 }
 
@@ -291,7 +307,7 @@ func TestSearchResponseKeysAreTheAllowlist(t *testing.T) {
 	// here is §1.3's key set, which is the claim the doc comment makes.
 	wantItem := []string{
 		"added_at", "availability", "have_count", "id", "kind",
-		"media_type", "score", "title", "want_count", "year",
+		"media_type", "poster_key", "score", "title", "want_count", "year",
 	}
 	if got := sortedKeys(items[0]); !reflect.DeepEqual(got, wantItem) {
 		t.Errorf("item keys = %v, want %v", got, wantItem)

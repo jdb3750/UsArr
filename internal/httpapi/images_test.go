@@ -488,3 +488,124 @@ func headerThrough(t *testing.T, srv *httptest.Server, path, name string) string
 	defer func() { _ = resp.Body.Close() }()
 	return resp.Header.Get(name)
 }
+
+// ── the key on the browse responses ─────────────────────────────────────────
+
+// posterKeys reads `poster_key` off every row of an items envelope, keyed by
+// title so the two endpoints can be compared row for row.
+func posterKeys(t *testing.T, body string) map[string]string {
+	t.Helper()
+	var env struct {
+		Items []struct {
+			Title     string `json:"title"`
+			PosterKey string `json:"poster_key"`
+		} `json:"items"`
+	}
+	if err := json.Unmarshal([]byte(body), &env); err != nil {
+		t.Fatalf("body is not an items envelope: %s", body)
+	}
+	out := map[string]string{}
+	for _, it := range env.Items {
+		out[it.Title] = it.PosterKey
+	}
+	return out
+}
+
+// ⚠️ store.RecentWork REACHES TWO REGISTERED ENDPOINTS, and a field added to it
+// lands on the library grid as well as on Home's recently-added. Both allowlist
+// tests are single-sided — each compares one response against a hand-copied list
+// of its own — so this asserts the RELATIONSHIP: the same work carries the same
+// key on both, and the row that has no poster carries none on either.
+//
+// It is a VALUE assertion and not a key-set one. TestBrowseEndpointRowIsBlockCsRow
+// already pins that the two rows have the same KEYS, and it would stay green with
+// this field hardcoded to "" on one of the two handlers.
+func TestPosterKeyCrossesBothBrowseRenderPaths(t *testing.T) {
+	s := newTestServer(t, nil)
+	seedLibraryCorpus(t, s)
+
+	_, recentBody := callRecentWorks(t, s, "")
+	_, gridBody := callBrowseWorks(t, s, "")
+	recent := posterKeys(t, recentBody)
+	grid := posterKeys(t, gridBody)
+
+	// Berserk is the one seeded work with a poster.
+	const key = "aaaaaaaaaaaaaaaa"
+	if recent["Berserk"] != key {
+		t.Errorf("Block C's Berserk row carries poster_key %q, want %q:\n%s",
+			recent["Berserk"], key, recentBody)
+	}
+	if grid["Berserk"] != key {
+		t.Errorf("the grid's Berserk row carries poster_key %q, want %q:\n%s",
+			grid["Berserk"], key, gridBody)
+	}
+
+	// And absent, not empty, on a work with no poster — asserted on the RAW
+	// row, because the struct above turns an absent key and an empty one into
+	// the same string.
+	var raw struct {
+		Items []map[string]json.RawMessage `json:"items"`
+	}
+	if err := json.Unmarshal([]byte(recentBody), &raw); err != nil {
+		t.Fatal(err)
+	}
+	saw := false
+	for _, item := range raw.Items {
+		title := strings.Trim(string(item["title"]), `"`)
+		if title == "Berserk" {
+			continue
+		}
+		saw = true
+		if _, present := item["poster_key"]; present {
+			t.Errorf("%q has no poster asset and its row carries a poster_key: %s",
+				title, item["poster_key"])
+		}
+	}
+	if !saw {
+		t.Fatal("no posterless rows in the fixture, so the absence assertion is vacuous")
+	}
+
+	// Every key on both responses must be a key the /img route would accept —
+	// otherwise a client builds a URL that 404s on every render.
+	for name, keys := range map[string]map[string]string{"recent": recent, "grid": grid} {
+		for title, k := range keys {
+			if k != "" && !store.ValidImageCacheKey(k) {
+				t.Errorf("%s row %q ships %q, which /img refuses", name, title, k)
+			}
+		}
+	}
+}
+
+// THE END TO END: the key a browse response publishes is the key the /img route
+// serves. This is the whole claim of the serving half, and neither the browse
+// tests nor the image tests can make it alone — one knows the key and not the
+// route, the other knows the route and not where the key came from.
+func TestThePosterKeyOnTheBrowseResponseResolvesThroughImg(t *testing.T) {
+	cacheDir := t.TempDir()
+	s := newTestServer(t, func(c *Config) { c.ImageCacheDir = cacheDir })
+	seedLibraryCorpus(t, s)
+
+	_, body := callBrowseWorks(t, s, "")
+	key := posterKeys(t, body)["Berserk"]
+	if key == "" {
+		t.Fatal("the grid response carries no poster_key, so there is nothing to resolve")
+	}
+
+	// Before the bytes exist: a real answer, and the one that says "not yet".
+	if w := callImage(t, s, key, "?w=342"); w.Code != http.StatusNotFound ||
+		!strings.Contains(w.Body.String(), string(CodeNotCached)) {
+		t.Errorf("an unrendered poster = %d %s, want 404 not_cached", w.Code, w.Body.String())
+	}
+
+	writeCachedImage(t, cacheDir, key, imagecache.Width342, []byte("the poster"))
+	w := callImage(t, s, key, "?w=342")
+	if w.Code != http.StatusOK {
+		t.Fatalf("the published key does not resolve: %d %s", w.Code, w.Body.String())
+	}
+	if w.Body.String() != "the poster" {
+		t.Errorf("body = %q", w.Body.String())
+	}
+	if got := w.Header().Get("Content-Type"); got != "image/jpeg" {
+		t.Errorf("Content-Type = %q, want image/jpeg", got)
+	}
+}

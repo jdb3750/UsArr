@@ -59,9 +59,17 @@ import (
 // WHAT IS GENUINELY NOT BUILT ANYWHERE, checked one item at a time rather than
 // asserted as a list:
 //
-//   - No cover art, here or on the grid. server.go routes no image endpoint at
-//     all, so shipping poster_asset_id would be an id the client cannot turn
-//     into anything.
+//   - No cover-art BYTES, here or on the grid — but ⚠️ THIS BULLET USED TO READ
+//     "No cover art ... server.go routes no image endpoint at all, so shipping
+//     poster_asset_id would be an id the client cannot turn into anything", AND
+//     BOTH HALVES ARE NOW FALSE. `GET /img/{key}` is routed (images.go), and
+//     both this response and the grid's carry `poster_key` —
+//     `image_asset.cache_key`, which resolves through that route. What is not
+//     built is the FETCH half of §4.4's pipeline: nothing writes `image_asset`,
+//     so the key is legitimately absent on every row of every real install and
+//     every /img request answers not_cached. The wire is ahead of the bytes,
+//     deliberately, so the fetcher is a small piece when a catalogue adapter
+//     starts producing cover URLs.
 //   - No Block A. It is §17.2's per-type rollup row. ⚠️ THIS BULLET USED TO
 //     READ "No Block A and no Block B ... and server.go routes neither", AND
 //     BOTH HALVES OF THAT WERE WRONG BY THE TIME IT WAS READ. Block A's
@@ -152,6 +160,32 @@ type recentWorkResponse struct {
 	// it *silently* is not, because it made a writer bug and an honestly-empty
 	// work byte-identical to a consumer.
 	Availability json.RawMessage `json:"availability,omitempty"`
+
+	// PosterKey is `image_asset.cache_key` for the work's poster: the key
+	// `GET /img/{key}` addresses, which is the ONLY way artwork reaches a
+	// client. A client builds `/img/{poster_key}?w=342` from it; see
+	// images.go for the route and internal/imagecache for the width allowlist.
+	//
+	// ABSENT rather than empty when the work has no poster asset — which is
+	// every work on this tree, because nothing writes `image_asset` yet. `""`
+	// would read as a key whose value is unknown, and a renderer that built a
+	// URL from it would request `/img/` on every row.
+	//
+	// ⚠️ IT IS NOT AN EXISTENCE ORACLE, structurally rather than carefully. It
+	// is a column of a row this response already carries, selected under the
+	// same access-scope predicate: a work the scope hides has no row here, so it
+	// has no key here either, and there is no way to ask for the key without
+	// asking for the work. store.PosterKeyExpr carries the argument;
+	// internal/store's TestLookupImageAssetScopeActuallyFilters proves it by
+	// deleting the predicate rather than by threading a parameter.
+	//
+	// ⚠️ IT IS THE cache_key AND NOT `work.poster_asset_id`. This response used
+	// to ship neither, and http-api.md §7.1 gave as the reason that
+	// poster_asset_id "would be an id the client cannot turn into anything".
+	// Now that the route exists, the thing a client can turn into something is
+	// the key the route is spelled with — ARCHITECTURE.md §4.1 and §13 both say
+	// `/img/{cache_key}` — so that is what ships.
+	PosterKey string `json:"poster_key,omitempty"`
 }
 
 type recentWorksResponse struct {
@@ -385,7 +419,37 @@ func (s *Server) toRecentWorkResponse(w store.RecentWork) recentWorkResponse {
 		}
 	}
 	out.Availability = s.availabilityFor(w.ID, w.Availability)
+	out.PosterKey = posterKeyFor(s, w.ID, w.PosterKey)
 	return out
+}
+
+// posterKeyFor is the poster key as it crosses to a browser, or "" when there is
+// none to send.
+//
+// A KEY THAT IS NOT SHAPED LIKE ONE IS DROPPED RATHER THAN SHIPPED. The client
+// turns this into a URL path segment, and store.ValidImageCacheKey is the same
+// shape the /img route refuses at — so a malformed value would produce a row
+// whose cover 404s on every render, with nothing saying why. It is LOGGED rather
+// than merely dropped, for the reason availabilityFor logs its four cases: a
+// writer bug and an honestly-absent poster would otherwise be byte-identical to
+// a consumer.
+//
+// It is one function for the three responses that carry the field, because the
+// three render one row component and a second copy of this rule is a second
+// thing to keep in step.
+func posterKeyFor(s *Server, workID int64, key sql.NullString) string {
+	if !key.Valid {
+		return ""
+	}
+	if !store.ValidImageCacheKey(key.String) {
+		// The work id, not the key: the key came out of the database and the
+		// row is what makes this findable —
+		// `SELECT cache_key FROM image_asset ia JOIN work w ON w.poster_asset_id = ia.id WHERE w.id = ?`.
+		s.log.Warn("image_asset.cache_key is not a cache key and was dropped from the response",
+			"work_id", workID)
+		return ""
+	}
+	return key.String
 }
 
 // GET /api/v1/library is §17.2's per-type library grid and §17.8's library
@@ -416,9 +480,16 @@ func (s *Server) toRecentWorkResponse(w store.RecentWork) recentWorkResponse {
 // hazard it leaves is answered instead by refusing a bad VALUE on a name this
 // handler does read, and by the envelope echoing what was applied.
 //
-// WHAT IT DOES NOT DO YET: no cover art (there is no image endpoint, so
-// poster_asset_id would be an id the client cannot turn into anything), and no
-// facet counts beside the chips.
+// WHAT IT DOES NOT DO YET: no cover-art BYTES, and no facet counts beside the
+// chips.
+//
+// ⚠️ THIS SENTENCE USED TO READ "no cover art (there is no image endpoint, so
+// poster_asset_id would be an id the client cannot turn into anything)", AND
+// BOTH HALVES ARE FALSE NOW. `GET /img/{key}` is routed (images.go) and this
+// response carries `poster_key`, the `image_asset.cache_key` that route takes.
+// What is unbuilt is §4.4's FETCH half: nothing writes `image_asset`, so the key
+// is absent on every row of every real install and every /img request answers
+// not_cached.
 //
 // ⚠️ THE FACET COUNTS ARE BUILT — they are just not on THIS response. See
 // facets.go and http-api.md §8: GET /api/v1/library/facets answers all six in

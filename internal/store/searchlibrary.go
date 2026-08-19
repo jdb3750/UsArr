@@ -159,6 +159,12 @@ type SearchHit struct {
 	WantCount    int64
 	Availability sql.NullString
 
+	// PosterKey is RecentWork.PosterKey: `image_asset.cache_key` for the work's
+	// poster, invalid when there is none. The Search screen renders the SAME row
+	// component as Home and the grid do, so the cover travels on all three or on
+	// none of them.
+	PosterKey sql.NullString
+
 	// Score is rerank's output for this hit: the weighted sum of the three live
 	// signals, in (0,1]. It is written by rerank and by nothing else, so a hit
 	// that never went through the re-rank carries the zero value.
@@ -486,6 +492,7 @@ func searchLibrarySQL(scope Scope, legs []retrievalLeg, limit int) (string, []an
     SELECT sd.work_id, w.kind, w.title, w.year, w.added_at,
            w.have_count, w.want_count, w.availability,
            (SELECT MIN(e.format = ?) FROM edition e WHERE e.work_id = sd.work_id),
+           ` + PosterKeyExpr + `,
            sd.norm_title, fused.rrf
       FROM fused
       JOIN search_doc sd ON sd.rowid = fused.doc_rowid
@@ -608,7 +615,7 @@ func (s *Store) searchCandidates(
 		var allAudiobook sql.NullInt64
 		if err := rows.Scan(&c.hit.ID, &c.hit.Kind, &c.hit.Title, &c.hit.Year,
 			&c.hit.AddedAt, &c.hit.HaveCount, &c.hit.WantCount, &c.hit.Availability,
-			&allAudiobook, &c.normTitle, &c.rrf); err != nil {
+			&allAudiobook, &c.hit.PosterKey, &c.normTitle, &c.rrf); err != nil {
 			return nil, fmt.Errorf("search: scan: %w", err)
 		}
 		// mediaTypeOf returns "" for a kind §17.2's six-value enum has no row

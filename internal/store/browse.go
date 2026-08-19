@@ -407,6 +407,7 @@ func browseWorksSQL(scope Scope, f WorksFilter, cur WorksCursor, limit int) (str
 		SELECT w.id, w.kind, w.title, w.year, w.added_at,
 		       w.have_count, w.want_count, w.availability,
 		       (SELECT MIN(e.format = ?) FROM edition e WHERE e.work_id = w.id),
+		       ` + PosterKeyExpr + `,
 		       ` + keyExpr + `
 		  FROM work w
 		 WHERE w.deleted_at IS NULL
@@ -577,7 +578,8 @@ func (s *Store) browseWorksPage(
 		// editions.
 		var allAudiobook sql.NullInt64
 		if err := rows.Scan(&w.ID, &w.Kind, &w.Title, &w.Year, &w.AddedAt,
-			&w.HaveCount, &w.WantCount, &w.Availability, &allAudiobook, &r.key); err != nil {
+			&w.HaveCount, &w.WantCount, &w.Availability, &allAudiobook,
+			&w.PosterKey, &r.key); err != nil {
 			return nil, fmt.Errorf("browse library: scan: %w", err)
 		}
 		w.MediaType = mediaTypeOf(w.Kind, allAudiobook)
