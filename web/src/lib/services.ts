@@ -328,11 +328,18 @@ export interface SyncChannel {
 /**
  * The `Last successful sync` cell for a source that HAS a catalogue.
  *
- * ⚠️ NOTHING IN v0.1 REACHES THIS, and it is written now because it cannot be
+ * ⚠️ NOTHING SHIPPED CALLS THIS, and it is written now because it cannot be
  * retrofitted: the labelling rule is the whole point of the column, and the
- * first catalogue source must not have to rediscover it. v0.1's only kind is
- * prowlarr, an indexer, so `syncCell()` below answers `Not applicable` for
- * every row that can exist today.
+ * first DELTA channel must not have to rediscover it.
+ *
+ * ⚠️ THE REASON GIVEN WAS *"v0.1's only kind is prowlarr, an indexer, so
+ * `syncCell()` below answers `Not applicable` for every row that can exist
+ * today"*, AND THAT IS DEAD — `internal/httpapi`'s `serviceKinds` carries
+ * `kavita` and `bookorbit` at role `library` (ADR-0041, ADR-0052), and
+ * `syncCell` answers a real timestamp for both. What is still missing is the
+ * DELTA: `internal/libsync` does a full import on connect and there is no
+ * change-feed channel behind any adapter, so nothing constructs a `SyncChannel`
+ * to pass in here. Same conclusion, one layer down from where this put it.
  *
  *   ordered channel      →  `delta 14:02` / `6 minutes ago`
  *   channel 3b (§7.1a)   →  `page-walk delta 13:40` / `28 minutes ago`

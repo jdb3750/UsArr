@@ -887,9 +887,10 @@ const UNNAMED_SOURCE = 'Unnamed service';
 function chipTitle(source: LibrarySource, label: string, verdict: SourceVerdict): string {
 	// §17.8's *"upstream's own name beneath it, greyed and non-editable"*, folded
 	// into the row's `title` because the row view has no second line for it. The
-	// container ref is NOT appended: it is a Kavita library id in v0.1, machine
-	// data with no meaning to a reader, and §9.1 keeps machine strings out of a
-	// cell's identity text.
+	// container ref is NOT appended: it is the upstream's own container id —
+	// a Kavita library id or a BookOrbit one, per `cmd/usarr/import.go`'s two
+	// adapters — machine data with no meaning to a reader, and §9.1 keeps machine
+	// strings out of a cell's identity text.
 	const parts = [label];
 	if (source.containerName !== undefined) parts.push(source.containerName);
 	if (verdict.word !== '') parts.push(verdict.word);

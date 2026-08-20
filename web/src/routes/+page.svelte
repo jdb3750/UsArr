@@ -42,17 +42,25 @@
 	 * over the local file, `internal/httpapi/facets.go`. Until it existed every
 	 * count in Block A would have had to be invented, which DESIGN-DIRECTION
 	 * §9.6 closes off by name. That constraint still SHAPES the block rather than
-	 * suppressing it: the section does not render before the read lands, and it
-	 * draws only the two of §17.2's five row fields the wire answers. `Have` and
-	 * `Synced` are "their own aggregates and their own commit" and are therefore
-	 * not drawn at all — see SUMMARY_COLUMNS.
+	 * suppressing it: the section does not render before the read lands, and
+	 * §17.2's `Have` and `Synced` are "their own aggregates and their own commit"
+	 * and are not drawn at all — see SUMMARY_COLUMNS.
 	 *
-	 * ⚠️ THE SIX ROWS ARE ALL DRAWN, AND THE ONES WITH NO SOURCE ARE §17.7's
-	 * `unconfigured` STATE rather than an omission: the type, `no catalogue
-	 * source connected`, the service that will populate it, the milestone it
-	 * arrives in, and a link to Add. §17.2's hard rule — "a media type the user
-	 * does not have is not shown AT ALL" — is satisfied by that state, which
-	 * `design/DESIGN-DIRECTION.md` rule 13 says in as many words.
+	 * THREE COLUMNS SHIP AND ONLY TWO OF THEM ARE THE FACET READ's. `Type` and
+	 * `Items` are its two answers; `Status` is §17.7's per-type state and comes
+	 * off the SERVICES read, which is the same read Block B is drawn from. So the
+	 * block has two sources, not one, and neither is invented.
+	 *
+	 * ⚠️ THE SIX ROWS ARE ALL DRAWN, AND EVERY ONE CARRIES ONE OF §17.7's THREE
+	 * STATES rather than an omission. A type no connected service can write gets
+	 * `unconfigured` — the type, `no catalogue source connected`, the service that
+	 * would populate it, the milestone it arrives in, and a link to Add; a type
+	 * with a source and no finished import gets `first import running` and no
+	 * number; a counted one gets `ok`. §17.2's hard rule — "a media type the user
+	 * does not have is not shown AT ALL" — is satisfied by the first of those,
+	 * which `design/DESIGN-DIRECTION.md` rule 13 says in as many words. Which row
+	 * is in which state is `$lib/home`'s `catalogueReach` and `countBasis`, off
+	 * the install and never off a table of types.
 	 *
 	 * ⚠️ AN EXEMPLAR HERE ONCE READ `Comics · no catalogue source · Kavita ·
 	 * after v0.1 · Add` AND WAS FALSE ON BOTH CLAIMS, which is why the shipped
@@ -1693,14 +1701,20 @@
 				belongs here the moment adding one gets the user a catalogue, which
 				is the same test that keeps it out today." THAT TEST IS NOW MET, so
 				the condition was SATISFIED rather than dropped: `internal/libsync`
-				imports a Kavita catalogue, and `cmd/usarr` fires that import when a
-				Kavita client stack is built (`bootstrapImport`, wired at
-				cmd/usarr/services.go, gated on `last_full_sync_at`). Adding a
-				Kavita gets the user a catalogue, which is the sentence's own test.
+				imports a catalogue, and `cmd/usarr` fires that import when a
+				library-bearing client stack is built (`bootstrapImport`, wired at
+				cmd/usarr/services.go, gated on `last_full_sync_at`). Adding one gets
+				the user a catalogue, which is the sentence's own test.
+
+				⚠️ THE ADAPTER COUNT MOVED AND THE TEST DID NOT. This read "a Kavita
+				client stack" throughout, on a tree with one adapter; ADR-0052 added
+				BookOrbit and `cmd/usarr/import.go` now names both — and refuses every
+				other kind, in as many words. Read that file for the list, never this
+				comment: what belongs here is the TEST, which is milestone-independent.
 
 				⚠️ AND WHAT IS STILL NOT CLAIMED, because the corrected sentence is
-				one word away from claiming it. One adapter, one trigger a user can
-				reach, and NO TIMER — `cmd/usarr/import.go` says exactly that. The
+				one word away from claiming it. One trigger a user can reach, and NO
+				TIMER — `cmd/usarr/import.go` says exactly that. The
 				import runs at most once per instance per database, there is no
 				scheduler and no periodic re-import, and the manual trigger is a Go
 				call with no HTTP or CLI route in front of it. "once, when you
@@ -1811,12 +1825,14 @@
 				stage on the way to another one" was the load-bearing part of the
 				lie. Falsified by ADR-0041, which put Kavita in v0.1 as the sync
 				core's first adapter, and by `internal/libsync`, which imports its
-				catalogue.
+				catalogue. ADR-0052 then made BookOrbit v0.1's source as well; the
+				falsification is the same one either way, and the count of adapters is
+				`cmd/usarr/import.go`'s to state rather than this comment's.
 
 				⚠️ AND THE REPLACEMENT IS BOUNDED ON THE OTHER SIDE, because the
 				correction's own failure mode is promising a sync that does not
-				exist. One adapter, one trigger, NO TIMER — `cmd/usarr/import.go` in
-				those words. The import fires when a Kavita client stack is built, is
+				exist. One trigger, NO TIMER — `cmd/usarr/import.go` in those words.
+				The import fires when a library-bearing client stack is built, is
 				gated on `last_full_sync_at` so it runs at most once per instance per
 				database, and has no scheduler and no periodic re-read behind it. The
 				copy below therefore says a first import and says it is not a running

@@ -22,9 +22,10 @@
  * DESIGN-DIRECTION §9.6's ban is unchanged and is what shapes the block rather
  * than what suppresses it: never fabricated data in a shipped product surface,
  * so the section does not render before its read lands (no skeleton, no zeroed
- * table), and it draws only the two columns the wire answers. §17.2's `Have`
- * and `Synced` are *"their own aggregates and their own commit"*
- * (`internal/httpapi/facets.go`) and are therefore not drawn at all.
+ * table). Three columns ship and only two of them are the facet read's: `Type`
+ * and `Items` are its answers, and `Status` is §17.7's per-type state off the
+ * SERVICES read. §17.2's `Have` and `Synced` are *"their own aggregates and
+ * their own commit"* (`internal/httpapi/facets.go`) and are not drawn at all.
  *
  * ⚠️ TWO THINGS ON HOME ARE NOT ONE OF THE THREE BLOCKS, and saying so here is
  * the point rather than a caveat. A release-search entry point and the recent
@@ -57,10 +58,16 @@
  * exists. **The rule is satisfied by the `unconfigured` STATE rather than by
  * omission** — §17.2 says so itself, and `design/DESIGN-DIRECTION.md` rule 13
  * says why rows that carry a state, a cause and an action are not an empty
- * section. `librarySummary` below is where that lands, and it explains which
- * types this build can catalogue and how that was measured. ⚠️ Rule 13 counts
- * FOUR such rows and this build draws three, which is the audiobooks
- * disagreement `librarySummary` records rather than a second rule.
+ * section. `librarySummary` below is where that lands.
+ *
+ * ⚠️ HOW MANY SUCH ROWS THERE ARE IS NOT WRITTEN DOWN ANYWHERE, HERE INCLUDED,
+ * AND THAT IS THE POINT RATHER THAN AN OMISSION. This read *"Rule 13 counts FOUR
+ * such rows and this build draws three"*, which was a count of the BUILD's
+ * adapters — and how many rows have no source is a property of the INSTALL, so
+ * any number stated in a comment is wrong on some install and goes stale on the
+ * next adapter. `catalogueReach` derives it from the connected service kinds and
+ * `summaryCount` renders it; a Kavita-only install and a BookOrbit one disagree,
+ * correctly, and neither disagrees with this file.
  *
  * 🕰️ THIS PARAGRAPH ONCE CONTINUED, TRULY OF THE TREE IT WAS WRITTEN AGAINST:
  * *"The sidebar draws none either (`routes/+layout.svelte`, whose `NAV_GROUPS`
@@ -80,7 +87,10 @@
  * would leave that ADR pointing at nothing. The ADR carries the reasoning and
  * the rejection; do not restate either here. `routes/+layout.svelte` carries the
  * shipped rule at `TYPE_NAV`, and `docs/reference/http-api.md` §7.1 is where the
- * missing facet count is written down.
+ * sidebar's own no-counts rule is written down. ⚠️ THIS CALLED THAT COUNT
+ * "missing", AND IT IS NOT: `GET /api/v1/library/facets` ships and Block A is
+ * drawn off it. §7.1's rule is about the SIDEBAR CHIPS and survives the read
+ * landing, which the paragraph four below says at length.
  *
  * What the quote got WRONG, and why the sidebar could ship without the rollup:
  * the two rows are not the same KIND of thing. A sidebar row is a PLACE, and a
@@ -132,19 +142,24 @@ import {
  * ⚠️ IT WENT ON TO SAY **"what the arm renders is still one honest sentence and
  * NO catalogue: a Kavita can be added and probed, and nothing imports from it
  * yet"**, AND BOTH HALVES OF THAT ARE DEAD. Something imports from it —
- * `internal/libsync`'s Kavita source, run by `cmd/usarr`'s `bootstrapImport`
- * from the `kavita` arm of the client build (`cmd/usarr/services.go`) — and the
+ * `internal/libsync`, run by `cmd/usarr`'s `bootstrapImport` from the
+ * library-bearing arms of the client build (`cmd/usarr/services.go`) — and the
  * arm draws Block C's table off `GET /api/v1/library/recent`, not a sentence.
  *
  * The SHAPE of that import is what is still worth stating, because the dead
  * sentence undershot and a bare "the library sync is built" would overshoot by
- * as much: ONE adapter, Kavita and nothing else (`cmd/usarr/import.go` refuses
- * any other kind); ON CONNECT, gated on `last_full_sync_at` being unset, so it
- * runs at most once per instance per database; NO timer and NO periodic
- * re-sync; and the manual `FullImport` has no HTTP route and no CLI flag in
- * front of it, so nothing a user can reach asks for a second import. Read
- * `internal/db/migrations`, `cmd/usarr/import.go` and `web/src/routes` for what
- * exists, never this comment.
+ * as much: ON CONNECT, gated on `last_full_sync_at` being unset, so it runs at
+ * most once per instance per database; NO timer and NO periodic re-sync; and the
+ * manual `FullImport` has no HTTP route and no CLI flag in front of it, so
+ * nothing a user can reach asks for a second import.
+ *
+ * ⚠️ WHICH ADAPTERS ARE BEHIND IT IS NOT WRITTEN HERE, AND IT USED TO BE: this
+ * read **"ONE adapter, Kavita and nothing else"** and ADR-0052 falsified it by
+ * adding BookOrbit. The count and the list are `cmd/usarr/import.go`'s — it
+ * names the kinds it accepts and refuses every other one, in as many words —
+ * and a copy of that list in a comment goes stale the next time the list moves,
+ * which it now has twice. Read `internal/db/migrations`, `cmd/usarr/import.go`
+ * and `web/src/routes` for what exists, never this comment.
  */
 export type HomeMode = 'unconfigured' | 'search-and-grab' | 'library';
 

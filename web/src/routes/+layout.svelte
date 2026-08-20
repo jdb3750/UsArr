@@ -12,15 +12,23 @@
 	 * AND THAT IS A DELIBERATE DEPARTURE FROM §17.2'S DATA-DRIVEN RULE RATHER
 	 * THAN AN OVERSIGHT. §17.2 and DESIGN-DIRECTION §8.1 both want a type the
 	 * user does not have hidden entirely, and doing that honestly needs a per-type
-	 * COUNT. There is none on the wire: `docs/reference/http-api.md` §7.1 states
-	 * that there are *"no facet counts beside the chips; each is its own aggregate
-	 * and its own read"*, and this header used to say the rows were absent because
+	 * COUNT BESIDE THESE CHIPS. `docs/reference/http-api.md` §7.1 states that
+	 * there are *"no facet counts beside the chips; each is its own aggregate and
+	 * its own read"*, and this header used to say the rows were absent because
 	 * nothing could drive them. Six one-row probes on every navigation is exactly
 	 * the render-path cost principle 1 exists to refuse, and hiding a type on a
 	 * count nobody measured would hide a library that is really there — the worse
 	 * of the two failures, because it is silent. So all six ship and an empty type
-	 * says so on its own screen, where the words can be true. The rule comes back
-	 * the day a facet count does.
+	 * says so on its own screen, where the words can be true.
+	 *
+	 * ⚠️ THIS ENDED *"The rule comes back the day a facet count does"*, AND ONE
+	 * LANDED WITHOUT BRINGING IT BACK. `GET /api/v1/library/facets` ships six
+	 * counts and Home's Block A is drawn off them, so the premise "there is none
+	 * on the wire" is dead — but §7.1's rule is about a count BESIDE A CHIP, on a
+	 * component that renders on every navigation, and ADR-0053's reopening
+	 * condition is not this number: ADR-0059 refined it to an independent EXISTS
+	 * over `edition.format`. So NOTHING HERE CHANGES. All six entries still ship,
+	 * unconditionally, and none of them carries a number.
 	 *
 	 * THE SCOPE CHIP IS STILL NOT HERE. It renders nothing at 0 or 1 library,
 	 * exactly as Navidrome's LibrarySelector returns null, so at zero libraries
@@ -117,9 +125,12 @@
 	type NavItem = { id: string; label: string; href: ResolvedPathname };
 
 	/** ⚠️ ALL SIX, NOT THE ONES THIS INSTALL HAS. The header carries the whole
-	 * argument: there is no facet count on the wire (http-api.md §7.1), and
-	 * hiding a type on a count nobody measured hides a library that is really
-	 * there. The order is `$lib/library`'s `MEDIA_TYPES`, which is §17.2's own. */
+	 * argument: §7.1 puts no facet count beside a chip, and hiding a type on a
+	 * count nobody measured hides a library that is really there. ⚠️ THIS SAID
+	 * *"there is no facet count on the wire"*, WHICH IS NO LONGER TRUE — Home's
+	 * Block A is drawn off `GET /api/v1/library/facets` — and it does not change
+	 * this list; the header says why. The order is `$lib/library`'s
+	 * `MEDIA_TYPES`, which is §17.2's own. */
 	const TYPE_NAV: NavItem[] = MEDIA_TYPES.map((type) => ({
 		id: `/library/${type}`,
 		label: mediaTypeLabel(type),

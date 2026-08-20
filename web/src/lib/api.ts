@@ -1183,10 +1183,15 @@ function toTestResult(value: unknown): ConnectionTestResult {
  * `bookorbit` as ADR-0052's.
  *
  * ⚠️ APPEARING HERE MEANS A SERVICE CAN BE ADDED, NOT THAT ITS CATALOGUE CAN BE
- * READ. The two are separate registrations on the server — the kind decides what
- * may be stored, `cmd/usarr`'s registry decides what each stored kind can then
- * do — and for `bookorbit` today that is the credential handshake and the health
- * probe. The Services screen says so per row rather than this picker hiding it.
+ * READ. The two are separate registrations on the server: the kind decides what
+ * may be stored, and `cmd/usarr`'s registry decides what each stored kind can
+ * then do. The Services screen says so per row rather than this picker hiding
+ * it. ⚠️ THE EXAMPLE GIVEN HERE WAS *"for `bookorbit` today that is the
+ * credential handshake and the health probe"*, AND IT IS DEAD:
+ * `cmd/usarr/import.go` imports a catalogue from bookorbit and from kavita, and
+ * refuses every other kind. The DISTINCTION survives its example — it is what
+ * this list would get wrong first — and which kinds are on which side of it is
+ * that file's to say, not this comment's.
  */
 export const SERVICE_KINDS = ['prowlarr', 'kavita', 'bookorbit'] as const;
 
