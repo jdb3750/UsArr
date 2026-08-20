@@ -23813,3 +23813,500 @@ completeness and as evidence that nothing regressed, and **not** as coverage of 
 of this change is this entry and the quotations above.
 
 ⚠️ **Any commit sha reported for this entry is a content sha, never a merge.**
+
+---
+
+## LS-386 — Home's Block A stated two things it could not know: that a first-run library is empty, and that this build's adapter list is this install's. Twelve findings, ten applied, two recorded as misreporting
+
+**`LS-386`, allocated by the coordinator, and re-checked at this lane's tip rather than taken on
+report.** Run before a line of this entry was written, at `290327b35e29` (the merge of `origin/main`
+`c9006dc` into this branch): `grep -c 'LS-386' docs/REVIEW-LOG.md` returns `0`,
+`git grep -n 'LS-386' origin/main` returns nothing, and `git log --all --grep='LS-386'` returns no
+commit. The high-water in this file at that tip is **`LS-385`**, which arrived on `origin/main` in the
+merge. **`LS-386` was free and is taken; no id was bumped and no gap was left.** Nothing here touches
+the `SD-`, `DS-`, `RK-` or `FI-` series, and no ADR or migration number is allocated by this lane.
+
+ℹ️ **This entry does not cite its own commit sha, deliberately** — the entry lives in the commit it
+would be citing. The three commits it reports ON are cited by sha; the fourth is identified by its
+shape, one file, this section, and its sha is reported to the coordinator where it can be true.
+⚠️ **Any commit sha here is a content sha, never a merge.**
+
+### What was reviewed
+
+`51a9e6835b97`, *"feat(home): Block A draws the six media types off the facet read"*, on branch
+`claude/hearth-thread-9h9ep6` off `a928adf`. **That commit is pushed and was reported to the owner; it
+is never amended, rebased or force-pushed.** Everything below lands on top of it, in three commits:
+
+| Commit | Subject | Content sha |
+|---|---|---|
+| 1 | `fix(home): Block A's counts and its reach are read off the install, not the build` | `da33aa7b3a89` |
+| 2 | `docs(web): sweep the comments the facets landing and ADR-0052 falsified` | `7437ab44b3da` |
+| 3 | `docs: strike §16's Kavita ground for the six-media-types claim, dated` | `81a472117147` |
+
+The review returned **1 blocking finding, 6 should-fix and 5 notes**. Ten are applied, two are
+recorded here as misreporting by the builder rather than as defects in the tree. **None is dropped.**
+
+### F1 (BLOCKING) — applied. A first-run install read as an empty library
+
+`+page.svelte` rendered Block A as soon as `facetsLoaded` flipped, which is **before the first import
+has written a row**. So a user who had just connected a service was told
+`Ebooks 0 books · Audiobooks 0 audiobooks · Comics 0 series` for the several minutes the walk ran.
+Every one of those zeros was a real value off the wire and every one of them was a false sentence on
+the screen. ARCHITECTURE §17.2 legislates exactly this moment — *"what Block A's columns mean while an
+import is running, stated because that is where the first-run user spends their first several
+minutes"* — and requires a caption above the block.
+
+**The signal was already being fetched and thrown away.** `load()` read
+`GET /api/v1/services/health` for Block B and kept `health.services.length`; `ServiceHealth.lastFullSyncAt`
+is `null` for never-synced, which the same file already said at length 570 lines further down. The
+whole payload is kept now, and `$lib/home`'s **`countBasis`** derives three states from it:
+
+| Basis | Test | What Block A renders |
+|---|---|---|
+| `not-counted` | no library-bearing instance has `lastFullSyncAt`, and none has `workCount > 0` | **no number on any row**; each sourced row says `first import running` |
+| `partial` | no completed import, but committed batches landed | the counts, and a caption saying they are not totals |
+| `counted` | some library-bearing instance has `lastFullSyncAt !== null` | the counts, plainly |
+
+`partial` renders its numbers on `services.ts`'s own precedent for the same fact — *"a partial import's
+committed rows are real and are shown"* — rather than on a second judgement. `isIndexer` decides which
+instances count, because a Prowlarr reports `null` / `0` exactly like an unsynced catalogue source and
+only `role` separates them (`http-api.md` §3.2).
+
+#### §17.2's literal caption string is REFUSED, and the requirement is not
+
+§17.2 writes the caption out: *"`Items` is the source's declared total from first contact, and it says
+so once above the block — 'Totals reported by each service.'"* **That string does not ship.**
+`internal/store/facets.go` is `SELECT COUNT(*)` over local rows under the caller's access scope; it
+never asks a service for a declared total and no field on the wire carries one. Printing §17.2's
+sentence would put a number's provenance on screen that UsArr has not got, which is
+DESIGN-DIRECTION §9.6's fabrication ban wearing a caption.
+
+⚠️ **The builder was right to refuse it and wrong to drop the requirement with it**, which is the
+finding. The caption ships, once, above the block, and says what this read can support — including the
+thing §17.2 wanted a caption FOR. The three sentences are in `SUMMARY_CAPTION`, and the refusal is
+argued in a comment at the constant AND at the markup, citing §17.2, so the deviation is legible to
+the next reader rather than invisible:
+
+> `not-counted` — *"No import has finished yet, so nothing here has been counted. The first one starts
+> on its own and runs for minutes rather than seconds on a large library."*
+> `partial` — *"An import is still running, so these are the rows that have landed so far and not
+> totals."*
+> `counted` — *"Counted in UsArr's own catalogue, never a total reported by a service."*
+
+#### ✅ What a first-run user now literally sees, measured in Chromium and not described
+
+A stub server answering `/api/v1/services/health` with one enabled `bookorbit` at role `library`,
+`last_full_sync_at: null`, `work_count: 0`, and `/api/v1/library/facets` with the six counts, against
+the shipped `pnpm build` output at 1440×900. Read off the live DOM:
+
+```
+Your library                                 6 media types, 3 catalogued
+No import has finished yet, so nothing here has been counted. The first one
+starts on its own and runs for minutes rather than seconds on a large library.
+
+Type         Items              Status
+Movies       (nothing)          no catalogue source connected / Radarr · v0.2 · Add
+TV           (nothing)          no catalogue source connected / Sonarr · v0.2 · Add
+Music        (nothing)          no catalogue source connected / Navidrome · after v0.1 · Add
+Ebooks       (nothing)          first import running
+Audiobooks   (nothing)          first import running
+Comics       (nothing)          first import running
+```
+
+The same install once the import completes, same harness, same run:
+
+```
+Your library                                 6 media types, 3 catalogued
+Counted in UsArr’s own catalogue, never a total reported by a service.
+
+Ebooks       424 books          catalogued
+Audiobooks   118 audiobooks     catalogued
+Comics       553 series         catalogued
+```
+
+🔥 **Fired, not trusted.** With the gate reverted to `if (catalogued)`:
+`× draws no number at all before anything has been counted` /
+`AssertionError: expected [ '', '', '', '0 books', …(2) ] to deeply equal [ '', '', '', '', '', '' ]`.
+
+### F2 — applied. `catalogued` was a property of the BUILD
+
+`home.ts`'s `TYPE_SOURCE` was a static record and nothing consulted which services were connected.
+`cmd/usarr/import.go` imports from **bookorbit and from kavita**, and `internal/libsync/kavita.go`'s
+`LibraryTypeBook` arm says *"Kavita serves no audio, so nothing here can produce one"* — so a
+**Kavita-only install was told `Audiobooks · 0 audiobooks`**, which is precisely the claim the same
+file argues no row may make: a claim about the library where the true fact is about the pipeline.
+
+**`catalogueReach(health)` derives it per install** from the connected service kinds, following
+`librarygrid`'s `browseEmptyState`, which already separates *"a library-bearing service is connected"*
+from *"this type has no rows"* off the same services read. The kind-to-types map is read off
+`internal/libsync` rather than off a document:
+
+| Kind | Types | Read from |
+|---|---|---|
+| `kavita` | ebooks, comics | `mapLibraryType`: `LibraryTypeBook` → `book` with no audio arm; `Comic`/`ComicVine`/`Manga` → `comic` |
+| `bookorbit` | ebooks, audiobooks, comics | the same two work kinds, plus `bookOrbitEditionFormat` mapping m4b/mp3/m4a/opus/ogg/flac onto `edition.format = 'audiobook'` |
+
+It reads `kind` and **not** `role`, so a kind registered as `library` in
+`internal/httpapi.serviceKinds` before an adapter exists reaches no types rather than promising rows
+nothing can write; and it ignores `enabled`, because a disabled instance's rows are already in the
+local file and the six counts include them. Both have their own test.
+
+✅ **Measured, same harness, a Kavita-only install with a completed import:**
+
+```
+Your library                                 6 media types, 2 catalogued
+Audiobooks   (nothing)          no catalogue source connected / BookOrbit · v0.1 · Add
+Ebooks       424 books          catalogued
+Comics       553 series         catalogued
+```
+
+🔥 **Fired.** With `kavita: ['ebooks', 'audiobooks', 'comics']`:
+`× gives a Kavita install ebooks and comics, and no audiobooks at all` /
+`AssertionError: expected [ 'audiobooks', 'comics', 'ebooks' ] to deeply equal [ 'comics', 'ebooks' ]`.
+
+📌 **The general rule, and it is why this pair is one finding and not two.** F1 and F2 are the same
+mistake pointing in two directions: **a constant standing in for a fact about the install.** One made
+a claim about time the install had not reached, the other a claim about services the install did not
+have. Both were invisible to every test in the file, because a test that passes the function a
+constant cannot notice that the function should not have had one.
+
+### F3 — applied. A new comment contradicted its own file 570 lines above
+
+`+page.svelte`'s new text said §17.7's `partial` and `stale` states *"want a per-instance sync clock —
+a different read again"*. Surviving text in the same comment block, untouched and correct, says the
+clock is `ServiceHealth.lastFullSyncAt` off the services health read *"which this screen already
+fetches for Block B"*. **Both halves of the new sentence were wrong**: the clock is not a different
+read, and `partial` is now drawn. Fixed rather than annotated, per CLAUDE.md. What `stale` still wants
+is the BANNER, which §17.7 specifies and nothing here has built, and the comment now says that
+instead.
+
+### F4 — applied, and re-fired with the reviewer's own injection
+
+`home.test.ts`'s ban-word guards sliced `id="home-summary"` to `</section>`. **Every row of Block A is
+drawn by `{#snippet summaryCellRender}`, which Svelte requires at the TOP LEVEL of the component** and
+which therefore sits outside every `<section>` on the page. The reviewer injected
+`restricted · hidden · skeleton shimmer placeholder` into every sourceless row's rendered sub-line and
+**all 99 tests passed.**
+
+`copyguard.ts` gains **`snippetMarkup(markup, name)`**, slicing `{#snippet name(` to its `{/snippet}`,
+and the corpus is the section plus the snippet, both stripped by the one `userFacingMarkup` pass so
+the guards cannot disagree about what a reader can see. A missing snippet **throws**, on
+`sectionsMarkup`'s reason: an empty corpus passes every `not.toContain` there is. The
+*"is reading the region it thinks it is reading"* test gains two positive assertions that only the
+snippet half can satisfy, because the three it had all lived inside the section.
+
+🔥 **Re-fired with the reviewer's exact string**, put in the same place:
+
+```
+× never explains a zero as something being hidden from the caller
+  AssertionError: expected 'id="home-summary">\n\t\t\t<div class=…' not to contain 'hidden'
+× draws no skeleton, no shimmer and no placeholder row
+  AssertionError: expected 'id="home-summary">\n\t\t\t<div class=…' not to contain 'skeleton'
+```
+
+Two tests fail where none did. The file was restored and re-run green before anything else was
+touched.
+
+📌 **The rule: a text guard is only as good as its corpus, and a corpus is a claim about where the
+strings are.** A `<section>` slice is a claim that the section contains the rendering. In Svelte 5 it
+never contains the rows.
+
+### F5 — applied. One shipped guard was a tautology
+
+`home.test.ts` compared `librarySummary(NO_MEDIA_TYPE_COUNTS)` against
+`librarySummary({six literal zeros})`. The two arguments are deep-equal literals, so the assertion
+holds for **any** deterministic function and says nothing about the restricted-scope collapse it is
+named for. The reviewer proved it by mutation: reversing the row order broke three tests in the file
+and left this one green, because a reversal applies equally to both sides.
+
+It now pins the **rendered strings** for that same input, which is the claim
+`internal/store/facets.go`'s collapse actually requires:
+
+```
+['Movies', '', 'no catalogue source connected', 'Radarr', 'v0.2'],
+…
+['Ebooks', '0 books', 'catalogued', '', ''],
+['Audiobooks', '0 audiobooks', 'catalogued', '', ''],
+['Comics', '0 series', 'catalogued', '', '']
+```
+
+🔥 **Re-fired with the reviewer's own mutation.** With `MEDIA_TYPES` reversed, the replacement fails —
+`× renders a restricted scope with the SAME strings an empty library gets` /
+`AssertionError: expected [ Array(6) ] to deeply equal [ [ 'Movies', '', …(3) ], …(5) ]` — alongside
+five neighbours. The tautology it replaced survived that mutation.
+
+### F6 — applied. A malformed 200 rendered as a real library of zero
+
+`library.ts`'s `toMediaTypeCounts` answered `NO_MEDIA_TYPE_COUNTS` for any body that was not
+`{counts:{…}}`, and `loadFacets` treated it as success. **A renamed envelope key shipped
+"0 books / 0 audiobooks / 0 series" with no error anywhere and the screen's own error banner
+unreachable.**
+
+It answers **`null`** now, and `loadFacets` routes that to the existing banner with
+`FACETS_BODY_UNREADABLE` as the text — there is no upstream string to quote, because this is UsArr
+talking to UsArr and getting an answer it does not recognise. **A `counts` object that is present with
+missing or non-numeric members still defaults each to `0`**, which is a different decision and is
+unchanged: `facets.go` sends all six with no `omitempty`, so a missing member is build skew rather
+than a shape the client cannot read.
+
+⚠️ **This is a deliberate departure from the house default one line of thought above it**, and the
+reason is in a comment at the function. `toSessionState` answers `SIGNED_OUT` and `toRecentPage`
+answers an empty page, and both are right, because both are **inert** states: a signed-out screen asks
+the user to sign in and an empty page asks for nothing. **Six zeros is not inert.** It is an assertion
+about the user's library, on the one screen whose whole job is to answer *"what do I have?"*, made off
+a body the client could not read. A restricted scope's zeros are TRUE; a malformed body's zeros are
+UNKNOWN, and the endpoint has no way to say "unknown".
+
+✅ **Measured**, same harness, `/api/v1/library/facets` answering 200 with `{totals:{…}}`: no table
+renders, and the banner reads *"Your library could not be counted … GET /api/v1/library/facets
+answered, and the body was not the counts envelope it sends."*
+🔥 **Fired**: with the six-zero fallback restored,
+`× answers null for a body that is not the envelope, and never six zeros` /
+`AssertionError: expected { movies: +0, tv: +0, music: +0, …(3) } to be null`.
+
+### F7 — applied. One transient failure disabled the block for the session
+
+`facetsLoaded` is set in `finally` so a failure still ends the unrendered state, and `load()` gated
+the read on `!facetsLoaded`. So one 500 flipped the flag and closed the retry off: the 60-second timer
+went on calling `load()` and `load()` went on declining to ask, leaving the banner on screen for the
+rest of the session over a failure that had already passed. The condition is
+`(!facetsLoaded || facetsError !== '')` now, and `facetsError` is cleared on success.
+
+✅ **Verified by execution rather than by reading**, with Chromium's virtual clock driven forward
+through CDP so the real 60-second interval runs rather than a shortened one:
+
+| Scenario | Facet reads | Banner after | Rows after |
+|---|---|---|---|
+| 500, endpoint heals, +65 s | 1 → **2** | **gone** | `424 books` / `118 audiobooks` / `553 series` |
+| 500 permanently, +5 min | **6** (once a minute) | still there | none |
+
+🔥 **Fired**: with the condition reverted to `!facetsLoaded`, the same run gives `1 → 1`, the banner
+still on screen and no counts. Six reads over five virtual minutes is the cadence the health read
+beside it already runs at, so the permanent case is asked rather than spun.
+
+### F8 — applied in the STRONGER form, measured before and after
+
+Two comments described a rendering that does not happen: one said *"`Items` IS LINE 1 BESIDE THE
+NAME"*, another said *"name over count"*, and the render matched neither claim's intent.
+
+✅ **Measured at 390 px on the shipped build at `51a9e68`**, against the real compiled CSS and the real
+`List.svelte` row DOM: `Ebooks` at top 338, `424 books` at top **356**, both 18 px tall at
+`font-weight: 600`. A **second title** under the first, not a count beside a name.
+ARCHITECTURE §17.2 asks for *"name and count on line one"*.
+
+The cause is `.tbl--2line td[data-line='1'] { display: block }`, which gives a second line-1 column its
+own line. **The reviewer's check of the builder's reason for not moving `Items` to line 2 is confirmed
+here:** `List.svelte` emits `.stacksep`'s `·` before every second-line cell except `firstSecondLine`,
+unconditionally and without looking at whether the cell has anything in it, so a pair each empty on
+half the rows renders a dangling separator. That route was never available.
+
+**So the line-1 cells go inline and the line-2 cell takes the block that ends the line**, in
+`routes/+page.svelte`'s own `<style>`, scoped by `#home-summary` — which Svelte compiles to
+`#home-summary.svelte-1uha8ag …`, an id **and** a component hash, so it cannot reach another list.
+`.trunc` is `display: block`, so the name needed `inline-block` to sit on the line at all; and
+`vertical-align: baseline` left the two texts **2.5 px apart**, because an inline-block with
+`overflow: hidden` takes its bottom margin edge as its baseline. `vertical-align: top` aligns them
+exactly.
+
+✅ **Three measurements, same harness and same viewport, because two would hide which change did
+what:**
+
+| Tree | `Ebooks` | `424 books` | catalogued row | sourceless row | six rows |
+|---|---|---|---|---|---|
+| `51a9e68`, as reviewed | top 338 | top **356** | 49 px | 69 px | 354 px |
+| this lane, F1/F2/F9 in, **F8 not** | top 378 | top **396** | 69 px | 69 px | 414 px |
+| this lane, **F8 in** | top 381, left 28 | top **381**, left 77 | 52 px | 70 px | 366 px |
+
+The name and its count share a line, and their painted text boxes agree to the pixel — both
+`textTop` 380.5625. **F8 alone takes the block from 414 px to 366 px, 48 px shorter**, by collapsing
+each catalogued row from two lines to one. Against `51a9e68` the net is **+12 px**, and that is F9's
+doing rather than F8's: the three catalogued rows had an empty `Status` cell there and now carry a
+word.
+
+**Nothing else moved, and that is measured rather than asserted.** At 1440 px and at 761 px — the
+boundary's desktop side — the rows are 49/31 px, identical to `51a9e68`. And Block C, the other
+`stack="two-line"` list on the same screen at the same 390 px, still renders its line-1 `title` as
+`display: block` and its line-2 cells as `display: inline` with the `·` on the second of them: the
+exact shape the rule would have broken had the scope leaked.
+
+⚠️ **The blockified line 2 is only correct while there is ONE second-line column**, and §17.2 wants
+this block to grow `Have` and `Synced` — which is precisely the change that would put a `·` on a third
+line. So the constraint is a **tripwire** rather than a sentence.
+🔥 **Fired both ways**: adding a second `stackLine: 2` column gives
+`AssertionError: expected [ …(2) ] to have a length of 1 but got 2`; unscoping the rule from
+`#home-summary` gives
+`AssertionError: expected '<script lang="ts">…' to contain '#home-summary :global(.tbl--2line td[…'`.
+
+### F9 (NOTE) — applied. The `Status` column was blank on every row that had a status
+
+Measured 8 px tall and empty on catalogued rows: the snippet rendered content only under
+`{:else if !row.catalogued}`. **A column headed `Status` that is blank on Ebooks, Audiobooks and
+Comics reads as *status unknown*, not *status fine*** — on the three rows the screen is most confident
+about. §17.7 has an `ok` state and F1/F2 put the services read in reach, so the column delivers what
+its header promises rather than being renamed down to what it managed. Every row carries one of
+`SUMMARY_STATE`'s three words: `no catalogue source connected`, `first import running`, `catalogued`.
+
+`catalogued` is deliberately **not** `Up to date`: there is no periodic re-sync in this build, so a
+freshness claim would be one nothing measures. What the word asserts is what was checked — an import
+completed and these rows came out of it.
+
+⚠️ **All three take the same grey (`.st--none`), including `ok`.** Nothing here is broken and nothing
+failed, so no error or warning tone is available; and `st--ok`'s green on three healthy rows would
+turn Block A into the reassurance panel DESIGN-DIRECTION §9.5 rules out — *"chroma marks what is
+wrong, not what is fine"*. `.st--none`'s own note says grey is load-bearing for exactly this. The
+**icon** separates them, which is `.st`'s rule: icon and text together, never colour alone. `check` and
+`dash-circle` are two of `Icon.svelte`'s existing six names; no seventh was minted for a distinction
+the words already carry.
+🔥 **Fired**: with `ok: ''`, two tests fail, including
+`× gives a counted row §17.7's ok state and never leaves Status blank`.
+
+### F10 (NOTE) — recorded, no code change. No test was removed in `51a9e68`
+
+⚠️ **The builder's report claimed a removed test and the diff does not contain one.**
+`git diff a928adf..51a9e6835b97 | grep -cE "^-\s*it\("` returns **0**, re-run here at this tip. The
+finding is recorded because a false claim of removal is the kind of thing a later reader would act on;
+there is nothing in the tree to fix.
+
+### F11 (NOTE) — recorded, no code change. `make design` could not have moved for a `web/src`-only commit
+
+⚠️ **`docs/design/check.mjs`'s `FILES` list (`:455-460`) is `docs/design/tokens.css`, the three
+mockup assets and every `mockups/*.html` but the prototype; `docs/ARCHITECTURE.md` is read separately
+for the §17 copy corpus. Nothing under `web/src` is in either.** The only mention of that path in the
+file is a comment at `:753` describing what would change *"when this check is later pointed at
+`web/src/**`"* — a plan, not a read. So a `web/src`-only commit cannot change its count in either
+direction, and the
+builder's report of the anti-AI-look verification had to rest — and did rest — on reading `tokens.css`
+and the shipped classes rather than on a green from that target. Recorded so the next reader does not
+take `make design` for coverage of a `web/` change.
+
+📌 **Carried into this entry's own gate reporting**, which is the point of recording it: the
+`make design` result below is reported as evidence that nothing regressed and **not** as coverage of
+anything in commits 1 or 2.
+
+### F12 (NOTE) — applied, with a departure from the finding's number, argued
+
+The finding: `ROW_INTRINSIC_SUMMARY = 44`'s comment claimed *"the same measured figure"* as Block B's
+and Block C's, and no measurement had been taken on this list. **Confirmed.** The finding then said to
+keep 44 and fix the comment, on the ground that 44 is the sourceless row's real height and
+over-reserving is the better error direction.
+
+⚠️ **The first half of that ground does not survive measurement.** Measured in Chromium at 1440×900 on
+the shipped build **at `51a9e68` itself**, before this lane changed anything: catalogued rows are
+**27 px** content box — the finding's number exactly — and sourceless rows are **48 px**, not 44. So
+`44` was neither shape, and it was **under**-reserving on half the rows rather than over-reserving on
+the other half. The finding's own criterion therefore points the other way, and the constant is
+**48**: `list.ts` records that `auto` in front of the length makes the browser discard the estimate
+once the row has been laid out, so the whole cost is scrollbar drift on unseen rows — and
+over-reserving settles the scrollbar downward while under-reserving pushes content away from a reader
+chasing it. After F9 the catalogued row is 30 px; 48 is the taller shape exactly and over-reserves the
+other three by 18 px. The comment states both numbers, the viewport they were taken at, and that the
+old text claimed a measurement nobody took.
+
+### F13 (NOTE) — applied. A test name overstated what it verifies
+
+`library.test.ts`'s *"reads the endpoint server.go actually routes"* pins one literal against another
+and nothing cross-checks Go. **The value IS correct** — `internal/httpapi/server.go` registers
+`GET /api/v1/library/facets`, checked by hand here — and the name is now
+*"pins the facets path as a literal, so a rename has to be deliberate"*, with the limit written into
+the test: what it catches is an accidental edit to the constant, and what it cannot catch is the
+client and the server disagreeing.
+
+### Commit 2 — the sweep, and one claim it deleted rather than refreshed
+
+Two claims had gone stale and were still asserted in **seven** places under `web/src`: that the
+per-type facet read does not exist, and that Kavita is v0.1's one catalogue source. Found by grep,
+swept in `web/` only; `internal/`, `docs/design/`, `docs/DECISIONS.md`, `docs/ROADMAP.md` and the
+mockups are other lanes' and were not touched.
+
+| Site | What was false |
+|---|---|
+| `routes/+layout.svelte` ×2 | *"there is no facet count on the wire"*, twice, as the reason all six types are in the sidebar |
+| `lib/home.ts` | §7.1's count called *"missing"*; *"ONE adapter, Kavita and nothing else"*; *"Rule 13 counts FOUR such rows and this build draws three"* |
+| `routes/+page.svelte` ×2 | the import fires *"when a Kavita client stack is built"*; *"One adapter, one trigger, NO TIMER"* |
+| `lib/api.ts` | `bookorbit` offered as the example of a kind whose catalogue cannot be read |
+| `lib/libraries.ts` | a container ref is *"a Kavita library id in v0.1"* |
+| `lib/services.ts` | *"v0.1's only kind is prowlarr, an indexer"* — two adapters out of date, which made `syncCell`'s reachability claim wrong as well as its premise |
+
+⚠️ **`+layout.svelte`'s BEHAVIOUR is unchanged and that is verified, not asserted.** ADR-0053 keeps all
+six types in the sidebar unconditionally; only the reason was wrong, because `http-api.md` §7.1 bans a
+count **beside a chip** on a component that renders on every navigation, and ADR-0053's reopening
+condition is not this number — ADR-0059 refined it to an independent `EXISTS` over `edition.format`.
+`git diff -U0 web/src/routes/+layout.svelte`, filtered to lines that are not comments, returns
+**nothing**.
+
+📌 **Every one of these is repointed at the file that owns the list rather than given a fresher copy of
+it.** An enumeration in a comment goes stale the next time the enumeration moves, and this one has now
+moved twice — ADR-0041 and ADR-0052. The same rule was applied to a count **commit 1 itself
+falsified**: `home.ts` said rule 13 counts four sourceless rows and this build draws three. **No number
+is written there now at all.** How many rows have no source is a property of the install; a
+Kavita-only install and a BookOrbit one disagree, correctly, and `summaryCount` renders whichever it
+is.
+
+### Commit 3 — the §16 dated strike
+
+`docs/ARCHITECTURE.md` §16.1's blockquote read *"**The catalogue is books and comics/manga**, because
+Kavita is the source that ships (ADR-0041)."* The **ground** is superseded — ADR-0052 made BookOrbit
+v0.1's source — while the **conclusion** survives, because BookOrbit's own media types are Kavita's.
+So: a dated strike at the ground, in the form this same file already uses at §16.1's slot-#1 paragraph
+(`~~struck~~ 🚩 **STRUCK <date> by [ADR](…) — <what is true now>**`). Never a rewrite, never a
+deletion, and **no other section of that file is touched.**
+
+⚠️ **The rider carries one clause beyond the correction, because the correction invites the mistake it
+exists to prevent.** The conclusion is right **by coincidence**: which media types have a catalogue is
+a property of the install, not of the milestone, so a replacement enumeration would go stale exactly
+as this one did. The rider says so and points at `librarySummary`.
+
+🔻 **Found and NOT struck, routed rather than assumed done:** `docs/ARCHITECTURE.md:2455`, in §16.0,
+carries the same sentence with the same ADR-0041 ground — *"**The catalogue is books and
+comics/manga**, because Kavita is the source that ships"*. It is a second instance of one defect, it is
+inside §16, and it was left because this lane's instruction bounded it to the one blockquote. **Whoever
+takes it should read this entry's rider first**, because correcting it to the current split would
+carry the defect forward.
+
+### What the gate is worth on this work, tool by tool
+
+`make check` green after every commit and again after the merge. Reported at the merge tip
+`290327b35e29` (`origin/main` `c9006dc` merged into this branch), with each tool's own banner
+verbatim:
+
+```
+tool: /root/go/bin/gofumpt — version v0.11.0, asserted against the pin
+fmt-check: checking 300 .go files with gofumpt
+tool: /root/go/bin/golangci-lint — version 2.12.2, asserted against the pin
+lint-go: linting 19 Go packages — 18 untagged, plus 1 behind .golangci.yml's build-tags (upstream,bench)
+0 issues.
+tool: /root/go/bin/gitleaks — build-info module github.com/zricethezav/gitleaks/v8@v8.30.1, asserted against the pin (--version is unstamped)
+ Test Files  21 passed (21)
+      Tests  908 passed (908)
+tool: /root/go/bin/govulncheck — version v1.7.0, asserted against the pin
+check: OK
+```
+
+⚠️ **What that green covers, and what it does not.** `eslint`, `svelte-check`, `prettier` and `vitest`
+all read the six changed `web/src` files, and the 908 vitest tests include every guard fired above, so
+the gate does establish that the changes compile, type-check and pass their own assertions. **It
+attests nothing about the prose in this file**, which reaches the gate through `gitleaks` alone —
+`fmt-check`'s prettier half runs `--dir web`, so no Markdown outside `web/` is formatter-gated. And
+per **F11** it attests nothing about `docs/design/`.
+
+🔍 **One defect the gate found that no reviewer had:** a literal `<style>` inside a comment **in the
+`<script> `element** of a `.svelte` file makes the Svelte parser report
+``` `<script>` was left open ``` at the last line of the file. It cost one `svelte-check` failure and
+the mention was reworded. Worth knowing before the next long comment mentions a tag by name.
+
+**`make design`: 0 violations, exit 0, `all design checks pass`, at `290327b35e29`.** ⚠️ **That number
+is not a baseline this lane can claim credit or blame for, and it must not be read against the 3 that
+stood earlier.** At this lane's pre-merge tip it was 3 — all in `docs/ARCHITECTURE.md` §17
+(`:4194`, `:4482`, `:4502`), all em dashes in specified UI copy, none of them touched here — and
+another lane's pass cleared them, arriving in the merge. **What is established is the thing that
+matters: no violation present at any point is attributable to anything this lane changed.** Commit 3
+edits §16, which is not in `check.mjs`'s §17 copy corpus at all, and commits 1 and 2 are `web/src`,
+which per F11 that target never opens.
+
+🔍 **The verification is manual and is listed so it can be repeated at any tip:**
+`git diff a928adf..51a9e6835b97 | grep -cE "^-\s*it\("` for F10's zero;
+`git diff -U0 web/src/routes/+layout.svelte | grep -E "^[+-]" | grep -vE "^[+-]{3}" | grep -vE "^[+-]\s*(\*|/\*|//)"` for the empty comment-only proof;
+`grep -rn 'no facet count on the wire' web/src` and `grep -rn 'ONE adapter, Kavita and nothing else' web/src` for the two swept claims — ⚠️ **each returns exactly one hit and it is the QUOTED HISTORY**, the struck sentence kept inside its own correction, which is what CLAUDE.md's fix-or-delete rule leaves behind and is not a live claim; the live forms are gone and the surrounding text says so;
+`grep -n 'readFileSync\|readdirSync' docs/design/check.mjs` and reading its `FILES` list at `:455-460` — `docs/design/tokens.css`, the three mockup assets and every `mockups/*.html` but the prototype, plus `docs/ARCHITECTURE.md` for the §17 copy corpus, and **nothing under `web/src`**, which is F11; ⚠️ `grep -rn 'web/src' docs/design/check.mjs` is NOT the check to run — it returns one hit, a comment at `:753` saying what would change *"when this check is later pointed at `web/src/**`"*, which is the opposite of a read;
+`grep -n 'comics/manga' docs/ARCHITECTURE.md` for the two instances, `:2455` routed and `:2721` struck (the strike wraps mid-phrase, so grep the shorter string);
+and the Chromium figures re-taken by serving `web/build` with a stub `/api/v1/{auth/session,services/health,library/facets,library/recent}` and reading `getBoundingClientRect()` off the live rows, which is how every number above was produced.
