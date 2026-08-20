@@ -32,25 +32,35 @@ import {
 } from './services';
 import type { ImportProgress, ServiceHealth } from './api';
 import { NOTHING } from './list';
+import { snippetMarkup, userFacingMarkup } from './copyguard';
 // The Services template AS TEXT. Vite's `?raw` is the only way to ask what a
 // component contains here: vitest runs in `node` with no Svelte plugin, so the
 // screen cannot be compiled, imported or rendered in this suite.
 import SERVICES_SOURCE from '../routes/services/+page.svelte?raw';
 
 /**
- * The `items` arm of the screen's cell snippet, sliced to the next arm.
+ * ONE ARM OF THE SCREEN'S `cell` SNIPPET, sliced to the next arm.
+ *
+ * ⚠️ THE CORPUS IS THE SNIPPET, NOT THE FILE. `<script>` computes these cells
+ * and the prose around the table describes them, so a check run over the whole
+ * source can be satisfied by a comment ABOUT the markup instead of by the
+ * markup. `snippetMarkup` over the stripped template keeps the text being read
+ * the text that renders — and it is also what proves the `cell` snippet the
+ * `<List>` is handed still exists at all.
  *
  * ⚠️ A MISSING MARKER THROWS RATHER THAN RETURNING ''. The failure mode of a
  * text guard is matching nothing at all: an empty corpus passes every assertion
  * over it, so a renamed column id would turn this into no check while staying
  * green.
  */
-function itemsBranch(source: string): string {
-	const start = source.indexOf("{:else if column.id === 'items'}");
-	if (start === -1) throw new Error('the Items branch of the Services cell snippet was not found');
-	const rest = source.slice(start + 1);
+function cellArm(id: string): string {
+	const snippet = snippetMarkup(userFacingMarkup(SERVICES_SOURCE), 'cell');
+	const marker = `{:else if column.id === '${id}'}`;
+	const start = snippet.indexOf(marker);
+	if (start === -1) throw new Error(`the ${id} arm of the Services cell snippet was not found`);
+	const rest = snippet.slice(start + marker.length);
 	const end = rest.indexOf('{:else if column.id ===');
-	if (end === -1) throw new Error('the Items branch has no following branch to end at');
+	if (end === -1) throw new Error(`the ${id} arm has no following arm to end at`);
 	return rest.slice(0, end);
 }
 
@@ -371,6 +381,166 @@ describe('the four states of last_full_sync_at x work_count', () => {
 });
 
 /*
+ * THE TEMPLATE HALF OF THE SAME COLUMN, WHICH IS THE HALF NOTHING ELSE COVERS.
+ *
+ * Everything above this is about `syncCell` THE FUNCTION: five states pinned,
+ * both dropped-field cases pinned, seven cases in all. Every one of them stays
+ * green while the markup draws a hardcoded word instead — and a hardcoded word
+ * is exactly what this column was. The 176px track's own comment in
+ * `routes/services/+page.svelte` records the history: the width was 150px
+ * "while this column was the hardcoded word `Never`".
+ *
+ * `vitest.config.ts` is `environment: 'node'` with no Svelte plugin, so nothing
+ * in this suite renders a component and the model drifting away from the markup
+ * is invisible to all of it. The repo's answer is `?raw` and text —
+ * `home.test.ts`, `havecell.test.ts`, and the Items note further down this file
+ * — and this is that guard on the neighbouring arm.
+ *
+ * ⚠️ THE CORPUS IS ASSERTED BEFORE ANYTHING IS ASSERTED ABOUT IT. `toContain`
+ * on an empty string fails, but every `not.toContain` on one passes, and a slice
+ * that matched nothing is the single failure a text guard cannot report about
+ * itself. So the first case proves the template was read, that the `cell`
+ * snippet is still in it and that the arm is still in the snippet; the rest
+ * drill the arm.
+ *
+ * ⚠️ THE BINDING IS READ OUT OF THE MARKUP RATHER THAN SPELT HERE. The arm is
+ * searched for `{@const … = syncCell(`, and the name that capture yields is the
+ * name every later assertion uses. Renaming the local therefore breaks nothing,
+ * while swapping `syncCell` for another helper — or for a literal — breaks the
+ * binding and every assertion standing on it.
+ */
+describe('the Last successful sync column is drawn by syncCell, not by a literal', () => {
+	/*
+	 * Three floors, each far enough below the real size to survive ordinary
+	 * editing of the screen and nowhere near far enough to survive a `?raw`
+	 * import that resolved to nothing or a slice that landed outside the markup.
+	 * Measured on this tree: the template is 65,668 characters, the `cell`
+	 * snippet 2,244 and the sync arm 151.
+	 */
+	const SOURCE_FLOOR = 20000;
+	const SNIPPET_FLOOR = 800;
+	const ARM_FLOOR = 60;
+
+	/** The sync arm, and the name the template bound `syncCell`'s result to. */
+	function binding(): { arm: string; name: string } {
+		const arm = cellArm('sync');
+		const bound = /\{@const\s+([A-Za-z_$][\w$]*)\s*=\s*syncCell\(/.exec(arm);
+		return { arm, name: bound?.[1] ?? '' };
+	}
+
+	it('read the Services template, and found the cell snippet and the sync arm in it', () => {
+		expect(
+			SERVICES_SOURCE.length,
+			`the ?raw import of routes/services/+page.svelte yielded ` +
+				`${SERVICES_SOURCE.length} characters, under the floor of ${SOURCE_FLOOR}. ` +
+				'Either the import resolved to something that is not the screen, or the screen ' +
+				'lost two thirds of itself. Nothing below this line can be trusted until this ' +
+				'passes: a guard reading an empty corpus reports no findings, which is ' +
+				'indistinguishable from a guard finding nothing wrong.'
+		).toBeGreaterThan(SOURCE_FLOOR);
+
+		const snippet = snippetMarkup(userFacingMarkup(SERVICES_SOURCE), 'cell');
+		expect(
+			snippet.length,
+			`the {#snippet cell(…)} block sliced out of the template is ${snippet.length} ` +
+				`characters, under the floor of ${SNIPPET_FLOOR}. That snippet draws every cell ` +
+				'in the table, so a slice this small is a slice that ended early, not a table ' +
+				'that shrank.'
+		).toBeGreaterThan(SNIPPET_FLOOR);
+
+		const arm = cellArm('sync');
+		expect(
+			arm.length,
+			`the sync arm of the cell snippet is ${arm.length} characters, under the floor of ` +
+				`${ARM_FLOOR}. An arm this short cannot be computing a cell and rendering two ` +
+				'lines of it, and an empty one would pass every ban below without reading a word.'
+		).toBeGreaterThan(ARM_FLOOR);
+	});
+
+	it('still declares the sync column in the column list', () => {
+		expect(
+			SERVICES_SOURCE,
+			"routes/services/+page.svelte no longer declares { id: 'sync' } with §9.1's header. " +
+				'The arm below is selected on that id, so a renamed or deleted column takes the ' +
+				'cell with it — and takes every assertion in this block out of reach, silently, ' +
+				'because a branch that is never entered fails nothing.'
+		).toContain("{ id: 'sync', header: 'Last successful sync'");
+	});
+
+	it('binds syncCell in the arm, and calls no other cell helper there', () => {
+		const { arm, name } = binding();
+		expect(
+			name,
+			'the sync arm no longer binds {@const … = syncCell(…)}. The five states pinned above ' +
+				'are computed by that call and nothing else computes them, so an arm without it ' +
+				'renders something else: a literal, a stale local, or another helper. This column ' +
+				'shipped as the hardcoded word `Never` once already, which is why the width ' +
+				'comment beside it still records the day it stopped being one.'
+		).not.toBe('');
+
+		const others = [...arm.matchAll(/(\w*[cC]ell)\(/g)]
+			.map((m) => m[1] ?? '')
+			.filter((h) => h !== 'syncCell');
+		expect(
+			others,
+			`the sync arm calls ${others.join(', ')} as well as syncCell. One cell, one helper: ` +
+				'a second call here is a second opinion about what this column says, and the ' +
+				'neighbouring Items arm is one keystroke away in the same snippet.'
+		).toEqual([]);
+	});
+
+	it('renders the value, the muted flag and the sub-line syncCell returned', () => {
+		const { arm, name } = binding();
+		for (const field of ['text', 'sub', 'muted']) {
+			expect(
+				arm,
+				`the sync arm never reads ${name}.${field}. syncCell returns all three and the ` +
+					'arm draws all three: the value, the muted flag §9.1 dims the nothing-words ' +
+					'with, and the relative age underneath. Dropping `sub` alone is the regression ' +
+					'that looks fine — the timestamp still renders, and only the age it was ' +
+					'measured against disappears.'
+			).toContain(`${name}.${field}`);
+		}
+	});
+
+	it('draws the sub-line only when syncCell computed one', () => {
+		const { arm, name } = binding();
+		// Every occurrence guarded: strip the guarded regions and nothing may be
+		// left. An unguarded read survives the strip and fails here, which is the
+		// opposite failure to the one above — an empty muted line under every row
+		// whose cell has no second half.
+		const guarded = new RegExp(`\\{#if ${name}\\.sub\\}[\\s\\S]*?\\{/if\\}`, 'g');
+		expect(
+			arm.replace(guarded, ''),
+			`the sync arm reads ${name}.sub outside {#if ${name}.sub}. Three of the five states ` +
+				'have no second line, and an unguarded read gives all three an empty one.'
+		).not.toContain(`${name}.sub`);
+	});
+
+	it('spells none of the five states in the markup', () => {
+		const { arm } = binding();
+		// The words syncCell itself returns, in the order its doc comment lists
+		// the states. `Not applicable` is taken from the constant rather than
+		// retyped, so §9.1's nothing-words stay defined in one place.
+		const states = [
+			NOTHING.inapplicable,
+			'no catalogue',
+			'Never',
+			'Partial import',
+			'some rows landed'
+		];
+		const spelt = states.filter((word) => arm.includes(word));
+		expect(
+			spelt,
+			`the sync arm writes ${spelt.join(', ')} itself. Whatever else the arm does, a state ` +
+				'word written in the markup is a state the template decided, and the template has ' +
+				'no access to `role`, `last_full_sync_at` or `work_count` at the moment it decides. ' +
+				'syncCell owns all five answers; the arm renders whichever one it was handed.'
+		).toEqual([]);
+	});
+});
+
+/*
  * `file_read_failures`, WHICH IS A NOTE AND NOT A FAULT.
  *
  * docs/reference/http-api.md §3.4: the number is how many DISTINCT items of this
@@ -492,7 +662,7 @@ describe('file_read_failures on the Items cell', () => {
 	 *                                               zero case rendering something.
 	 */
 	it('draws the note in the Items branch, and only when there is one', () => {
-		const branch = itemsBranch(SERVICES_SOURCE);
+		const branch = cellArm('items');
 		expect(branch).toContain('{items.sub}');
 		// Every occurrence guarded: strip the guarded regions and nothing may be
 		// left. An unguarded `{items.sub}` survives the strip and fails here.
