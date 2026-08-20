@@ -395,7 +395,7 @@ func TestVendoredBookOrbitTypesManifestIsCurrent(t *testing.T) {
 			t.Errorf("api/specs/bookorbit-types/%s is not in the manifest", p)
 		}
 	}
-	t.Logf("manifest and vendored tree agree on %d files", len(want))
+	t.Logf("compared the manifest's %d entries against the vendored tree", len(want))
 }
 
 // ─── the declaration digest: what a change MEANS, not merely that there was one ───

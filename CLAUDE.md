@@ -193,7 +193,7 @@ See `docs/ARCHITECTURE.md` §14 for the full threat model.
 | `docs/ARCHITECTURE.md` | The design. §16 is the authoritative roadmap. |
 | `docs/ROADMAP.md` | A working checklist of what v0.1 still needs, each item with a check you can run. Authoritative for neither scope (§16 is) nor status (the tree is). |
 | `docs/DECISIONS.md` | ADRs. **Add one for any decision that closes off an alternative.** |
-| `docs/FUTURE.md` | Deferred features, and the seam each one is designed against. |
+| `docs/FUTURE.md` | Mostly deferred features, and the seam each one is designed against — unless the heading says *Declined*. |
 | `docs/RESEARCH.md` | Ecosystem findings with primary-source citations. |
 | `docs/CONFIGURATION.md` | Every configuration key and its semantics. |
 | `docs/DEVELOPMENT.md` | Local setup, workflow, the make targets. |
@@ -232,7 +232,8 @@ video transcoding · an in-app media player · any FFmpeg dependency.
 
 **Deferred, not rejected.** Out of scope for the current milestone, wanted later, and the
 design should leave room for them. Do not build them now; do not treat them as refused either.
-`docs/FUTURE.md` owns each one, with the seam in the current design that keeps it cheap to add:
+`docs/FUTURE.md` owns each one, with the seam in the current design that keeps it cheap to add
+(a *Declined* heading there means closed, not deferred):
 
 - WASM / Extism plugins
 - an external search engine such as Meilisearch
