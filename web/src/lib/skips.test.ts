@@ -272,6 +272,91 @@ describe('the sentence above the table', () => {
 		expect(note).toContain('the same skip is reported on each of them and is counted once here');
 	});
 
+	/* ── two instances, two mixed containers: the shape the row total cannot ──
+	 * dedupe on its own.
+	 *
+	 * ⚠️ THIS IS WHY THE BREAKDOWN IS ON THE WIRE AT ALL. Two BookOrbit
+	 * instances, each holding one mixed container, and §17.8 binds:
+	 *
+	 *     Fiction          book   over A/1 and B/9
+	 *     Fiction (Comics) comic  over A/1
+	 *     Fiction (2)      comic  over B/9
+	 *
+	 * A/1 left one item out and B/9 left two out, so the truth is THREE. The
+	 * three rows report 3, 1 and 2, and their container SIGNATURES are all
+	 * different, so a fold on the signature collapses nothing and reports six.
+	 *
+	 * ⚠️ AND NO ARITHMETIC ON THE ROW TOTALS RECOVERS IT. 3, 1 and 2 are each
+	 * true of their own row; which container each part happened in is simply not
+	 * in them. That is MISSING DATA rather than a client bug, so the fix is the
+	 * server sending the per-container breakdown — apportioning a row's total
+	 * across its signatures would invent a precision nobody measured, and a skip
+	 * is a fact about a container rather than about a library.
+	 */
+
+	const src = (instance: number, ref: string) => ({
+		id: instance * 100 + Number(ref),
+		service_instance_id: instance,
+		service_name: instance === 1 ? 'BookOrbit A' : 'BookOrbit B',
+		service_kind: 'bookorbit',
+		container_kind: 'remote_library',
+		container_ref: ref,
+		is_metadata_authority: instance === 1
+	});
+	const part = (instance: number, ref: string, items: number) => ({
+		service_instance_id: instance,
+		container_kind: 'remote_library',
+		container_ref: ref,
+		items
+	});
+	const twoInstances = () => [
+		parse({
+			id: 2,
+			name: 'Fiction',
+			sources: [src(1, '1'), src(2, '9')],
+			skipped: {
+				state: 'left_out',
+				items: 3,
+				reason: 'r',
+				containers: [part(1, '1', 1), part(2, '9', 2)]
+			}
+		}),
+		parse({
+			id: 3,
+			name: 'Fiction (Comics)',
+			kind: 'comic',
+			sources: [src(1, '1')],
+			skipped: { state: 'left_out', items: 1, reason: 'r', containers: [part(1, '1', 1)] }
+		}),
+		parse({
+			id: 4,
+			name: 'Fiction (2)',
+			kind: 'comic',
+			sources: [src(2, '9')],
+			skipped: { state: 'left_out', items: 2, reason: 'r', containers: [part(2, '9', 2)] }
+		})
+	];
+
+	it('counts each container once when the rows overlap only in part', () => {
+		const note = skippedNote(twoInstances());
+		expect(note).toContain('3 items');
+		expect(note).not.toContain('6 items');
+	});
+
+	it('names both shared containers rather than the rows that share them', () => {
+		const note = skippedNote(twoInstances());
+		expect(note).toContain(
+			'2 upstream containers are each reported by more than one row, so the same skip is reported on each of them and is counted once here.'
+		);
+	});
+
+	it('keeps every row whole: each row total is its own containers summed', () => {
+		for (const l of twoInstances()) {
+			const parts = l.skipped?.containers ?? [];
+			expect(parts.reduce((n, c) => n + c.items, 0)).toBe(l.skipped?.items);
+		}
+	});
+
 	it('says nothing about sharing when every row stands over its own container', () => {
 		const note = skippedNote([
 			parse({ id: 2, skipped: { state: 'left_out', items: 40, reason: 'r' } }),

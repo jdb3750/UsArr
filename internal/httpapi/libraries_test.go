@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -660,6 +661,87 @@ func TestWhatTheImportLeftOutReachesTheLibrariesWire(t *testing.T) {
 			if _, present := fields[key]; present {
 				t.Errorf("row %d serves %q under state `none`: %s", i, key, blob)
 			}
+		}
+	}
+}
+
+// THE PER-CONTAINER BREAKDOWN CROSSES THE WIRE, BECAUSE WITHOUT IT A CLIENT
+// CANNOT DEDUPE AND NO ARITHMETIC DOWNSTREAM CAN RESCUE IT.
+//
+// §17.8 renders one row per LIBRARY while a skip is a fact about a CONTAINER,
+// and since ADR-0066 decision 5 several libraries stand over one container and
+// each report its skip whole. A client folding on the row's SET of containers is
+// exact only while those sets are identical or disjoint: two instances holding a
+// mixed container each bind three libraries — book over A and B, comic over A,
+// comic over B — whose sets are all different while the skips underneath
+// overlap, and that fold reported every skip twice.
+//
+// ⚠️ THE CLIENT COULD NOT HAVE FIXED THAT ITSELF. Apportioning a library's total
+// across its containers invents a precision no import measured, and a skip is
+// not a library's to divide. It was MISSING DATA, so the data is sent.
+func TestTheSkipVerdictNamesTheContainerEachSkipHappenedIn(t *testing.T) {
+	s := newTestServer(t, nil)
+	seedLibrariesScreenCorpus(t, s)
+
+	// Ebooks (library 2) binds BOTH containers. One left items out, the other
+	// was walked and recorded a clean zero.
+	seedSkip(t, s, 1, "12", `{"name":"Ebooks","skipped_comics":0,"skipped_unknown":0}`)
+	seedSkip(t, s, 2, "21",
+		`{"name":"More Ebooks","skipped_comics":4,"skipped_unknown":1,"reason":"r"}`)
+
+	_, body := callListLibraries(t, s, true)
+	var got librariesResponse
+	mustJSON(t, body, &got)
+
+	var ebooks *librarySkipsResponse
+	for _, l := range got.Items {
+		if l.Name == "Ebooks" {
+			ebooks = l.Skipped
+		}
+	}
+	if ebooks == nil || ebooks.State != "left_out" {
+		t.Fatalf("Ebooks' skipped = %+v, want a left_out verdict: %s", ebooks, body)
+	}
+
+	want := []librarySkipContainerResponse{
+		{ServiceInstanceID: 2, ContainerKind: "remote_library", ContainerRef: "21", Items: 5},
+	}
+	if !reflect.DeepEqual(ebooks.Containers, want) {
+		t.Errorf("Ebooks' breakdown = %+v, want %+v — the container that recorded a ZERO "+
+			"is not served, on the same reasoning that omits `items` under `none`, and the "+
+			"one that left items out must name itself so a second row over it folds onto it",
+			ebooks.Containers, want)
+	}
+
+	var total int64
+	for _, c := range ebooks.Containers {
+		total += c.Items
+	}
+	if total != ebooks.Items {
+		t.Errorf("the entries sum to %d and the row says %d — the row's count is the SUM "+
+			"of its containers, and a mismatch means one of them was apportioned",
+			total, ebooks.Items)
+	}
+
+	// ⚠️ AND `containers` IS ABSENT UNDER `none`, ON THE WIRE. A zero-count entry
+	// there would be a number where there is a measured negative, which is the
+	// claim `items`'s own absence refuses to make.
+	var raw struct {
+		Items []map[string]json.RawMessage `json:"items"`
+	}
+	mustJSON(t, body, &raw)
+	for i, l := range raw.Items {
+		blob, ok := l["skipped"]
+		if !ok {
+			continue
+		}
+		var fields map[string]json.RawMessage
+		mustJSON(t, string(blob), &fields)
+		if string(fields["state"]) != `"none"` {
+			continue
+		}
+		if _, present := fields["containers"]; present {
+			t.Errorf("row %d serves `containers` under state `none`: %s", i, blob)
 		}
 	}
 }
