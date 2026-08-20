@@ -1708,6 +1708,18 @@ paragraph describing a repo that no longer exists.
   retry, and only go hunting for a defect if it survives. The config-level answer is
   `run.allow-serial-runners: true`, which makes the wait unbounded instead of failing at five seconds;
   `.golangci.yml` does not set it, so retrying is the operating procedure today.
+* **A log you intend to attribute must be written to a path no other lane can guess.** The
+  bullets above — *never run two committing agents in one checkout*, and the shared lint cache and
+  its lock — are lanes colliding over a checkout and over a binary; this is lanes colliding over a
+  *file path*, and it damages the evidence rather than the run. Relayed, not measured here: a
+  worker's `make check` log at a scratchpad path another lane could guess was truncated and
+  interleaved by that lane's concurrent gate run, and what came back was not an obviously broken
+  file but a **plausible** one — so there was nothing to repair, and the whole gate had to be re-run
+  before any result could be attributed to a tree. **A corrupted-but-readable gate log is a green
+  nobody can attribute**, which is *a guard that cannot speak when it fires* moved down a layer, out
+  of the guard and into the evidence about the guard. So namespace everything you write under the
+  scratchpad — logs, temp extracts, anything — under a directory carrying your own id, never the
+  scratchpad root.
 * **A sequential id read out of a file is a race, not a lookup.** `M5-NN` entry ids, `M5.N` subsection
   numbers, ADR numbers and migration numbers are all allocated by reading the highest one already
   present, and **two agents that read at the same moment both get the right answer and both are wrong
