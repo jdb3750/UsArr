@@ -4,12 +4,13 @@ import (
 	"go/ast"
 	"go/parser"
 	"go/token"
-	"io/fs"
 	"path/filepath"
 	"regexp"
 	"strconv"
 	"strings"
 	"testing"
+
+	"github.com/jdb3750/UsArr/internal/repofiles"
 )
 
 // imageAssetWriteSQL matches an INSERT or UPDATE aimed at image_asset in a SQL
@@ -64,7 +65,7 @@ var imageAssetWriteSQL = regexp.MustCompile(
 //     that does not rely on being read — it executes the failing branch against
 //     a synthetic source, so the branch ships having run.
 //     ⚠️ THAT BRANCH IS NO LONGER THE ONE THIS TREE TAKES. internal/store/
-//     imagewrite.go writes image_asset and calls ValidImageFormat, so the walk
+//     imagewrite.go writes image_asset and calls ValidImageFormat, so the scan
 //     below now runs its LOAD-BEARING branch on every `make check`. Verified by
 //     drill: deleting the ValidImageFormat call from PosterAsset.validate turns
 //     this test red with "production code writes image_asset but nothing
@@ -83,6 +84,15 @@ var imageAssetWriteSQL = regexp.MustCompile(
 // SCOPE: production code only, matching TestNoCodeMutatesTheAuditLog. Test files
 // are exempt, and must be: this file's own regex-fixture subtest contains the
 // exact strings it forbids.
+//
+// WHICH FILES "PRODUCTION CODE" MEANS is internal/repofiles' question, not
+// this file's. This guard used to answer it itself, with a filepath.WalkDir
+// from the module root and a prune list that did not name `.claude` — so it
+// scanned every agent lane's nested checkout of this repo as though those
+// files were this tree's. It stayed green anyway, because those checkouts
+// happened to hold no violation in a non-test .go file; that is a coincidence,
+// not a property, and its sibling internal/db/planlint_test.go — same walk,
+// same prune list, _test.go scope — went red with 875 foreign faults.
 func TestImageWritesValidateTheFormatVocabulary(t *testing.T) {
 	// Fire the guard before trusting it. A matcher that has never been shown to
 	// match is indistinguishable from no matcher at all, which is the whole
@@ -131,42 +141,39 @@ func TestImageWritesValidateTheFormatVocabulary(t *testing.T) {
 
 	root := repoRoot(t)
 
+	paths, err := repofiles.NonTestGoFiles(t.Context(), root)
+	if err != nil {
+		t.Fatalf("enumerating this repository's non-test .go files: %v", err)
+	}
+
 	var writes []string
 	validatorReferenced := false
+	inspected := 0
 	fset := token.NewFileSet()
 
-	err := filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
-		if err != nil {
-			return err
-		}
-		if d.IsDir() {
-			switch d.Name() {
-			case ".git", "node_modules", "dist", "build", ".svelte-kit", ".dev":
-				return fs.SkipDir
-			}
-			return nil
-		}
-		if !strings.HasSuffix(path, ".go") || strings.HasSuffix(path, "_test.go") {
-			return nil
-		}
+	for _, path := range paths {
 		// images.go is the declaration, not a reference to it.
 		if filepath.Base(path) == "images.go" && filepath.Base(filepath.Dir(path)) == "store" {
-			return nil
+			continue
 		}
 
 		file, perr := parser.ParseFile(fset, path, nil, 0)
 		if perr != nil {
 			t.Logf("skipping unparseable %s: %v", path, perr)
-			return nil
+			continue
 		}
+		inspected++
 
 		rel, _ := filepath.Rel(root, path)
 		scanImageAssetWrites(fset, rel, file, &writes, &validatorReferenced)
-		return nil
-	})
-	if err != nil {
-		t.Fatalf("walking the tree: %v", err)
 	}
+	// A floor, per DEVELOPMENT.md §11's rule 4. Both branches below read as a
+	// verdict about the tree; over an empty listing they would be a verdict
+	// about nothing, and the two would be indistinguishable in the output.
+	if inspected == 0 {
+		t.Fatal("the enumeration found no non-test .go files at all, so this guard is checking nothing")
+	}
+	t.Logf("inspected %d non-test .go files this repository owns, %d write_sites", inspected, len(writes))
 
 	if len(writes) == 0 {
 		t.Log("VACUOUS PASS: no production code writes image_asset, so there is " +
