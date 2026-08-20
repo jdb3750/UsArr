@@ -29,12 +29,24 @@
 	 * disappeared and none reordered, and this screen did not quietly become a
 	 * different list under the same address.
 	 *
-	 * ⚠️ HOME'S BLOCK C KEEPS THE OTHER ENDPOINT, DELIBERATELY. §17.2 as amended
-	 * by ADR-0028 closes Block C at ONE table, ONE order and NO filters — a sixth
-	 * media type adds rows to it rather than a sixth region — and http-api.md §7
-	 * is explicit that the browse read *"is a different endpoint from §1, not a
-	 * superset of it"*. Home is that block and is unchanged. The two share a row
-	 * shape and a paging rule and share NO cursor (§7.5).
+	 * ⚠️ HOME'S BLOCK C KEEPS THE OTHER ENDPOINT, AND THE DELIBERATE PART IS THAT
+	 * THIS SWITCH WAS SCOPED TO THIS SCREEN — not that Block C was held back.
+	 * §17.2 as amended by ADR-0028 closes Block C at ONE table spanning every
+	 * media type, a sixth type adding rows to it rather than a sixth region; that
+	 * is a rule about Home's SHAPE, and it neither names an endpoint nor withholds
+	 * a control. ⚠️ THIS SENTENCE USED TO RUN ON — *"ONE order and NO filters"* —
+	 * AND THE ADDITION SAID THE OPPOSITE OF BOTH DOCUMENTS: §17.2 asks that same
+	 * table to sort, filter and Ctrl+F (§4.5), and ADR-0028 repeats it as *"the
+	 * unified table sorts, filters and Ctrl+Fs"*. Block C's single order is
+	 * `/library/recent`'s, an endpoint that parses `limit` and `cursor` and
+	 * nothing else, so the sort control this screen grew is one Block C has not
+	 * been given rather than one it was refused. Re-grounded 2026-08-20 on that
+	 * endpoint's parameter set, which is the only thing now holding this up. http-api.md §7 is explicit that
+	 * the browse read *"is a different endpoint from §1, not a superset of it"*,
+	 * which is true of the contract — though ⚠️ the reason §7 gives for it is that
+	 * same phantom, so take the split and leave the reason. Home is that block and
+	 * is unchanged. The two share a row shape and a paging rule and share NO
+	 * cursor (§7.5).
 	 *
 	 * ⚠️ A TO Z IS NOT ON THE SORT CONTROL, AND ITS ABSENCE IS STATED. `sort_title`
 	 * walks `ix_work_kind_sort`, which is `(kind, sort_title, id)`, and SQLite

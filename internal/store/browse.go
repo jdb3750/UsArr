@@ -25,9 +25,18 @@ import (
 // two on the one added_at/undated boundary ListWorks documents — against the
 // local file, no upstream call, no metadata provider, no image fetch.
 //
-// WHY IT IS A NEW FILE AND NOT AN EXTENSION OF recent.go. Block C is ONE query
-// with ONE order and no filters, and §17.2 is emphatic that it stays that way: a
-// sixth media type adds rows to it, never a sixth region. This read is the
+// WHY IT IS A NEW FILE AND NOT AN EXTENSION OF recent.go. recent.go is ONE query
+// with ONE order and no filters — a fact about the statement that file holds
+// today, not a ceiling any document sets on it. ⚠️ This paragraph used to add
+// "and §17.2 is emphatic that it stays that way: a sixth media type adds rows to
+// it, never a sixth region", which pins the wrong half of §17.2 to the wrong
+// claim: §17.2 is emphatic about the SHAPE of Home's Block C — one table rather
+// than one strip per type, so "a sixth type adds rows to an existing list rather
+// than a sixth region to scan" — and of that table it requires, in the same
+// sentence, that "it sorts, it filters, it Ctrl+Fs (§4.5)". ADR-0028 puts Block
+// C's scope on the `?lib=` chip. Neither declines a filter.
+//
+// The reason stands without them, and it is this file's own: this read is the
 // opposite shape — three orders, two filters and a cursor codec per order — and
 // growing recent.go into it would make the unfiltered single-order statement an
 // argument-dependent special case of the filtered one. The two share what they

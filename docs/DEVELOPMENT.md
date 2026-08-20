@@ -1600,6 +1600,63 @@ rider."* ⚠️ **Cited as forthcoming, and deliberately without a SHA** — tha
 `docs/DECISIONS.md` at the tip this was written against, and inventing a citation for it would be
 this same defect one level up.
 
+### A disclosure lives where the person who would be misled will encounter it
+
+A qualifier reaches only the readers who pass through it, and in a document of any size most do not.
+A caveat in the paragraph above the claim, a limitation in a footnote, a scope note in a preamble, a
+marker prefixed to a bolded lead — each of those is a disclosure its author has made and a
+disclosure much of the audience will never meet, because readers arrive mid-document from an anchor
+or a search, skim the bolded leads, and carry away the sentence that asserts rather than the
+sentence that qualifies. **The author is then certain the thing was disclosed, and that certainty is
+what does the damage**: an undisclosed limitation still gets argued about, while one its author
+believes is already on the record does not.
+
+So the test is not *is the caveat somewhere in this document*. It is: **lifted out on its own, what
+does the most quotable sentence here claim?** Put the limit in that sentence, in words, beside the
+assertion it limits, and leave the full account of the limit wherever it already lives — the
+adjacent words only have to stop the misreading, not carry the argument. This governs a report, a
+commit message and a brief exactly as it governs a document: anywhere a claim can be quoted away
+from its neighbourhood. *Every figure carries the artifact it was measured on* is the same
+obligation at the moment of measurement; this one binds at the moment somebody quotes the
+measurement onward.
+
+**This rule's only guard is the shape of its own prose, so it says here what the shape is doing** —
+*a rule enforced by the shape of its own prose says so, next to itself*. What guards it is a
+qualification standing at the point of the claim while the same one already stands in a preamble,
+and a careful editor reads that as redundancy and gathers it upward. **The gathering is the defect
+and the repetition is the repair**, which is the reverse of how the edit will look on the way past.
+
+**The repo already keeps this rule in one narrow case, and the general form is that case's reason.**
+`docs/DECISIONS.md`, under *How an ADR is amended when the world moves under it*, owes an amendment
+a flag on the `Status:` line *"so a reader arriving at the anchor is warned before the first section
+rather than after it"*, and owes a dated inline flag to **the falsified sentence itself**, *"since
+anchors and search land people mid-document"*. What generalises out of amendments is exactly that:
+the reader's arrival point is not the author's starting point.
+
+**The instance that produced the general form.** ADR-0029's 2026-08-17 amendment in
+`docs/DECISIONS.md` leads a finding with *"At this ADR's own pessimistic 5× Pi-5 factor, the shipped
+200-row page is 378.5 ms against a 400 ms hard fail — 21.5 ms of margin, about 5%"* (read at
+`efaa4c9`). Skimmed, that is a measured millisecond figure against a named threshold, with a verdict
+attached. The words that withdraw it — *"The scaling is inference — the source scaled nothing to a
+Pi and §13 forbids quoting a Pi-derived figure as measured"* — do not arrive until further down the
+same paragraph, and `ARCHITECTURE.md` §13 does forbid it, in the note reading **"A figure derived
+from the Pi is a design floor and must never be quoted as a measured number"** (`efaa4c9`). So the
+most quotable line in that finding invites the precise error its own qualification exists to
+prevent. **That amendment is a dated record and this is no licence to rewrite it** — *a citation
+inside a dated record is history, not staleness* — and what is named here is a shape to avoid in the
+next finding, not a roster of stale sites; the tree answers for its own state.
+
+**A symbol is a disclosure only to a reader who is already decoding symbols.** That lead does carry
+a marker, and it is one this project defines: `ARCHITECTURE.md`'s preamble, in the paragraph
+beginning *"Facts about upstream APIs were read from a shipped OpenAPI spec or from source"*, states
+**⚠️ = unverified. 🔍 = inference from verified facts, not itself verified.** `docs/DECISIONS.md`
+defines nothing of the kind — at `efaa4c9` it carries a status vocabulary and an amendment procedure
+and no legend anywhere, while eleven distinct glyphs stand at the head of a bullet or a bolded lead
+in it. So the reader who most needs the key is inside the document that does not hold one, and the
+reader who does know the convention still has to stop skimming to apply it. Markers are worth
+keeping and how they are used is settled where they are defined; what this rule asks of one is only
+that the words a skimmer actually reads say what the marker says.
+
 ### Working alongside other threads
 
 Several threads work this repo in parallel, on branches cut from the same base. The collisions that
