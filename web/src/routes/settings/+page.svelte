@@ -76,7 +76,7 @@
 				Single-key shortcuts
 			</label>
 			<p class="field__help">
-				Turns off the single-letter shortcuts as a set. Shortcuts that need a modifier are not
+				Turns off the single-key shortcuts as a set. Shortcuts that need a modifier are not
 				affected, and <kbd class="mono">?</kbd> always opens the shortcut list.
 			</p>
 		</div>
