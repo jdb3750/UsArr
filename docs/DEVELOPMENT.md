@@ -66,7 +66,7 @@ shipped artifact is pure Go with no Wasm runtime in the graph. Verified against
 `github.com/ncruces/go-sqlite3-wasm/v3`, `julianday`, `sort`, `wbt` and `golang.org/x/sys` — **no
 `tetratelabs/wazero` at any version**.
 
-Three consequences, because earlier drafts of several documents got this wrong:
+The consequences, because earlier drafts of several documents got this wrong:
 
 * Any claim that UsArr gets wazero "for free, already a dependency" is **false**. Adopting wazero for
   anything would be a new dependency with its own cost. (This is moot for plugins — a WASM tier is
@@ -75,9 +75,20 @@ Three consequences, because earlier drafts of several documents got this wrong:
   pipeline. Do not assert it; assert "the upstream C source, not a Go reimplementation", which is
   what is actually true and is the property that mattered.
 * Memory behaviour is a **different** profile from a cgo driver, not necessarily a smaller one.
-  Navidrome idling at ~50 MB is evidence about cgo SQLite, and it does not transfer. Measure before
-  quoting an idle-RSS number: a one-day spike (500k-row fixture, WAL, the intended pragmas, arm64)
-  belongs before the schema work, not after.
+  Navidrome idling at ~50 MB is evidence about cgo SQLite, and it does not transfer. **On x86-64 the
+  measurement now exists**: `make bench-rss` over a 500k-row fixture, built through the real
+  `internal/db` open path at the shipped pragmas, reads **idle 10 MB** and **peak 50 MB** for the
+  import — ADR-0001, *Correction, revision 3 — the memory numbers are measured now (x86-64 only)*;
+  `docs/ARCHITECTURE.md` §13 carries the same pair, **idle 10 MB** and **peak 50 MB** for the
+  500k-row import.
+  **arm64 remains unmeasured**, so an idle-RSS number quoted for it is still quoted from nothing.
+  This bullet used to end *"Measure before quoting an idle-RSS number: a one-day spike (500k-row
+  fixture, WAL, the intended pragmas, arm64) belongs before the schema work, not after"*; the schema
+  shipped and the deployment target is x86-64, so the arm64 run is **a prerequisite to claiming
+  arm64 support, not a prerequisite to v0.1** (ruled 2026-08-20). **That moves the gate and does not
+  discharge the obligation** — run `make bench-rss` on the arm64 box and add its row to ADR-0001
+  before any claim that arm64 works. Page size and core count both move these figures, so the
+  x86-64 numbers do not transfer and an arm64 result replaces nothing.
 
 ---
 
