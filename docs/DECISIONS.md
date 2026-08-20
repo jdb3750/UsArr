@@ -10102,8 +10102,8 @@ no migration, no column, no `sync_report` writer and no `SkipState` member is to
 travel, and the refusal recorded at `internal/store/skips.go:116-120` and
 `internal/httpapi/libraries.go:215-221` still holds word for word ·
 **Ships no code here**: the change this ADR governs is built on another branch and lands behind it ·
-⚠️ **The numbers below are MEASURED, not argued** — they were read off a real two-instance import
-body at `0a5d66e`, and each one names what produced it.
+⚠️ **The numbers below are MEASURED, not argued** — §3 carries a ground truth, `main`'s answer and
+the fix's answer, all three read off one response body captured from a real two-instance import.
 
 ### Context
 
@@ -10137,8 +10137,18 @@ and right when they are *disjoint*. It is wrong for every shape in between. Two 
 one container but not another get two different signatures, fold to themselves, and the shared
 container's skips are counted **once per library that binds it**.
 
-Measured on a real two-instance import body at `0a5d66e`, the shipped client rendered
-**"4 items in 3 libraries"** where ground truth was **2**.
+⚠️ **The measurement, and it is a PAIR against a ground truth** — all three read off one response
+body captured from a real two-instance import:
+
+| | Items reported |
+| --- | --- |
+| Ground truth — items actually read and not mapped | **2** |
+| `main` at `0a5d66e` | **4** |
+| The branch carrying this ADR's decision | **2** |
+
+The shipped client renders that 4 as *"4 items in 3 libraries"*. The third row is what makes the
+first two a defect report rather than an observation: the same body, read by a client that was sent
+the breakdown, lands on the ground truth.
 
 #### 4 · The worse half: in exactly that shape, the caveat is absent
 
@@ -10153,15 +10163,25 @@ guard the function has against this class of error is disarmed by the same condi
 error. A wrong number that announces its own uncertainty is a nuisance; a wrong number that presents
 itself as clean is the defect.
 
-#### 5 · This is missing data, not a client bug — and that was tested, not assumed
+#### 5 · This is missing data, not a client bug, and the proof is that the payload is ambiguous
 
 The client cannot dedupe correctly **because it was never sent what it needs**. It is sent a library
-total (`items`) and a list of the library's sources; it is not sent which of those sources the total
-came from. No arithmetic downstream recovers that, because the information is not in the payload.
+total (`items`) and a list of the library's sources; it is **not** sent which of those sources the
+total came from. No arithmetic downstream recovers that, because the information is not in the
+payload — and the way to see that is that today's payload is genuinely **ambiguous**, not merely
+awkward to read.
 
-The demonstration is the negative one. Strip `containers` from the body and hand it to the **new**
-client, and the new client reproduces the wrong **4** exactly. Same code, data withheld, wrong answer
-returns. That is what makes this a data decision rather than a client-logic decision.
+Take library A over containers {X, Y} and library B over {Y, Z}, each reporting `items: 2`. Two
+different worlds produce that body:
+
+- **X skipped 2, Y skipped 0, Z skipped 2** — screen-wide truth **4**.
+- **X skipped 0, Y skipped 2, Z skipped 0** — screen-wide truth **2**.
+
+The two are **byte-identical on the wire today**, because `librarySkipsResponse` carries no container
+identity for the count it reports. No client can separate them, however clever, because there is
+nothing in the bytes to separate. That is what makes this a **data** decision rather than a
+client-logic decision, and it is checkable by reading the response type rather than by running
+anything.
 
 #### 6 · The server already computes the breakdown, then folds it away
 
@@ -10194,8 +10214,9 @@ dividing a library total is not permitted, here or later.
 
 ### Why
 
-**The client is given the fact it lacks, and nothing else.** The defect in §3 is that a total arrives
-without the container identities behind it. §2's key is the smallest thing that fixes that: it lets
+**The client is given the fact it lacks, and nothing else.** §5's defect is that a total arrives
+without the container identity behind it, leaving two different worlds indistinguishable on the wire.
+Decision 2's key is the smallest thing that separates them: it lets
 the client union containers across libraries and count each one once, which is the arithmetic
 `containerSignature` was reaching for and could not reach with a library-level signature.
 
@@ -10256,8 +10277,8 @@ as having fixed it.
 
 ### Consequences
 
-**A client that unions containers across libraries and counts each once gets the right total.** In
-the §3 shape it renders **2**. The sibling-library shape pinned by
+**A client that unions containers across libraries and counts each once gets the right total** — §3's
+third row, **2**, is that client against the same captured body. The sibling-library shape pinned by
 `cmd/usarr/bookorbit_import_e2e_test.go` is unaffected: identical container sets fold identically
 whether the fold is on a library signature or on a container key.
 
@@ -10267,9 +10288,9 @@ one library is overlap, directly. §4's failure mode — the guard disarmed by t
 against — cannot recur, because the guard no longer depends on the signatures being equal.
 
 **⚠️ There is NO compatibility fallback for an old server withholding `containers`, and that is
-deliberate.** The shape *is* reachable in testing — §5's demonstration constructs it on purpose — so
-the next reader will find a known-reachable case with no handling and be tempted to add handling for
-it. They should not. **The SPA is embedded in the binary** (`internal/web/web.go:33`,
+deliberate.** A body with `containers` absent is trivially constructible in a test harness — nothing
+stops anyone hand-writing one — so the next reader will find a case they can reach with no handling
+for it, and be tempted to add some. They should not. **The SPA is embedded in the binary** (`internal/web/web.go:33`,
 `//go:embed all:spa`), so the client can never be newer than the server that served it: the browser
 gets its JavaScript from the same binary that answers its API calls. A new client talking to an old
 server is not a deployment this project can produce. A fallback for it would be dead code that looks
