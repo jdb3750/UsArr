@@ -9559,9 +9559,12 @@ unit of work; decision 5 is what changes it, on evidence rather than on a guess.
   readings was already the ratified rule, it does not amend one.
   **(a) The broad reading would make this ADR contradict itself.** Decision 5's own implementation
   mints the `comic` sibling **conditionally on observed contents**, and argues that it must:
-  `internal/store/catalogue.go:1382-1389` — *"Minting the comic library at bind time would therefore
-  give EVERY prose-only library a permanently empty comic sibling on the Libraries screen, which is
-  the 'empty screen that looks broken' principle 3 exists to prevent."* Under the broad reading,
+  `internal/store/catalogue.go`'s `resolveBinding`, at `:1594-1601` on the tree this rider ships in
+  and at `:1382-1389` on the tree it was ruled against — the comment moved with the mint, in the
+  change this rider licenses, and it is quoted rather than only cited for exactly that reason —
+  *"Minting the comic library at bind time would therefore give EVERY prose-only library a
+  permanently empty comic sibling on the Libraries screen, which is the 'empty screen that looks
+  broken' principle 3 exists to prevent."* Under the broad reading,
   decision 5 violates this sentence. A reading that leaves the document coherent beats one that makes
   it self-contradictory.
   **(b) This is a Consequence, not a Decision.** Consequences describe what follows and hand rules to
@@ -9573,7 +9576,7 @@ unit of work; decision 5 is what changes it, on evidence rather than on a guess.
   **(d) This ADR named its own expiry and we have reached it.** *"The kind stays `book` until comics
   have a unit of work"* (`:9532-9533`), and the book-over-comics residual *"closes when comics get a
   unit of work"* (`:9548`). [ADR-0068](#adr-0068) discharges that condition in those exact words —
-  *"and **this ADR is that unit of work**"* (`:9951`) — so the interval in which contents could not
+  *"and **this ADR is that unit of work**"* (`:9954`) — so the interval in which contents could not
   inform a kind is over.
 
 ---
