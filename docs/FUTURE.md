@@ -901,14 +901,23 @@ next_cursor}` with no per-type facet (`recentWorksResponse`, `internal/httpapi/l
 (`serviceHealthResponse`, `internal/httpapi/services.go`).
 
 **Why it is not built now, which is a scope judgement rather than an oversight.** The gap only
-became reachable at all when v0.1 gained a catalogue source, and two of the six media types have a
-source while four do not, so the rule has to hold on a mixed screen for the first time. (The measured
+became reachable at all when v0.1 gained a catalogue source, and some media types have a source
+while others do not, so the rule has to hold on a mixed screen for the first time. (The measured
 instance of that shape is `mapLibraryType` in `internal/libsync/kavita.go`, which emits exactly two
 `work.kind` values, `comic` and `book`. That adapter is **sunset, not deleted**
-([ADR-0052](./DECISIONS.md#adr-0052)); v0.1's source is BookOrbit, whose media types §16.1 gives as
-books, comics and manga, and whose adapter is not written yet.) But v0.1 connects **one** catalogue source, and with one source the static half
-carries the screen — Ebooks names v0.1's one source, and the residual confusion is one milestone of polish
-rather than a missing capability. The array earns its cost when several sources are connected and
+([ADR-0052](./DECISIONS.md#adr-0052)); v0.1's source is BookOrbit, and
+`internal/libsync/bookorbit.go` is where what it yields is decided.) 🚩 **STRUCK 2026-08-20.** This
+read *"two of the six media types have a source while four do not"* and *"whose media types §16.1
+gives as books, comics and manga, and whose adapter is not written yet"*. **Every part of that is
+now false.** The adapter **is** written — `internal/libsync/bookorbit.go` and `bookorbitfiles.go` —
+and it maps `m4b`, `mp3`, `m4a`, `opus`, `ogg` and `flac` onto `edition.format = 'audiobook'`
+(`bookOrbitEditionFormat` over `bookorbit.MediaKindOf`), so audiobooks were missing from the list it
+cited. ⚠️ **No corrected split replaces it, and §16.1 no longer supplies one to cite** — that section
+has stopped enumerating catalogue coverage altogether, on its own ground that such a list is *"a
+claim about which sources happen to be configured, not about the milestone"*. **How many types have a
+source is a property of the install**, since `cmd/usarr/import.go` imports from more than one kind.
+But v0.1 connects **one** catalogue source, and with one source the static half carries the screen,
+so the residual confusion is one milestone of polish rather than a missing capability. The array earns its cost when several sources are connected and
 the answer stops being derivable by hand. *Cut before you add.*
 
 **⚠️ §8.3's `Caps.MediaKinds` is not this, and the resemblance is the trap.** Two independent
