@@ -47,7 +47,7 @@ import (
 //
 // The specified `max(5 min, 2 × |clock_skew_secs| + poll interval)` is retired
 // for this source. `+ poll interval` is undefined: there is no timer. The skew
-// term is dead. What survives is a FIXED five
+// term is dead — see clock_skew_secs below. What survives is a FIXED five
 // minutes, and it is a NEW constant for a NEWLY NAMED hazard rather than the old
 // floor carried forward: its equality with §7.1a's floor is a coincidence, not a
 // derivation.
@@ -61,6 +61,41 @@ import (
 // empirical lower bound on the window actually required, and never seeing it is
 // evidence the window can be cut. That data can only be collected WHILE the
 // lookbehind exists.
+//
+// # ⚠️ clock_skew_secs — THE SEAM, AND WHY 3b DOES NOT NEED IT
+//
+// `service_instance.clock_skew_secs` (migration 00001, "from the Date response
+// header") is the column §7.1a's formula would read. Stated at the seam, on
+// internal/store/libraries.go's precedent for `orphaned_at`:
+//
+//   - ⚠️ NOTHING WRITES IT AND NOTHING READS IT. Measured over the tree:
+//     `clock_skew_secs`, and any Go, TypeScript or Svelte spelling of it, occurs
+//     in migration 00001, in the generated schema snapshot and in
+//     docs/reference/schema.md — and NOWHERE ELSE. There is no probe, no
+//     accessor and no reader.
+//
+//   - IT IS NOT NEEDED HERE, and that is CONDITIONAL ON THE SHAPE OF THIS
+//     COMPARISON RATHER THAN A PROPERTY OF THE AXIS. The seed is a maximum
+//     `books.addedAt` BookOrbit itself reported, and it is compared against
+//     `books.addedAt` inside BookOrbit's own WHERE. Both sides are the same
+//     machine's values, so UsArr's clock never enters and there is no skew term
+//     for the column to hold. THE COMPARISON HAS EXACTLY ONE BOUND AND THAT
+//     BOUND IS AN UPSTREAM-OBSERVED VALUE; ANY TWO-BOUNDED FORM REINTRODUCES
+//     THE SKEW. `between` is exactly that form — it needs an upper bound, UsArr
+//     has no upstream-clock value for "now", so the bound comes from UsArr's
+//     clock and a clock running ahead excludes the newest arrivals PERMANENTLY.
+//
+//   - IT IS RETAINED BECAUSE THE SEAM IS REAL. A source whose watermark is
+//     computed against UsArr's OWN clock — anything where the two sides of the
+//     comparison come from two machines — would need it, and channel 3 for the
+//     *Arrs is specified in exactly that shape. So the column stays.
+//
+//   - ⚠️ THIS IS NOT "WIRING PENDING". Nothing is pending. 3b is the channel
+//     that would have wired it and has decided, with a reason, that it must not:
+//     a correct measurement feeding a term that guards nothing would cost a
+//     per-instance probe and a reader, and would produce a number inviting the
+//     reading "we have accounted for clock skew" on the one axis where there is
+//     no skew to account for.
 const arrivalsLookbehind = 5 * time.Minute
 
 // arrivalsFold is the ONE producer of the arrivals facts a cursor position is

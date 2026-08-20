@@ -24,6 +24,43 @@ import (
 // screen renders for a delta comes from the latest `delta_walk` sync_report
 // row's created_at, and needs no column at all.
 //
+// # ⚠️ last_delta_sync_at — WHY 3b DELIBERATELY DOES NOT WRITE IT
+//
+// `service_instance.last_delta_sync_at` (migration 00001) is the seam this
+// channel was expected to land in, and 3b does not use it. Stated at the seam
+// rather than in a design document, on internal/store/libraries.go's precedent
+// for `orphaned_at`:
+//
+//   - ⚠️ NOTHING WRITES IT AND NOTHING READS IT. Measured over the tree:
+//     `last_delta_sync_at` and any Go spelling of it occur in migration 00001,
+//     in the generated schema snapshot and in docs/reference/schema.md, and
+//     nowhere in Go. It has no writer and no reader, test or otherwise.
+//
+//   - ⚠️ NO CHANNEL CLAIMS IT. docs/ARCHITECTURE.md §7.3 and
+//     docs/reference/sync.md §3 specify a *reader* for it — channel 3, the *Arr
+//     history walk, which computes `last_delta_sync_at − overlap` and expects
+//     store.ParseTime's layout — but channel 3 is v0.2's and no *Arr adapter
+//     exists. A specified reader is not a writer, so today the column is claimed
+//     by a channel that is not built.
+//
+//   - 3b IS NOT THAT WRITER, and the reason is the heading above rather than
+//     tidiness. This channel stores a CURSOR POSITION that deliberately lags the
+//     maximum it observed (the walk's per-page mitigation advances to the
+//     largest value strictly below the last row's), in an upstream's clock, in a
+//     millisecond layout ParseTime refuses. `last_delta_sync_at` names a
+//     freshness fact in UsArr's own second-resolution layout. Writing one into
+//     the other would be silent in the worst way: services.go's three
+//     `if t, err := ParseTime(...); err == nil` blocks SWALLOW the parse error,
+//     so the first screen to render it would read `never` — no error, no log.
+//
+//   - ITS INTENDED USE IS UNSETTLED. This comment does not say who will
+//     eventually write it, because the honest answer is that nobody has decided.
+//     §7.3 makes it channel 3's, ADR-0035 §2a's Kavita watermark is a different
+//     shape again, and the column may end up meaning neither. It is retained
+//     because a column with a specified reader is a real seam and dropping it
+//     would need a migration to put back; it is left alone because a third
+//     confident story about its owner is exactly what produced the first two.
+//
 // # The type boundary, and what it is for
 //
 // ArrivalsWatermark is a struct rather than a time.Time or a string, and the
