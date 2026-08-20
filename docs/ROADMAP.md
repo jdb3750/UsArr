@@ -1416,14 +1416,18 @@ Items marked 🛑 **STOPPED** are the different case: those are stopped by the d
       *Authority:* §13, §16 v0.1 entry.
       *Done when:* a recorded measurement exists in `docs/`.
 
-- [ ] **The zero-external-providers evidence clause for Kavita.** §16 says v0.1 needs no TMDB account
-      because the source carries its own metadata. That claim was evidenced against Radarr's
+- [ ] **The zero-external-providers evidence clause for BookOrbit.** §16 says v0.1 needs no TMDB
+      account because the source carries its own metadata. That claim was evidenced against Radarr's
       `MovieResource` and Sonarr's `SeriesResource`, and **neither is in v0.1 any more**; the
-      equivalent primary-source check against Kavita's payloads is **owed and undischarged in the
-      repo.** ⚠️ **That is NOT the claim that the check was never made** — see the header's
-      **absence rule**: a check can have been run and never written up, exactly as the cover probe
-      was. What is readable is only the repo's silence, which is the weaker claim, and an
-      undischarged obligation is still owed, so this box stays open.
+      equivalent primary-source check against BookOrbit's payloads is **owed and undischarged in the
+      repo.** ⚠️ **The source name here read *"Kavita"*** until
+      [ADR-0052](./DECISIONS.md#adr-0052) moved v0.1's catalogue source; only the subject changed,
+      and the obligation, its evidence standard and the *Done when* below are untouched — that
+      `grep` is a dated record of a check fired against the superseded subject, and re-firing it at
+      BookOrbit is part of what this box still owes. ⚠️ **That is NOT the claim that the check was
+      never made** — see the header's **absence rule**: a check can have been run and never written
+      up, exactly as the cover probe was. What is readable is only the repo's silence, which is the
+      weaker claim, and an undischarged obligation is still owed, so this box stays open.
       *Authority:* §16 v0.1 entry, which flags it against itself.
       *Done when:* `docs/RESEARCH.md` carries the citation. Fired at the baseline above:
       `grep -n -i kavita docs/RESEARCH.md` returns 9 lines — the API surface, the auth scheme, the

@@ -2883,9 +2883,12 @@ Owner account, Argon2id, cookie sessions, CSRF, encrypted credentials **with key
 a working `usarr key rotate`**, the SSRF egress policy, redaction middleware. **Zero external metadata
 providers** — **no TMDB account is required to see your own library**, because v0.1's source carries
 its own metadata. ⚠️ **The evidence for that clause named Radarr's `MovieResource` and Sonarr's
-`SeriesResource`, and neither is in v0.1 any more** (ADR-0041); the equivalent claim for **Kavita**'s
-series and volume payloads is **owed and not yet made here** — it needs the same primary-source check
-against Kavita's API that the \*Arr claim had, and this section will not assert it before that runs.
+`SeriesResource`, and neither is in v0.1 any more** (ADR-0041); the equivalent claim for
+**BookOrbit**'s catalogue payloads is **owed and not yet made here** — it needs the same
+primary-source check against BookOrbit's API that the \*Arr claim had, and this section will not
+assert it before that runs. ⚠️ **The source name here read *"Kavita"*, and its payloads *"series and
+volume"*,** until [ADR-0052](./DECISIONS.md#adr-0052) moved v0.1's catalogue source; only the subject
+changed, and the obligation, its evidence standard and the requirement below it are untouched.
 The *requirement* — zero external providers in v0.1 — is unchanged. Docker image, `VACUUM INTO`
 backups. In the gate: `EXPLAIN QUERY PLAN` + row-count assertions; `make bench` as a manual release
 gate. **There is no CI** — the gate is `make check`, which a person or an agent has to type, and a CI
