@@ -239,6 +239,52 @@ type librarySkipsResponse struct {
 	// of the observation the state rests on, which is what lets a client render
 	// either state as a measurement with an age rather than as a live fact.
 	RecordedAt *time.Time `json:"recorded_at,omitempty"`
+
+	// Containers is WHERE the count above came from: one entry per upstream
+	// container that left something out. Present only with `left_out`, on
+	// Items's reasoning.
+	//
+	// ⚠️ IT IS HERE BECAUSE Items ALONE CANNOT BE DEDUPED, AND THAT IS MISSING
+	// DATA RATHER THAN A CLIENT BUG. A skip is a fact about a container; §17.8
+	// renders one row per LIBRARY, and since ADR-0066 decision 5 several
+	// libraries can stand over one container and each report its skip in full.
+	// A client adding the rows then double-counts. It used to fold on the
+	// library's set of containers to avoid that, which is exact only while the
+	// sets are either identical or disjoint — two instances with a mixed
+	// container each produce three libraries (book over A and B, comic over A,
+	// comic over B) whose sets are all DIFFERENT while the skips underneath
+	// overlap, and that fold reported every skip twice.
+	//
+	// ⚠️ AND THE ALTERNATIVE OF APPORTIONING WAS REFUSED, not overlooked. A
+	// client cannot divide a library's total across its containers without
+	// inventing a precision no import measured, and a skip does not belong to a
+	// library to be divided in the first place. The client could not dedupe
+	// because it had never been sent what it would need; no arithmetic
+	// downstream fixes data that was never sent.
+	//
+	// ⚠️ EVERY ENTRY IS WHOLE AND SO IS Items: Items is the sum of these, each
+	// row's count is true of that row, and what is false is a reader adding two
+	// ROWS together. Nothing here is split between libraries.
+	Containers []librarySkipContainerResponse `json:"containers,omitempty"`
+}
+
+// librarySkipContainerResponse is one container's contribution to a library's
+// skips.
+//
+// The identity triple is the same one `sources` publishes — and deliberately
+// NOT the `library_source` id, because two libraries over one container have two
+// source rows and keying on those would make one container look like two, which
+// is the confusion this key exists to end.
+type librarySkipContainerResponse struct {
+	ServiceInstanceID int64  `json:"service_instance_id"`
+	ContainerKind     string `json:"container_kind"`
+	ContainerRef      string `json:"container_ref"`
+
+	// Items is what this container left out. Always present and always non-zero:
+	// a container that recorded nothing is not served here, on the same reasoning
+	// that omits `items` under `none` — there is no count to serve rather than a
+	// count of zero.
+	Items int64 `json:"items"`
 }
 
 // libraryCompletenessResponse is one library's completeness verdict on the wire.
@@ -409,9 +455,38 @@ func librarySkipsFor(l store.Library) *librarySkipsResponse {
 	out := &librarySkipsResponse{State: string(state)}
 	if state == store.SkipsLeftOut {
 		out.Items, out.Reason = s.Items, s.Reason
+		out.Containers = librarySkipContainersFor(s.Containers)
 	}
 	if at, err := store.ParseTime(s.RecordedAt); err == nil {
 		out.RecordedAt = &at
+	}
+	return out
+}
+
+// librarySkipContainersFor renders the per-container breakdown, dropping the
+// containers that left nothing out.
+//
+// ⚠️ THE ZERO CONTAINERS ARE DROPPED RATHER THAN SERVED AS ZEROES, which is the
+// same call `items` makes under `none`: a container that recorded no skip has no
+// count to publish, and an entry reading 0 would be a number where there is a
+// measured negative. Dropping them cannot move the total either — they
+// contribute nothing to it — so the invariant that the entries sum to `items`
+// survives the drop.
+func librarySkipContainersFor(in []store.LibrarySkipContainer) []librarySkipContainerResponse {
+	out := make([]librarySkipContainerResponse, 0, len(in))
+	for _, c := range in {
+		if c.Items <= 0 {
+			continue
+		}
+		out = append(out, librarySkipContainerResponse{
+			ServiceInstanceID: c.ServiceInstanceID,
+			ContainerKind:     c.ContainerKind,
+			ContainerRef:      c.ContainerRef,
+			Items:             c.Items,
+		})
+	}
+	if len(out) == 0 {
+		return nil
 	}
 	return out
 }

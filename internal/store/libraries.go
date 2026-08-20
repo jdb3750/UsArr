@@ -212,9 +212,41 @@ type LibrarySkips struct {
 	// verdict's stamp, because that row is the observation the state rests on.
 	RecordedAt string
 
-	// Containers is how many container rows were folded in. It is on the struct
-	// because the fold is lossy, exactly as LibraryCompleteness.Containers is.
-	Containers int
+	// Containers is the per-container breakdown, one entry per container row
+	// folded in, in the order the statement returned them.
+	//
+	// ⚠️ IT IS SERVED RATHER THAN FOLDED AWAY, AND THAT IS THE WHOLE POINT OF
+	// THE FIELD. Items above is the library's total and is true of the library;
+	// the containers are where the skips actually happened, and a reader holding
+	// several libraries needs them to tell one container's skip counted twice
+	// from two containers' skips counted once. Two BookOrbit instances with a
+	// mixed container each bind three libraries — book over A and B, comic over
+	// A, comic over B — whose container SETS are all different while the skips
+	// underneath overlap, so nothing derived from the library total separates
+	// those two cases. See librarySkipsResponse in internal/httpapi.
+	//
+	// ⚠️ AND THE TOTAL IS NEVER APPORTIONED ACROSS THEM, in either direction. A
+	// skip is a fact about a container, so each entry carries what that container
+	// recorded and Items is their sum; dividing a library's total across its
+	// containers would invent a precision no import measured.
+	Containers []LibrarySkipContainer
+}
+
+// LibrarySkipContainer is one container's contribution to a library's skips.
+//
+// The identity is the same triple library_source publishes — instance, kind and
+// the upstream's own ref — because that is what makes an entry on one library
+// recognisable as THE SAME CONTAINER as an entry on another. It is deliberately
+// not the library_source id: two libraries over one container have two source
+// rows, and keying on those would make one container look like two.
+type LibrarySkipContainer struct {
+	ServiceInstanceID int64
+	ContainerKind     string
+	ContainerRef      string
+
+	// Items is what this container's newest skip row recorded. 0 is the measured
+	// negative for that container, not an absence.
+	Items int64
 }
 
 // LibraryCompleteness is one library's verdict, folded from the per-container
@@ -714,8 +746,16 @@ func containerReportSQL(kind string, scope Scope, libraryIDs []int64) (string, [
 	instPred, instArgs := scope.instancePredicate("ls.service_instance_id")
 	args = append(args, instArgs...)
 
+	// ⚠️ THE THREE ls COLUMNS AFTER library_id ARE THE CONTAINER'S IDENTITY, AND
+	// THE COMPLETENESS CALLER SCANS AND DISCARDS THEM. They are here rather than
+	// in a second statement because the two reads share this text on purpose —
+	// see librarySkipsSQL — and they cost nothing: library_source is the driving
+	// table and its row is already fetched. attachLibrarySkips needs them to say
+	// WHICH container each folded row came from, which is the one thing a client
+	// cannot reconstruct from a library-level total.
 	return `
-		SELECT ls.library_id, r.detail, r.created_at
+		SELECT ls.library_id, ls.service_instance_id, ls.container_kind,
+		       ls.container_ref, r.detail, r.created_at
 		  FROM library_source ls
 		  JOIN service_instance si ON si.id = ls.service_instance_id
 		  JOIN sync_report r ON r.id = (
@@ -752,9 +792,15 @@ func (s *Store) attachLibraryCompleteness(
 
 	for rows.Next() {
 		var libraryID int64
+		var container LibrarySkipContainer
 		var detail sql.NullString
 		var createdAt string
-		if err := rows.Scan(&libraryID, &detail, &createdAt); err != nil {
+		// The container identity is scanned and DROPPED here: this read folds to
+		// a library-level verdict and no caller asks which container produced
+		// which part of it. The columns are in the text for the skip read, which
+		// does. See containerReportSQL.
+		if err := rows.Scan(&libraryID, &container.ServiceInstanceID,
+			&container.ContainerKind, &container.ContainerRef, &detail, &createdAt); err != nil {
 			return fmt.Errorf("list library completeness: scan: %w", err)
 		}
 		i, ok := index[libraryID]
@@ -864,9 +910,11 @@ func (s *Store) attachLibrarySkips(
 
 	for rows.Next() {
 		var libraryID int64
+		var container LibrarySkipContainer
 		var detail sql.NullString
 		var createdAt string
-		if err := rows.Scan(&libraryID, &detail, &createdAt); err != nil {
+		if err := rows.Scan(&libraryID, &container.ServiceInstanceID,
+			&container.ContainerKind, &container.ContainerRef, &detail, &createdAt); err != nil {
 			return fmt.Errorf("list library skips: scan: %w", err)
 		}
 		i, ok := index[libraryID]
@@ -882,7 +930,7 @@ func (s *Store) attachLibrarySkips(
 		if err := json.Unmarshal([]byte(detail.String), &note); err != nil {
 			continue
 		}
-		out[i].Skips = foldSkips(out[i].Skips, note, createdAt)
+		out[i].Skips = foldSkips(out[i].Skips, container, note, createdAt)
 	}
 	if err := rows.Err(); err != nil {
 		return fmt.Errorf("list library skips: %w", err)
@@ -902,11 +950,19 @@ func (s *Store) attachLibrarySkips(
 // zero row carries none — cmd/usarr does not write one — and lifting a reason
 // off it would explain a skip that did not happen. Belt and braces against a
 // future adapter that writes one anyway.
-func foldSkips(into *LibrarySkips, note SkipNote, createdAt string) *LibrarySkips {
+func foldSkips(
+	into *LibrarySkips, container LibrarySkipContainer, note SkipNote, createdAt string,
+) *LibrarySkips {
 	if into == nil {
 		into = &LibrarySkips{State: SkipsNone}
 	}
-	into.Containers++
+	// ⚠️ THE ENTRY IS KEPT WHOLE ALONGSIDE THE SUM RATHER THAN INSTEAD OF IT.
+	// Items stays the library's total because that is what §17.8's row renders;
+	// the entry says where that total came from. Both are true, and only the
+	// second one lets a caller holding two libraries tell a shared container
+	// from two distinct ones. See LibrarySkips.Containers.
+	container.Items = note.Total()
+	into.Containers = append(into.Containers, container)
 	into.Items += note.Total()
 	if note.Total() > 0 {
 		into.State = SkipsLeftOut

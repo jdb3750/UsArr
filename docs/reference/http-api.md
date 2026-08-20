@@ -371,7 +371,14 @@ express. There is nothing to clamp, so unlike §1 there is no `400` path at all.
         "state": "left_out",
         "items": 42,
         "reason": "a file BookOrbit itself cannot classify has no row",
-        "recorded_at": "2026-08-19T10:24:00Z"
+        "recorded_at": "2026-08-19T10:24:00Z",
+        // WHERE the 42 happened. Several libraries can stand over one
+        // container and each report its skip whole, so this is what lets a
+        // client fold them without counting one skip twice. §2.6a.
+        "containers": [
+          { "service_instance_id": 1, "container_kind": "remote_library",
+            "container_ref": "12", "items": 42 }
+        ]
       }
     },
     {
@@ -409,7 +416,7 @@ from a failure.
 | `items[].item_count` | yes | `library_member` rows in this library **that the caller's access scope admits**. Edition-grained by the table's key; equal to a count of distinct works today, because the only writer files every work under the `edition_id = 0` "whole work" sentinel. |
 | `items[].orphaned_at` | **no** | RFC 3339 UTC. §6.5 rule 5's retained-with-a-reason state, set when the last source goes away. ⚠️ **Nothing writes it** — see §2.4. |
 | `items[].completeness` | **no** | What the last import measured about how much of this library's upstream containers UsArr's credential could see. ⚠️ **Absent means nothing was measured, never "complete"** — see §2.7. |
-| `items[].skipped` | **no** | What the last import **read and did not map** in this library's containers. A different axis from `completeness`, not its inverse. ⚠️ **Absent means nothing walked this library, never "nothing was skipped"** — see §2.6a. |
+| `items[].skipped` | **no** | What the last import **read and did not map** in this library's containers. A different axis from `completeness`, not its inverse. ⚠️ **Absent means nothing walked this library, never "nothing was skipped"** — see §2.6a. ⚠️ **Its `items` is per LIBRARY and several rows can report one container's skip, so do not sum it across rows** — fold on `skipped.containers`. |
 | `items[].sources` | yes | Possibly `[]`. Never absent: an absent key reads as *"unknown"*, and *"this library has no sources"* is precisely what §17.8's orphaned state renders. |
 | `sources[].id` | yes | `library_source.id`. |
 | `sources[].service_instance_id` | yes | What §17.8's cross-link needs: *"a degraded source on a library row links to that instance's Services row"*. |
@@ -549,15 +556,46 @@ unit of work for part of it — and **neither is evidence for the other**. Like 
 ```jsonc
 "skipped": { "state": "left_out", "items": 42,
              "reason": "a file BookOrbit itself cannot classify has no row",
-             "recorded_at": "2026-08-19T10:24:00Z" }
+             "recorded_at": "2026-08-19T10:24:00Z",
+             "containers": [ { "service_instance_id": 1,
+                               "container_kind": "remote_library",
+                               "container_ref": "12", "items": 42 } ] }
 ```
 
 | Field | Always present? | Meaning |
 | --- | --- | --- |
 | `state` | yes | `left_out` or `none`. There is no third member; a client that meets one must render **nothing**. |
-| `items` | **no** | How many items were read and not mapped. ⚠️ **Absent under `none`** — there is nothing to count there, and a `0` under that label is a claim the label does not make. |
+| `items` | **no** | How many items were read and not mapped **in this library**. ⚠️ **Absent under `none`** — there is nothing to count there, and a `0` under that label is a claim the label does not make. ⚠️ **Never sum it across rows** — see the fold rule below. |
 | `reason` | **no** | UsArr's own short sentence about why, present only with `left_out`. ⚠️ **Never upstream text** — reference/security.md §5 — and short, because it renders in a table cell. |
 | `recorded_at` | **no** | RFC 3339 UTC. Under `none` it is the stamp of the observation the state rests on. |
+| `containers` | **no** | The per-**container** breakdown: one object per upstream container that left something out, present only with `left_out`. Each carries `service_instance_id`, `container_kind`, `container_ref` — the **same identity triple `sources[]` publishes** — and its own non-zero `items`. A container that recorded a zero is **not** served, on `items`'s own reasoning, so the entries always sum to `items`. |
+
+⚠️ **`containers` breaks the count down by CONTAINER, never by REASON, and it adds no field to this
+object.** The three identity keys are ones `sources[]` already carries and `items` is the same
+integer this section has always described; `items` above still carries the **whole library's**
+total and is still true of that row. Nothing is split, and the adapter's per-reason vocabulary is
+**not** what got broken out — see *"the adapter's per-reason vocabulary does not cross"* below,
+which is unchanged and covers this key too.
+
+**FOLD ON `containers`, NEVER ON THE ROWS, AND NEVER ON THE ROW'S `sources`.** A skip is a fact
+about a **container**; §17.8 renders one row per **library**, and since
+[ADR-0066](../DECISIONS.md#adr-0066) decision 5 several libraries can stand over one container and
+each report that container's skip **in full**. Both rows are true — the count is never split and
+never apportioned between them — so a client that adds them reports a number that never happened.
+The identity to fold on is the `(service_instance_id, container_kind, container_ref)` triple, and
+deliberately **not** the `sources[].id`: two libraries over one container have two source rows and
+one container.
+
+⚠️ **Folding on the row's set of `sources` is exact only while those sets are identical or
+disjoint, which is why `containers` exists at all.** Two instances each holding one mixed container
+bind three libraries — `book` over A and B, `comic` over A, `comic` over B — whose source sets are
+all **different** while the skips underneath overlap, so that fold collapses nothing and reports
+every skip twice.
+
+⚠️ **And no arithmetic on the row totals recovers it.** Apportioning a library's total across its
+containers invents a precision no import measured, and a skip does not belong to a library to be
+divided. A client that lacked `containers` was **missing data**, not doing arithmetic wrong, which
+is why the breakdown is sent rather than derived.
 
 **Two states on the wire, three readings, and the third is the absent key.**
 
@@ -594,11 +632,12 @@ unchanged and is not this field's: an instance whose import did not finish rende
 not finish · this count may be short"* on every one of its libraries. `none` also renders nothing,
 so the cost is a sentence that was not shown rather than a claim that was made.
 
-**The adapter's per-reason vocabulary does not cross.** `sync_report.detail` carries
-`skipped_comics` and `skipped_unknown`; the wire carries the **total** and UsArr's sentence, because
-a second adapter will decline items for reasons that are neither and a field named `comics` would
-have to be lied to. The operator-facing keys — `effect`, `covers`, `does_not_cover` — stay in the
-row.
+**The adapter's per-reason vocabulary does not cross, and `containers` did not change that.**
+`sync_report.detail` carries `skipped_comics` and `skipped_unknown`; the wire carries the **total**
+and UsArr's sentence, because a second adapter will decline items for reasons that are neither and a
+field named `comics` would have to be lied to. That holds inside every `containers` entry as well —
+an entry carries a container's identity and its total, never a per-reason split. The
+operator-facing keys — `effect`, `covers`, `does_not_cover` — stay in the row.
 
 **`items` is not `item_count` minus anything.** §2.6's closing rule applies here in the direction it
 was written for: an adapter that deliberately skips part of a container is exactly why the upstream's
