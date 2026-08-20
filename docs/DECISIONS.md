@@ -7178,6 +7178,22 @@ rather than hypothetical — it has simply not been run.
 
 > **1. v0.1's catalogue source is BookOrbit.** It replaces Kavita in that slot, on the owner's
 > decision. The media types v0.1 catalogues are unchanged: books, comics and manga.
+> ⚠️ **Amended 2026-08-20 — the decision stands; the descriptive clause after it does not.** The
+> wording above is **kept deliberately**, as the record of what was believed when this ADR was
+> written. What falsifies its last sentence is **this project's own shipped code**, not a change
+> upstream and not a re-reading of the owner: `bookorbit.MediaKindOf`
+> (`internal/bookorbit/catalogue.go`) classifies a primary file whose format token is `m4b`, `mp3`,
+> `m4a`, `opus`, `ogg` or `flac` as `MediaKindAudiobook` (landed in `862a0ca`), and
+> `bookOrbitEditionFormat` (`internal/libsync/bookorbitfiles.go`, landed in `373df3f`) writes that
+> through to `edition.format = 'audiobook'`. **BookOrbit's catalogue therefore yields audiobooks as
+> well**, which *"unchanged: books, comics and manga"* excludes. ⚠️ **This is a RIDER, NOT a
+> supersession**: clause 1's decision — *v0.1's catalogue source is BookOrbit* — is untouched, no
+> other clause of this ADR moves, and this ADR's status is unchanged. ⚠️ **No corrected list is
+> written in its place**, and that is the point rather than an omission:
+> [`ARCHITECTURE.md`](./ARCHITECTURE.md) §16.1 had already ruled that such an enumeration is *"a
+> claim about which sources happen to be configured, not about the milestone"*, so *"any replacement
+> enumeration would go stale the same way"*. Which media types an install catalogues follows from
+> the sources it has connected; `cmd/usarr/import.go`'s `catalogueSource` is where that is decided.
 >
 > **2. Kavita is SUNSET, NOT DELETED.** `internal/libsync/kavita.go`, `internal/kavita`, the vendored
 > specs `api/specs/kavita-v0.9.0.2.json` and `api/specs/kavita-develop.json`, and the contract tests

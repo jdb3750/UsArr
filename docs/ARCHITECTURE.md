@@ -7,7 +7,8 @@ document.
 **Last revised:** 2026-08-16 (revision 2, after a three-way adversarial review —
 [`REVIEW-LOG.md`](./REVIEW-LOG.md) records what was applied and what was rebutted).
 **Evidence:** [`RESEARCH.md`](./RESEARCH.md). **Decisions:** [`DECISIONS.md`](./DECISIONS.md).
-**Deferred ideas and the seams that keep them cheap:** [`FUTURE.md`](./FUTURE.md).
+**Mostly deferred ideas and the seams that keep them cheap — unless the heading says *Declined*:**
+[`FUTURE.md`](./FUTURE.md).
 
 This is the document a contributor reads start to finish: principles, shapes, invariants, reasons.
 Reference detail — full DDL, endpoint tables, normalisation matrices, provider inventories — lives
@@ -957,8 +958,10 @@ closure over external ids — 0.95; (3) `normalized_title` + year ±1 + same kin
 paragraph read *"Its providers are Sonarr and Radarr and every row from both carries
 `tmdbId`/`imdbId`/`tvdbId`, so tier 1 resolves essentially 100% of the v0.1 identity problem —
 including the dual-Radarr case, which joins on `tmdbId`."* That was true of the providers it named,
-and [ADR-0041](./DECISIONS.md#adr-0041) replaced them: **v0.1's catalogue source is Kavita**, with
-Sonarr and Radarr re-sequenced behind it. It is kept as the statement about the \*Arrs that it is, and
+and [ADR-0041](./DECISIONS.md#adr-0041) replaced them, with Sonarr and Radarr re-sequenced behind it.
+🚩 **STRUCK 2026-08-20 by [ADR-0052](./DECISIONS.md#adr-0052):** that clause read *"**v0.1's catalogue
+source is Kavita**"*. **It is BookOrbit.** The tier-1 argument below is left standing as the statement
+about Kavita it is, and is **owed a restatement against BookOrbit** that has not been made. It is kept as the statement about the \*Arrs that it is, and
 restated here against the source v0.1 actually has:
 
 * **Kavita's external-id fields are present in the payload and empty on a free instance.** `SeriesDto`
@@ -1270,8 +1273,11 @@ Mechanics in full: [`reference/sync.md`](./reference/sync.md).
 ⚠️ **The `In` column was amended 2026-08-17 by [ADR-0041](./DECISIONS.md#adr-0041)**, and both changed
 rows are named rather than silently rewritten. Channel 3 read **v0.1** and channel 3b read *"specified
 now, built with the first catalogue adapter (§16.1)"* — both correct only while v0.1's library-bearing
-services were Sonarr and Radarr. **v0.1's catalogue source is Kavita**, which has no `/history/since`
-at all, so ADR-0041 clause 4 sets v0.1's channels to **1, 3b and 4 — not 1, 3 and 4**. Channel 3 is
+services were Sonarr and Radarr. 🚩 **STRUCK 2026-08-20 by [ADR-0052](./DECISIONS.md#adr-0052):** this
+read *"**v0.1's catalogue source is Kavita**, which has no `/history/since` at all"*. **It is
+BookOrbit**, and ADR-0052 **REOPENS** ADR-0041 clause 4's channel set (**1, 3b and 4**) rather than
+re-answering it, because that set was earned from a live *Kavita* probe. What is unchanged is that
+`/history/since` applies to neither. Channel 3 is
 not cut; it lands with the first \*Arr adapter, which is re-sequenced rather than refused.
 
 The numbering is historical; the order is not. **Channel 3 is the correctness guarantee, channel 4 is
@@ -2346,8 +2352,9 @@ stop, replace the file, start**, with the key as a separate, explicitly-named st
 when, **this section wins.** Versions are scope markers, not dates. **A milestone label is scope, not
 status:** it says which milestone owns a thing, never that the thing exists. Only part of v0.1 is
 built, and this section does not enumerate which part — that answer lives in the tree, where it
-cannot go stale; v0.2 and later are wholly unimplemented. Deferred ideas are not listed here at all; they are in [`FUTURE.md`](./FUTURE.md)
-with their seams.
+cannot go stale; v0.2 and later are wholly unimplemented. Ideas that are out of scope are not listed
+here at all; they are in [`FUTURE.md`](./FUTURE.md) with their seams — where a *Declined* heading
+means closed rather than deferred, and carries no seam.
 
 **The ordering rationale, since it changed:** *the earliest milestone that is not already available
 elsewhere is the one that must ship soonest.* The previous order put the gateway second and both
@@ -2452,9 +2459,17 @@ made it. See the v0.2 entry for why that milestone already needed them.
 **What the six-type claim honestly is in v0.1, stated rather than implied.** The **schema** is
 six-type, because migration 0001 can never be edited (see the enumeration in the v0.1 entry).
 **Requesting** is six-type, because Prowlarr Search-and-Grab covers all six categories. **The
-catalogue is books and comics/manga**, because Kavita is the source that ships
-([ADR-0041](./DECISIONS.md#adr-0041); it read *"film and TV"* while Sonarr and Radarr were v0.1's
-sources, and they are not). A screen for a media type with no configured source says so — principle
+catalogue is whatever the connected sources yield, and this section does not say which types those
+are.** 🚩 **STRUCK 2026-08-20 by [ADR-0052](./DECISIONS.md#adr-0052).** This read *"**The catalogue
+is books and comics/manga**, because Kavita is the source that ships ([ADR-0041](./DECISIONS.md#adr-0041);
+it read *film and TV* while Sonarr and Radarr were v0.1's sources, and they are not)"*. **The strike
+is not a swap.** The clause had already been rewritten once — *film and TV* to *books and
+comics/manga* — when the source changed, and it would have needed rewriting again now, which is the
+tell: it grounds a MILESTONE claim in **which source happens to be configured**, and that is a
+category error rather than a stale fact. §16.1's blockquote reached the same verdict against itself
+and drew the conclusion this strike applies: **any replacement enumeration would go stale the same
+way**, so none is written. What an install catalogues is `librarySummary`'s answer, derived per
+install from the connected service kinds. A screen for a media type with no configured source says so — principle
 3, degrade honestly — rather than rendering an empty grid, and that behaviour is the same one an
 install without Navidrome would get in any case. **What it says is set out in §16.1's v0.1 entry,
 which splits the rule rather than stating it once**: *naming the source that will populate the type*
@@ -2718,15 +2733,24 @@ not cut, and neither is this write path** — the owner's explicit condition, re
 
 > **What "six media types" does and does not mean in v0.1**, because the phrase is load-bearing and
 > was previously overstated. The **schema** is six-type — it has to be, migration 0001 cannot be
-> edited. **Requesting** is six-type — Prowlarr covers all six categories. **The catalogue is books
-> and comics/manga**, ~~because Kavita is the source that ships (ADR-0041)~~ 🚩 **STRUCK 2026-08-20
-> by [ADR-0052](./DECISIONS.md#adr-0052) — BookOrbit is v0.1's source. The conclusion above is
-> unaffected: BookOrbit's own media types are Kavita's, so the catalogue is still books and
-> comics/manga on either source. ⚠️ But note what that makes the conclusion — a claim about which
-> sources happen to be configured, not about the milestone — so it is right by coincidence and any
-> replacement enumeration would go stale the same way. What an install has is `librarySummary`'s
-> answer, derived per install from the connected service kinds.** A media type with no
-> configured source says so on screen rather than rendering an empty grid.
+> edited. **Requesting** is six-type — Prowlarr covers all six categories. **The catalogue is
+> whatever the connected sources yield; this section does not enumerate which types those are.**
+> ~~The catalogue is books and comics/manga, because Kavita is the source that ships (ADR-0041)~~
+> 🚩 **STRUCK 2026-08-20 by [ADR-0052](./DECISIONS.md#adr-0052) — struck in two passes, and this is
+> the second.** The first pass struck only the *because* clause and left *"the catalogue is books and
+> comics/manga"* standing, on the reasoning that **"BookOrbit's own media types are Kavita's, so the
+> catalogue is still books and comics/manga on either source"**. ⚠️ **That reasoning was wrong on
+> fact**, and the same code this repo ships falsifies it: `bookorbit.MediaKindOf`
+> (`internal/bookorbit/catalogue.go`) classifies `m4b`, `mp3`, `m4a`, `opus`, `ogg` and `flac` as
+> `MediaKindAudiobook`, and `bookOrbitEditionFormat` (`internal/libsync/bookorbitfiles.go`) writes
+> that through to `edition.format = 'audiobook'` — **so BookOrbit yields audiobooks too**, and the
+> retained half excluded them. ⚠️ **The first pass had ALREADY named the reason no fresher list
+> should be written** — the enumeration is *"a claim about which sources happen to be configured, not
+> about the milestone"*, so *"any replacement enumeration would go stale the same way"* — and this
+> pass simply applies it to the half that was left. **No replacement enumeration is written, here or
+> in §16.0.** What an install has is `librarySummary`'s answer, derived per install from the
+> connected service kinds. A media type with no configured source says so on screen rather than
+> rendering an empty grid.
 
 **Schema, enumerated — because §16 is authoritative for scope and an implementer reads this line,
 not the ADRs:** `work`/`edition`/`media_file`/`external_id`/`service_item_link`; the **four library
@@ -2740,8 +2764,12 @@ its own `kind_byte`, excluded from the navigation enum, the prefix index and the
 ⚠️ **Of the six subtype tables named in that enumeration, three are v0.1's scope and three are not.**
 The rule is [ADR-0040](./DECISIONS.md#adr-0040)'s and it is unchanged: **each lands with the catalogue
 source that writes it**, so which milestone a table falls in follows its source. **`work_book`,
-`work_comic` and `work_comic_issue` are v0.1's**, because Kavita is v0.1's catalogue source and Kavita
-is what writes them ([ADR-0041](./DECISIONS.md#adr-0041)) — and ✅ **all three now exist in the tree**:
+`work_comic` and `work_comic_issue` are v0.1's**, because v0.1's catalogue source is what writes them
+and those are the tables it writes. 🚩 **STRUCK 2026-08-20 by [ADR-0052](./DECISIONS.md#adr-0052):**
+this read *"because Kavita is v0.1's catalogue source and Kavita is what writes them
+([ADR-0041](./DECISIONS.md#adr-0041))"* — the same *because X is the configured source* shape struck
+in the blockquote above, three paragraphs earlier. **ADR-0040's rule is what carries the claim and it
+is unchanged**: each table lands with the source that writes it, whichever source that is — and ✅ **all three now exist in the tree**:
 `internal/db/migrations/00006_kavita_subtypes.sql` creates `work_book` (`:129`), `work_comic` (`:153`)
 and `work_comic_issue` (`:180`), with `ix_comic_issue_sort` (`:211`), in commit `d0a02aa`. ⚠️ **This
 clause read *"none of the three exists in the tree today, and they arrive in a new migration"*, which
@@ -2889,10 +2917,17 @@ drawing an empty one"*. That was re-measured and recorded as still holding at `5
 **One clause of that sentence was a requirement wearing a status claim's clothes, and it survives as
 a requirement**: *every screen that would render a library says which source is missing rather than
 drawing an empty one* (principle 3, §17.7's `unconfigured` state). While nothing replicated it was
-vacuously satisfied. It is no longer vacuous — Kavita's adapter emits exactly two `work.kind` values,
-`comic` and `book` (`mapLibraryType`, `internal/libsync/kavita.go`), so **two of §1's six media types
-now have a source and four do not**, and the rule now has to hold on a mixed screen rather than an
-empty one. **That is §17's to re-measure, and it is flagged rather than assumed here** (REVIEW-LOG
+vacuously satisfied. It is no longer vacuous — some of §1's six media types have a catalogue source
+and some do not, so the rule now has to hold on a mixed screen rather than an empty one. 🚩 **STRUCK
+2026-08-20 by [ADR-0052](./DECISIONS.md#adr-0052):** this read *"Kavita's adapter emits exactly two
+`work.kind` values, `comic` and `book` (`mapLibraryType`, `internal/libsync/kavita.go`), so **two of
+§1's six media types now have a source and four do not**"*. ⚠️ **This paragraph is itself a
+retraction note about a claim that went stale, and it committed the same error a second time while
+retracting the first** — which is the reason a sweep cannot trust its own search shape, since it
+restates the enumeration in words that match none of the anchors the earlier passes used. **The count
+is deliberately not corrected to a different count**, because naming which media types have a source
+is a category error rather than a stale fact: `cmd/usarr/import.go` imports a catalogue from
+`bookorbit` **and** from `kavita`, so the answer is a property of the install. **That is §17's to re-measure, and it is flagged rather than assumed here** (REVIEW-LOG
 CH1-04). (The query-plan assertions are in
 place for the tables that exist, in `make test` — the gate named above, not a CI.)
 
@@ -3383,7 +3418,9 @@ this book" when it means "the source gave us no ISBN".
 is written now because it cannot be retrofitted.** This paragraph read `matched by title is not
 reachable in v0.1 … v0.1's only sources are Radarr and Sonarr, which carry TMDB and TVDB ids, so
 every v0.1 work resolves at the identifier tier`, and [ADR-0041](./DECISIONS.md#adr-0041) replaced
-those sources: **v0.1's catalogue source is Kavita.** §16.0 flagged the consequence rather than
+those sources. 🚩 **STRUCK 2026-08-20 by [ADR-0052](./DECISIONS.md#adr-0052):** this read *"**v0.1's
+catalogue source is Kavita.**"* **It is BookOrbit**, and the identity argument below is Kavita's and
+is owed a restatement. §16.0 flagged the consequence rather than
 answering it — `§6.4 owns the tier-1 claim and has not been restated against Kavita` — and **§6.4 has
 since been restated, so the claim is read there and not restated here**: how much of the identity
 problem the identifier tier resolves is **a property of the instance, not of the design** —

@@ -1488,6 +1488,19 @@ rule for that", when what existed was a ruling in conversation and not a rule in
 unwritten convention acquiring written authority through repetition. Rule 8 was written down for the
 same reason.*
 
+**A positional reference is the same defect in miniature.** It is *no heading, subject line or
+preamble states a count of its own contents* generalised, not a separate rule. *"The two bullets
+above"*, *"the section below"*, *"the first of these"* — each states a fact about the document's
+current shape instead of a fact about its subject, and **the next insertion falsifies it silently**.
+A count goes stale when the body grows; a position goes stale when anything lands between the
+pointer and what it points at, and neither has anything mechanical behind it: nothing compiles,
+nothing lints, and the sentence still reads perfectly while naming the wrong neighbour. The remedy
+is the one this file already practises: **name a neighbour by its own wording, not by where it
+sits.** *A log you intend to attribute must be written to a path no other lane can guess* does
+exactly that — it quotes *never run two committing agents in one checkout* and calls out the shared
+lint cache and its lock by name, so both stay findable however many bullets land around them. A name
+survives an insertion; a position does not.
+
 ### Working alongside other threads
 
 Several threads work this repo in parallel, on branches cut from the same base. The collisions that
@@ -1720,6 +1733,21 @@ paragraph describing a repo that no longer exists.
   of the guard and into the evidence about the guard. So namespace everything you write under the
   scratchpad — logs, temp extracts, anything — under a directory carrying your own id, never the
   scratchpad root.
+* **Never kill by pattern in a shared process table.** Kill only a PID you captured yourself, or
+  kill nothing — *"clear my own duplicate"* and *"kill everyone's gate"* are the same command.
+  `pkill -f 'make check'` is the instance and not the rule: a pattern is matched against every
+  process on the box, the box is shared with every other lane in the container, and a command line
+  records **what** was run and never **who** started it, so no pattern selects your run and spares
+  theirs. That is also why this is worse than lanes colliding over a checkout, over the lint cache
+  and its lock, or over a log path: those damage a run or the evidence about it and leave something
+  behind to inspect, while a killed gate leaves its owner an exit status, no output and no reason.
+  **Relayed, not measured here**: an agent clearing what it believed was a stale duplicate of its
+  own gate matched another lane's `make check` too, and that lane lost the run and the work in
+  flight behind it. There is no commit, no PID and no file to cite for that, and the absence is the
+  property being described rather than a gap in the record — a pattern kill destroys the thing that
+  would have been the evidence. So capture the PID when you start the process — `$!`, or a pid file
+  you wrote yourself — and kill that; if you no longer have it, you no longer have anything you may
+  kill.
 * **A sequential id read out of a file is a race, not a lookup.** `M5-NN` entry ids, `M5.N` subsection
   numbers, ADR numbers and migration numbers are all allocated by reading the highest one already
   present, and **two agents that read at the same moment both get the right answer and both are wrong

@@ -42,7 +42,9 @@ import (
 //     `acquisition`, which is for the library-bearing *Arrs that also take
 //     add/monitor/delete commands — Kavita is read-only and has no command sink
 //     (ADR-0032), so filing it under acquisition would promise a write path that
-//     does not exist. ADR-0041 puts it in v0.1 as the sync core's first adapter.
+//     does not exist. ADR-0041 put it in v0.1 as the sync core's first adapter;
+//     ADR-0052 ended that placement and Kavita is sunset, not removed, so the
+//     kind stays admissible and the role is unchanged.
 //   - bookorbit → `library`, for exactly the same reasons: ADR-0052 makes it
 //     v0.1's catalogue source, and it is read-only with no command sink. The
 //     ROLE IS THE SAME AS KAVITA'S AND THE KIND IS NOT, which is the whole point

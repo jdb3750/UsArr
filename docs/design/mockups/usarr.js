@@ -72,12 +72,20 @@
              since made v0.1's catalogue source BOOKORBIT, on the owner's
              decision to sunset Kavita, so the name here is one milestone
              stale and the re-draw is owed. What it changes is the name and
-             not the shape: ARCHITECTURE 16.1 gives BookOrbit the same three
-             media types Kavita had -- books, comics and manga -- so ebooks
-             and comics still have a source; movies, TV, music and audiobooks
-             still do not, and each still says which service will populate it
-             and when -- Radarr and Sonarr at v0.2 (ADR-0045), Navidrome and
-             Audiobookshelf after v0.1.
+             not the shape. STRUCK 2026-08-20: this read "ARCHITECTURE 16.1
+             gives BookOrbit the same three media types Kavita had -- books,
+             comics and manga -- so ebooks and comics still have a source;
+             movies, TV, music and audiobooks still do not". Section 16.1 no
+             longer gives that list to cite -- it has stopped enumerating
+             catalogue coverage, on its own ground that such a list states
+             which sources happen to be configured rather than what the
+             milestone owns. The list was also wrong: bookOrbitEditionFormat
+             maps m4b, mp3, m4a, opus, ogg and flac onto edition.format
+             audiobook, so audiobooks were missing from it. WHICH TYPES AN
+             INSTALL CATALOGUES IS A PROPERTY OF THAT INSTALL, derived from
+             the connected service kinds; a row with no source still says
+             which service will populate it and when -- Radarr and Sonarr at
+             v0.2 (ADR-0045), Navidrome and Audiobookshelf after v0.1.
 
      The two installs also demonstrate the OPPOSITE identity tiers, and that is
      the sharpest thing the switcher shows. The v0.1 install's one source as

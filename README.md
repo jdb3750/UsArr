@@ -4,10 +4,14 @@
 > What runs today is Prowlarr Search-and-Grab: free-text indexer search, results streaming in per
 > indexer, and grab — served by a Go binary with an embedded SPA shell. There is no release and no
 > container image yet, so running it means building it (`make build`). A catalogue import exists as
-> of `c56c8e4` — for Kavita and for nothing else, and only the first-import channel: it fires once
-> when you connect a Kavita, or on demand, and there is no periodic re-sync behind it. Which
-> channels the sync core has is a question for `internal/libsync` and `cmd/usarr/import.go`, whose
-> package docs answer it channel by channel. The rest moves week to week, so what exists is
+> of `c56c8e4`, and only the first-import channel: it fires once when you connect a catalogue
+> source, or on demand, and there is no periodic re-sync behind it. 🚩 **STRUCK 2026-08-20 by
+> [ADR-0052](docs/DECISIONS.md#adr-0052):** this read *"for Kavita and for nothing else … it fires
+> once when you connect a Kavita"*, and both halves are false — `cmd/usarr/import.go` dispatches on
+> `entry.bookorbit` beside `entry.kavita`, and says so itself. **No fresher list replaces them**,
+> because which sources import is the same kind of question as which channels exist, and a list
+> here would go stale the same way. Both are questions for `internal/libsync` and
+> `cmd/usarr/import.go`, whose package docs answer them. The rest moves week to week, so what exists is
 > whatever is in the tree (`web/src/routes`, `internal/`) rather than whatever this paragraph last
 > claimed. If you are here to install something finished, come back later.
 
@@ -66,7 +70,7 @@ is not built yet, and which parts are changes faster than the table does — for
 
 | Feature | Status |
 |---|---|
-| **Six-media-type foundation** — the schema covers movies, TV, music, ebooks, audiobooks and comics, and requesting covers all six; **the v0.1 catalogue itself is books and comics/manga**, because BookOrbit is the one catalogue source that ships as of ADR-0052 | 📋 Planned — v0.1 |
+| **Six-media-type foundation** — the schema covers movies, TV, music, ebooks, audiobooks and comics, and requesting covers all six; **which of the six an install catalogues follows from the sources it has connected**, and neither this row nor §16 names them. 🚩 **STRUCK 2026-08-20:** this read *"**the v0.1 catalogue itself is books and comics/manga**, because BookOrbit is the one catalogue source that ships as of ADR-0052"*. It had already been rewritten once when the source changed (from *film and TV*), which is the tell — it grounds a milestone claim in whichever source happens to be configured. **§16 has stopped enumerating catalogue coverage entirely and wrote no replacement list**, so this row cannot restate one without contradicting the section it is maintained against | 📋 Planned — v0.1 |
 | **The sync core, with BookOrbit as its first adapter** (ADR-0052, which replaced Kavita in that slot on the owner's decision to sunset it) — full import, the ordered page walk where the source supports one, and reconciliation. It is what proves the local-first thesis on a real library, and BookOrbit carries it because it is the source the owner actually runs | 📋 Planned — v0.1 |
 | **\*Arr library sync — Sonarr and Radarr** — **re-sequenced out of v0.1, not cut** (ADR-0041): the owner runs neither, so *"prove it on a real Sonarr and a real Radarr"* was a criterion no v0.1 could meet. They arrive onto a core already proven | 📋 Planned — §16 has not yet named the milestone |
 | Read-only catalogue sources: **Navidrome, then Audiobookshelf, then Komga** — one at a time after v0.1, each its own milestone. ✅ The delta-watermark probe that set the order **ran 2026-08-17 and passed** — that is what moved Kavita into v0.1 ahead of them, a placement ADR-0052 has since ended, and Kavita is **not added back** to this sequence (ARCHITECTURE §16.1) | 📋 Planned — after v0.1 |

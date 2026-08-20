@@ -451,8 +451,15 @@
     </section>
 
     <!-- Block A on the v0.1 install. Still six rows, and that is the decision:
-         v0.1 connects Kavita and Prowlarr, so ebooks and comics have a
-         catalogue source and the other four do not. Dropping the four would
+         some media types have a catalogue source on this install and some do
+         not. STRUCK 2026-08-20 (ADR-0052): this read "v0.1 connects Kavita and
+         Prowlarr, so ebooks and comics have a catalogue source and the other
+         four do not". The count is deliberately not corrected to a different
+         count, because naming which types have a source is a category error
+         rather than a stale fact: cmd/usarr/import.go imports a catalogue from
+         bookorbit AND from kavita, so the answer is a property of the install.
+         What this file DRAWS is a v0.1 install and the re-draw is owed
+         separately. Dropping the sourceless rows would
          leave a home screen showing books and comics from which the only
          available inference is that UsArr does not do films, TV or music,
          which is the misreading principle 3 exists to prevent. Each of the

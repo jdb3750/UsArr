@@ -37,11 +37,20 @@ positions, and every screen, count, caption and service row answers to it.
 | Home Block C | 26 rows across 6 types | 7 rows across 2 types |
 | Search `dune` | 31 results in 6 groups | 6 results in 2 groups |
 
-**The two types v0.1 catalogues are ebooks and comics.** Kavita is its one catalogue source
+**Which media types the v0.1 install catalogues is a property of that install, not a fact about the
+milestone.** 🚩 **STRUCK 2026-08-20 by [ADR-0052](../../DECISIONS.md#adr-0052):** this read *"**The
+two types v0.1 catalogues are ebooks and comics.** Kavita is its one catalogue source
 ([ADR-0041](../../DECISIONS.md#adr-0041)) and Kavita's adapter emits exactly two `work.kind` values,
-so the four types with no source behind them are films, TV, music and audiobooks — the first two at
-v0.2 ([ADR-0045](../../DECISIONS.md#adr-0045)), the other two somewhere in ARCHITECTURE §16.1's
-sequence after v0.1. Its four libraries are Ebooks, Comics, Manga and the orphaned Ongoing comics.
+so the four types with no source behind them are films, TV, music and audiobooks"*. **The count is
+deliberately not corrected to a different count**, because naming which types have a source is a
+category error rather than a stale fact: `cmd/usarr/import.go` imports a catalogue from `bookorbit`
+**and** from `kavita`, so the answer is a property of the install. Audiobooks in the sourceless list
+was additionally false on this tree — `bookorbit.MediaKindOf` classifies `m4b`, `mp3`, `m4a`, `opus`,
+`ogg` and `flac` as `MediaKindAudiobook`. A type with no source still names the service that will
+populate it and when — films and TV at v0.2 ([ADR-0045](../../DECISIONS.md#adr-0045)), the rest in
+ARCHITECTURE §16.1's sequence after v0.1. ⚠️ **The comparison table above describes what this mockup
+DRAWS**, and stands under the existing *"the re-draw is owed"* deferral; this paragraph was a claim
+about the milestone and did not. Its four libraries are Ebooks, Comics, Manga and the orphaned Ongoing comics.
 
 **The full stack is the default, and that is a deliberate choice about what is being judged.** Six
 populated media types is the case the layout has to survive — the unified recently-added table, the
