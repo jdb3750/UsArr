@@ -957,8 +957,10 @@ closure over external ids — 0.95; (3) `normalized_title` + year ±1 + same kin
 paragraph read *"Its providers are Sonarr and Radarr and every row from both carries
 `tmdbId`/`imdbId`/`tvdbId`, so tier 1 resolves essentially 100% of the v0.1 identity problem —
 including the dual-Radarr case, which joins on `tmdbId`."* That was true of the providers it named,
-and [ADR-0041](./DECISIONS.md#adr-0041) replaced them: **v0.1's catalogue source is Kavita**, with
-Sonarr and Radarr re-sequenced behind it. It is kept as the statement about the \*Arrs that it is, and
+and [ADR-0041](./DECISIONS.md#adr-0041) replaced them, with Sonarr and Radarr re-sequenced behind it.
+🚩 **STRUCK 2026-08-20 by [ADR-0052](./DECISIONS.md#adr-0052):** that clause read *"**v0.1's catalogue
+source is Kavita**"*. **It is BookOrbit.** The tier-1 argument below is left standing as the statement
+about Kavita it is, and is **owed a restatement against BookOrbit** that has not been made. It is kept as the statement about the \*Arrs that it is, and
 restated here against the source v0.1 actually has:
 
 * **Kavita's external-id fields are present in the payload and empty on a free instance.** `SeriesDto`
@@ -1270,8 +1272,11 @@ Mechanics in full: [`reference/sync.md`](./reference/sync.md).
 ⚠️ **The `In` column was amended 2026-08-17 by [ADR-0041](./DECISIONS.md#adr-0041)**, and both changed
 rows are named rather than silently rewritten. Channel 3 read **v0.1** and channel 3b read *"specified
 now, built with the first catalogue adapter (§16.1)"* — both correct only while v0.1's library-bearing
-services were Sonarr and Radarr. **v0.1's catalogue source is Kavita**, which has no `/history/since`
-at all, so ADR-0041 clause 4 sets v0.1's channels to **1, 3b and 4 — not 1, 3 and 4**. Channel 3 is
+services were Sonarr and Radarr. 🚩 **STRUCK 2026-08-20 by [ADR-0052](./DECISIONS.md#adr-0052):** this
+read *"**v0.1's catalogue source is Kavita**, which has no `/history/since` at all"*. **It is
+BookOrbit**, and ADR-0052 **REOPENS** ADR-0041 clause 4's channel set (**1, 3b and 4**) rather than
+re-answering it, because that set was earned from a live *Kavita* probe. What is unchanged is that
+`/history/since` applies to neither. Channel 3 is
 not cut; it lands with the first \*Arr adapter, which is re-sequenced rather than refused.
 
 The numbering is historical; the order is not. **Channel 3 is the correctness guarantee, channel 4 is
@@ -3383,7 +3388,9 @@ this book" when it means "the source gave us no ISBN".
 is written now because it cannot be retrofitted.** This paragraph read `matched by title is not
 reachable in v0.1 … v0.1's only sources are Radarr and Sonarr, which carry TMDB and TVDB ids, so
 every v0.1 work resolves at the identifier tier`, and [ADR-0041](./DECISIONS.md#adr-0041) replaced
-those sources: **v0.1's catalogue source is Kavita.** §16.0 flagged the consequence rather than
+those sources. 🚩 **STRUCK 2026-08-20 by [ADR-0052](./DECISIONS.md#adr-0052):** this read *"**v0.1's
+catalogue source is Kavita.**"* **It is BookOrbit**, and the identity argument below is Kavita's and
+is owed a restatement. §16.0 flagged the consequence rather than
 answering it — `§6.4 owns the tier-1 claim and has not been restated against Kavita` — and **§6.4 has
 since been restated, so the claim is read there and not restated here**: how much of the identity
 problem the identifier tier resolves is **a property of the instance, not of the design** —

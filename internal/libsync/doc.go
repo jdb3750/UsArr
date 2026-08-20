@@ -1,5 +1,9 @@
-// Package libsync is UsArr's catalogue sync core — channel 1, the full import —
-// with Kavita as its first adapter (ADR-0041).
+// Package libsync is UsArr's catalogue sync core — channel 1, the full import.
+// BookOrbit is v0.1's catalogue source (ADR-0052, which replaced Kavita in that
+// slot); kavita.go is sunset, not deleted, and still builds and still passes.
+// Which adapters exist is a question for the files in this package, and which
+// of them cmd/usarr will actually import from is catalogueSource's answer in
+// cmd/usarr/import.go — not a list in this comment.
 //
 // # Why "libsync" and not "sync"
 //

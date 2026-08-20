@@ -21,9 +21,12 @@ written for it rather than for the imaginary user who already has a full stack.
 
 ⚠️ **The milestone labels below were re-cut on 2026-08-17 by
 [ADR-0041](./DECISIONS.md#adr-0041)**, and the change is exactly that starting position taken
-seriously: **v0.1's catalogue source is Kavita — which you already run — and Sonarr and Radarr
-re-sequence out of v0.1.** They are not cut, and `ARCHITECTURE.md` §16 does not yet name the milestone
-they land in. §16 stays authoritative for scope; the labels here point at it and are not a second
+seriously: **v0.1 has a catalogue source at all — rather than none — and Sonarr and Radarr
+re-sequence out of v0.1.** 🚩 **STRUCK 2026-08-20 by [ADR-0052](./DECISIONS.md#adr-0052):** this
+read *"v0.1's catalogue source is Kavita — which you already run"*. **It is BookOrbit**, on your own
+decision to sunset Kavita, so the clause that made this checklist's advice land — *which you already
+run* — no longer holds; §2.0 below carries the consequence for your stack. Sonarr and Radarr are
+not cut, and `ARCHITECTURE.md` §16 does not yet name the milestone they land in. §16 stays authoritative for scope; the labels here point at it and are not a second
 roadmap.
 
 ---
@@ -51,14 +54,27 @@ produces a working install with nothing in it, which is the worst possible first
 
 ⚠️ **This section used to answer that with *"stand up one \*Arr — Radarr is easiest"*, and
 [ADR-0041](./DECISIONS.md#adr-0041) replaced the answer.** The library-bearing service v0.1 renders is
-**your Kavita** (§2.0), because it is the one you actually run and the only one whose delta channel
-has been verified against a live instance. Prowlarr stays exactly where it was — it is v0.1's request
+**BookOrbit** ([ADR-0052](./DECISIONS.md#adr-0052)). 🚩 **STRUCK 2026-08-20:** this read *"**your
+Kavita** (§2.0), because it is the one you actually run and the only one whose delta channel has been
+verified against a live instance"*. Both grounds went with the slot — you are sunsetting Kavita, and
+**BookOrbit has had no equivalent of that live probe**, so the verification is owed rather than
+inherited. Prowlarr stays exactly where it was — it is v0.1's request
 path (Search-and-Grab, `ARCHITECTURE.md` §8.5), which covers all six media types. **Standing up an
 \*Arr is no longer a v0.1 prerequisite**; it moves to §4 with the milestone it now belongs to.
 
-### 2.0 Kavita — 5000 — which you already have
+### 2.0 Kavita — 5000 — 🚩 **SUPERSEDED 2026-08-20 by [ADR-0052](./DECISIONS.md#adr-0052)**
 
-**This is the thing that makes v0.1 render.** Nothing to stand up; what UsArr needs is the same line
+🚩 **DO NOT FOLLOW THIS SECTION AS SETUP GUIDANCE.** Its heading read *"which you already have"* and
+its first line read *"This is the thing that makes v0.1 render"*. **v0.1's catalogue source is
+BookOrbit**, on your own decision to sunset Kavita entirely — so this section now describes a service
+you are moving off, and following it would stand up the wrong thing. ⚠️ **No BookOrbit setup steps
+are written in its place here, and that absence is deliberate rather than an oversight:** no primary
+source for BookOrbit's port, its settings path or where it surfaces a credential has been checked, and
+`CLAUDE.md`'s *verify, don't assert* forbids writing one from memory. [ADR-0052](./DECISIONS.md#adr-0052)
+is what is settled; `internal/bookorbit` is what is built. ⚠️ **Sunset is not deleted** — `internal/kavita`
+stays in the tree and stays green, so what follows remains accurate about Kavita itself.
+
+**What UsArr needs from a Kavita, for as long as you run one.** Nothing to stand up; it is the same line
 as every other service (§2.3) — `kavita | url | api key`. ✅ The key travels in the **`x-api-key`**
 header, confirmed from the vendored spec (`api/specs/kavita.json`, `RESEARCH.md` Track 06). 🔍 Where
 Kavita's UI puts that key is **not asserted here** — no primary source for the menu path has been
@@ -89,7 +105,8 @@ Key: Settings → General → Security → API Key. 32 hex characters, **full ad
 ⚠️ This subsection read *"Then one \*Arr … this is the thing that makes v0.1 render"*, and
 [ADR-0041](./DECISIONS.md#adr-0041) moved it out of v0.1: the criterion was *"a real Sonarr and a real
 Radarr, imported"*, which cannot be met where you run neither, and the source that makes v0.1 render
-is now §2.0's Kavita. **Nothing is refused** — you have said you want films and TV eventually, the
+is now v0.1's catalogue source — **BookOrbit** as of [ADR-0052](./DECISIONS.md#adr-0052), which
+ended §2.0's placement. **Nothing is refused** — you have said you want films and TV eventually, the
 adapters are re-sequenced rather than cut, and `ARCHITECTURE.md` §16 does not yet name the milestone
 they land in. See the §4 row.
 
@@ -183,7 +200,7 @@ points at `ARCHITECTURE.md` §16, which is authoritative for scope** — where a
 | **Lidarr** (8686, `/api/v1`) | v1.0 | free | Only if you want music from the acquisition side rather than from Navidrome. |
 | **LazyLibrarian** (5299) | v1.0 | free | Books/magazines/comics. Key must be **exactly 32 characters** or it returns `503 Invalid API key`. Prefer its read-only key. |
 | **Jellyfin** (8096) | v1.0 | free | Video library aggregation and the "open in Jellyfin" handoff. **Not blocking, and never was** — v0.1 sources 100% of its metadata and poster URLs from the *Arrs. When it lands, give the wizard admin credentials once and let UsArr mint its own key via `/Auth/Keys` rather than storing a password; tell me the server version, since 10.11 changed which auth header the server accepts. |
-| **Kavita** (5000) | **v0.1 — see §2.0** | free | ⚠️ Moved here from *"the first catalogue milestone after v0.1, or the second"* by [ADR-0041](./DECISIONS.md#adr-0041): the probe that was going to decide the order ran, Kavita passed, and it became v0.1's one catalogue source rather than the first thing after it. Books, comics and manga — the one you already run. It is the only row in this table that is **not** "later"; it is listed for completeness. |
+| **Kavita** (5000) | ⚠️ **no longer v0.1 — see §2.0** | free | ⚠️ Moved into v0.1 by [ADR-0041](./DECISIONS.md#adr-0041) after the ordering probe ran and Kavita passed. 🚩 **STRUCK 2026-08-20 by [ADR-0052](./DECISIONS.md#adr-0052):** the cell read **"v0.1 — see §2.0"** and the note ended *"it became v0.1's one catalogue source rather than the first thing after it. Books, comics and manga — the one you already run."* **BookOrbit holds that slot now**, on your decision to sunset Kavita, and **no media-type list replaces the struck one** — which types an install catalogues follows from the sources it has connected, not from a line in this table. Kavita is **not** added back to the post-v0.1 sequence ([ADR-0042](./DECISIONS.md#adr-0042)'s refusal-to-invent-a-milestone precedent); its adapter stays in the tree and stays green. |
 | **Audiobookshelf** (13378) | **§16.1 #2** — the second catalogue milestone after v0.1 | free | ⚠️ Read *"the third"* while Kavita held a slot in that sequence; Kavita moved into v0.1 and the three below it shifted up by one **without reordering** (ADR-0041). Audiobooks; ABS stays the source of truth for listening position, UsArr mirrors it. |
 | **Komga** (25600) | **§16.1 #3** — the last catalogue milestone | free | A second comics source, and still last — the position is unchanged, only its number moved (see the row above). Last deliberately: you do not run it, so nothing on this project can test the adapter against a real library. Only needed if you adopt it. |
 | **Bazarr** (6767) | v1.0 | free | Subtitle status. Joins via the *Arr instance's local IDs, not external IDs. |
@@ -235,8 +252,11 @@ but are on no milestone and need nothing from you now (`docs/FUTURE.md`).
 
 1. **Decide the module path and the port** (§1). Costs ten minutes, blocks the first commit. The
    licence is already settled — AGPL-3.0, confirmed 2026-08-16, `LICENSE` is in the repo.
-2. **Send me your Kavita** (§2.0) as `kind | url | api key` through a secret channel. **This is the
-   thing that makes v0.1 have anything to show**, and it is already running.
+2. **Send me your catalogue source** as `kind | url | api key` through a secret channel. **This is
+   the thing that makes v0.1 have anything to show.** 🚩 **STRUCK 2026-08-20 by
+   [ADR-0052](./DECISIONS.md#adr-0052):** this read *"Send me your **Kavita** (§2.0) … and it is
+   already running"*. The source is **BookOrbit**, which is the one you are moving to rather than
+   the one already up, so this item is no longer free — see §2.0.
 3. **Stand up Prowlarr** (§2.1) and send the same. That is v0.1's request path.
 
 ⚠️ Item 3 read *"stand up one \*Arr — Radarr is easiest … this is the thing that makes v0.1 have

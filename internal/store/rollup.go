@@ -292,8 +292,8 @@ func (s *Store) flushRollupBatch(
 // rollupKindHasCountShape reports whether a work's kind is one this writer can
 // produce a blob for.
 //
-// v0.1's catalogue source is Kavita, so the kinds with files are 'comic' and
-// 'book' — both of them k="count" (schema.md §1: "comics, and anything else with
+// v0.1's catalogue sources write 'comic' and 'book' works, so those are the
+// kinds with files — both of them k="count" (schema.md §1: "comics, and anything else with
 // no honest denominator"). Video is k="tier" and music is k="edition", and
 // neither has a source that writes a media_file row yet, so a dirty work of
 // those kinds is not reachable today; the switch has an arm for them anyway

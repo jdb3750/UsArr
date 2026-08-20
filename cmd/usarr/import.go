@@ -25,10 +25,12 @@ import (
 //
 // THREE TRIGGERS, all explicit:
 //
-//   - ON CONNECT. bootstrapImport runs once when a Kavita client stack is built
-//     for an instance that has never completed a full sync. That is the
-//     first-run bootstrap: the user adds a Kavita, and a catalogue appears
-//     without them having to find a button.
+//   - ON CONNECT. bootstrapImport runs once when a catalogue-source client
+//     stack is built for an instance that has never completed a full sync. That
+//     is the first-run bootstrap: the user adds a catalogue source, and a
+//     catalogue appears without them having to find a button. Which kinds those
+//     are is catalogueSource's answer below, never a list here — it named only
+//     Kavita until 2026-08-20 and was falsified by the bookorbit arm.
 //   - ON DEMAND, from the Services screen's "Run full sync now" action
 //     (ARCHITECTURE.md §17.3), which reaches StartImport through
 //     POST /api/v1/services/{id}/sync.

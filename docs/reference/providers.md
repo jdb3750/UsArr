@@ -311,9 +311,13 @@ confirmation before it is bound to a credential**.
 > tier does not exist until v0.3, so Audiobookshelf, Kavita and Komga are each a **hand-written
 > Tier 0 Go adapter**, written in the milestone that source lands in. ⚠️ **This read *"None of them
 > is v0.1 — per [ADR-0036](../DECISIONS.md#adr-0036) no catalogue source ships in v0.1"*, and
-> [ADR-0041](../DECISIONS.md#adr-0041) amended it**: **Kavita is v0.1's one catalogue source**, and
-> its hand-written Tier 0 adapter is the worked example of this paragraph rather than a
-> counter-example to it — `internal/kavita` is the client and `internal/libsync` holds the adapter.
+> [ADR-0041](../DECISIONS.md#adr-0041) amended it**: **v0.1 has a hand-written Tier 0 catalogue
+> source**, which is the worked example of this paragraph rather than a counter-example to it — a
+> client package beside an adapter in `internal/libsync`. 🚩 **STRUCK 2026-08-20 by
+> [ADR-0052](../DECISIONS.md#adr-0052):** this read *"**Kavita is v0.1's one catalogue source**"*
+> and named `internal/kavita` as the client. **It is BookOrbit** — `internal/bookorbit` with
+> `internal/libsync/bookorbit.go`. Kavita is **sunset, not deleted**, so `internal/kavita` remains a
+> second instance of the same shape.
 > Audiobookshelf and Komga are still after v0.1, one at a time, in ARCHITECTURE §16.1's sequence.
 
 This replaces an earlier "real diversity of the ecosystem" table that listed cookie-session,
