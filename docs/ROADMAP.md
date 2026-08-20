@@ -1839,7 +1839,8 @@ Things no agent in this repo can do. Nothing here is blocked on code.
 
 Not restated here, deliberately — one list, one owner:
 
-- **Deferred, wanted later, each with the seam that keeps it cheap:** [`FUTURE.md`](./FUTURE.md).
+- **Deferred, wanted later, each with the seam that keeps it cheap:** [`FUTURE.md`](./FUTURE.md) —
+  where a heading reading *Declined* means closed rather than deferred.
 - **Permanent refusals:** [`ARCHITECTURE.md`](./ARCHITECTURE.md) §1.4 and §16's *Explicitly never*.
   Do not propose them and do not reopen them.
 - **Which milestone owns a thing:** §16. Not this file.

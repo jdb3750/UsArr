@@ -14,7 +14,8 @@ document is downstream of.
 philosophy), §16 (scope), §13 (performance budget); [`CLAUDE.md`](../../CLAUDE.md) (the four
 principles); [`DECISIONS.md`](../DECISIONS.md) ADR-0003 (SvelteKit `adapter-static` + `embed.FS`)
 and ADR-0025 (the styling and typography stack, which this document is the rationale for).
-**Deferred UI surfaces and the seams they need:** [`FUTURE.md`](../FUTURE.md).
+**Deferred UI surfaces and the seams they need:** [`FUTURE.md`](../FUTURE.md) — where a heading
+reading *Declined* means closed rather than deferred.
 
 Where §17 and this document disagree, **§17 wins** and this document is the bug.
 

@@ -15,9 +15,10 @@ distinctions now matter and are used consistently below:
 
 - **Accepted** — the decision stands.
 - **Deferred** — the idea is sound and is *not* being built now. Every deferred ADR names **the
-  seam** in the v0.1 design that keeps it cheap to add later, and **a revisit trigger**. The full
-  set lives in [`FUTURE.md`](./FUTURE.md). A deferral is not a rejection, and it must not be
-  restated as one.
+  seam** in the v0.1 design that keeps it cheap to add later, and **a revisit trigger**. That set is
+  written up in [`FUTURE.md`](./FUTURE.md), which is not only deferrals — an entry headed *Declined*
+  is closed rather than deferred, and names no revisit trigger. A deferral is not a rejection, and it
+  must not be restated as one; a *Declined* heading is a rejection, and says so.
 - **Superseded / Reversed** — the decision was wrong, or its evidence was. The reversal records what
   changed and why, rather than silently rewriting the original.
 
