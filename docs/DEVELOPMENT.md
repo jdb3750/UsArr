@@ -1401,9 +1401,9 @@ reason each one is safe, is the consistency audit in `docs/REVIEW-LOG.md`.
 
 ### A wire vocabulary and a storage vocabulary never share a term
 
-Three instances of this, and **every one of them compiled clean** — which is the whole reason it is
-a convention. A collision the build catches needs no rule. This class is invisible to `go build`, to
-`go vet` and to a reading eye, because both sides are spelled correctly and only the meaning differs.
+**Every instance of this compiled clean** — which is the whole reason it is a convention. A
+collision the build catches needs no rule. This class is invisible to `go build`, to `go vet` and to
+a reading eye, because both sides are spelled correctly and only the meaning differs.
 
 * **Two constants, one name, two values.** `internal/httpapi` carried `outcomeSentUnknown` twice
   after a merge: `grab.go:214`'s is `audit_log.metadata_json`'s vocabulary (`"sent_unknown"`),
@@ -1426,7 +1426,7 @@ a convention. A collision the build catches needs no rule. This class is invisib
   `TestBrowseWorksUnknownMediaTypeIsAnError` (`internal/store/browse_test.go`, same branch) asserts
   that `MediaType: "series"` is refused, because nothing in the type system does.
 
-So, two rules:
+So:
 
 * **Before naming a new enum member, check it against every existing enum**, not only the one you
   are extending. The collision that matters is between vocabularies, not within one: a duplicate
@@ -1435,6 +1435,44 @@ So, two rules:
   `outcome…` — so a mismatch is a build error rather than a silent rebind. Do not repair a collision
   by making the values agree instead: two vocabularies that match today are free to diverge
   tomorrow, and one shared identifier turns a change to an internal record into a change on the wire.
+
+### No heading, subject line or preamble states a count of its own contents
+
+The same shape as the collision above — a claim nothing mechanical can check. The count and the
+contents are maintained by two different acts, so they diverge; the count is the half that looks
+authoritative; and nothing compiles, lints or gates against it. **The enumeration in the body is the
+count.** A heading, a preamble or a banner that restates it goes stale the moment the body moves.
+
+The operational half, which is the half that gets dropped: **amend in place; never append past a
+self-counting preamble.** A reader who has only the first clause still adds a row under a preamble
+that counts, and the count is stale before the append finishes. If the total genuinely has to change,
+change it in the same act and say so.
+
+The instances that earned it:
+
+* **The earliest, and still standing.** `SD-02`'s amendments table in `docs/REVIEW-LOG.md` opens
+  *"Three rows moved within hours of the entry landing"* and pins itself with *"Verified at
+  `98916fe`"* (introduced in `ec4298d`, 2026-08-17). It is true only because nothing has been
+  appended — a fourth row would falsify the count **and** hang a new amendment off a verification SHA
+  that never saw it. What keeps it true is this rule's second clause: flip a row's state in place
+  rather than add one.
+* **`LS-386`'s heading said twelve; its body enumerates thirteen.** *"Twelve findings, ten applied,
+  two recorded as misreporting"* stood above `F1`–`F13`, where `F2`–`F8` is seven should-fix and not
+  six. Nothing was lost — all thirteen are dispositioned in the text — so this was a miscount, not a
+  dropped finding. The repair at `264ab37` was **not a bigger number**: the heading and the preamble
+  now describe the pass and leave the `F`-enumeration to be the count. The stale figure also rode out
+  in `e258179`'s commit subject, where it cannot be corrected at all.
+* **A placeholder banner that enumerated its own fill-in sites** is the same divergence one level up:
+  the banner counted the work and the tree moved under it, so the list was incomplete. That one has
+  its own bullet under *Working alongside other threads* below, because it lands on id allocation.
+
+Adjacent, and not the same rule: **rule 8** above says compute a count from the artefact rather than
+from recollection — that is how to state a count you have to state. This one is about not stating it.
+
+*Written down 2026-08-20 after an evening of being enforced on the strength of "we already have a
+rule for that", when what existed was a ruling in conversation and not a rule in the tree — an
+unwritten convention acquiring written authority through repetition. Rule 8 was written down for the
+same reason.*
 
 ### Working alongside other threads
 
