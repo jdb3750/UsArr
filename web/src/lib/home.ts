@@ -25,10 +25,10 @@
  * table). Three columns ship and only two of them are the facet read's: `Type`
  * and `Items` are its answers, and `Status` is §17.2's per-type state off the
  * SERVICES read. ⚠️ THAT READ `§17.7's per-type state` UNTIL 2026-08-20. The
- * per-type row state is specified at `docs/ARCHITECTURE.md:3325` (§17.2);
+ * per-type row state is specified in `docs/ARCHITECTURE.md` §17.2;
  * §17.7 specifies install-level screens and does not contain the word
  * `unconfigured` anywhere. The install-level §17.7 citations beside it are
- * SOUND and were deliberately left alone. §17.2:3325 writes this state
+ * SOUND and were deliberately left alone. §17.2 writes this state
  * `(§17.7)` itself, so the mis-citation originates in the design document and
  * `web/` copied it faithfully.
  *
@@ -500,7 +500,7 @@ export function summaryCaption(health: ServicesHealth | undefined): string {
  * source renders a COUNT, and a type without one renders §17.2's per-type
  * `unconfigured` state — *"the type, `no catalogue source connected`, the
  * service that will populate it and the milestone it arrives in, and a link to
- * Add"*, at `docs/ARCHITECTURE.md:3325`.
+ * Add"*, in `docs/ARCHITECTURE.md` §17.2.
  *
  * ⚠️ THAT ATTRIBUTION READ *"§17.7's per-type `unconfigured` state"* UNTIL
  * 2026-08-20, ABOVE THIS SAME QUOTED SENTENCE. The quotation was accurate and
@@ -510,7 +510,7 @@ export function summaryCaption(health: ServicesHealth | undefined): string {
  * without raising actual verification, so a correct quote under a wrong
  * citation reads as the most careful comment in the file. The install-level
  * §17.7 citations beside it are SOUND and were deliberately left alone.
- * §17.2:3325 writes this state `(§17.7)` itself, so the mis-citation
+ * §17.2 writes this state `(§17.7)` itself, so the mis-citation
  * originates in the design document and `web/` copied it faithfully.
  *
  * `design/DESIGN-DIRECTION.md` rule 13 is what makes the second shape
@@ -576,9 +576,9 @@ const TYPE_FACTS: Record<MediaType, TypeFacts> = {
  * §17.2's words for a type nothing can fill. One sentence, §9.6.
  *
  * ⚠️ READ *"§17.7's words"* UNTIL 2026-08-20. This exact string is quoted at
- * `docs/ARCHITECTURE.md:3325` (§17.2); §17.7 specifies no per-type state. The
+ * `docs/ARCHITECTURE.md` §17.2; §17.7 specifies no per-type state. The
  * install-level §17.7 citations beside it are SOUND and were deliberately left
- * alone. §17.2:3325 writes this state `(§17.7)` itself, so the mis-citation
+ * alone. §17.2 writes this state `(§17.7)` itself, so the mis-citation
  * originates in the design document and `web/` copied it faithfully.
  */
 export const NO_CATALOGUE_SOURCE = 'no catalogue source connected';
@@ -615,7 +615,8 @@ const COUNT = new Intl.NumberFormat('en-GB');
  * was not found in those two files. Whether §17 gains a third state or this
  * code's state changes is §17's owner's decision, already queued as a named
  * design gap. The two neighbouring states ARE specified, both in §17.2:
- * `unconfigured` at `:3325` and `importing` at `:3364`.
+ * `unconfigured` in the sourceless-row sentence quoted above, `importing` in
+ * the sentence about what `Synced` reads while an import runs.
  *
  * `Catalogued` is deliberately not `Up to date`. There is no periodic re-sync in
  * this build — `cmd/usarr/import.go` runs at most one import per instance per
@@ -650,12 +651,12 @@ export interface SummaryRow {
 	 * `catalogueReach`.
 	 */
 	catalogued: boolean;
-	/** §17.2's state for this row, which every row has — `unconfigured` at
-	 *  `docs/ARCHITECTURE.md:3325`, `importing` at `:3364`. ⚠️ Read `§17.7's`
+	/** §17.2's state for this row, which every row has — `unconfigured` and
+	 *  `importing` both in `docs/ARCHITECTURE.md` §17.2. ⚠️ Read `§17.7's`
 	 *  until 2026-08-20; §17.7 carries install-level screens, not this state.
 	 *  `ok` is the exception and its citation is withdrawn, not re-pointed:
 	 *  see the `SUMMARY_STATE` note above. The install-level §17.7 citations
-	 *  beside it are SOUND and were deliberately left alone. §17.2:3325 writes
+	 *  beside it are SOUND and were deliberately left alone. §17.2 writes
 	 *  this state `(§17.7)` itself, so the mis-citation originates in the design
 	 *  document and `web/` copied it faithfully. */
 	state: SummaryState;

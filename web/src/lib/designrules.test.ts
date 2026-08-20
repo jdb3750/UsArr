@@ -362,21 +362,21 @@ function strip(text: string, kind: Kind): string {
  * WITH ITS MARGIN, because a reader deciding whether an edit is safe needs that
  * number visible rather than recomputable:
  *
- *     corpus                                    1,191,479  over 42 files
- *     largest   `routes/+page.svelte`             108,247
+ *     corpus                                    1,191,498  over 42 files
+ *     largest   `routes/+page.svelte`             108,216
  *     second    `app.css`                         105,273
  *     floor                                     1,100,000
- *     gap     corpus − floor                       91,479
- *     MARGIN  floor − (corpus − largest)           16,768
+ *     gap     corpus − floor                       91,498
+ *     MARGIN  floor − (corpus − largest)           16,718
  *
  * The GAP is under both file sizes, so losing EITHER of the two largest files
- * fails the floor — the property the rule has always claimed — and 91,479
+ * fails the floor — the property the rule has always claimed — and 91,498
  * characters is far more source than ordinary editing removes, which is what
  * stops the floor firing on an honest deletion.
  *
  * THE MARGIN IS THE NUMBER THAT GOES STALE, and it is the one the last two
  * derivations left unstated. It is how far the corpus may GROW before this floor
- * can no longer fail. It was 881. It is 16,768. When a change to `web/src` adds
+ * can no longer fail. It was 881. It is 16,718. When a change to `web/src` adds
  * more than that, this floor stops being a floor and must be re-derived — and
  * the drill below is what will say so.
  */

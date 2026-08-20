@@ -52,17 +52,17 @@
 	 * block has two sources, not one, and neither is invented.
 	 *
 	 * ⚠️ THAT READ `§17.7's per-type state` UNTIL 2026-08-20. The per-type row
-	 * state is `docs/ARCHITECTURE.md:3325` (§17.2); §17.7 specifies install-level
+	 * state is `docs/ARCHITECTURE.md` §17.2; §17.7 specifies install-level
 	 * screens and contains the word `unconfigured` nowhere. The install-level
 	 * §17.7 citations in this file — the header, and the `HomeMode` block below —
-	 * are SOUND and were deliberately left alone. §17.2:3325 writes the state
+	 * are SOUND and were deliberately left alone. §17.2 writes the state
 	 * `(§17.7)` itself, so the mis-citation originates in the design document and
 	 * `web/` copied it faithfully.
 	 *
 	 * ⚠️ THE SIX ROWS ARE ALL DRAWN, AND EVERY ONE CARRIES ONE OF THIS SCREEN'S
 	 * THREE STATES rather than an omission. ⚠️ THIS READ `ONE OF §17.7's THREE
 	 * STATES` UNTIL 2026-08-20, and §17.7 specifies none of them: two are §17.2's
-	 * — `unconfigured` at `docs/ARCHITECTURE.md:3325`, `importing` at `:3364` —
+	 * — `unconfigured` and `importing`, both in `docs/ARCHITECTURE.md` §17.2 —
 	 * and `ok`'s citation is withdrawn rather than re-pointed, no source for it
 	 * having been found in `docs/ARCHITECTURE.md` or
 	 * `docs/design/DESIGN-DIRECTION.md` (see `$lib/home`'s `SUMMARY_STATE`).
@@ -303,7 +303,7 @@
 	 *
 	 * ⚠️ THE THIRD COLUMN IS `Status` AND NOT `Source`, WHICH IS A HONESTY CALL
 	 * RATHER THAN A SYNONYM. What the cell carries is §17.2's per-type
-	 * `unconfigured` STATE (`docs/ARCHITECTURE.md:3325`) plus its cause and its
+	 * `unconfigured` STATE (`docs/ARCHITECTURE.md` §17.2) plus its cause and its
 	 * action — ⚠️ cited as §17.7's until 2026-08-20, which specifies
 	 * install-level screens and never this one; it carries no service
 	 * instance and cannot, because `internal/httpapi/facets.go` refuses to
@@ -949,9 +949,9 @@
 		ALL SIX ROWS RENDER, IN THE MEDIA-TYPE ENUM'S OWN ORDER, and the ones with
 		no catalogue source render §17.2's per-type `unconfigured` state rather
 		than being dropped. ⚠️ CITED AS §17.7's UNTIL 2026-08-20; the state is
-		specified at `docs/ARCHITECTURE.md:3325`, and §17.7 — whose install-level
+		specified in `docs/ARCHITECTURE.md` §17.2, and §17.7 — whose install-level
 		citations elsewhere in this file are SOUND and were left alone — does not
-		contain the word `unconfigured` at all. §17.2:3325 writes it `(§17.7)`
+		contain the word `unconfigured` at all. §17.2 writes it `(§17.7)`
 		itself, so the mis-citation originates in the design document.
 
 		§17.2 rejects dropping them explicitly: a Home showing
@@ -1070,9 +1070,9 @@
 	{:else}
 		<!--
 			§17.2's PER-TYPE STATE, AND EVERY ROW HAS ONE. ⚠️ Read `§17.7's` until
-			2026-08-20: `unconfigured` is `docs/ARCHITECTURE.md:3325` and
-			`importing` is `:3364`, both §17.2, and §17.7 specifies install-level
-			screens only. §17.2:3325 writes the state `(§17.7)` itself, so the
+			2026-08-20: `unconfigured` and `importing` are both §17.2's, in
+			`docs/ARCHITECTURE.md`, and §17.7 specifies install-level
+			screens only. §17.2 writes the state `(§17.7)` itself, so the
 			mis-citation originates in the design document and `web/` copied it
 			faithfully.
 

@@ -436,7 +436,7 @@ describe('Block A’s rows', () => {
 	});
 
 	it('gives every sourceless row a service and a milestone, and no number', () => {
-		// §17.2's per-type `unconfigured` state (`docs/ARCHITECTURE.md:3325`),
+		// §17.2's per-type `unconfigured` state (`docs/ARCHITECTURE.md`),
 		// which is what makes these rows legal beside §17.1's "never render a
 		// section with no content" rule (DESIGN-DIRECTION rule 13): a state, a
 		// cause and an action.
@@ -444,7 +444,7 @@ describe('Block A’s rows', () => {
 		// ⚠️ CITED §17.7 UNTIL 2026-08-20. §17.7 does not contain the word
 		// `unconfigured` anywhere; it specifies install-level screens, and the
 		// install-level §17.7 citations in this file's header are SOUND and were
-		// left alone. §17.2:3325 writes this state `(§17.7)` itself, so the
+		// left alone. §17.2 writes this state `(§17.7)` itself, so the
 		// mis-citation originates in the design document and `web/` copied it
 		// faithfully.
 		const rows = librarySummary(counts(), bookorbit());
@@ -683,7 +683,7 @@ describe('Block A while the first import runs', () => {
 		// shipped descriptive text, and a false design citation inside quotation
 		// marks is no more true than one after a `//`. The two states this case
 		// also asserts, `unconfigured` and `importing`, ARE specified, both in
-		// §17.2 — `docs/ARCHITECTURE.md:3325` and `:3364`.
+		// §17.2 of `docs/ARCHITECTURE.md`.
 		const rows = librarySummary(counts(), bookorbit());
 		expect(rows.map((r) => r.status)).toEqual([
 			'no catalogue source connected',
