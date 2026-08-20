@@ -217,6 +217,41 @@ export interface LibrarySkips {
 	/** RFC 3339 UTC: when the verdict was recorded. Under `none` it is the stamp
 	 * of the observation the state rests on. */
 	recordedAt?: string;
+	/**
+	 * WHERE `items` CAME FROM: one entry per upstream container that left
+	 * something out. Present only with `left_out`.
+	 *
+	 * ⚠️ IT IS WHAT MAKES A SKIP DEDUPABLE ACROSS ROWS, and nothing else on this
+	 * wire is. §17.8 renders one row per LIBRARY while a skip is a fact about a
+	 * CONTAINER, and since ADR-0066 decision 5 several libraries can stand over
+	 * one container and each report its skip in full. Two instances with a mixed
+	 * container each bind three libraries whose container SETS are all different
+	 * while the skips underneath overlap, so no fold over a library's sources
+	 * separates one shared skip from two distinct ones. That was missing data
+	 * rather than arithmetic this module got wrong, and the server now sends it.
+	 *
+	 * ⚠️ AND IT IS NEVER USED TO SPLIT A ROW'S COUNT. `items` is the sum of these
+	 * and is true of the row; the entries say where it happened.
+	 */
+	containers?: LibrarySkipContainer[];
+}
+
+/**
+ * ONE CONTAINER'S CONTRIBUTION TO A LIBRARY'S SKIPS, as
+ * `librarySkipContainerResponse` in `internal/httpapi/libraries.go` spells it.
+ *
+ * The three identity fields are the same triple a source chip carries, and they
+ * are the key: two libraries over one container have two `library_source` rows
+ * and one container, so anything keyed on the source id would see two.
+ */
+export interface LibrarySkipContainer {
+	serviceInstanceId: number;
+	containerKind: string;
+	containerRef: string;
+	/** What this container left out. Never zero: the server does not serve a
+	 * container that recorded nothing, for the reason it omits `items` under
+	 * `none`. */
+	items: number;
 }
 
 /**
@@ -398,9 +433,44 @@ export function toSkips(value: unknown): LibrarySkips | undefined {
 		if (items !== undefined) out.items = items;
 		const reason = str(value.reason);
 		if (reason !== '') out.reason = reason;
+		const containers = toSkipContainers(value.containers);
+		if (containers.length > 0) out.containers = containers;
 	}
 	const recordedAt = str(value.recorded_at);
 	if (recordedAt !== '') out.recordedAt = recordedAt;
+	return out;
+}
+
+/**
+ * The per-container breakdown, with anything unreadable dropped ENTRY BY ENTRY.
+ *
+ * ⚠️ A MALFORMED ENTRY IS DROPPED AND THE REST ARE KEPT, which is the one place
+ * this module's usual "drop the whole record" reflex would be wrong: the
+ * breakdown exists so a caller can tell a shared container from a distinct one,
+ * and each entry answers that for itself. Dropping the lot because one was bad
+ * would take away the answer for the containers that were fine.
+ *
+ * ⚠️ A ZERO OR NEGATIVE COUNT IS DROPPED TOO. The server serves an entry only
+ * for a container that left something out, so a zero here is a record this build
+ * cannot account for, and it contributes nothing to any total either way.
+ */
+function toSkipContainers(value: unknown): LibrarySkipContainer[] {
+	if (!Array.isArray(value)) return [];
+	const out: LibrarySkipContainer[] = [];
+	for (const raw of value) {
+		if (!isRecord(raw)) continue;
+		const serviceInstanceId = num(raw.service_instance_id);
+		const items = num(raw.items);
+		const containerRef = str(raw.container_ref);
+		if (serviceInstanceId === undefined || items === undefined || items <= 0) continue;
+		if (containerRef === '') continue;
+		out.push({
+			serviceInstanceId,
+			containerKind: str(raw.container_kind),
+			containerRef,
+			items
+		});
+	}
 	return out;
 }
 
@@ -762,6 +832,41 @@ function containerSignature(library: Library): string {
 }
 
 /**
+ * ONE LIBRARY'S SKIPS, BROKEN DOWN BY THE CONTAINER EACH ONE HAPPENED IN, so
+ * that two libraries reporting one container's skip fold onto one key.
+ *
+ * The key is the identity triple, never the `library_source` id: two libraries
+ * over one container have two source rows and one container.
+ *
+ * ⚠️ THERE IS NO FALLBACK FOR A SERVER THAT SENDS NO BREAKDOWN, AND THE ABSENCE
+ * IS DELIBERATE RATHER THAN AN OVERSIGHT — THE PARAGRAPH IS HERE SO THE NEXT
+ * READER DOES NOT HELPFULLY ADD ONE. This SPA is embedded in the binary that
+ * serves it (`internal/web/spa`, written by `web/scripts/sync-embed.mjs`), so
+ * the client can never be newer than its server: a build whose `skippedNote`
+ * reads `containers` is a build whose handler writes it. The version skew a
+ * fallback would defend against cannot occur in a shipped build.
+ *
+ * ⚠️ AND THE ONLY FALLBACK AVAILABLE WOULD BE THE DEFECT. Keying on the set of
+ * containers the row stands over is precisely what this function replaced: it is
+ * exact only while those sets are identical or disjoint, and the two-instance
+ * shape it got wrong is the one this whole path exists for. A degraded arm that
+ * reinstates the bug is worse than none, because it is the arm nobody looks at.
+ *
+ * A row that somehow carried `left_out` with no readable breakdown therefore
+ * contributes NOTHING to the total rather than being reconstructed from its
+ * sources. That understates, which is this module's standing direction whenever
+ * a record cannot be read — `toSkips` and `toCompleteness` drop rather than
+ * default for the same reason. The row's own mark is unaffected: `skipMarks`
+ * renders that row's count and has never needed the breakdown.
+ */
+function skipParts(library: Library): { key: string; items: number }[] {
+	return (library.skipped?.containers ?? []).map((c) => ({
+		key: `${c.serviceInstanceId}\u0000${c.containerKind}\u0000${c.containerRef}`,
+		items: c.items
+	}));
+}
+
+/**
  * THE SENTENCE ABOVE THE TABLE FOR WHAT THE IMPORT LEFT OUT, and the second half
  * is the load-bearing one.
  *
@@ -793,15 +898,27 @@ export function skippedNote(libraries: readonly Library[]): string {
 	// report the same count, so summing the rows counts one skipped file twice
 	// and tells the owner a number that never happened.
 	//
-	// Folding on the container signature is exact for the shape that produces
-	// this: sibling libraries carry the SAME single `library_source` row, so they
-	// fold the same evidence and their counts are identical by construction. Any
-	// library whose signature is unique — which is every library on an install
-	// with no mixed container — folds to itself and the total is unchanged.
+	// ⚠️ THIS FOLDS ON THE SERVER'S PER-CONTAINER BREAKDOWN, AND IT USED TO FOLD
+	// ON THE LIBRARY'S SET OF SOURCES. That is exact only while the sets are
+	// either identical or disjoint. Two instances holding a mixed container each
+	// bind three libraries — book over A and B, comic over A, comic over B —
+	// whose sets are all DIFFERENT while the skips underneath overlap, and the
+	// old fold collapsed nothing and reported every skip twice.
+	//
+	// ⚠️ AND NO ARITHMETIC ON THE ROW TOTALS COULD HAVE FIXED IT. Dividing a
+	// library's total across its sources would invent a precision no import
+	// measured, and a skip is not a library's to divide. The breakdown was
+	// missing from the wire; it is sent now, and this reads it.
 	const perContainer = new Map<string, number>();
-	for (const l of left) perContainer.set(containerSignature(l), l.skipped?.items ?? 0);
+	const rowsOver = new Map<string, number>();
+	for (const l of left) {
+		for (const part of skipParts(l)) {
+			perContainer.set(part.key, part.items);
+			rowsOver.set(part.key, (rowsOver.get(part.key) ?? 0) + 1);
+		}
+	}
 	const items = [...perContainer.values()].reduce((n, v) => n + v, 0);
-	const shared = left.length - perContainer.size;
+	const shared = [...rowsOver.values()].filter((n) => n > 1).length;
 
 	const parts = [
 		`UsArr read ${COUNT.format(items)} ${items === 1 ? 'item' : 'items'} in ${
@@ -820,7 +937,11 @@ export function skippedNote(libraries: readonly Library[]): string {
 	// one.
 	if (shared > 0) {
 		parts.push(
-			`${shared === 1 ? 'One of those rows shares' : `${COUNT.format(shared)} of those rows share`} an upstream container with another row, so the same skip is reported on each of them and is counted once here.`
+			`${
+				shared === 1
+					? 'One upstream container is'
+					: `${COUNT.format(shared)} upstream containers are each`
+			} reported by more than one row, so the same skip is reported on each of them and is counted once here.`
 		);
 	}
 

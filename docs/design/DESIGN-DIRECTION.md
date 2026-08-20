@@ -231,7 +231,7 @@ These are not new. They are restated because every decision below is downstream 
 | **ARCHITECTURE §17.1 / §4.4.1** | **No skeleton shimmer.** The image placeholder is a `dominant_color` block — the cover's own average colour, reserved at the right aspect before the image arrives. Informative, not decorative, and it never pulses. **The title sits below it, not in it** (§9.2) |
 | **ARCHITECTURE §2.3 / §5.5 / §17.7** | Degraded ≠ blocked. A small **non-modal** banner. **The catalogue never greys out and never shows a spinner** |
 | **ARCHITECTURE §13** | Client-side prefix filter p50 < 5 ms, p99 < 16 ms — one frame. The UI's own budget, not the server's |
-| **ARCHITECTURE §16** (amended by ADR-0032, then by ADR-0035, then re-sequenced by ADR-0041 and ADR-0045, then re-sourced by ADR-0052) | **v0.1 connects two services: BookOrbit and Prowlarr** ([ADR-0052](../DECISIONS.md#adr-0052), which replaced Kavita in that slot on the owner's decision to sunset it). The six media types stay in the model and the navigation, but **v0.1 has no catalogue source for movies, TV, music or audiobooks** — §16.1 gives v0.1's one catalogue source the same three media types Kavita had, books, comics and manga, so ebooks and comics are the two types v0.1 catalogues and the other four wait. ⚠️ **That pair used to be read off the adapter**, and it no longer can be: *"its adapter emits exactly two `work.kind` values, `comic` and `book`"* is measured on `mapLibraryType` (`internal/libsync/kavita.go`), and **BookOrbit's adapter is not written yet**, so the pair now rests on §16.1's media types rather than on code. **Sonarr and Radarr are v0.2** ([ADR-0045](../DECISIONS.md#adr-0045)); **Navidrome, Audiobookshelf and Komga** sequence after v0.1 one at a time, in §16.1's order, which does not fix which release each lands in. ⚠️ This row used to read *"v0.1 connects three services: Sonarr, Radarr and Prowlarr"* with the \*Arr library sync proving the replica thesis first; ADR-0041 moved the sync core onto Kavita because the owner runs Kavita and runs neither \*Arr, and **re-sequenced rather than cut** — both \*Arrs still arrive. Of the comics pair, this row then read *"**Kavita ships and Komga follows it**"*: ADR-0032 cut Kavita and **ADR-0035 reversed that**, because it was the install the owner actually ran and it covered books, comics and manga in one source. **ADR-0052 ended that placement.** Kavita left v0.1 with it and is **not** added back to §16.1's post-v0.1 sequence, on [ADR-0042](../DECISIONS.md#adr-0042)'s refusal-to-invent-a-milestone precedent — so Komga is that sequence's third entry with nothing of Kavita's ahead of it. ⚠️ **Sunset is not deleted:** `internal/kavita` and `internal/libsync/kavita.go` stay in the tree and stay green; what stops is investment. ARCHITECTURE §16 is authoritative for which milestone each lands in. The **command sinks are all out of v0.1** — including the minimal \*Arr write path, which [ADR-0042](../DECISIONS.md#adr-0042) re-sequenced out with the \*Arrs — and they do not all land together: **LazyLibrarian is v0.3** (the first Tier 1 manifest, request sink only), while **Lidarr, Mylar3 and Kapowarr are v1.0**. Requests in v0.1 is the **Prowlarr Search-and-Grab path only — for all six types**, which is what keeps the four sourceless types navigable |
+| **ARCHITECTURE §16** (amended by ADR-0032, then by ADR-0035, then re-sequenced by ADR-0041 and ADR-0045, then re-sourced by ADR-0052) | **v0.1 connects two services: BookOrbit and Prowlarr** ([ADR-0052](../DECISIONS.md#adr-0052), which replaced Kavita in that slot on the owner's decision to sunset it). The six media types stay in the model and the navigation, and **which of them an install catalogues is derived from the service kinds that install has connected — this document enumerates no split** (§8.4). 🚩 **STRUCK 2026-08-20.** This passage read: *"but **v0.1 has no catalogue source for movies, TV, music or audiobooks** — §16.1 gives v0.1's one catalogue source the same three media types Kavita had, books, comics and manga, so ebooks and comics are the two types v0.1 catalogues and the other four wait. ⚠️ **That pair used to be read off the adapter**, and it no longer can be: 'its adapter emits exactly two `work.kind` values, `comic` and `book`' is measured on `mapLibraryType` (`internal/libsync/kavita.go`), and **BookOrbit's adapter is not written yet**, so the pair now rests on §16.1's media types rather than on code."* **Both halves are dead, and the shape of the mistake matters more than either.** BookOrbit's adapter **is** written (`internal/libsync/bookorbit.go`, `bookorbitfiles.go`), and `bookOrbitEditionFormat` returns `edition.format` = `'audiobook'` for `bookorbit.MediaKindAudiobook` — *"one of m4b, mp3, m4a, opus, ogg, flac"* — which `internal/store`'s `mediaTypeOf` renders as **Audiobooks**; so §16.1's *"the media types are unchanged — books, comics and manga"* is falsified by the same code, upstream of this row. ⚠️ **The count is deliberately not corrected to a different count**, because naming which types have a source is a category error rather than a stale fact: `cmd/usarr/import.go` imports a catalogue from `bookorbit` **and** from `kavita`, so the answer is a property of the install. §8.4 carries the rule that replaces it. **Sonarr and Radarr are v0.2** ([ADR-0045](../DECISIONS.md#adr-0045)); **Navidrome, Audiobookshelf and Komga** sequence after v0.1 one at a time, in §16.1's order, which does not fix which release each lands in. ⚠️ This row used to read *"v0.1 connects three services: Sonarr, Radarr and Prowlarr"* with the \*Arr library sync proving the replica thesis first; ADR-0041 moved the sync core onto Kavita because the owner runs Kavita and runs neither \*Arr, and **re-sequenced rather than cut** — both \*Arrs still arrive. Of the comics pair, this row then read *"**Kavita ships and Komga follows it**"*: ADR-0032 cut Kavita and **ADR-0035 reversed that**, because it was the install the owner actually ran and it covered books, comics and manga in one source. **ADR-0052 ended that placement.** Kavita left v0.1 with it and is **not** added back to §16.1's post-v0.1 sequence, on [ADR-0042](../DECISIONS.md#adr-0042)'s refusal-to-invent-a-milestone precedent — so Komga is that sequence's third entry with nothing of Kavita's ahead of it. ⚠️ **Sunset is not deleted:** `internal/kavita` and `internal/libsync/kavita.go` stay in the tree and stay green; what stops is investment. ARCHITECTURE §16 is authoritative for which milestone each lands in. The **command sinks are all out of v0.1** — including the minimal \*Arr write path, which [ADR-0042](../DECISIONS.md#adr-0042) re-sequenced out with the \*Arrs — and they do not all land together: **LazyLibrarian is v0.3** (the first Tier 1 manifest, request sink only), while **Lidarr, Mylar3 and Kapowarr are v1.0**. Requests in v0.1 is the **Prowlarr Search-and-Grab path only — for all six types**, which is what keeps a type the install has no catalogue source for navigable (🚩 **STRUCK 2026-08-20:** this read *"the four sourceless types"*; the number is per-install, §8.4) |
 | **ARCHITECTURE §6.5 / ADR-0026** | **User-defined libraries exist and are configured separately from services.** They are a *scope*, never a navigation axis (§8.1) |
 
 One more, from the ecosystem rather than from the repo: in this software family **stability of
@@ -1610,12 +1610,50 @@ Audiobookshelf and Kavita — because six populated types is what this layout ha
 **That is not the v0.1 install.** **v0.1 connects BookOrbit and Prowlarr only**
 ([ADR-0052](../DECISIONS.md#adr-0052), which replaced Kavita in that slot; this sentence read
 *"v0.1 connects Kavita and Prowlarr only (ADR-0041)"*). The remaining
-catalogue sources sequence after it, one at a time, so on a v0.1 install movies, TV, music and
-audiobooks have **no catalogue source** and Block A renders those four rows in the per-type
-`unconfigured` state, naming the service that will populate each and the milestone it arrives in
-(ARCHITECTURE §17.2, and rule 13 in §13 below for why four stateful rows are not an empty section).
-**Which four types those are is unchanged** — BookOrbit's media types are Kavita's, books, comics
-and manga (§16.1) — so the wireframe below is right about the *shape* while its v0.1 counterpart in
+catalogue sources sequence after it, one at a time.
+
+🚩 **STRUCK 2026-08-20 — the two sentences that stood here read:**
+
+> ~~so on a v0.1 install movies, TV, music and audiobooks have **no catalogue source** and Block A
+> renders those four rows in the per-type `unconfigured` state, naming the service that will
+> populate each and the milestone it arrives in (ARCHITECTURE §17.2, and rule 13 in §13 below for
+> why four stateful rows are not an empty section). **Which four types those are is unchanged** —
+> BookOrbit's media types are Kavita's, books, comics and manga (§16.1)~~
+
+⚠️ **THE DEFECT IS NOT THAT THAT LIST WENT OUT OF DATE.** Audiobooks in it is false of this tree:
+`bookOrbitEditionFormat` (`internal/libsync/bookorbitfiles.go`) returns `edition.format` =
+`'audiobook'` for `bookorbit.MediaKindAudiobook`, which `internal/bookorbit/catalogue.go` defines
+as *"one of m4b, mp3, m4a, opus, ogg, flac"*, and `internal/store`'s `mediaTypeOf` reads exactly
+that format to answer `Audiobooks` instead of `Ebooks`. **But replacing four with three would carry
+the same defect forward**, because **enumerating which media types have a source is a category
+error rather than a fact with a shelf life.** Whether a type is catalogued is a property of **the
+install**, derived from **the service kinds that install has connected**: `cmd/usarr/import.go`
+accepts a catalogue import from `bookorbit` **and** from `kavita`, so a Kavita-only install yields
+no audiobooks, a BookOrbit install yields them, and an install holding both is a third answer. The
+struck sentences were only ever accidentally correct, for as long as one install shape was the only
+one anybody had in mind.
+
+**So this section names no catalogued-versus-sourceless split at all, and the rule stands in its
+place:** Block A's rows are **derived from what is connected**, never from a list written here or
+anywhere else in this document. A type an install has a source for renders its counts; a type it
+has none for renders the per-type `unconfigured` state, naming the service that will populate it
+and the milestone that service arrives in (ARCHITECTURE §17.2, and §8.6 row 13 below for why
+stateful rows are not an empty section). **How many rows land on each side is the derivation's
+output and is not a design constant.** The shipped precedent to follow is
+`$lib/librarygrid.browseEmptyState`, which answers *why is this empty* from `homeMode` —
+computed by `$lib/home` from the health response, on the rule that *"a build that later accepts a
+library-bearing kind changes what this returns without anything here being edited"* — rather than
+from any enumeration of types. Block A owes the same derivation one grain finer: per media type
+rather than per install.
+
+⚠️ **Two things the struck text pointed at are named rather than carried.** Its *"rule 13 in §13
+below"* meant **§8.6 row 13**, which is where that rule lives. And its *"BookOrbit's media types
+are Kavita's, books, comics and manga"* was quoting [ADR-0052](../DECISIONS.md#adr-0052) clause 1,
+restated at ARCHITECTURE §16.1 — so that phrasing is **the upstream of the residue struck here**,
+and the same code falsifies it there. Both belong to other threads; this section stops repeating
+the claim and amends neither.
+
+The wireframe below is right about the *shape*, while its v0.1 counterpart in
 `design/mockups/` still **draws** Kavita by name. That re-draw is owed and is not done here:
 ADR-0052 lists it among the documents it deliberately did not sweep, calling it a design-asset
 change rather than a prose one. Both installs are real screens the design owes; neither is the
@@ -1722,7 +1760,7 @@ Carried across so none of it has to be rediscovered:
 | 10 | Let a linked work appear once per medium | §8.5 rule 4 |
 | 11 | Build per-type screens | Jellyfin serves eight content types from one card builder branching on **aspect ratio, not media type**; §9.1 already forbids varying row treatment by type |
 | 12 | Hide a media type behind "More" | Types are a closed enum capped at six and all fit the row budget. Overflow is for pinned libraries only |
-| 13 | Show a type, section, group or control with no content | §17.2; Komga's `v-if="collectionsCount > 0"`; Navidrome's `LibrarySelector` returning `null` at ≤1 library; Sonarr's status badge returning `null` at zero. ⚠️ **The bound is *no content*, not *no items*.** Home Block A's four sourceless rows in v0.1 (§17.2) are **not** an exception to this rule: a row reading *"Music — no catalogue source · Navidrome · after v0.1 · Add"* (the mockup's verbatim string) carries a state, a cause and an action, which is content. What the rule bans is a region that says nothing. Dropping those four rows instead would leave a Home screen from which the only inference is that UsArr does not do movies, TV, music or audiobooks |
+| 13 | Show a type, section, group or control with no content | §17.2; Komga's `v-if="collectionsCount > 0"`; Navidrome's `LibrarySelector` returning `null` at ≤1 library; Sonarr's status badge returning `null` at zero. ⚠️ **The bound is *no content*, not *no items*.** Home Block A's **sourceless rows** — however many an install has, which §8.4 derives from the connected service kinds rather than fixing as a count — are **not** an exception to this rule: a row reading *"Music — no catalogue source · Navidrome · after v0.1 · Add"* (the mockup's verbatim string) carries a state, a cause and an action, which is content. What the rule bans is a region that says nothing. Dropping those rows instead would leave a Home screen from which the only inference is that UsArr does not do whichever types that install has no source for. 🚩 **STRUCK 2026-08-20:** this cell read *"Home Block A's **four** sourceless rows in v0.1 (§17.2)"*, *"Dropping those **four** rows"* and *"UsArr does not do **movies, TV, music or audiobooks**"*. The count and the enumeration are both residue from the Kavita slot — BookOrbit catalogues audiobooks, so the sourceless set is neither four nor fixed (§8.4) — and **the argument never rested on either**: it needs at least one sourceless row, not four, so nothing above it moves |
 
 ---
 

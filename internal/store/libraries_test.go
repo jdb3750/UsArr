@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -1410,8 +1411,8 @@ func TestLibrarySkipsTellsNothingSkippedFromNothingWalked(t *testing.T) {
 			"to count there, and a zero under that label is a claim the label does not make",
 			books)
 	}
-	if books.Containers != 2 {
-		t.Errorf("Books folded %d container observations, want 2", books.Containers)
+	if len(books.Containers) != 2 {
+		t.Errorf("Books folded %d container observations, want 2", len(books.Containers))
 	}
 
 	// ⚠️ THE CONTROLS, AND THE FIRST OF THEM IS THE INVERTED ONE. Films'
@@ -1426,6 +1427,65 @@ func TestLibrarySkipsTellsNothingSkippedFromNothingWalked(t *testing.T) {
 	}
 	if loose := libraryByName(t, got, "Loose Ends").Skips; loose != nil {
 		t.Errorf("Loose Ends has no source and carries %+v", loose)
+	}
+}
+
+// THE BREAKDOWN SURVIVES THE FOLD, AND IT IS THE ONLY THING THAT MAKES A SKIP
+// DEDUPABLE BY A READER HOLDING SEVERAL LIBRARIES.
+//
+// A skip is a fact about a CONTAINER; ListLibraries returns one row per LIBRARY,
+// and since ADR-0066 decision 5 several libraries can stand over one container
+// and each report its skip in full. The library total cannot separate one shared
+// skip from two distinct ones — two instances holding a mixed container each
+// bind three libraries (book over A and B, comic over A, comic over B) whose
+// container SETS are all different while the skips underneath overlap. So the
+// containers are carried rather than folded away.
+//
+// ⚠️ AND THE TOTAL IS THEIR SUM, NEVER A SHARE OF ANYTHING. Each entry carries
+// what its own container recorded; nothing here is apportioned, because a skip
+// does not belong to a library to be divided.
+func TestLibrarySkipsCarryTheContainerEachSkipHappenedIn(t *testing.T) {
+	s := newTestStore(t)
+	seedLibrariesCorpus(t, s)
+	seedSkipReports(t, s)
+
+	got, err := s.ListLibraries(t.Context(), OwnerScope(0))
+	if err != nil {
+		t.Fatalf("ListLibraries: %v", err)
+	}
+
+	manga := libraryByName(t, got, "Manga").Skips
+	if manga == nil {
+		t.Fatal("Manga has no skip verdict")
+	}
+	want := []LibrarySkipContainer{
+		{ServiceInstanceID: 1, ContainerKind: "remote_library", ContainerRef: "11", Items: 3},
+	}
+	if !reflect.DeepEqual(manga.Containers, want) {
+		t.Errorf("Manga's breakdown = %+v, want %+v — the entry must name the container "+
+			"the skip happened in, and carry the NEWEST row's tally", manga.Containers, want)
+	}
+
+	// Books spans TWO instances, which is the shape a single-instance corpus
+	// would never catch: the two entries must stay two entries.
+	books := libraryByName(t, got, "Books").Skips
+	if books == nil {
+		t.Fatal("Books has no skip verdict")
+	}
+	var total int64
+	seen := map[string]bool{}
+	for _, c := range books.Containers {
+		seen[fmt.Sprintf("%d/%s", c.ServiceInstanceID, c.ContainerRef)] = true
+		total += c.Items
+	}
+	if !seen["1/12"] || !seen["2/21"] {
+		t.Errorf("Books' breakdown = %+v, want an entry for 1/12 and one for 2/21",
+			books.Containers)
+	}
+	if total != books.Items {
+		t.Errorf("Books' entries sum to %d but the library total is %d — the total is the "+
+			"SUM of the entries, and a mismatch means one of them is apportioned",
+			total, books.Items)
 	}
 }
 

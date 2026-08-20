@@ -114,10 +114,14 @@ func statusAllowsATotal(status string) bool {
 //
 // ⚠️ THERE IS NO `missing` KEY, and its absence is a consequence rather than an
 // oversight. `missing` is contiguity — "43 issues · #7, #12 and #30-32 missing"
-// — computed locally from work_comic_issue.number_sort, and nothing in the tree
-// writes work_comic_issue (internal/libsync/files.go's header says why). It is
-// the one always-honest completeness number in the domain, and it is owed by the
-// slice that lands the issue level.
+// — computed locally from work_comic_issue.number_sort. That table HAS a writer
+// now: catalogue.go's `comic_issue` branch lands one row per issue, fed by
+// libsync's BookOrbit comics path (ADR-0068). What it has NOT got is a reader —
+// nothing computes contiguity off number_sort — and the rows cover one adapter's
+// comics only: Kavita's chapter walk still writes none, and
+// internal/libsync/files.go's header says why. `missing` is the one
+// always-honest completeness number in the domain, and it is owed by the slice
+// that computes it rather than by the one that landed the issue level.
 type availabilityCount struct {
 	K           string  `json:"k"`
 	Have        int64   `json:"have"`

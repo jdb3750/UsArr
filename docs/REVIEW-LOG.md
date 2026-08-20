@@ -23473,3 +23473,343 @@ and that package's `version` for the SvelteKit special case;
 `go test ./internal/web/ -run 'TestFallbackAssetPathsAreRootAbsolute|TestEmbeddedFSCarriesAppDir' -v`
 for the two passes; and **ADR-0024 and ADR-0025 §6 read in `docs/DECISIONS.md`** rather than taken on
 report. ⚠️ **Any commit sha reported for this entry is a content sha, never a merge.**
+
+---
+
+## LS-385 — ADR-0069's decision was silent on the SQL choice implementing it forces, and on the ADR-0063 consequence that choice invalidates; four blocking findings applied, two rebutted in part
+
+**`LS-385`, allocated by the coordinator and confirmed by the allocator, and re-checked at this lane's
+own tip before a word was written.** The standing check-at-tip tripwire ran first: `grep -n 'LS-385'
+docs/REVIEW-LOG.md` at `cf98938` returned nothing, and the highest id present was **`LS-384`**.
+**`LS-385` was free and is taken; no id was bumped.** Nothing here touches the `SD-`, `DS-`, `RK-` or
+`FI-` series, and no ADR or migration number is allocated by this lane — ADR-0069 already exists and
+is amended in place.
+
+ℹ️ **This entry does not cite its own commit sha**, on this file's convention: the entry lives in the
+commit it would be citing. The change is identified by its shape — **two Markdown files,
+`docs/DECISIONS.md` and this one, with no code, no test and no schema touched** — and the sha is
+reported to the coordinator, where it can be true.
+
+⚠️ **THE DECISIVE FACT OF THIS ENTRY IS THAT THE FIX ALREADY EXISTS.** Branch
+`claude/libskips-percontainer-20260820`, contents `82d7362` and `dea63f5`, tip `b0142a0`. So most of
+what follows is not a proposal: the implementation has already chosen, and the ADR's job was to
+**record** the choice it made rather than invent one. Where the two disagreed, **the implementation
+is the fact and the ADR was what was wrong** — checked in each case against the possibility that the
+implementation was itself the defect, which none of these turned out to be. **Nothing on that branch
+was edited, committed or pushed by this lane; it was read and run only.**
+
+### 🔴 B1 — APPLIED. Decision 2's key was not in the SELECT, and the choice that fixes it was never recorded
+
+`containerReportSQL` selected `ls.library_id, r.detail, r.created_at`. `service_instance_id`,
+`container_kind` and `container_ref` sit on the already-joined `library_source` and were neither
+selected nor scanned — so **ADR-0069's decision 2 named a key its own statement did not return**, and
+implementing it forced a choice the ADR never recorded: **widen the shared body, or fork it.** That
+statement is shared: `librarySkipsSQL` and `libraryCompletenessSQL` both delegate to it, and
+`TestTheSkipStatementIsTheCompletenessStatement` asserts the two texts byte-identical precisely so
+**one** plan guard covers both reads.
+
+**What the implementation did, read off `82d7362`: it WIDENED.** The SELECT now returns the three
+identity columns for both callers, `attachLibraryCompleteness` scans them into a
+`LibrarySkipContainer` and **discards them** with a comment saying so, and `foldSkips` takes the
+container as a parameter and appends an entry per row. `LibrarySkips.Containers` changed from `int`
+to `[]LibrarySkipContainer`.
+
+**Applied as a new decision 6** — *"The shared statement is WIDENED, not forked"* — with both costs
+priced (a discarded scan off a row already fetched, versus a second statement whose correctness rests
+on four equalities lining up with an index and which would take the skips read's only plan assertion
+with it), and with the deciding term named: **the plan guard, not the wasted scan.**
+
+#### 🔍 Both guards were FIRED, not inferred from a green suite
+
+The review asked whether the guards still pass. That question is answerable from a test run; the
+question worth asking is whether they still **cover the skips read**, and a guard passing while
+pointing somewhere else is indistinguishable from a guard working. Both were made to fail on purpose
+at the fix's tip and then restored:
+
+- **Fire A — degrade the shared body.** `ls.library_id IN (…)` → `ls.library_id+0 IN (…)`.
+  `TestLibrarySkipsPlanIsSeeksAndOneSort` went **red**: *"SCAN ls USING COVERING INDEX
+  sqlite_autoindex_library_source_1 … the plan contains a SCAN; every leg of this read is a seek"*.
+  The completeness guard reddened too, and the byte-identity test stayed green — correctly, since
+  both statements moved together.
+- **Fire B — fork `librarySkipsSQL` alone**, giving it a hand-copied lookalike with
+  `ORDER BY r2.created_at` in place of `ORDER BY r2.id`. **`TestLibrarySkipsPlanIsSeeksAndOneSort`
+  went red while `TestLibraryCompletenessPlanIsSeeksAndOneSort` stayed GREEN** — *"the subquery's
+  sync_report leg is SEARCH r2 USING INDEX ix_sync_report_instance …, not … COVERING INDEX
+  ix_sync_report_container_latest"*. **That is the result that matters**: it establishes the skips
+  plan assertion is bound to `librarySkipsSQL` — the same function `attachLibrarySkips` calls — and is
+  not merely riding its neighbour. `TestTheSkipStatementIsTheCompletenessStatement` caught the fork
+  independently and named the coverage that would have lapsed.
+- **Restored**, tree verified clean by `git status --porcelain`, and all four tests green again.
+
+**The skips read has NOT lost plan coverage**, so this was documented rather than escalated.
+
+#### 🚩 And ADR-0063 gets a dated supersession in its OWN text, not just a mention in ADR-0069
+
+ADR-0069's boundary 1 said it *"does not reverse ADR-0063"*. That stays **true of ADR-0063's
+decisions** — no migration, no writer, no `SkipState` member is touched. But **a recorded consequence
+is part of what an ADR decided**, and ADR-0063's Consequences said *"**No SQL and no plan changes.**"*
+Its first half is now **false**: `containerReportSQL`'s SELECT list is four columns wider. An "only"
+claim has to name the boundary it holds within, so silence behind boundary 1 was not good enough.
+
+Applied **both** ways: ADR-0069's Consequences now say plainly which ADR-0063 consequence is
+invalidated and which half of it survives, **and** ADR-0063 carries a
+`🚩 **SUPERSEDED IN PART 2026-08-20 by ADR-0069**` blockquote directly beneath the bullet, in this
+file's house shape — matched to the existing `🚩 **SUPERSEDED IN PART 2026-08-19 by ADR-0063**`
+blockquote under ADR-0061 §5 rather than invented. Its index row carries the same flag inline. **The
+superseded bullet is left verbatim**, on this file's standing convention that a retraction kept in
+place beats a deleted assertion.
+
+### 🔴 B2 — APPLIED, as a correction rather than a deletion. The "cheaper" bullet was false
+
+§6 and the *Why* section claimed publishing unfolded is *"strictly less work than what the server does
+today"* / *"cheaper than the status quo"*. **Decision 3 keeps the fold** and calls the breakdown
+additive, so the server does everything it did **plus** appending an entry per row and serialising it.
+The bullet was not deleted — the point under it is real. Both sites now carry the defensible narrower
+claim: **the per-container numbers are already measured, so the breakdown adds no measurement, no
+extra statement and no extra pass — only serialisation.** Each site says in as many words that the
+stronger claim was what it used to say and is not defensible.
+
+### 🔴 B3 — APPLIED. Decision 1 was silent on `state: "none"` and on zero-count entries
+
+Under ADR-0063 **every walked container files a row, zero or not**, so decision 1's *"every container
+that contributed a skip row"* literally implied publishing zeros. Read off the implementation, it
+publishes neither:
+
+- **`containers` is absent under `none`.** `librarySkipsFor` fills `Items`, `Reason` and `Containers`
+  only inside its `if state == store.SkipsLeftOut` arm — the suppression is explicit rather than left
+  to `omitempty`, matching the comment already on that path and
+  `reference/http-api.md` §2.6a's *"a 0 under that label is a claim the label does not make"*.
+- **A zero-count entry is dropped even under `left_out`.** `librarySkipContainersFor` filters
+  `c.Items <= 0` and returns `nil` if that empties the slice.
+
+Decision 1 now says both, with the invariant they buy — **the entries always sum to `items`** — and
+with an explicit note that the zero **rows** are untouched, so this reads as consistent with ADR-0063
+rather than as a retreat from it.
+
+### 🔴 B4 — APPLIED, as a citation rather than an edit still owed
+
+`reference/http-api.md` §2.6a is the authoritative `skipped` contract. ADR-0069 added a fifth field
+and never mentioned it; ADR-0063's precedent named it in its own decision. **Checked before writing,
+and the implementation branch had already amended it** — §2.6a's field table now carries **five** rows
+with `containers` among them, plus a paragraph stating the count breaks down *"by CONTAINER, never by
+REASON"*, a rewritten fold rule (*"FOLD ON `containers`, NEVER ON THE ROWS, AND NEVER ON THE ROW'S
+`sources`"*), and a matching warning on the top-level `items[].skipped` row. Decision 2 now names
+§2.6a and **cites what is actually there**, flagged as already-amended so no later reader goes looking
+for an edit that is owed.
+
+### Minor findings — all applied, two of them narrowed
+
+| # | Finding | Before | After |
+| --- | --- | --- | --- |
+| 1 | Dangling `§7`, decision 5 | *"and §7 below is why"* | *"and Consequences ¶3 below is why"* |
+| 2 | Dangling `§7`, *Why* | *"see the boundary in §7"* | *"see the boundary in *What this does NOT decide* item 2"* |
+| 3 | Citation drift | `libraries.ts:757` | `libraries.ts:756` — `containerSignature` is declared there |
+| 4 | Citation drift | `libraries.go:911-913` | `libraries.go:911-915`, *"the `if` through the assignment it guards"* — the old range stopped one line short of `into.Reason = note.Reason` |
+| 5 | Citation misattached | `bookorbit_import_e2e_test.go:635-650` carried a claim about the **client** fold | Split in two: `web/src/lib/skips.test.ts:260` for the client fold, `bookorbit_import_e2e_test.go:650-654` for the server fact under it |
+| 6 | Truncated quote | *"…would then have to be lied to"* | *"…lied to **or left at zero**"*, with a note that the four words were dropped without an ellipsis |
+
+⚠️ **The ADR's numbered sections are §1–§6 and they are Context only**, which is what made findings 1
+and 2 dangle: there is no §7 to point at. Both are re-pointed **by name**, the way an earlier fix
+already turned *"§2's key"* into *"Decision 2's key"* — a section number in a document whose sections
+can be renumbered is the drift that produced this class in the first place.
+
+### 🚩 "byte-identical" — the finding is APPLIED but the argument under it is REBUTTED and kept
+
+§5's ambiguity argument said the two worlds are *"byte-identical on the wire today"*. **The word
+overreaches**: `reason` is lifted from the first non-zero container and `recorded_at` is the newest
+row's stamp, so the two worlds can differ in both. Narrowed to *"indistinguishable on the wire today
+in the field that matters"*, with the overreach named.
+
+⚠️ **What is REBUTTED is any reading of that finding as damaging to the argument.** The central claim
+is **verified correct and survives intact**: `librarySkipsResponse` carries **no container identity**
+for the count it reports, so no client can separate the two worlds however clever. The two fields the
+narrowing concedes are **a sentence and a timestamp, not a container** — neither separates them. The
+ADR now says that explicitly, so the concession cannot later be mistaken for a hole in the argument.
+This remains checkable by **reading the response type**, not by running anything.
+
+### The 2/4/2 pair was not reproducible from the ADR, and the mechanism was verified rather than relayed
+
+The measured pair — ground truth **2**, `main` **4**, the fix **2** — was stated with no topology, so
+a reader could not check it by hand. One paragraph and a three-row table now give it: two BookOrbit
+instances **A** and **B**, each holding one mixed container named `Fiction`, each leaving one item
+out; `Fiction` (`book`) over {A/1, B/9} at 2, `Fiction (Comics)` (`comic`) over {A/1} at 1,
+`Fiction (2)` (`comic`) over {B/9} at 1. Every row correct, all three signatures distinct, sum **4**.
+
+⚠️ **The brief's account of the mechanism was checked against the tree rather than taken as fact, and
+it held on both halves.** `bindOneContainer`'s **step 2** (`internal/store/catalogue.go`) joins on
+same **name** and same **kind** over `userLibraries`, **not scoped to an instance** — so B's container
+lands on A's `book` library and one library binds both. And the sibling mint's naming was read to the
+end: A's comics take `kindQualifier("comic")` → `Fiction (Comics)`; B's find that name already held
+in `existing.names`, so the qualifier candidate is **not free** and control falls to the pre-existing
+ordinal loop, landing on `Fiction (2)`. That last hop is the one that could not be assumed — the
+ADR-0066 amendment **refused** ordinals for the traversal-order case — and it is reached here only
+because the qualified name is taken, which the code comments call out as an open design question in
+its own right. **Recorded as observed, not smoothed.**
+
+### 🔍 Found and RECORDED, not fixed: `skipMarks` has the same defect on the per-row axis
+
+§4's disarmed-guard finding is about the **screen-wide** sentence. The **per-row** one fails in the
+same shape for the same reason, and the ADR discussed only `skippedNote`. `skipMarks`' `alsoReporting`
+clause compares `containerSignature` — the same library-level whole-set signature — so in the
+partial-overlap topology the three signatures differ, `alsoReporting` is empty on every row, and **no
+row says the skip is shared**. That defeats the clause whose own comment reads *"an identical number
+in two places with nothing joining them is exactly how a reader double-counts. This clause is what
+joins them."*
+
+⚠️ **Measured at the fix's tip (`web/src/lib/libraries.ts:1425-1427`): `skippedNote` moved to the
+breakdown via `skipParts`, and `alsoReporting` did NOT — it is still on `containerSignature`.** So
+this is genuinely open, not incidentally closed. Decision 2's key fixes it too, which is why it
+belongs in this ADR's Consequences; it is written there as **OPEN**, with the measurement, and
+**nothing was changed in any `.ts` file by this lane**.
+
+### Scope, and what is NOT done here
+
+**No code, no test, no schema, no migration and no wire change.** This lane edited exactly two
+Markdown files. It did not touch `docs/ROADMAP.md`, the branch
+`claude/adr0050-image-format-20260819-1`, or the fix branch itself. It did not fix
+`alsoReporting`, and it did not fix the `Reason` attribution defect that ADR-0069's boundary 4
+already records as open — **both remain open and both are named as open.**
+
+### What a green gate is worth on this entry
+
+⚠️ **`make check` attests nothing about a single claim above.** This is a docs-only diff: **no arm of
+the gate reads `docs/` for content.** `gitleaks` is the only arm that touches these two files at all,
+and it establishes that the prose carries no credential — not that it is true. `fmt-check`'s prettier
+half runs `--dir web`, so no Markdown outside `web/` is even formatter-gated. The Go arms compile and
+run the tree, which for a docs-only diff means they attest that **the tree still builds**, not that
+this entry describes it correctly.
+
+🔍 **What DOES carry weight here is the deliberate firing**, and it is the reason it was done: the two
+guard results above are measured, on the shipped statement, through the same function the shipped read
+calls, with a red and a restored green on either side of each.
+
+🔍 **The verification is manual and is listed so it can be repeated at any tip:**
+`grep -n 'LS-385' docs/REVIEW-LOG.md` at `cf98938` for the tripwire;
+`git show 82d7362 -- internal/store/libraries.go` for the widen-not-fork choice;
+`git show 82d7362 -- internal/httpapi/libraries.go` for the `left_out`-only arm and the `c.Items <= 0`
+filter;
+`sed -n '548,640p' docs/reference/http-api.md` on `b0142a0` for §2.6a's five-row table;
+`go test ./internal/store/ -run 'TestTheSkipStatementIsTheCompletenessStatement|TestLibrarySkipsPlanIsSeeksAndOneSort|TestLibraryCompletenessPlanIsSeeksAndOneSort|TestLibrarySkipsCarryTheContainerEachSkipHappenedIn' -v`
+on `b0142a0` for the four passes, and the two perturbations above to see them fail;
+`grep -n 'containerSignature' web/src/lib/libraries.ts` on `b0142a0` for `alsoReporting` still on the
+old signature;
+`sed -n '662,760p;786,835p' internal/store/catalogue.go` for step 2's join and the qualifier's
+fall-through to the ordinal loop;
+and **ADR-0063's Consequences read in `docs/DECISIONS.md`** rather than taken on report.
+⚠️ **Any commit sha reported for this entry is a content sha, never a merge.**
+
+---
+
+# VN9-12 — `DESIGN-DIRECTION.md` enumerated which media types have a catalogue source; the list was a category error, not a stale fact
+
+**Date:** 2026-08-20. **Prefix:** `VN9-`, continuing from
+[`VN9-11`](#vn9-11--the-mockups-readme-argued-from-the-identity-tiers-the-two-installs-no-longer-hold),
+which was the highest `VN9-` **entry** on `main` when this was written, re-read immediately before
+writing rather than remembered. Appended, never renumbered.
+
+## What was routed, and what it turned out to be
+
+The finding as routed was a self-contradiction two sentences apart in
+`docs/design/DESIGN-DIRECTION.md` §8.4: the section had been updated to say **v0.1 connects BookOrbit
+and Prowlarr** ([ADR-0052](./DECISIONS.md#adr-0052)) while its list of types with no catalogue source
+still named **audiobooks**, residue from the Kavita slot. That much is real, and it is verified below
+against the code rather than against a document.
+
+⚠️ **But correcting four to three would have been the same defect in a fresh coat, and this entry
+exists mostly to record that.** *Which* media types have a source is not a fact about the media types.
+It is a fact about **the install**, derived from **the service kinds that install has connected** —
+and `cmd/usarr/import.go` accepts a catalogue import from **two** kinds, so the answer genuinely
+differs between installs. The struck sentences were never *out of date*; they were **accidentally
+correct**, for exactly as long as one install shape was the only one anybody had in mind. A document
+that names a split at all has the bug, at any number.
+
+## What was verified, in the tree, before anything was written
+
+- **BookOrbit catalogues audiobooks.** `internal/libsync/bookorbitfiles.go`'s
+  `bookOrbitEditionFormat` returns `sql.NullString{String: "audiobook", Valid: true}` for
+  `bookorbit.MediaKindAudiobook`. `internal/bookorbit/catalogue.go` defines that kind as
+  *"MediaKindAudiobook is one of m4b, mp3, m4a, opus, ogg, flac"*, with the set itself at
+  `audioFormats = map[string]bool{"m4b": true, "mp3": true, "m4a": true, "opus": true, "ogg": true, "flac": true}`.
+- **And it reaches the navigation enum as `Audiobooks`.** `internal/libsync/bookorbit.go` routes
+  `MediaKindEbook` and `MediaKindAudiobook` through the **same** `mapBook`, so both are `work.kind`
+  `book`; `internal/store/recent.go`'s `mediaTypeOf` then returns `MediaTypeAudiobooks` when
+  `MIN(edition.format = 'audiobook')` is 1 and `MediaTypeEbooks` otherwise. So the split is carried by
+  the **edition format**, and BookOrbit sets it.
+- **Kavita records the opposite, in as many words.** `internal/libsync/kavita.go`, on
+  `LibraryTypeBook`: *"an audiobook is not a kind (it is an edition with format='audiobook',
+  ADR-0031), and Kavita serves no audio, so nothing here can produce one."*
+- **Both kinds import, which is what makes the set per-install.** `cmd/usarr/import.go` has an arm for
+  `entry.kavita` and an arm for `entry.bookorbit`, and its refusal names both:
+  *"%q has kind %q; v0.1 imports a catalogue from bookorbit and from kavita, and from nothing else
+  (ADR-0052, ADR-0041)"*. So a Kavita-only install yields **no** audiobooks, a BookOrbit install yields
+  them, and an install holding both is a third answer — from one binary, with nothing recompiled.
+- **The precedent the replacement points at is shipped, not proposed.**
+  `web/src/lib/librarygrid.ts`'s `browseEmptyState` answers *why is this empty* by delegating three of
+  its four cases to `recentEmptyState(mode)`, where `mode` is `$lib/home`'s `homeMode(health)` —
+  computed from the services-health response over `isIndexer`, on the rule that comment states
+  outright: *"a build that later accepts a library-bearing kind changes what this returns without
+  anything here being edited."* Block A owes the same derivation one grain finer, per media type
+  rather than per install.
+
+## What was applied — three sites, all in `docs/design/DESIGN-DIRECTION.md`
+
+Dated riders throughout. **No superseded sentence was deleted or reworded**; each is quoted where it
+stood so a reader can see what the document asserted and when it stopped being true.
+
+1. **§8.4.** Two sentences struck (`🚩 STRUCK 2026-08-20`), quoted whole in a blockquote: *"so on a
+   v0.1 install movies, TV, music and audiobooks have **no catalogue source** and Block A renders
+   those four rows in the per-type `unconfigured` state … **Which four types those are is
+   unchanged** — BookOrbit's media types are Kavita's, books, comics and manga (§16.1)"*. What stands
+   in their place is **the rule, not a new count**: Block A's rows are derived from what is connected,
+   the section names no split, and `browseEmptyState` is cited as the shape to follow.
+2. **§8.6 row 13.** *"Home Block A's **four** sourceless rows in v0.1"*, *"Dropping those **four**
+   rows"* and *"UsArr does not do **movies, TV, music or audiobooks**"* struck and quoted.
+   ✅ **The surrounding argument survives untouched, and that was checked rather than assumed**: rule
+   13's claim is that a row carrying a state, a cause and an action is *content*, which needs **at
+   least one** sourceless row and never four. Nothing above it moves.
+3. **§2, the `ARCHITECTURE §16` inheritance row — a third site, not in the routing, found by grep.**
+   It carried the identical defect and one further dead claim: *"**BookOrbit's adapter is not written
+   yet**, so the pair now rests on §16.1's media types rather than on code"*. It **is** written
+   (`internal/libsync/bookorbit.go`, `bookorbitfiles.go`). Struck and quoted, with the same rule in
+   its place. Left unrepaired, this row would have gone on enumerating a split while §8.4 forbade one.
+
+## What was NOT applied, and is routed rather than swept
+
+⚠️ **The residue has an upstream, and it is not in this thread's file.**
+[ADR-0052](./DECISIONS.md#adr-0052) clause 1 states *"The media types v0.1 catalogues are unchanged:
+books, comics and manga"*, and ARCHITECTURE §16.1 restates it as *"BookOrbit takes its media types,
+which are unchanged — books, comics and manga"*. **The same code falsifies both.** They are other
+threads' documents; `DESIGN-DIRECTION.md` now stops repeating the claim and **amends neither**, and
+§8.4 says so where a reader meets the citation. **This is a live finding for whoever owns those two
+files**, recorded here so it is not lost between lanes.
+
+ℹ️ **A second, smaller pointer defect is named rather than silently fixed.** §8.4's *"rule 13 in §13
+below"* meant **§8.6 row 13** — §13 is the lint checklist and has no numbered rule 13. The
+replacement text points correctly and says that it is correcting the pointer.
+
+ℹ️ **One more instance of the Kavita residue was seen and left alone, out of scope**:
+`web/src/lib/libraryscreen.ts`'s `search-and-grab` empty state still reads *"Kavita is the
+library-bearing service this build connects"*. That is a shipped UI string in the frontend lane's
+file, not this thread's, and it is a copy fix rather than a reasoning defect.
+
+## The gate, reported as measured
+
+`make design` — **exit 2, `2 FAILURES`**, `9 source files`, `860896 chars scanned`, on
+`docs/design/tokens.css`, `mockups/usarr.css`, `fonts.css`, `usarr.js` and the five screen HTML files.
+
+⚠️ **That red is pre-existing and is not this change's**, and it was measured rather than argued:
+the run was repeated with the edit stashed and produced the **same** exit code, the same
+`2 FAILURES`, and the same three violations — all of them
+*"ARCHITECTURE §17: em dash in specified UI copy"*, on `FullImport is a Go method with no HTTP route
+…`, `Some books are hidden — this library holds 412 books …` and `Some items were left out — 42 items
+were read and not mapped …`. §17's shipping copy is the owner's to word, and §13.0 already records
+that a checker does not edit the specification it checks.
+
+🚩 **AND THE GREEN ATTESTS NOTHING ABOUT THIS CHANGE EITHER WAY, WHICH IS THE HONEST THING TO SAY.**
+`docs/design/check.mjs` reads `tokens.css`, the four mockup assets, the five mockup screens and
+`docs/ARCHITECTURE.md` (for §17's copy corpus). **`DESIGN-DIRECTION.md` is in no corpus it reads** —
+the document specifies the checks and is never itself checked. So `make design` is reported here for
+completeness and as evidence that nothing regressed, and **not** as coverage of the edit. The review
+of this change is this entry and the quotations above.
+
+⚠️ **Any commit sha reported for this entry is a content sha, never a merge.**

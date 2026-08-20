@@ -58,8 +58,16 @@ import (
 //     writing them is a change to the shared write path rather than to this
 //     adapter. The narrators at least are not lost meanwhile: they land as
 //     work_credit rows (bookorbitcredits.go).
-//  3. work_comic_issue, on files.go's reasoning and with less at stake: this
-//     adapter writes no comics at all.
+//  3. work_comic_issue, and the reason is no longer files.go's. The row is not
+//     owed here at all any more: ADR-0068 imports comics, so bookorbit.go's item
+//     pass maps each one to a 'comic_issue' and store lands the row before this
+//     walk runs. What this pass does not do is give an issue a FILE, and that
+//     is two facts rather than one: a comic is a CHILD item — mapComic always
+//     sets Parent — so streamAndApply's flush drops it from `imported`, the
+//     list this walk is fed from; and bookorbit.go keeps no `keepCard` entry
+//     for it either, so `card` would miss even if it arrived. That is
+//     ADR-0068's budget rather than an omission, since the three card-fed
+//     passes are exactly what its "Zero extra HTTP" declined to widen.
 //
 // # A NON-CONTENT FILE IS NOT A media_file ROW
 //

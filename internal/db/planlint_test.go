@@ -1,11 +1,13 @@
 package db
 
 import (
+	"context"
 	"go/ast"
 	"go/parser"
 	"go/token"
 	"io/fs"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -234,9 +236,9 @@ func unquote(s string) string {
 	return s
 }
 
-// TestPlanGuardsUseTheWholeTokenHelper walks every _test.go file in the
-// repository and fails on a raw substring plan assertion that a rename could
-// silently satisfy.
+// TestPlanGuardsUseTheWholeTokenHelper reads every _test.go file THIS
+// repository owns — see repoTestFiles for what that phrase has to mean — and
+// fails on a raw substring plan assertion that a rename could silently satisfy.
 //
 // IS IT VACUOUS? No, and the distinction matters because internal/store's
 // imagelint guard logged VACUOUS PASS for months. This walk classifies real
@@ -259,35 +261,18 @@ func TestPlanGuardsUseTheWholeTokenHelper(t *testing.T) {
 	var faults []planLintFault
 	inspected := 0
 
-	err := filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
-		if err != nil {
-			return err
-		}
-		if d.IsDir() {
-			switch d.Name() {
-			case ".git", "node_modules", "dist", "build", ".svelte-kit", ".dev":
-				return fs.SkipDir
-			}
-			return nil
-		}
-		if !strings.HasSuffix(path, "_test.go") {
-			return nil
-		}
+	for _, path := range repoTestFiles(t, root) {
 		if filepath.Base(path) == "planlint_test.go" {
-			return nil
+			continue
 		}
 		file, perr := parser.ParseFile(fset, path, nil, 0)
 		if perr != nil {
 			t.Logf("skipping unparseable %s: %v", path, perr)
-			return nil
+			continue
 		}
 		inspected++
 		rel, _ := filepath.Rel(root, path)
 		faults = append(faults, scanPlanAssertions(fset, rel, file)...)
-		return nil
-	})
-	if err != nil {
-		t.Fatalf("walking the tree: %v", err)
 	}
 	if inspected == 0 {
 		t.Fatal("the walk found no _test.go files at all, so this guard is checking nothing")
@@ -405,6 +390,99 @@ func TestPlanLintGuardFires(t *testing.T) {
 			}
 		})
 	}
+}
+
+// repoTestFiles enumerates the _test.go files THIS repository owns, and the
+// whole of the bug it fixes is in that last word.
+//
+// It used to be a filepath.WalkDir from the module root with a hand-maintained
+// prune list — .git, node_modules, dist, build, .svelte-kit, .dev — and that
+// list did not name `.claude`. Agent lanes keep their own checkouts of this
+// repo under `.claude/worktrees/`, dozens of them, so the walk descended into
+// every one and linted its test files as though they were this tree's.
+// Measured on main on 2026-08-20: 875 faults across 5975 inspected _test.go
+// files, every fault path under `.claude/`, not one of them from a file this
+// repo tracks — in a repo with 158 tracked _test.go files. `make check` could
+// not be run in the primary checkout at all.
+//
+// The Makefile's fmt-check hit the identical wall and answered it this way (see
+// GO_SRC_LIST), and matching it is the point rather than a coincidence: two
+// enumerations that both ask git what this repo contains agree by construction,
+// where a prune list handles one hazard at a time and leaves the next nested
+// directory to be discovered the same way — by a red gate nobody can explain.
+//
+// `--cached --others --exclude-standard` is deliberately not `--cached` alone:
+// it is tracked files PLUS untracked ones .gitignore does not exclude, so a
+// brand-new _test.go is linted before it is ever staged, while `.claude/`
+// (ignored at .gitignore:117) is not. Build-tagged test files are listed too —
+// this guard parses without resolving build tags, so `upstream`- and
+// `bench`-tagged sources are inspected exactly as the untagged ones are.
+//
+// OUTSIDE A GIT WORK TREE there is no index to ask — a release tarball, an
+// extracted module zip — so the walk stays as the fallback, with `.claude`
+// added to its prunes. It is the fallback and not the primary because it cannot
+// tell this repo's files from a checkout that happens to sit inside it.
+func repoTestFiles(t *testing.T, root string) []string {
+	t.Helper()
+	if files, ok := gitListedTestFiles(t.Context(), root); ok {
+		return files
+	}
+	return walkedTestFiles(t, root)
+}
+
+// gitListedTestFiles reports the listing and whether git could answer at all.
+// Every failure — git absent, root outside a work tree, a broken index — falls
+// through to the walk rather than failing the test, because "not a git
+// checkout" is a supported way to hold this source, not a fault in it. A git
+// that answers with an EMPTY listing is still an answer and is returned as one:
+// the caller's `inspected == 0` fatal is what catches a vacuous run, and it
+// catches it for both enumerations.
+func gitListedTestFiles(ctx context.Context, root string) ([]string, bool) {
+	if err := exec.CommandContext(ctx, "git", "-C", root, "rev-parse", "--is-inside-work-tree").Run(); err != nil {
+		return nil, false
+	}
+	out, err := exec.CommandContext(ctx, "git", "-C", root,
+		"ls-files", "--cached", "--others", "--exclude-standard", "-z", "--", "*_test.go").Output()
+	if err != nil {
+		return nil, false
+	}
+	// -z, because a path is allowed to contain a newline and a listing split on
+	// one would silently lose the file rather than fail.
+	files := []string{}
+	for _, rel := range strings.Split(string(out), "\x00") {
+		if rel == "" {
+			continue
+		}
+		files = append(files, filepath.Join(root, rel))
+	}
+	return files, true
+}
+
+// walkedTestFiles is the non-git fallback. `.claude` is in the prune list here
+// as well: a source tree extracted without its .git can still carry one.
+func walkedTestFiles(t *testing.T, root string) []string {
+	t.Helper()
+	var files []string
+	err := filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if d.IsDir() {
+			switch d.Name() {
+			case ".git", ".claude", "node_modules", "dist", "build", ".svelte-kit", ".dev":
+				return fs.SkipDir
+			}
+			return nil
+		}
+		if strings.HasSuffix(path, "_test.go") {
+			files = append(files, path)
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("walking the tree: %v", err)
+	}
+	return files
 }
 
 // repoRootDir walks up to the directory holding go.mod.

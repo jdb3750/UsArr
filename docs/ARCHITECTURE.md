@@ -4197,8 +4197,8 @@ asserted:
   library on the name key or creates one (`internal/store/catalogue.go`). **The Accept step below does
   not gate it, because the Accept step does not exist.** Rows appear; nothing asked.
 - **That is not the only trigger; the second one is a button.** ⚠️ This bullet used to read
-  *"`FullImport` is a Go method with no HTTP route and no CLI subcommand — `internal/httpapi/server.go`'s
-  route table registers nothing that reaches it — so on the shipped binary an import happens on a
+  *"`FullImport` is a Go method with no HTTP route and no CLI subcommand: `internal/httpapi/server.go`'s
+  route table registers nothing that reaches it. So on the shipped binary an import happens on a
   first connect and on no other occasion. There is no 'sync now'."* **The CLI half is still true;
   the HTTP half is not, and has not been since the route landed.** Measured at this commit:
   **There IS an HTTP route.** `POST /api/v1/services/{id}/sync` is registered at
@@ -4485,7 +4485,7 @@ identically otherwise).
 **A NINTH STATE, added 2026-08-19 and NOT one of the eight above: *some items are hidden from
 UsArr's credential*.** A catalogue source may compare **what the credential was shown** against
 **what the container says it holds** and record the difference at import (ADR-0061,
-[`reference/http-api.md`](./reference/http-api.md) §2.6). The row then says *"Some books are hidden —
+[`reference/http-api.md`](./reference/http-api.md) §2.6). The row then says *"Some books are hidden:
 this library holds 412 books; the service account can see 389"*, amber, with the age of the
 measurement, and one sentence above the table names the fix — which is **off this screen**: the
 filter is set on the service account UsArr connects with, and no control here can widen it.
@@ -4504,10 +4504,17 @@ all. §17.8's screen must never render the clean half as completeness.
 **A TENTH STATE, added 2026-08-19 and the ninth's sibling rather than its variant: *some items
 were left out*.** The ninth asks whether UsArr's credential **saw** the whole container. This asks
 the question one step later — of what it saw, how much did UsArr **read and deliberately not map**,
-because it has no unit of work for it. BookOrbit's adapter maps prose books only and counts the
-comics and the unclassified files it declines; the row then says *"Some items were left out — 42
-items were read and not mapped; UsArr maps prose books only"*, **grey**, with the age of the record,
-and one sentence above the table carries the total and the boundary. Wire contract:
+because it has no unit of work for it. ~~BookOrbit's adapter maps prose books only and counts the
+comics and the unclassified files it declines; the row then says *"Some items were left out: 42
+items were read and not mapped; UsArr maps prose books only"*, **grey**, with the age of the
+record.~~
+🚩 **STRUCK 2026-08-20 by [ADR-0068](./DECISIONS.md#adr-0068), which gave comics a unit of work, so
+neither the explanation nor the row's own words may still name them.** The shipped `skipReason` is
+**`a file BookOrbit itself cannot classify has no row`** — `cmd/usarr/import.go` holds the constant
+and its own retraction of the struck wording — so the row reads *"Some items were left out: 42 items
+were read and not mapped; a file BookOrbit itself cannot classify has no row"*, **grey**, with the
+age of the record. What moved is which items land in this state, not the state. And one sentence
+above the table carries the total and the boundary. Wire contract:
 [`reference/http-api.md`](./reference/http-api.md) §2.6a.
 
 ⚠️ **Grey, and that is the opposite call from the ninth's amber, deliberately.** A content filter
@@ -4518,11 +4525,21 @@ would make the shortfalls that ARE actionable harder to find.
 ⚠️ **Two values on the wire, three readings, and the third is an absent key.** `left_out` renders;
 `none` — an import observed this library and recorded nothing left out — renders **nothing**, which
 keeps this column's standing invariant that no positive claim is made on it; and a library nothing
-observed carries no verdict at all. The last two are separate values because in the database they
+observed carries no verdict at all. ~~The last two are separate values because in the database they
 are the same silence: a skip is recorded only when something was skipped, so the read pairs that
-absence with the completeness record, which is written for every container an import observed. The
-sentence above the table is where the difference becomes visible — it names the total, and once it
-has made a claim it says how many rows the claim does **not** cover.
+absence with the completeness record, which is written for every container an import observed.~~
+🚩 **STRUCK 2026-08-20 by [ADR-0063](./DECISIONS.md#adr-0063) — every container an import WALKED
+records an `items_skipped` row, zero or not.** The struck sentence's premise is false rather than
+superseded: `none` is a **zero-count row** and absent is **no row**, which are two different things
+in the database and not one silence, and the completeness pairing it describes was **retired rather
+than kept as a fallback**. ⚠️ **ADR-0063 changed nothing else in THIS paragraph** — it moved the
+evidence and not the vocabulary, so the three readings and both render rules stand exactly as
+stated. ⚠️ **That all-clear is scoped to ADR-0063 and to this paragraph, and is not one on §17.8
+above it**: the tenth state's prose was falsified separately, by ADR-0068, and is struck where it
+stands.
+`internal/store/skips.go`'s `SyncReportItemsSkipped` carries the current rule and its own retraction
+of the old one. The sentence above the table is where the difference becomes visible — it names the
+total, and once it has made a claim it says how many rows the claim does **not** cover.
 
 ⚠️ **And a skip count is not a completeness check.** It says how many items were left out and why. It
 does **not** say the rest of the library arrived, and it does not say the credential saw the whole
