@@ -1337,6 +1337,18 @@ including the earlier wording of ADR-0035 §2's own pass condition — describes
 cannot do. What the watermark is *for* is deciding when to stop reading and what to compare, never
 what to send.
 
+⚠️ **THAT "NEVER" HAS A BOUNDARY, AND IT IS NAMED HERE RATHER THAN LEFT TO BE DISCOVERED BY THE
+FIRST SOURCE THAT CROSSES IT.** The paragraph above does not forbid a since-filter; it records that
+Kavita **cannot express one**, and the "never" is that measurement generalised. **A source whose API
+can express a since-filter on the field 3b walks is outside it.** BookOrbit is the first such source:
+`addedAt` is a `StaticRuleField`, bound to `books.addedAt`, supporting `after` / `before` / `between` /
+`withinLast` server-side, so its 3b is a **filtered arrivals read** rather than a client-side stop,
+and it is filtered on **arrivals** because `updatedAt` is sort-only there and misses tag, genre,
+author and narrator edits. See [ADR-0070](./DECISIONS.md#adr-0070), which measured it and which
+carries the portable rule: **build the delta on the field the source can actually serve, and assign
+what that field cannot see to channel 4.** The client-side stop remains the mechanism for every
+source that cannot express the filter, which today is all of the others.
+
 ℹ️ **And why the overlap window is not optional, from that same live run:** Kavita's
 `lastChapterAddedUtc` values cluster on the **scan job's** clock rather than on the moment each
 chapter appeared — three series within microseconds at `07:00:30`. A walk that resumes exactly at
@@ -1347,7 +1359,7 @@ Five properties, each of which is a correctness requirement rather than a detail
 
 | Property | Rule |
 |---|---|
-| **Watermark** | `service_instance.last_delta_sync_at` holds **the maximum upstream `lastModified` value actually observed**, in the upstream's own clock and format — never `now()`, and never UsArr's clock. Same rule as channel 3's cursor and for the same reason. |
+| **Watermark** | `service_instance.last_delta_sync_at` holds **the maximum upstream `lastModified` value actually observed**, in the upstream's own clock and format — never `now()`, and never UsArr's clock. Same rule as channel 3's cursor and for the same reason. 🚩 **THIS RULE NOW CARRIES A SECOND LOAD, AND RELAXING IT ON ITS ORIGINAL GROUNDS WOULD BREAK SOMETHING THE ORIGINAL GROUNDS NEVER MENTIONED.** It was written for the cursor reason — a cursor read from the upstream's clock must not advance past events that were never returned. It is **also** what keeps the watermark at or behind the true upstream value when the wire truncates the timestamp below the column's precision, and that is what makes a boundary tie an **over-read of a bounded set rather than a skip**. Measured on BookOrbit, where the wire carries milliseconds over a microsecond column and the loss is a **floor**: [ADR-0070](./DECISIONS.md#adr-0070). **Do not substitute a locally computed time, a rounded value, or a "close enough" clock here** — the substitution looks unrelated to the guarantee it removes. |
 | **Ordering guarantee** | The source must return items ordered by a monotonic last-modified field it maintains itself. Probed at connect time, not assumed. |
 | **Overlap window** | Re-read `max(5 min, 2 × \|clock_skew_secs\| + poll interval)` **behind** the watermark, from the `Date` header skew already measured per instance (§7.3). Items changed during the walk otherwise fall between pages. |
 | **Page-walk stability** | An ordering key that mutates *while* the walk runs reorders the result set under the cursor, so an item can be skipped. The walk therefore records the first page's top item and **restarts if it is no longer first on the next poll**, rather than continuing into a reordered set. |
