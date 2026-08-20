@@ -1552,6 +1552,30 @@ Items marked 🛑 **STOPPED** are the different case: those are stopped by the d
       arm64 measurement was taken is not readable from the tree.
       *Authority:* §13, §16 v0.1 entry.
       *Done when:* a recorded measurement exists in `docs/`.
+      ➡️ **RIDER, 2026-08-20 — THE GATE THIS ITEM NAMES HAS MOVED, BY
+      [ADR-0072](./DECISIONS.md#adr-0072).** The three lines above are left exactly as written and
+      are **not** a mistake: *"a day-one spike"* is what §16 said when they were written, and this
+      rider supersedes them rather than correcting them. ADR-0072 ratifies the 2026-08-16 re-scope in
+      the project-manager thread's own words — an arm64 `make bench-rss` is *"a prerequisite to
+      claiming arm64 support, not a prerequisite to v0.1."* **So v0.1 owes no arm64 measurement, and
+      nothing here holds the schema, the milestone or any slice of it on this run.**
+      ⚠️ **THE OBLIGATION IS NOT DISCHARGED, ONLY REPOINTED.** ADR-0072 §2 is explicit that the run
+      *"remains owed before any claim of arm64 support"*, that nothing in the ruling says arm64
+      works, and that the x86-64 figures **do not transfer** — page size and core count both move
+      these numbers. Whoever first claims UsArr supports arm64 runs `make bench-rss` on the arm64 box
+      and records it as a **second row** in [ADR-0001](./DECISIONS.md#adr-0001) beside the x86-64
+      row, never as a replacement. The box therefore stays open; what changed is **which claim it
+      blocks**, not whether it is owed.
+      ⚠️ **THIS ITEM WAS KNOWINGLY LEFT UNREWRITTEN, AND THE OTHER END SAYS SO.**
+      `docs/ARCHITECTURE.md` §16's arm64 clause records that its own correction searched
+      `ARCHITECTURE.md` alone and is *"blind to every other document — `docs/ROADMAP.md`'s arm64 item
+      still cites this entry for the old deadline, and is not rewritten here."* This rider is that
+      loose end being closed from this side, which is why it cites ADR-0072 and not that clause: per
+      ADR-0072 §4, a conforming edit terminates its authority **inside** the repository.
+      📍 **Placement, stated rather than fixed:** this box still sits under §2 *v0.1 remaining work*,
+      which is now the wrong heading for it by the ruling above. It is left where it is because
+      moving it is a rewrite and this rider is not one — **read it as owed-but-not-v0.1's**, and do
+      not count it against the milestone.
 
 - [ ] **The zero-external-providers evidence clause for BookOrbit.** §16 says v0.1 needs no TMDB
       account because the source carries its own metadata. That claim was evidenced against Radarr's
