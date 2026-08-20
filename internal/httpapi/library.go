@@ -476,13 +476,24 @@ func posterKeyFor(s *Server, workID int64, key sql.NullString) string {
 // scope chip: the same corpus and the same row as Block C above, filtered by
 // media type and by library, in one of three orders, keyset-paginated.
 //
-// IT IS A DIFFERENT ENDPOINT FROM /library/recent AND NOT A SUPERSET OF IT.
-// §17.2 is emphatic that Block C is ONE table with ONE order and no filters — a
-// sixth media type adds rows to it, never a sixth region — so collapsing the two
-// into `/library/recent?media_type=…` would make the Home block a special case
-// of the grid and put a filter on the endpoint whose whole design is that it has
-// none. They share the row shape (recentWorkResponse) and the allowlist that
-// builds it (toRecentWorkResponse), by calling them.
+// IT IS A DIFFERENT ENDPOINT FROM /library/recent AND NOT A SUPERSET OF IT, AND
+// §17.2 IS NOT WHY. ⚠️ This comment used to say "§17.2 is emphatic that Block C
+// is ONE table with ONE order and no filters ... so collapsing the two into
+// `/library/recent?media_type=…` would ... put a filter on the endpoint whose
+// whole design is that it has none", and that inverts the sentence it cites.
+// What §17.2 is emphatic about is the SHAPE — one table rather than one strip
+// per type, "a sixth type adds rows to an existing list rather than a sixth
+// region to scan" — and of that table it requires in the same sentence that "it
+// sorts, it filters, it Ctrl+Fs (§4.5)"; ADR-0028 puts Block C's scope on the
+// `?lib=` chip outright. No document forbids a filter on either endpoint.
+//
+// The split is over the SHAPE OF THE QUERY, and internal/store/browse.go owns
+// that argument: this read is three orders, two filters and a cursor codec per
+// order, where /library/recent is one unfiltered statement in one order, and
+// collapsing them would make the simple statement an argument-dependent special
+// case of the filtered one. They share the row shape (recentWorkResponse) and
+// the allowlist that builds it (toRecentWorkResponse), by calling them; they
+// share no cursor (http-api.md §7.5).
 //
 // IT IS A LOCAL READ (principle 1). One SQLite statement per page — two on the
 // added_at/undated boundary internal/store documents — plus at most one small
