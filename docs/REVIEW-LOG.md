@@ -23697,3 +23697,119 @@ old signature;
 fall-through to the ordinal loop;
 and **ADR-0063's Consequences read in `docs/DECISIONS.md`** rather than taken on report.
 ⚠️ **Any commit sha reported for this entry is a content sha, never a merge.**
+
+---
+
+# VN9-12 — `DESIGN-DIRECTION.md` enumerated which media types have a catalogue source; the list was a category error, not a stale fact
+
+**Date:** 2026-08-20. **Prefix:** `VN9-`, continuing from
+[`VN9-11`](#vn9-11--the-mockups-readme-argued-from-the-identity-tiers-the-two-installs-no-longer-hold),
+which was the highest `VN9-` **entry** on `main` when this was written, re-read immediately before
+writing rather than remembered. Appended, never renumbered.
+
+## What was routed, and what it turned out to be
+
+The finding as routed was a self-contradiction two sentences apart in
+`docs/design/DESIGN-DIRECTION.md` §8.4: the section had been updated to say **v0.1 connects BookOrbit
+and Prowlarr** ([ADR-0052](./DECISIONS.md#adr-0052)) while its list of types with no catalogue source
+still named **audiobooks**, residue from the Kavita slot. That much is real, and it is verified below
+against the code rather than against a document.
+
+⚠️ **But correcting four to three would have been the same defect in a fresh coat, and this entry
+exists mostly to record that.** *Which* media types have a source is not a fact about the media types.
+It is a fact about **the install**, derived from **the service kinds that install has connected** —
+and `cmd/usarr/import.go` accepts a catalogue import from **two** kinds, so the answer genuinely
+differs between installs. The struck sentences were never *out of date*; they were **accidentally
+correct**, for exactly as long as one install shape was the only one anybody had in mind. A document
+that names a split at all has the bug, at any number.
+
+## What was verified, in the tree, before anything was written
+
+- **BookOrbit catalogues audiobooks.** `internal/libsync/bookorbitfiles.go`'s
+  `bookOrbitEditionFormat` returns `sql.NullString{String: "audiobook", Valid: true}` for
+  `bookorbit.MediaKindAudiobook`. `internal/bookorbit/catalogue.go` defines that kind as
+  *"MediaKindAudiobook is one of m4b, mp3, m4a, opus, ogg, flac"*, with the set itself at
+  `audioFormats = map[string]bool{"m4b": true, "mp3": true, "m4a": true, "opus": true, "ogg": true, "flac": true}`.
+- **And it reaches the navigation enum as `Audiobooks`.** `internal/libsync/bookorbit.go` routes
+  `MediaKindEbook` and `MediaKindAudiobook` through the **same** `mapBook`, so both are `work.kind`
+  `book`; `internal/store/recent.go`'s `mediaTypeOf` then returns `MediaTypeAudiobooks` when
+  `MIN(edition.format = 'audiobook')` is 1 and `MediaTypeEbooks` otherwise. So the split is carried by
+  the **edition format**, and BookOrbit sets it.
+- **Kavita records the opposite, in as many words.** `internal/libsync/kavita.go`, on
+  `LibraryTypeBook`: *"an audiobook is not a kind (it is an edition with format='audiobook',
+  ADR-0031), and Kavita serves no audio, so nothing here can produce one."*
+- **Both kinds import, which is what makes the set per-install.** `cmd/usarr/import.go` has an arm for
+  `entry.kavita` and an arm for `entry.bookorbit`, and its refusal names both:
+  *"%q has kind %q; v0.1 imports a catalogue from bookorbit and from kavita, and from nothing else
+  (ADR-0052, ADR-0041)"*. So a Kavita-only install yields **no** audiobooks, a BookOrbit install yields
+  them, and an install holding both is a third answer — from one binary, with nothing recompiled.
+- **The precedent the replacement points at is shipped, not proposed.**
+  `web/src/lib/librarygrid.ts`'s `browseEmptyState` answers *why is this empty* by delegating three of
+  its four cases to `recentEmptyState(mode)`, where `mode` is `$lib/home`'s `homeMode(health)` —
+  computed from the services-health response over `isIndexer`, on the rule that comment states
+  outright: *"a build that later accepts a library-bearing kind changes what this returns without
+  anything here being edited."* Block A owes the same derivation one grain finer, per media type
+  rather than per install.
+
+## What was applied — three sites, all in `docs/design/DESIGN-DIRECTION.md`
+
+Dated riders throughout. **No superseded sentence was deleted or reworded**; each is quoted where it
+stood so a reader can see what the document asserted and when it stopped being true.
+
+1. **§8.4.** Two sentences struck (`🚩 STRUCK 2026-08-20`), quoted whole in a blockquote: *"so on a
+   v0.1 install movies, TV, music and audiobooks have **no catalogue source** and Block A renders
+   those four rows in the per-type `unconfigured` state … **Which four types those are is
+   unchanged** — BookOrbit's media types are Kavita's, books, comics and manga (§16.1)"*. What stands
+   in their place is **the rule, not a new count**: Block A's rows are derived from what is connected,
+   the section names no split, and `browseEmptyState` is cited as the shape to follow.
+2. **§8.6 row 13.** *"Home Block A's **four** sourceless rows in v0.1"*, *"Dropping those **four**
+   rows"* and *"UsArr does not do **movies, TV, music or audiobooks**"* struck and quoted.
+   ✅ **The surrounding argument survives untouched, and that was checked rather than assumed**: rule
+   13's claim is that a row carrying a state, a cause and an action is *content*, which needs **at
+   least one** sourceless row and never four. Nothing above it moves.
+3. **§2, the `ARCHITECTURE §16` inheritance row — a third site, not in the routing, found by grep.**
+   It carried the identical defect and one further dead claim: *"**BookOrbit's adapter is not written
+   yet**, so the pair now rests on §16.1's media types rather than on code"*. It **is** written
+   (`internal/libsync/bookorbit.go`, `bookorbitfiles.go`). Struck and quoted, with the same rule in
+   its place. Left unrepaired, this row would have gone on enumerating a split while §8.4 forbade one.
+
+## What was NOT applied, and is routed rather than swept
+
+⚠️ **The residue has an upstream, and it is not in this thread's file.**
+[ADR-0052](./DECISIONS.md#adr-0052) clause 1 states *"The media types v0.1 catalogues are unchanged:
+books, comics and manga"*, and ARCHITECTURE §16.1 restates it as *"BookOrbit takes its media types,
+which are unchanged — books, comics and manga"*. **The same code falsifies both.** They are other
+threads' documents; `DESIGN-DIRECTION.md` now stops repeating the claim and **amends neither**, and
+§8.4 says so where a reader meets the citation. **This is a live finding for whoever owns those two
+files**, recorded here so it is not lost between lanes.
+
+ℹ️ **A second, smaller pointer defect is named rather than silently fixed.** §8.4's *"rule 13 in §13
+below"* meant **§8.6 row 13** — §13 is the lint checklist and has no numbered rule 13. The
+replacement text points correctly and says that it is correcting the pointer.
+
+ℹ️ **One more instance of the Kavita residue was seen and left alone, out of scope**:
+`web/src/lib/libraryscreen.ts`'s `search-and-grab` empty state still reads *"Kavita is the
+library-bearing service this build connects"*. That is a shipped UI string in the frontend lane's
+file, not this thread's, and it is a copy fix rather than a reasoning defect.
+
+## The gate, reported as measured
+
+`make design` — **exit 2, `2 FAILURES`**, `9 source files`, `860896 chars scanned`, on
+`docs/design/tokens.css`, `mockups/usarr.css`, `fonts.css`, `usarr.js` and the five screen HTML files.
+
+⚠️ **That red is pre-existing and is not this change's**, and it was measured rather than argued:
+the run was repeated with the edit stashed and produced the **same** exit code, the same
+`2 FAILURES`, and the same three violations — all of them
+*"ARCHITECTURE §17: em dash in specified UI copy"*, on `FullImport is a Go method with no HTTP route
+…`, `Some books are hidden — this library holds 412 books …` and `Some items were left out — 42 items
+were read and not mapped …`. §17's shipping copy is the owner's to word, and §13.0 already records
+that a checker does not edit the specification it checks.
+
+🚩 **AND THE GREEN ATTESTS NOTHING ABOUT THIS CHANGE EITHER WAY, WHICH IS THE HONEST THING TO SAY.**
+`docs/design/check.mjs` reads `tokens.css`, the four mockup assets, the five mockup screens and
+`docs/ARCHITECTURE.md` (for §17's copy corpus). **`DESIGN-DIRECTION.md` is in no corpus it reads** —
+the document specifies the checks and is never itself checked. So `make design` is reported here for
+completeness and as evidence that nothing regressed, and **not** as coverage of the edit. The review
+of this change is this entry and the quotations above.
+
+⚠️ **Any commit sha reported for this entry is a content sha, never a merge.**
