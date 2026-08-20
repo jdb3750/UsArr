@@ -2915,10 +2915,17 @@ drawing an empty one"*. That was re-measured and recorded as still holding at `5
 **One clause of that sentence was a requirement wearing a status claim's clothes, and it survives as
 a requirement**: *every screen that would render a library says which source is missing rather than
 drawing an empty one* (principle 3, §17.7's `unconfigured` state). While nothing replicated it was
-vacuously satisfied. It is no longer vacuous — Kavita's adapter emits exactly two `work.kind` values,
-`comic` and `book` (`mapLibraryType`, `internal/libsync/kavita.go`), so **two of §1's six media types
-now have a source and four do not**, and the rule now has to hold on a mixed screen rather than an
-empty one. **That is §17's to re-measure, and it is flagged rather than assumed here** (REVIEW-LOG
+vacuously satisfied. It is no longer vacuous — some of §1's six media types have a catalogue source
+and some do not, so the rule now has to hold on a mixed screen rather than an empty one. 🚩 **STRUCK
+2026-08-20 by [ADR-0052](./DECISIONS.md#adr-0052):** this read *"Kavita's adapter emits exactly two
+`work.kind` values, `comic` and `book` (`mapLibraryType`, `internal/libsync/kavita.go`), so **two of
+§1's six media types now have a source and four do not**"*. ⚠️ **This paragraph is itself a
+retraction note about a claim that went stale, and it committed the same error a second time while
+retracting the first** — which is the reason a sweep cannot trust its own search shape, since it
+restates the enumeration in words that match none of the anchors the earlier passes used. **The count
+is deliberately not corrected to a different count**, because naming which media types have a source
+is a category error rather than a stale fact: `cmd/usarr/import.go` imports a catalogue from
+`bookorbit` **and** from `kavita`, so the answer is a property of the install. **That is §17's to re-measure, and it is flagged rather than assumed here** (REVIEW-LOG
 CH1-04). (The query-plan assertions are in
 place for the tables that exist, in `make test` — the gate named above, not a CI.)
 
