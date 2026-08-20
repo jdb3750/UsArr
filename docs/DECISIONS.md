@@ -62,7 +62,7 @@ because no ADR ever decided it. Annotating leaves that failure mode nowhere to h
 
 | ADR | Decision | Status |
 |---|---|---|
-| [0001](#adr-0001) | Go for the backend | **Accepted, evidence corrected** (rev 2) |
+| [0001](#adr-0001) | Go for the backend | **Accepted, evidence corrected** (rev 2); **[ADR-0072](#adr-0072) ratifies this ADR's 2026-08-16 arm64 re-scope and supplies the ruler its sentence never named** — it amends nothing here, rewords nothing and supersedes nothing, so this row takes no amendment mark and the `Status:` line below it gains none |
 | [0002](#adr-0002) | Embedded SQLite + WAL, no required sidecar | Accepted, one claim narrowed |
 | [0003](#adr-0003) | SvelteKit `adapter-static` SPA embedded via `embed.FS` | Accepted — **one argument corrected by [ADR-0029](#adr-0029)** |
 | [0004](#adr-0004) | Replica, not proxy | Accepted — **refined by [ADR-0026](#adr-0026)**; the conflict rule is narrowed to three axes in ARCHITECTURE §2.2 |
@@ -130,6 +130,7 @@ because no ADR ever decided it. Annotating leaves that failure mode nowhere to h
 | [0067](#adr-0067) | A pasted BookOrbit **magic link is accepted and reduced to its token**; the refusal becomes the fallback | **Accepted** — 2026-08-19; **reverses a ruling taken the same morning and records both**, because the first one was correct reasoning on a premise that turned out to be false — `ab9e0f3` refused a pasted magic-link URL on the belief that BookOrbit's copy button *"yields a URL, while POST /api/v1/auth/magic-links/login wants the bare token"*, read as *an artefact its own API cannot consume*; **reading the consumer falsified it** — `client/src/router/index.ts` declares a public `/magic` route, `MagicLinkLoginView.vue` takes `route.query.token` and strips it from history, and `useAuth.loginWithMagicLink` POSTs `{"token": raw}`, so **URL in / bare token out is an adapter BookOrbit already implements**, and `MagicLinksSettings.vue` offers the operator nothing else (the table renders the label, the account, the expiry and the use count, never the raw value); **measured at `73b7877d2fede2221b0ca360af9bfced7c3797f3`, cited as a commit because the tag `v2.6.0` was NOT verified to point at it**; **found by a live failure on the owner's install**, not by review; **leaves [ADR-0060](#adr-0060) standing and unreworded**; the price is named rather than buried — the accept rule is a **whitelist**, so an upstream token-format change would have UsArr refuse a valid credential |
 | [0068](#adr-0068) | A BookOrbit comic is an **issue**, and issues are **minted under series works**; `seriesId` null synthesizes a one-shot series, extra memberships are **recorded, not resolved** | **Accepted** — 2026-08-19; **this is the "unit of work" [ADR-0066](#adr-0066) decision 5 was waiting for** — *"The kind stays `book` until comics have a unit of work"* — so it activates that decision's two-library split rather than reopening it; **[ADR-0030](#adr-0030)'s model is applied, not amended**: `comic` is the series, `comic_issue` the issue, verified at migration `00005_library_sync.sql:256` (*"'comic' is the SERIES, 'comic_issue' the issue or chapter"*) and `00006_kavita_subtypes.sql`'s header; **the parent binding is MEASURED, not inferred** — `BookCard.seriesId` is not an arbitrary `memberships[0]` and is not null under multi-membership, it is BookOrbit's own maintained **primary** (`series-membership.service.ts`, `displayOrder = 0`, round-tripped by `syncPrimaryMetadata` and `syncPrimaryFromMetadata`, at commit `73b7877d2fede2221b0ca360af9bfced7c3797f3`); **`seriesMemberships[]` beyond the primary is RECORDED and not acted on**, on [ADR-0063](#adr-0063)'s precedent, the fuzzy tier that would resolve it staying v0.3 via `work_relation`; **`is_oneshot` is WRITTEN rather than merely tolerated** — *"a column with a DEFAULT 0 and no writer is a deaf column"*; **both residue defaults emit a `sync_report` row**, so sizing comes from instrumentation rather than from estimates; **no migration, no column, no DDL and no new wire field** — `sync_report.kind` carries no `CHECK` by design and `library.kind` already permits `'comic'`; ⚠️ **the done-check FAILS if series count equals issue count**, because that is the per-row shape [ADR-0066](#adr-0066) already pre-emptively refused |
 | [0069](#adr-0069) | The library-skips payload carries a **per-container breakdown** beside the library total; **apportioning** a library's total across its containers is refused | **Accepted** — 2026-08-20; **does not reverse [ADR-0063](#adr-0063)'s decisions** — that is a write rule and nothing in the writer, the schema or `SkipState` is touched — ⚠️ **but it DOES invalidate one of ADR-0063's recorded consequences**, *"no SQL and no plan changes"*, whose first half is now false and which carries a dated supersession in its own text; **the breakdown is keyed on the `(service_instance_id, container_kind, container_ref)` triple `sources[]` already publishes**, and the authoritative wire contract is [`reference/http-api.md`](./reference/http-api.md) §2.6a, **already amended** to a five-row field table saying the count breaks down by **container, never by reason**; **the shared statement is WIDENED, not forked** — `containerReportSQL` selects the three identity columns for both callers and the completeness caller scans and discards them, chosen on the plan guard rather than on the wasted scan, and **both guards were fired deliberately** (a fork reddens the skips plan assertion while the completeness one stays green); **`containers` is absent under `none`** and a **zero-count entry is dropped** even under `left_out`, on `items`'s own reasoning, so the entries always sum to `items`; ⚠️ **`skipMarks`' `alsoReporting` has the SAME defect on the per-row axis and is recorded OPEN, not fixed**; the measured pair is ground truth **2** / `main` **4** / the fix **2**, with the topology that produces it stated so the numbers are hand-checkable |
+| [0072](#adr-0072) | The project-manager thread **ratifies** the arm64 RSS spike's re-scope: the `make bench-rss` run gates **claiming arm64 support**, not v0.1 | **Accepted** — 2026-08-20; **ratifies a re-scope that [ADR-0001](#adr-0001) states in an agentless passive** — *"the requirement is re-scoped"*, no agent, no limit clause, no application line — and whose only record was a review-log disposition that names no ruler either, under *"Round 2 — the first code drop"*, *"6. A documented prerequisite was re-scoped, not dropped"* (⚠️ **the round qualifier is load-bearing**: that file opens a second *"6."* under Round 6); **the venue follows from the argument and not from who made it** — a review-log entry records a **disposition** and an ADR records a **decision**, so recording the ratification as a disposition would reproduce the defect one level up, a second entry asserting a thing is settled and containing nothing that settles it; ⚠️ **it quotes the ruling NARROWLY on purpose** — the limit clause drifted by two words in one relay on the day of the ruling (*"nothing **about** it"* for *"nothing **in** it"*), so the entry carries the arguments and quotes only what it verified; **the decision**: the arm64 `make bench-rss` run is *"a prerequisite to claiming arm64 support, not a prerequisite to v0.1"*, and ⚠️ **the limit clause is not optional** — *"the arm64 run remains owed before any claim of arm64 support. This moves the gate; it does not discharge the obligation, and nothing in it says arm64 works or that the x86-64 figures transfer"*, page size and core count both moving these numbers, so an arm64 result is a **second row** in ADR-0001 and never a replacement; 🚫 **the live alternative it closes** is *"the re-scope was never ratified, so the original gate stands"*, read at roughly **70/30** on 2026-08-20 and **right about the record, wrong about what to do with it** — v0.1 deploys to x86-64, the original clause gated the schema and *"the gate had already been passed unmet"* with eleven migrations since landed, and the project has operated on the re-scoped reading since 2026-08-16; **rejecting it costs no rigour** because *"the measurement stays owed against the claim it actually supports"*; **the reach is bounded by the ruling itself** — *"it covers sites carrying the pre-re-scope framing of the arm64 spike, wherever they are, and nothing else. A lane editing a sentence that is not about that has left the chain"*; ⚠️ **it states its reach and NOT which sites conform**, per `DEVELOPMENT.md` §11 *"A ruling states its reach, not the tree's current state"*, the rule this very ruling produced — **two statements the ruling as issued made about the tree failed verification** and the ADR carries neither, a corrected count being the same kind of claim; **supersedes nothing** — ADR-0001's text stands unreworded, its `Status:` line gains no mark, and this ADR supplies the author that sentence never had; **ships no code, no migration, no column, no configuration key and no wire field** |
 
 ---
 
@@ -290,6 +291,41 @@ prerequisite to the schema work; the schema shipped and the deployment target is
 run is now a prerequisite to **claiming arm64 support**, not to v0.1 — see ARCHITECTURE §13 and
 REVIEW-LOG §R2.6. The command is `make bench-rss` on the arm64 machine; add its output as a second
 row here. Page size and core count both move these figures, so it replaces nothing.
+
+✅ **Rider 2026-08-20 — the UsArr project-manager thread ratified this re-scope, and the pointer it
+cites has never resolved.** This ADR states the re-scope in an agentless passive — *"the requirement
+is re-scoped"* — and names nobody who made it; the review-log finding behind it names nobody either.
+**The UsArr project-manager thread ratified it on 2026-08-20**, in its own words: *"I ratify the
+re-scoping of the arm64 RSS spike."* **Ratified by [ADR-0072](#adr-0072)**, which records the ruling
+in full. **The ruling moves the gate and moves nothing else** — the arm64 `make bench-rss` run is a
+prerequisite to *claiming arm64 support*, not a prerequisite to v0.1. **It rules nothing about the
+hardware, and says so itself**: *"The arm64 run remains owed before any claim of arm64 support. This
+moves the gate; it does not discharge the obligation, and nothing in it says arm64 works"* — nor
+that the x86-64 figures transfer, page size and core count both moving these numbers. **The ruling
+reaches every site carrying the prerequisite**, and names three as conforming to it — ARCHITECTURE
+§16, ARCHITECTURE §13 and DEVELOPMENT §1. Whether each already reads that way is a question for the
+tree, not for this rider.
+
+⚠️ **The citation *"REVIEW-LOG §R2.6"* in that same sentence has never resolved.** The finding is
+[`REVIEW-LOG.md`](./REVIEW-LOG.md)'s *"6. A documented prerequisite was re-scoped, not dropped"*,
+under the round heading *"Round 2 — the first code drop"* — and the round is load-bearing, because
+that file's *"Round 6 — five prongs over `main`, the shipped code and a fresh install"* opens a
+*"6."* of its own (*"Verification addendum…"*), so a round-less *"§6"* names two places. `§R2` there
+is *"R2. Where two research reports disagreed"*, a different subject with no sixth subsection under
+it. **This rider annotates the dead citation and leaves the sentence standing**, this file's
+convention being to annotate rather than rewrite; **it adds no status mark to this ADR's Status
+line**, because nothing here supersedes a decision — the re-scope stands unreworded, and this rider
+supplies the author it lacked.
+
+**Provenance, recorded because a ruling's authority is the thread that issued it.** The UsArr
+project-manager thread sent this ratification to the coordinating thread directly, on
+**2026-08-20**, and every quotation above comes from that message. An earlier relay had carried the
+same ruling to the drafting lane second-hand; **that relay is history, not the authority.** **The
+active voice here is the ruling's own requirement rather than a style choice**: the thread ruled
+that *"the ratification is written in the active voice, with the agent named, the date, and both
+what it does and what it does not do"*, because the 2026-08-16 agentless passive is what made this
+re-scope unreadable as a decision — *"If it lands as another agentless passive, this recurs, and the
+record will show we knew exactly why."*
 
 ### Alternatives rejected
 - **Rust + Axum** — the honest runner-up. 2–3× lower memory, no GC pauses during a 500k-row
@@ -10522,3 +10558,179 @@ in a shipped build.
 **The gate attests nothing about any of this.** This ADR changes one Markdown file. No arm of
 `make check` reads `docs/` for content; gitleaks is the only arm that touches this diff at all, and
 it attests that the prose contains no credential — not that the prose is true.
+
+
+---
+
+<a id="adr-0072"></a>
+## ADR-0072 — The project-manager thread ratifies the arm64 RSS spike's re-scope: the run gates **claiming arm64 support**, not v0.1
+
+**Status:** Accepted · **2026-08-20** · **The UsArr project-manager thread ruled this**, and this
+entry names it, dates it and writes it in the active voice on purpose — the 2026-08-16 re-scope it
+ratifies named nobody, and that is the defect this entry repairs ·
+**It moves a gate and discharges no obligation**: the arm64 `make bench-rss` run stays owed before
+any claim of arm64 support, and nothing here says arm64 works ·
+**Ships no code**, adds no migration, no column, no configuration key and no wire field — it rules
+on prose ·
+**It supersedes nothing.** [ADR-0001](#adr-0001)'s text stands unreworded and its `Status:` line
+gains no mark; this ADR supplies the author that ADR's re-scope sentence never had ·
+⚠️ **This entry states what the ruling REACHES, and refuses to state which sites conform today**,
+per [`DEVELOPMENT.md`](./DEVELOPMENT.md) §11 *"A ruling states its reach, not the tree's current
+state"* — a rule this very ruling produced, as that section records ·
+⚠️ **Two statements the ruling as issued made about the tree are deliberately absent below**, and
+*"Two statements the ruling made about the tree, and why they are absent here"* names which and why,
+rather than dropping them quietly.
+
+### Context
+
+#### 1 · What the 2026-08-16 disposition narrowed, and how thinly it recorded the narrowing
+
+[ADR-0001](#adr-0001) originally made one measurement a hard prerequisite — this driver, a 500k-row
+fixture, WAL, the §7.7 pragmas, idle and peak RSS measured **on arm64** — *"required before schema
+work starts"*. On **2026-08-16** a review-log disposition narrowed it — **naming no agent, which is
+half of what this entry repairs** — so that the arm64 run became a prerequisite to *claiming arm64
+support* rather than a prerequisite to v0.1.
+
+The entire record of that narrowing is one disposition in [`REVIEW-LOG.md`](./REVIEW-LOG.md),
+*"6. A documented prerequisite was re-scoped, not dropped"*, under the round heading *"Round 2 — the
+first code drop"*. **The round qualifier is load-bearing**: that file opens a second *"6."* under
+*"Round 6 — five prongs over `main`, the shipped code and a fresh install"*, so a round-less *"§6"*
+names two places.
+
+#### 2 · Three defects, and why a closer reading could not have settled them
+
+**ADR-0001 states the re-scope in an agentless passive.** *"The requirement is re-scoped"* names no
+agent, carries no limit clause and states no application line — so a reader cannot recover who ruled
+it, what it left owed, or which sentences elsewhere it was meant to move. The disposition behind it
+names no agent either.
+
+**The cross-reference carried with it has never resolved.** Sentences carrying the re-scope point at
+a `REVIEW-LOG §R2.6`. That file's `R2.` is *"R2. Where two research reports disagreed"* — a
+different subject, with no sixth subsection under it — so a reader following the pointer lands on an
+unrelated section and gets a confident wrong answer instead of a dangling-link signal.
+
+**The sites point at one another in a circle.** Each cites the others for its authority, and none of
+them visibly *ratifies* rather than *records*. **This is why the repair is a decision rather than a
+closer reading.** The project-manager thread said so directly: *"A further re-reading would not have
+settled it."* The missing thing was never in the paragraph, so no amount of re-reading the paragraph
+could produce it.
+
+#### 3 · Why this is an ADR and not another review-log entry
+
+**A review-log entry records a disposition; an ADR records a decision.** That distinction is this
+entry's whole occasion. The 2026-08-16 re-scope reached the log as a disposition naming no ruler,
+and four days later no reader could tell whether anyone had ruled it or someone had merely noted
+it — which is the defect above, arriving again as a question of venue. **Recording the
+*ratification* as a disposition would reproduce that defect one level up**: a second entry
+asserting that a thing is settled, containing nothing that settles it.
+
+**The venue therefore follows from the argument, and this entry rests it on the argument rather
+than on who made it** — which is also why it quotes the ruling narrowly instead of at length. **A
+quotation is worth no more than the hop it arrived on.** This ruling's own limit clause drifted by
+two words in a single relay on the day of the ruling — *"nothing **about** it says arm64 works"*
+for *"nothing **in** it says arm64 works"* — which is a small drift in a sentence whose entire job
+is to bound a claim. An argument survives a relay; a quotation does not.
+
+### Decision
+
+**The UsArr project-manager thread ratified the re-scope on 2026-08-20**, in its own words: *"I
+ratify the re-scoping of the arm64 RSS spike. Ruled by the UsArr project-manager thread,
+2026-08-20."*
+
+1. **The gate moves.** The arm64 `make bench-rss` run is *"a prerequisite to claiming arm64 support,
+   not a prerequisite to v0.1."* v0.1 owes no arm64 measurement, and no clause anywhere holds the
+   schema, the milestone or any slice of it on that run.
+
+2. **The obligation does not move, and this clause is not optional.** In the thread's own words:
+   *"The arm64 run remains owed before any claim of arm64 support. This moves the gate; it does not
+   discharge the obligation, and nothing in it says arm64 works or that the x86-64 figures transfer.
+   Page size and core count both move these numbers."* Whoever first claims UsArr supports arm64
+   runs `make bench-rss` on the arm64 box and records its output as a **second row** in ADR-0001
+   beside the x86-64 row — a second row, never a replacement.
+
+3. **The thread bounded its own ruling's reach, in its own words** — *"One boundary, so the
+   conformance chain does not become a licence: it covers sites carrying the pre-re-scope framing of
+   the arm64 spike, wherever they are, and nothing else. A lane editing a sentence that is not about
+   that has left the chain."* This ADR carries that boundary and adds nothing to it. **Whether any
+   given site already reads the re-scoped way is a question for the tree, not for this ADR.**
+
+4. **The authority now terminates inside the repository.** A lane conforming a sentence to this
+   ruling cites **ADR-0072**. A citation of the thread's message instead terminates outside the
+   tree, where no reader can check it — which is the same defect as an unattributed passive, wearing
+   a date.
+
+### Alternatives rejected
+
+🚫 **"The re-scope was never ratified, so the original gate stands."** This is the live alternative,
+and closing it is what makes this an ADR rather than a note. A careful reading of ADR-0001 on
+2026-08-20 reached roughly **70/30 in its favour**, and it reached that honestly: ADR-0001 carries
+no author for the narrowing, the disposition behind it names none, and the pointer joining them
+resolves to the wrong section. **That reading is right about the record and wrong about what to do
+with it.** The project-manager thread rejected it on three grounds:
+
+- **v0.1 deploys to x86-64, and the x86-64 figures already exist.** Reinstating the original gate
+  would hold the milestone on a measurement of hardware nobody deploys to.
+- **The original clause gated the schema, and the schema shipped anyway** — in the thread's words,
+  *"the gate had already been passed unmet"*. Reinstating it restores no gate that ever held; it
+  declares a milestone retroactively blocked by a condition the schema walked past long ago —
+  `internal/db/migrations` held **eleven** migrations, `00001` through `00011`, on the day of this
+  ruling, counted off the tree rather than quoted from a document.
+- **The project has operated on the re-scoped reading since 2026-08-16.** Reversing it four days
+  later would invalidate that work on a question of authorship rather than on evidence.
+
+**Rejecting it costs nothing in rigour**, because the obligation survives the move — *"the
+measurement stays owed against the claim it actually supports."* The one thing the alternative would
+buy, an arm64 number, this decision still requires; it requires it before the only claim that number
+can support.
+
+🚫 **A second review-log disposition, or a dated note beside the first.** Rejected for the reason
+under *"Why this is an ADR and not another review-log entry"* above: the original narrowing reached
+the log as a disposition naming no ruler, and recording the ratification the same way inherits the
+same unreadability.
+
+🚫 **Rewriting ADR-0001's re-scope sentence into the active voice in place.** Rejected on this file's
+own standing rule — *"An ADR body is a dated record of a decision as taken, so it is annotated,
+never rewritten."* A rewrite would erase the evidence of the defect while claiming to fix it.
+
+### ⚠️ What this does NOT decide
+
+- **It says nothing about whether arm64 works**, and nothing about what it would cost. The thread
+  wrote that limit into the ruling itself rather than leaving a reader to infer it.
+- **It does not let the x86-64 figures stand in for arm64 ones.** Page size and core count both move
+  these numbers, so an arm64 run produces a **second row**, not a confirmation of the first.
+- **It does not touch ADR-0001's measured x86-64 result, the `make bench-rss` harness, the pragma
+  defaults, or [ADR-0001](#adr-0001)'s amendment that set them.** It rules on one prerequisite's
+  scope and on nothing else that ADR carries.
+- **It supersedes no ADR and reverses none.** ADR-0001 keeps its text and its `Status:` line.
+- **It reaches no sentence outside the boundary in decision 3.** A lane holding this ADR up against
+  a sentence that is not about the arm64 spike's pre-re-scope framing has left the chain, in the
+  thread's own word for it.
+- **It does not state what any document currently says**, here or anywhere. That question belongs to
+  the tree.
+
+### ⚠️ Two statements the ruling made about the tree, and why they are absent here
+
+The ratification as issued carried two claims about which documents currently say what. **The
+drafting lane checked both against the tree and both failed**, so **this ADR carries neither** — not
+as asserted, and not as a corrected count, because a corrected count is the same kind of claim and
+goes stale the same way. `DEVELOPMENT.md` §11 *"A ruling states its reach, not the tree's current
+state"* records that case as the one that produced the rule, and is the place to read it.
+
+**Nothing in the ruling's substance rests on either.** The gate moves, the obligation stays and the
+boundary holds whatever any document happens to say this morning — which is the whole point of
+stating reach instead of state.
+
+### Consequences
+
+- **Anyone claiming arm64 support owes the run first**, and records it as a second row in ADR-0001.
+  This ADR is the citation for that being the *only* thing the arm64 run now gates.
+- **A conformance edit cites ADR-0072.** That is what makes the ruling checkable by a reader who was
+  not in the thread, and it is the difference between an authority inside the tree and one outside
+  it.
+- **ADR-0001 gains an author for its re-scope sentence without losing its text.** This file's
+  annotate-never-rewrite rule keeps that sentence standing; a rider beside it points here.
+- **This entry does not settle which sites conform, and refuses to.** A reader wanting that answer
+  reads `docs/`, not this ADR.
+- **The gate attests nothing about any of this.** This ADR changes one Markdown file. No arm of
+  `make check` reads `docs/` for content; gitleaks is the only arm that touches the diff at all, and
+  it attests that the prose contains no credential — not that the prose is true.
