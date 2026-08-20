@@ -413,7 +413,8 @@ func (s *BookOrbitSource) gate(ctx context.Context) error {
 	return s.gateErr
 }
 
-// bookKind is the work.kind every container this adapter binds is given.
+// bookKind is the FALLBACK kind this adapter's containers are bound at, pending
+// what the walk finds.
 //
 // ⚠️ IT IS A CONSTANT BECAUSE BOOKORBIT SUPPLIES NO CONTAINER-LEVEL KIND AT ALL,
 // not because every BookOrbit library holds prose. `libraries`
@@ -430,15 +431,23 @@ func (s *BookOrbitSource) gate(ctx context.Context) error {
 // ASKED FOR AND GRANTED: ADR-0066 decision 5 rules the split and ADR-0068
 // activates it. A mixed container now binds to a 'book' library HERE and a
 // 'comic' library minted lazily over the same container ref by
-// store.parentBinding, on the first comic the walk actually reaches — lazily,
+// store.resolveBinding, on the first comic the walk actually reaches — lazily,
 // because this constant runs before any book has been read and a comic library
 // minted for a prose-only container would be an empty row on the Libraries
 // screen for ever.
 //
+// ⚠️ AND THIS COMMENT SAID *"'book' is the kind every container this adapter
+// BINDS is given"*, WHICH IS NO LONGER TRUE OF THE END STATE. It is still the
+// kind every container is bound at, because it is still all this constant can
+// know; what changed is that the walk may move it. A container that turns out to
+// hold ONLY comics ends up as one 'comic' library — the same row, retyped in
+// place, keeping the container's name and its slug — rather than an empty 'book'
+// library with a 'Comics (Comics)' sibling beside it. That is what
+// store.CatalogueContainer.KindProvisional buys, and Containers() sets it.
+//
 // What is unchanged is what this constant IS: BookOrbit supplies no
-// container-level kind, so 'book' is the kind every container this adapter BINDS
-// is given, and the comic side is derived per book from the source's own format
-// fact.
+// container-level kind, so 'book' is a guess made before the walk, and the comic
+// side is derived per book from the source's own format fact.
 const bookKind = "book"
 
 // bookRemoteKind is service_item_link.remote_kind for every row this adapter
@@ -478,7 +487,8 @@ const (
 	comicSeriesRemoteKind = "series"
 )
 
-// Containers reads GET /api/v1/libraries and gives each one the 'book' kind.
+// Containers reads GET /api/v1/libraries and gives each one the 'book' kind, as
+// a FALLBACK the walk is allowed to move.
 //
 // NOTHING IS DECLINED HERE, and that is a difference from the Kavita adapter
 // worth naming. mapLibraryType declines Kavita's Image type because Kavita SAYS
@@ -522,6 +532,18 @@ func (s *BookOrbitSource) Containers(ctx context.Context) ([]store.CatalogueCont
 			RemoteID: containerRef(l.ID),
 			Name:     l.Name,
 			Kind:     bookKind,
+			// ⚠️ THE KIND ABOVE IS A FALLBACK AND SAYS SO. BookOrbit supplies no
+			// container-level kind at all, so 'book' here is a constant chosen
+			// before a single book has been read, and the WALK is the authority.
+			// Without this flag a comics-only container binds eagerly at 'book'
+			// and then gets a `comic` sibling minted beside it — two rows, one of
+			// them permanently empty, and the other carrying a kind qualifier that
+			// only earns its place when a container really is mixed. See
+			// store.CatalogueContainer.KindProvisional for what it changes, and
+			// what it deliberately does NOT: the row is still created here and
+			// eagerly, because ADR-0066 decision 1 requires a container whose
+			// every item is skipped to be bound anyway.
+			KindProvisional: true,
 		})
 	}
 	return out, nil

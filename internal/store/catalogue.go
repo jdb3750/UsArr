@@ -65,6 +65,38 @@ type CatalogueContainer struct {
 
 	// DeclineReason is set exactly when Kind is "".
 	DeclineReason string
+
+	// KindProvisional says Kind is the adapter's FALLBACK rather than the
+	// upstream's answer, so the WALK is the authority on what this container
+	// holds and the bind pass is only guaranteeing a row.
+	//
+	// ⚠️ IT EXISTS BECAUSE ONE ADAPTER CANNOT ANSWER THE QUESTION AT ALL.
+	// Kavita SAYS what a library holds, so its Kind is evidence and this stays
+	// false. BookOrbit's `libraries` table has no type, kind or mediaType column
+	// (bookorbit.Library), so `bookKind` is a constant guess made before a single
+	// book has been read — and a comics-only BookOrbit container bound eagerly at
+	// 'book' is a library that should not exist, with the comic sibling minted
+	// beside it carrying a qualifier it never needed.
+	//
+	// What the flag buys is exactly two behaviours in bindOneContainer, and
+	// nothing else changes for an adapter that leaves it false:
+	//
+	//   - the EAGER bind (bindFromContainerList) ADOPTS whatever library already
+	//     stands over this container ref, at whatever kind, rather than minting a
+	//     second one at the fallback kind. A guess must never contradict evidence
+	//     a previous import already recorded.
+	//   - the ITEM path (bindSiblingKind) may RETYPE that library in place when
+	//     it is still empty, instead of minting a sibling beside it.
+	//
+	// ⚠️ IT NEVER DEFERS OR DELETES A LIBRARY, and that is deliberate rather than
+	// incidental: ADR-0066 decision 1 requires that a container whose every item
+	// is skipped is STILL BOUND — "Containers() keeps reporting it,
+	// bindOneContainer keeps binding it, and the library renders on §17.8 with an
+	// item count of zero and a sentence". A content-derived scheme that waited for
+	// the walk to mint anything would silently delete exactly that row. The row is
+	// created eagerly here as it always was; only its `kind` can still move, and
+	// only while nothing has been filed into it.
+	KindProvisional bool
 }
 
 // CatalogueBinding is where one container's items are filed.
@@ -90,6 +122,17 @@ type CatalogueBinding struct {
 	// exactly as it always did; what it cannot do is mint a comic library.
 	UserID        int64
 	ContainerName string
+
+	// Provisional carries CatalogueContainer.KindProvisional onto the binding,
+	// because the item path needs it after BindContainers has returned.
+	//
+	// It is what makes applyOneItem re-ask which library a TOP-LEVEL item belongs
+	// in. For every other adapter the container's kind and the item's kind agree
+	// by construction and the binding is read straight through; for a provisional
+	// container they can disagree at runtime — a comic reached first retypes the
+	// container's library to 'comic', and a prose book arriving after it must get
+	// a 'book' library rather than be filed into that one.
+	Provisional bool
 }
 
 // SkippedContainer is one upstream container that could NOT be bound to a
@@ -621,6 +664,7 @@ func bindOneContainer(
 		}
 		return CatalogueBinding{
 			LibraryID: libID, Kind: kind, UserID: userID, ContainerName: c.Name,
+			Provisional: c.KindProvisional,
 		}, nil
 	case !errors.Is(err, sql.ErrNoRows):
 		return CatalogueBinding{}, fmt.Errorf("look up existing source: %w", err)
@@ -632,6 +676,20 @@ func bindOneContainer(
 	prior, err := containerBoundKinds(ctx, tx, instanceID, c.RemoteID)
 	if err != nil {
 		return CatalogueBinding{}, err
+	}
+
+	// Step 1c: A PROVISIONAL KIND IS A GUESS, AND A GUESS LOSES TO EVIDENCE.
+	// See CatalogueContainer.KindProvisional. This runs only for an adapter that
+	// cannot read a container's kind upstream, and it splits on WHO is asking,
+	// which is what bindReason is already for.
+	if c.KindProvisional && len(prior) > 0 {
+		b, done, err := bindProvisional(ctx, tx, instanceID, userID, c, why, prior)
+		if err != nil {
+			return CatalogueBinding{}, err
+		}
+		if done {
+			return b, nil
+		}
 	}
 
 	// Step 2: join a library of the same name AND the same kind, if one exists.
@@ -658,6 +716,7 @@ func bindOneContainer(
 		}
 		return CatalogueBinding{
 			LibraryID: got.id, Kind: got.kind, UserID: userID, ContainerName: c.Name,
+			Provisional: c.KindProvisional,
 		}, nil
 	}
 
@@ -732,7 +791,105 @@ func bindOneContainer(
 	}
 	return CatalogueBinding{
 		LibraryID: id, Kind: c.Kind, Created: true, UserID: userID, ContainerName: c.Name,
+		Provisional: c.KindProvisional,
 	}, nil
+}
+
+// bindProvisional is the whole of what CatalogueContainer.KindProvisional buys,
+// and it runs only when the container is ALREADY bound at some other kind.
+//
+// `done` false means "this is an ordinary bind after all" and bindOneContainer
+// carries on through steps 2 and 3 exactly as it does for every other adapter.
+//
+// # The eager pass ADOPTS, because its kind is a guess
+//
+// bindFromContainerList is the adapter's container list, whose kind for a
+// provisional container is a constant chosen before any book was read. If a
+// previous import already recorded what this container actually holds, minting a
+// second library at the fallback kind would contradict the evidence with the
+// guess — and would do it on EVERY import, producing a permanently empty
+// `Comics (Books)` beside the real `Comics`. Adopting returns before
+// noteKindChange on purpose: adopting is not a kind CHANGE, nothing moved, and a
+// sync_report row here would fire on every re-import of every comics library.
+//
+// # The item pass may RETYPE, because its kind is evidence
+//
+// bindSiblingKind is a walk that has actually seen a comic. If the only library
+// over this container is still EMPTY, it is the row the eager pass minted at the
+// fallback kind and nothing has been filed into it — so the honest answer is that
+// one library, at the kind the contents just proved, keeping its name and its
+// slug. Minting a sibling instead is what produced two rows for a comics-only
+// container: `Comics` holding nothing and `Comics (Comics)` carrying a qualifier
+// that answers a question nobody asked.
+//
+// ⚠️ THE ROW IS RETYPED, NEVER REMOVED, AND THAT IS ADR-0066 DECISION 1. A
+// container whose every item is skipped must still be bound and still render
+// "with an item count of zero and a sentence". Nothing here can delete a library
+// or decline to create one: the eager pass has already created it, and a walk
+// that yields nothing simply never reaches this function.
+//
+// # Every guard on the retype, and the state each one refuses
+//
+//   - EXACTLY ONE library over the ref. Two means the container is already split
+//     (ADR-0066 decision 5's mixed case) and both rows are somebody's answer.
+//   - ZERO library_member rows. One member means real content was filed here and
+//     retyping would relabel a library the user is looking at. Note that a comic
+//     ISSUE files no membership (applyOneItem step 8 returns early for a child
+//     kind), which is exactly why a comics-only container's `book` library reads
+//     as empty and is retypable.
+//   - EXACTLY ONE library_source row. A library fed by two containers, or by two
+//     service instances, is shared, and retyping it on one container's evidence
+//     would change the kind out from under the other.
+//   - managed_by = 'auto'. A library the user made is theirs; §6.5 rule 4 makes
+//     library.kind editable BY THE USER, and this must not overwrite that.
+func bindProvisional(
+	ctx context.Context, tx *sql.Tx, instanceID, userID int64, c CatalogueContainer,
+	why bindReason, prior []libraryRow,
+) (CatalogueBinding, bool, error) {
+	if why == bindFromContainerList {
+		// Step 1 has already established that none of these stands at the
+		// fallback kind, so every candidate here is evidence and the first is
+		// taken in containerBoundKinds' stable (kind, id) order — stable so a
+		// re-import of a split container adopts the same one every time rather
+		// than alternating.
+		adopt := prior[0]
+		if _, err := tx.ExecContext(ctx, `
+			UPDATE library_source SET missing_since = NULL, container_identity = ?
+			 WHERE service_instance_id = ? AND container_kind = 'remote_library' AND container_ref = ?`,
+			c.Name, instanceID, c.RemoteID); err != nil {
+			return CatalogueBinding{}, false, fmt.Errorf("refresh source: %w", err)
+		}
+		return CatalogueBinding{
+			LibraryID: adopt.id, Kind: adopt.kind, UserID: userID, ContainerName: c.Name,
+			Provisional: true,
+		}, true, nil
+	}
+
+	if len(prior) != 1 {
+		return CatalogueBinding{}, false, nil
+	}
+	var members, sources int64
+	var managedBy string
+	if err := tx.QueryRowContext(ctx, `
+		SELECT l.managed_by,
+		       (SELECT COUNT(*) FROM library_member lm WHERE lm.library_id = l.id),
+		       (SELECT COUNT(*) FROM library_source ls WHERE ls.library_id = l.id)
+		  FROM library l WHERE l.id = ?`, prior[0].id).Scan(&managedBy, &members, &sources); err != nil {
+		return CatalogueBinding{}, false, fmt.Errorf(
+			"read library %d before retyping it to %q: %w", prior[0].id, c.Kind, err)
+	}
+	if managedBy != "auto" || members != 0 || sources != 1 {
+		return CatalogueBinding{}, false, nil
+	}
+	if _, err := tx.ExecContext(ctx,
+		`UPDATE library SET kind = ? WHERE id = ?`, c.Kind, prior[0].id); err != nil {
+		return CatalogueBinding{}, false, fmt.Errorf(
+			"retype library %d to %q: %w", prior[0].id, c.Kind, err)
+	}
+	return CatalogueBinding{
+		LibraryID: prior[0].id, Kind: c.Kind, UserID: userID, ContainerName: c.Name,
+		Provisional: true,
+	}, true, nil
 }
 
 // containerBoundKinds is every (kind, library) this container is ALREADY bound
@@ -944,6 +1101,13 @@ func (s *Store) ApplyCatalogueBatch(
 		// whose writes made its entries true, so a rolled-back batch cannot leave
 		// a work id behind for the next one to hand a child to.
 		parents := parentCache{}
+		// SECOND CACHE, SAME LIFETIME AND THE SAME REASON. A provisional
+		// container's library is re-derived from each item's own kind (see
+		// resolveBinding), which without this would be one indexed query per
+		// item — ARCHITECTURE §13 sizes that at ~90,000 comic issues. It is
+		// per-batch and not per-process because its entries are only true
+		// inside the transaction whose writes made them so.
+		binds := bindCache{}
 		for _, it := range items {
 			b, ok := bindings[it.ContainerID]
 			if !ok {
@@ -954,7 +1118,7 @@ func (s *Store) ApplyCatalogueBatch(
 				// the whole import.
 				continue
 			}
-			_, one, err := applyOneItem(ctx, tx, instanceID, b, it, now, parents)
+			_, one, err := applyOneItem(ctx, tx, instanceID, b, it, now, parents, binds)
 			if err != nil {
 				return fmt.Errorf("apply %s %s from service_instance %d: %w",
 					it.RemoteKind, it.RemoteID, instanceID, err)
@@ -981,10 +1145,33 @@ func (s *Store) ApplyCatalogueBatch(
 //nolint:gocyclo,maintidx // see above: the order is the algorithm
 func applyOneItem(
 	ctx context.Context, tx *sql.Tx, instanceID int64,
-	b CatalogueBinding, it CatalogueItem, now time.Time, parents parentCache,
+	b CatalogueBinding, it CatalogueItem, now time.Time,
+	parents parentCache, binds bindCache,
 ) (int64, BatchResult, error) {
 	var res BatchResult
 	nowStr := FormatTime(now)
+
+	// ── 0a. WHICH LIBRARY THIS ITEM BELONGS IN, when the container's kind was
+	// a guess rather than the upstream's answer (CatalogueContainer.KindProvisional).
+	//
+	// ⚠️ IT IS RE-ASKED RATHER THAN COMPARED, and `it.Kind != b.Kind` is NOT the
+	// guard it looks like it should be. On a provisional container the binding's
+	// Kind is what the EAGER pass guessed, and a comic reached earlier in this
+	// same walk may have retyped that library to 'comic' underneath it — leaving a
+	// binding that says 'book', names a library that is now 'comic', and agrees
+	// with a prose book's own kind. Comparing the two would file the prose into
+	// the comic library. The cache is what makes re-asking cheap.
+	//
+	// A CHILD KIND IS SKIPPED because it is filed into no library at all
+	// (step 8 returns early for one); its parent's library is resolved by
+	// parentBinding below, from the PARENT's kind.
+	if b.Provisional && !childKinds[it.Kind] {
+		rb, err := resolveBinding(ctx, tx, instanceID, b, it.ContainerID, it.Kind, binds)
+		if err != nil {
+			return 0, res, err
+		}
+		b = rb
+	}
 
 	// ── 0. THE PARENT, when this item is a child. It is written FIRST and in
 	// this same transaction, so `parent_work_id` below is never null and never
@@ -997,7 +1184,7 @@ func applyOneItem(
 	// implementation of the ten steps below, and the two would drift.
 	var parentWorkID int64
 	if it.Parent != nil {
-		pb, err := parentBinding(ctx, tx, instanceID, b, it.ContainerID, *it.Parent)
+		pb, err := parentBinding(ctx, tx, instanceID, b, it.ContainerID, *it.Parent, binds)
 		if err != nil {
 			return 0, res, err
 		}
@@ -1013,7 +1200,7 @@ func applyOneItem(
 			// once per ISSUE would be thirty times the work for an identical row.
 			parentWorkID = id
 		} else {
-			id, pres, err := applyOneItem(ctx, tx, instanceID, pb, parentItem(it), now, parents)
+			id, pres, err := applyOneItem(ctx, tx, instanceID, pb, parentItem(it), now, parents, binds)
 			if err != nil {
 				return 0, res, fmt.Errorf("apply parent %s %s: %w",
 					it.Parent.RemoteKind, it.Parent.RemoteID, err)
@@ -1367,7 +1554,32 @@ func parentItem(it CatalogueItem) CatalogueItem {
 }
 
 // parentBinding is the library the PARENT is filed into, which is not always the
-// library the child's container bound to.
+// library the child's container bound to. resolveBinding owns the rest of it.
+func parentBinding(
+	ctx context.Context, tx *sql.Tx, instanceID int64,
+	b CatalogueBinding, containerRef string, p CatalogueParent, binds bindCache,
+) (CatalogueBinding, error) {
+	// ⚠️ `!b.Provisional` IS PART OF THE FAST PATH'S CONDITION, not decoration.
+	// On a provisional container the binding's Kind is the eager pass's guess and
+	// the library it names may already have been retyped by an earlier item in
+	// this same walk, so agreement between the two proves nothing and the
+	// question is re-asked. For every other adapter this is exactly the
+	// comparison it always was.
+	if p.Kind == b.Kind && !b.Provisional {
+		return b, nil
+	}
+	return resolveBinding(ctx, tx, instanceID, b, containerRef, p.Kind, binds)
+}
+
+// bindKey is one (container, kind) pair inside a batch. bindCache is what
+// resolveBinding remembers, for the lifetime of one ApplyCatalogueBatch
+// transaction.
+type bindKey struct{ containerRef, kind string }
+
+type bindCache map[bindKey]CatalogueBinding
+
+// resolveBinding is the library one container's items of ONE kind are filed
+// into, minted if it is not there yet.
 //
 // # ADR-0066 decision 5, activated by ADR-0068
 //
@@ -1388,14 +1600,21 @@ func parentItem(it CatalogueItem) CatalogueItem {
 // screen that looks broken" principle 3 exists to prevent. Minting it on the
 // first comic actually seen is what makes decision 5's word MIXED true.
 //
+// ⚠️ IT CAN ALSO RETYPE RATHER THAN MINT, and that is bindProvisional's job
+// rather than this one's. A container that turns out to hold ONLY comics has an
+// empty `book` library standing over it from the eager pass, and the answer there
+// is that one library at the proven kind — one row, named for the container, with
+// no qualifier — not a second row beside a first that will stay empty for ever.
+//
 // ⚠️ NO SERIES WORK IS EVER MINTED INTO NO LIBRARY AT ALL (ADR-0068 decision 5).
 // Every failure below is an error rather than a fallback to library 0.
-func parentBinding(
+func resolveBinding(
 	ctx context.Context, tx *sql.Tx, instanceID int64,
-	b CatalogueBinding, containerRef string, p CatalogueParent,
+	b CatalogueBinding, containerRef, kind string, binds bindCache,
 ) (CatalogueBinding, error) {
-	if p.Kind == b.Kind {
-		return b, nil
+	k := bindKey{containerRef: containerRef, kind: kind}
+	if got, ok := binds[k]; ok {
+		return got, nil
 	}
 	if b.UserID == 0 && b.ContainerName == "" {
 		// A binding built without the two facts a sibling mint needs. It is a
@@ -1405,22 +1624,31 @@ func parentBinding(
 		return CatalogueBinding{}, fmt.Errorf(
 			"container %q needs a %q library beside its %q one and the binding carries no owner "+
 				"(store.BindContainers stamps CatalogueBinding.UserID; a hand-built binding must too)",
-			p.RemoteID, p.Kind, b.Kind)
+			containerRef, kind, b.Kind)
 	}
-	return bindOneContainer(ctx, tx, instanceID, b.UserID, CatalogueContainer{
+	rb, err := bindOneContainer(ctx, tx, instanceID, b.UserID, CatalogueContainer{
 		// THE CONTAINER REF IS THE ISSUE'S OWN, verbatim — "the `comic` library
 		// minted over the `library_source` container ref the issue's book was
 		// walked from" (ADR-0068 decision 5). A synthesized ref would be a second
 		// container that no upstream ever reported.
 		RemoteID: containerRef,
 		Name:     b.ContainerName,
-		Kind:     p.Kind,
+		Kind:     kind,
+		// CARRIED THROUGH, because it is what licenses the retype below. It is
+		// the CONTAINER's property and the binding is the only place the item
+		// path can still read it from.
+		KindProvisional: b.Provisional,
 		// bindSiblingKind, NOT bindFromContainerList. This call is the ONE place
 		// a container is deliberately bound at a second kind, so the kind-change
 		// report must not fire here — it would fire on every mixed library, on
 		// the first comic reached, and say a change happened where the design
 		// says two kinds coexist.
 	}, bindSiblingKind)
+	if err != nil {
+		return CatalogueBinding{}, err
+	}
+	binds[k] = rb
+	return rb, nil
 }
 
 // searchDocText is the TEXT of one work's search document — the five FTS

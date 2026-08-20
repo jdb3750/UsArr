@@ -1477,7 +1477,7 @@ func TestTheSiblingMintIsNotReportedAsAKindChange(t *testing.T) {
 	if err := s.db.Write(t.Context(), func(ctx context.Context, tx *sql.Tx) error {
 		_, err := parentBinding(ctx, tx, inst, binds["1"], "1", CatalogueParent{
 			RemoteID: "s1", Kind: "comic", Title: "A Series",
-		})
+		}, bindCache{})
 		return err
 	}); err != nil {
 		t.Fatalf("parentBinding: %v", err)
@@ -1490,5 +1490,73 @@ func TestTheSiblingMintIsNotReportedAsAKindChange(t *testing.T) {
 	if n := count(t, s,
 		`SELECT COUNT(*) FROM library WHERE kind = 'comic' AND name = 'Fiction (Comics)'`); n != 1 {
 		t.Errorf("the mint produced %d 'Fiction (Comics)' libraries, want 1", n)
+	}
+}
+
+// TestAProvisionalRetypeRefusesALibraryTWOCONTAINERSFEED is the guard the
+// end-to-end tests cannot reach, because it takes two service instances to
+// build the state.
+//
+// A provisional container's empty library is retyped in place rather than
+// getting a sibling (bindProvisional) — that is what makes a comics-only
+// BookOrbit container ONE library named for the container instead of an empty
+// `Comics` beside a `Comics (Comics)`. But `library` is joined by NAME and KIND
+// (bindOneContainer step 2), so a Kavita container and a BookOrbit container
+// that agree on both are ONE library with TWO `library_source` rows — and
+// retyping it on one container's evidence would change the kind out from under
+// the other, silently, on a library the other service is still filling.
+//
+// The refusal is the ordinary path, not an error: the sibling is minted instead,
+// which is exactly what the code did before provisional kinds existed.
+func TestAProvisionalRetypeRefusesALibraryTWOCONTAINERSFEED(t *testing.T) {
+	s := newTestStore(t)
+	kav := fixtureInstance(t, s, "kavita")
+	bo := fixtureInstance(t, s, "bookorbit")
+
+	// Kavita names the kind, so its container is NOT provisional.
+	if _, _, err := s.BindContainers(t.Context(), kav, SystemUserID, []CatalogueContainer{
+		{RemoteID: "7", Name: "Comics", Kind: "book"},
+	}); err != nil {
+		t.Fatalf("BindContainers(kavita): %v", err)
+	}
+	// BookOrbit's container has the same name and the fallback kind, so it JOINS
+	// that library rather than creating a second one. Both now feed it.
+	binds, _, err := s.BindContainers(t.Context(), bo, SystemUserID, []CatalogueContainer{
+		{RemoteID: "7", Name: "Comics", Kind: "book", KindProvisional: true},
+	})
+	if err != nil {
+		t.Fatalf("BindContainers(bookorbit): %v", err)
+	}
+	shared := binds["7"].LibraryID
+	if n := count(t, s, `SELECT COUNT(*) FROM library_source WHERE library_id = ?`, shared); n != 2 {
+		t.Fatalf("library %d has %d source rows, want the 2 this fixture is about", shared, n)
+	}
+
+	// A comic is now reached in the BookOrbit walk. The library is empty and
+	// auto-managed — every retype guard but the source count is satisfied.
+	if err := s.db.Write(t.Context(), func(ctx context.Context, tx *sql.Tx) error {
+		_, err := parentBinding(ctx, tx, bo, binds["7"], "7", CatalogueParent{
+			RemoteID: "s1", Kind: "comic", Title: "A Series",
+		}, bindCache{})
+		return err
+	}); err != nil {
+		t.Fatalf("parentBinding: %v", err)
+	}
+
+	var kind string
+	if err := s.db.Read().QueryRowContext(t.Context(),
+		`SELECT kind FROM library WHERE id = ?`, shared).Scan(&kind); err != nil {
+		t.Fatalf("read the shared library's kind: %v", err)
+	}
+	if kind != "book" {
+		t.Errorf("the shared library's kind = %q, want \"book\" — it is fed by a Kavita "+
+			"container too, and one container's evidence must not retype a library the "+
+			"other is still filling", kind)
+	}
+	if n := count(t, s,
+		`SELECT COUNT(*) FROM library WHERE kind = 'comic' AND name = 'Comics (Comics)'`); n != 1 {
+		t.Errorf("the refusal produced %d 'Comics (Comics)' libraries, want 1 — refusing to "+
+			"retype falls back to the sibling mint, which is what the code did before "+
+			"provisional kinds existed", n)
 	}
 }
