@@ -325,58 +325,12 @@ func (im *Importer) FullImport(ctx context.Context, instanceID int64) (rep Repor
 		}
 	}()
 
-	containers, err := im.Source.Containers(ctx)
+	bindings, err := im.bindPhase(ctx, instanceID, "full import", &rep)
 	if err != nil {
-		return rep, fmt.Errorf("full import of service_instance %d: containers: %w", instanceID, err)
-	}
-	rep.ContainersSeen = len(containers)
-	for _, c := range containers {
-		if c.Kind == "" {
-			rep.DeclinedContainers = append(rep.DeclinedContainers, DeclinedContainer{
-				RemoteID: c.RemoteID, Name: c.Name, Reason: c.DeclineReason,
-			})
-		}
-	}
-	im.publish(Progress{InstanceID: instanceID, Phase: "containers"})
-
-	bindings, skipped, err := im.Store.BindContainers(ctx, instanceID, im.UserID, containers)
-	if err != nil {
-		return rep, fmt.Errorf("full import of service_instance %d: bind libraries: %w", instanceID, err)
-	}
-	// A container that could not be bound is NOT an import failure. It is one
-	// missing library, reported as one missing library — BindContainers has
-	// already written the sync_report row inside the bind transaction, so this
-	// is the operator-facing half and not the durable record.
-	rep.SkippedContainers = skipped
-	for _, sk := range skipped {
-		im.log().Warn("container skipped: it could not be bound to a library",
-			"instance_id", instanceID, "remote_id", sk.RemoteID,
-			"name", sk.Name, "reason", sk.Reason)
-	}
-	for _, b := range bindings {
-		if b.Created {
-			rep.LibrariesCreated++
-		} else {
-			rep.LibrariesJoined++
-		}
+		return rep, err
 	}
 
-	// A declined container is reported to the operator through sync_report, not
-	// only through the return value: an import triggered by a background connect
-	// has no caller left to read the Report by the time anyone asks why a Kavita
-	// library is missing from the Libraries screen.
-	for _, d := range rep.DeclinedContainers {
-		detail, err := json.Marshal(map[string]string{"name": d.Name, "reason": d.Reason})
-		if err != nil {
-			return rep, fmt.Errorf("full import of service_instance %d: encode decline: %w", instanceID, err)
-		}
-		if err := im.Store.RecordSyncReport(ctx, instanceID,
-			"container_declined", "library", d.RemoteID, string(detail)); err != nil {
-			return rep, fmt.Errorf("full import of service_instance %d: %w", instanceID, err)
-		}
-	}
-
-	imported, err := im.streamAndApply(ctx, instanceID, bindings, &rep)
+	imported, err := im.streamAndApply(ctx, instanceID, bindings, &rep, im.Source.StreamItems)
 	if err != nil {
 		return rep, err
 	}
@@ -416,6 +370,16 @@ func (im *Importer) FullImport(ctx context.Context, instanceID int64) (rep Repor
 	}
 	if err := im.Store.StampFullSync(ctx, instanceID, rep.StartedAt); err != nil {
 		return rep, fmt.Errorf("full import of service_instance %d: %w", instanceID, err)
+	}
+
+	// ⚠️ THE ARRIVALS BOOTSTRAP, IMMEDIATELY AFTER THE FRESHNESS STAMP AND
+	// DELIBERATELY NOT INSIDE IT. This is what gives channel 3b a cursor position
+	// to start from; without it the delta never runs once. It is a SEPARATE write
+	// because the two facts are different — see mintArrivalsWatermark, which
+	// carries the argument and the reason this landed in the same change as the
+	// walk rather than after it.
+	if err := im.mintArrivalsWatermark(ctx, instanceID); err != nil {
+		return rep, err
 	}
 
 	for _, c := range rep.IdentityConflicts {
@@ -474,6 +438,74 @@ func (im *Importer) FullImport(ctx context.Context, instanceID int64) (rep Repor
 	return rep, nil
 }
 
+// bindPhase is the container read, the library bind and the declined-container
+// record — the head of every catalogue channel rather than of channel 1 alone.
+//
+// IT IS ONE FUNCTION BECAUSE BOTH CHANNELS MUST BIND IDENTICALLY. A delta that
+// bound containers differently from a full import would file the same upstream
+// container into a different library depending on which channel reached it
+// first, and library membership is the one thing in this pipeline that is not
+// idempotent under a different answer.
+//
+// `what` names the caller in the errors, because "full import of instance 3:
+// containers" and "delta sync of instance 3: containers" are the same failure
+// reported to two different people pressing two different buttons.
+func (im *Importer) bindPhase(
+	ctx context.Context, instanceID int64, what string, rep *Report,
+) (map[string]store.CatalogueBinding, error) {
+	containers, err := im.Source.Containers(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("%s of service_instance %d: containers: %w", what, instanceID, err)
+	}
+	rep.ContainersSeen = len(containers)
+	for _, c := range containers {
+		if c.Kind == "" {
+			rep.DeclinedContainers = append(rep.DeclinedContainers, DeclinedContainer{
+				RemoteID: c.RemoteID, Name: c.Name, Reason: c.DeclineReason,
+			})
+		}
+	}
+	im.publish(Progress{InstanceID: instanceID, Phase: "containers"})
+
+	bindings, skipped, err := im.Store.BindContainers(ctx, instanceID, im.UserID, containers)
+	if err != nil {
+		return nil, fmt.Errorf("%s of service_instance %d: bind libraries: %w", what, instanceID, err)
+	}
+	// A container that could not be bound is NOT an import failure. It is one
+	// missing library, reported as one missing library — BindContainers has
+	// already written the sync_report row inside the bind transaction, so this
+	// is the operator-facing half and not the durable record.
+	rep.SkippedContainers = skipped
+	for _, sk := range skipped {
+		im.log().Warn("container skipped: it could not be bound to a library",
+			"instance_id", instanceID, "remote_id", sk.RemoteID,
+			"name", sk.Name, "reason", sk.Reason)
+	}
+	for _, b := range bindings {
+		if b.Created {
+			rep.LibrariesCreated++
+		} else {
+			rep.LibrariesJoined++
+		}
+	}
+
+	// A declined container is reported to the operator through sync_report, not
+	// only through the return value: an import triggered by a background connect
+	// has no caller left to read the Report by the time anyone asks why a Kavita
+	// library is missing from the Libraries screen.
+	for _, d := range rep.DeclinedContainers {
+		detail, err := json.Marshal(map[string]string{"name": d.Name, "reason": d.Reason})
+		if err != nil {
+			return nil, fmt.Errorf("%s of service_instance %d: encode decline: %w", what, instanceID, err)
+		}
+		if err := im.Store.RecordSyncReport(ctx, instanceID,
+			"container_declined", "library", d.RemoteID, string(detail)); err != nil {
+			return nil, fmt.Errorf("%s of service_instance %d: %w", what, instanceID, err)
+		}
+	}
+	return bindings, nil
+}
+
 // streamAndApply is the batching loop.
 //
 // The batch is flushed FROM INSIDE the stream callback. That holds the upstream
@@ -497,9 +529,20 @@ func (im *Importer) FullImport(ctx context.Context, instanceID int64) (rep Repor
 // two orders of magnitude below the 200–400 MB peak reference/sync.md §2
 // measures for the buffering this design exists to avoid. If that ever stops
 // being true the fix is a temp table, not a bigger slice.
+// stream is the item-producing half of streamAndApply, taken as a parameter so
+// channel 1 and channel 3b share ONE batching loop.
+//
+// ⚠️ IT IS A PARAMETER RATHER THAN A SECOND COPY OF THE LOOP because the loop is
+// where the batch sizing, the partial-delivery contract, the deliberate refusal
+// to flush a tail on a failed stream and the child-item exclusion all live. Two
+// copies of those four rules is four places for them to drift, silently, and the
+// delta and the full import must apply items identically or the delta is a
+// second write path for the same rows.
+type stream func(ctx context.Context, fn func(store.CatalogueItem) error) (int, error)
+
 func (im *Importer) streamAndApply(
 	ctx context.Context, instanceID int64,
-	bindings map[string]store.CatalogueBinding, rep *Report,
+	bindings map[string]store.CatalogueBinding, rep *Report, read stream,
 ) ([]ImportedItem, error) {
 	rows := im.BatchRows
 	if rows <= 0 {
@@ -561,7 +604,7 @@ func (im *Importer) streamAndApply(
 		return nil
 	}
 
-	read, streamErr := im.Source.StreamItems(ctx, func(it store.CatalogueItem) error {
+	delivered, streamErr := read(ctx, func(it store.CatalogueItem) error {
 		// COUNTED HERE, ONE PER HAND-OVER, and that is the whole point: the
 		// flush above publishes rep.ItemsRead, so a counter assigned only after
 		// the stream closes makes every frame but the last say "0 items read"
@@ -584,17 +627,17 @@ func (im *Importer) streamAndApply(
 	// that never reach fn at all. The adapter's number stays the Report's
 	// documented meaning — "how far the READ got" — and the running count exists
 	// to make the intermediate frames truthful, not to redefine the field.
-	rep.ItemsRead = read
+	rep.ItemsRead = delivered
 	if streamErr != nil {
 		// The tail is deliberately NOT flushed on a failed stream. A partial
 		// batch from a body that was cut mid-array is not known-good data, and
 		// the rows already committed are enough for the sweep to reconcile from.
 		return imported, fmt.Errorf("full import of service_instance %d: read items (delivered %d, applied %d): %w",
-			instanceID, read, rep.ItemsApplied, streamErr)
+			instanceID, delivered, rep.ItemsApplied, streamErr)
 	}
 	if err := flush(); err != nil {
 		return imported, fmt.Errorf("full import of service_instance %d: final batch (delivered %d, applied %d): %w",
-			instanceID, read, rep.ItemsApplied, err)
+			instanceID, delivered, rep.ItemsApplied, err)
 	}
 	return imported, nil
 }

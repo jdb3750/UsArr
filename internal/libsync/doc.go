@@ -20,12 +20,34 @@
 // HERE: channel 1. FullImport reads a catalogue source end to end, maps it onto
 // the schema, and writes it in batched transactions through internal/store.
 //
+// ALSO HERE, AND ⚠️ UNREACHABLE: channel 3b for BookOrbit. DeltaSync (delta.go,
+// bookorbitarrivals.go) is BUILT AND TESTED — the arrivals-only walk on
+// books.addedAt that ADR-0070 decided, asked for with a server-side after-filter
+// rather than by ordering the collection and stopping client-side, carrying
+// internal/bookorbit/arrivals.go's tie mitigation and its wedge stop.
+//
+// ⚠️ NOTHING USER-FACING CAN TRIGGER IT, BECAUSE THERE IS NO HTTP ROUTE.
+// Measured over the tree: internal/httpapi never names DeltaSync, no timer calls
+// it (see "Any timer" below, which is unchanged), and cmd/usarr's registry
+// method is reached only from tests. The engine exists; the wire surface does
+// not. This paragraph is here because the person who would otherwise write
+// "delta sync ships" is reading THIS DOC and not the git log, and a commit
+// message alone would not have reached them.
+//
+// THE ROUTE IS THE NAMED NEXT SLICE — not "later", which is where a thing goes
+// to be forgotten. Until it lands, an engine nobody can reach is worth what an
+// engine nobody wrote is worth, and any done-when phrased as "DeltaSync exists"
+// is satisfied by exactly the state described here.
+//
 // NOT HERE, and each one is a named channel with its own milestone rather than
 // an omission:
 //
-//   - Channel 3b, the ordered page walk with a client-side stop
-//     (ARCHITECTURE.md §7.1a). It is v0.1 work per ADR-0041 and it is a separate
-//     commit.
+//   - Channel 3b for every source that is NOT BookOrbit — the ordered page walk
+//     with a CLIENT-SIDE stop (ARCHITECTURE.md §7.1a). BookOrbit's 3b above is
+//     not that shape, and the difference is not a detail: §7.1a's client-side
+//     stop is the mechanism for a source that CANNOT express a since-filter, and
+//     BookOrbit can (ADR-0070). Navidrome, Audiobookshelf, Kavita and Komga each
+//     get their own measurement and none of them is walked here.
 //   - Channel 4, the reconciliation sweep and its two guards. Nothing here
 //     tombstones, deletes or detects drift — remote_hash and
 //     remote_identity_hash are WRITTEN here so the sweep has something to

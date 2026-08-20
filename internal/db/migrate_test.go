@@ -60,7 +60,7 @@ func TestMigrationRoundTrip(t *testing.T) {
 // asserted rather than derived so that adding a migration is a deliberate edit
 // here too — a version the tests do not know about is a migration nobody
 // round-tripped.
-const latestSchemaVersion int64 = 11
+const latestSchemaVersion int64 = 12
 
 // Down is not a supported user path, but it must work, because it is the
 // cheapest way to test a migration locally. A Down that leaves objects behind

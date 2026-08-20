@@ -108,7 +108,48 @@ type CatalogueBinding struct {
 	// an existing one. §17.8's second-instance rule makes joining the default,
 	// so a caller that wants to report "joined X as a second source" needs to be
 	// able to tell them apart.
+	//
+	// ⚠️ IT IS NOT "A BINDING WAS CREATED", AND THE TWO ARE ROUTINELY CONFUSED.
+	// See SourceAttached, which is that fact and is a different one.
 	Created bool
+
+	// SourceAttached reports whether this call bound THIS INSTANCE to a
+	// container it was not bound to before — a new `library_source` row, whether
+	// or not a `library` row came with it.
+	//
+	// 🚩 IT EXISTS BECAUSE `Created` IS THE WRONG SIGNAL FOR THAT QUESTION, AND
+	// THE FALSE NEGATIVE IS THE ORDINARY HOMELAB CASE RATHER THAN A CORNER.
+	// bindOneContainer has three exits. Step 1 finds the container already bound
+	// at this kind and creates nothing — Created false, correct. Step 3 creates a
+	// library — Created true. STEP 2 is the one: the container is NEW TO UsArr,
+	// its trimmed name matches an existing library of the same kind, so it JOINS
+	// that library and writes a brand-new binding row into it — and Created is
+	// the zero value, FALSE. A Kavita `Ebooks` library already bound and a
+	// BookOrbit `Ebooks` library granted to the credential afterwards takes
+	// exactly that path.
+	//
+	// The reader that needs it is channel 3b: a container UsArr has never
+	// imported is full of items whose arrival stamps are far behind the cursor,
+	// so an arrivals filter returns NONE of them, the walk succeeds, and a whole
+	// library is silently missing content. A container UsArr has never imported
+	// is not a delta question.
+	//
+	// ⚠️ IT CANNOT BE READ OFF RowsAffected, and the obvious implementation is
+	// wrong for a reason that does not announce itself: insertLibrarySource is an
+	// UPSERT, and SQLite reports one changed row for an INSERT and for a DO
+	// UPDATE alike. The detection is an existence SELECT on the unique key inside
+	// the same transaction, immediately before the write — a seek on
+	// ux_library_source, not a scan.
+	//
+	// ⚠️ AND IT DOES NOT CLOSE THE FALSE POSITIVE, which is stated here because
+	// it was claimed that it would. A container whose adapter-decided kind
+	// changes falls out of step 1 and creates a library at step 3, which also
+	// writes a binding row — so this fires there exactly as Created does. It
+	// SHOULD: a container whose kind changed has its already-imported items
+	// mapped under the kind UsArr decided BEFORE, and an arrivals walk reads only
+	// what arrives AFTER, so a delta cannot repair the container it just
+	// re-typed. A full import is the only pass that re-reads every item in it.
+	SourceAttached bool
 
 	// UserID and ContainerName are what a SIBLING library over the same
 	// container ref needs, and they are carried on the binding rather than added
@@ -761,15 +802,19 @@ func bindOneContainer(
 		name = "Library " + c.RemoteID
 	}
 	if got, ok := existing.joinable[libraryNameKey(name)]; ok && got.kind == c.Kind {
-		if err := insertLibrarySource(ctx, tx, got.id, instanceID, c); err != nil {
+		attached, err := insertLibrarySource(ctx, tx, got.id, instanceID, c)
+		if err != nil {
 			return CatalogueBinding{}, err
 		}
 		if err := noteKindChange(ctx, tx, instanceID, c, why, prior, got.id); err != nil {
 			return CatalogueBinding{}, err
 		}
+		// ⚠️ THIS IS THE EXIT `Created` MISSES. The library is joined, so Created
+		// stays false and correctly so; the binding row may be brand new, and
+		// SourceAttached is what says whether it is.
 		return CatalogueBinding{
 			LibraryID: got.id, Kind: got.kind, UserID: userID, ContainerName: c.Name,
-			Provisional: c.KindProvisional,
+			Provisional: c.KindProvisional, SourceAttached: attached,
 		}, nil
 	}
 
@@ -849,7 +894,11 @@ func bindOneContainer(
 	if err != nil {
 		return CatalogueBinding{}, fmt.Errorf("create library %q: id: %w", name, err)
 	}
-	if err := insertLibrarySource(ctx, tx, id, instanceID, c); err != nil {
+	// The library was created one statement ago, so its binding is necessarily
+	// new — the existence SELECT inside insertLibrarySource says so rather than
+	// this comment asserting it, which is the point of computing it there.
+	attached, err := insertLibrarySource(ctx, tx, id, instanceID, c)
+	if err != nil {
 		return CatalogueBinding{}, err
 	}
 	if err := noteKindChange(ctx, tx, instanceID, c, why, prior, id); err != nil {
@@ -857,7 +906,7 @@ func bindOneContainer(
 	}
 	return CatalogueBinding{
 		LibraryID: id, Kind: c.Kind, Created: true, UserID: userID, ContainerName: c.Name,
-		Provisional: c.KindProvisional,
+		Provisional: c.KindProvisional, SourceAttached: attached,
 	}, nil
 }
 
@@ -1158,18 +1207,46 @@ func userLibraries(ctx context.Context, q querier, userID int64) (userLibrarySet
 	return out, nil
 }
 
-func insertLibrarySource(ctx context.Context, tx *sql.Tx, libraryID, instanceID int64, c CatalogueContainer) error {
-	_, err := tx.ExecContext(ctx, `
+// insertLibrarySource binds one container to one library, and reports whether
+// that binding is NEW.
+//
+// ⚠️ THE EXISTENCE SELECT IS HERE, AT THE ONE WRITE, RATHER THAN AT THE ONE EXIT
+// THAT OBVIOUSLY NEEDS IT. Only step 2 can produce a new binding row that is not
+// also a new library, so an answer computed at step 2 alone would be correct
+// today — and it would be a fact assembled at each call site, which is how the
+// next exit added to bindOneContainer gets it wrong by omission. Computed here,
+// every caller inherits it and a new exit cannot forget to.
+//
+// It is a SEEK, not a scan: the four columns it tests are ux_library_source's
+// unique key in its own column order. It runs inside the caller's transaction,
+// so nothing can create the row between the read and the write.
+func insertLibrarySource(
+	ctx context.Context, tx *sql.Tx, libraryID, instanceID int64, c CatalogueContainer,
+) (bool, error) {
+	var one int
+	err := tx.QueryRowContext(ctx, `
+		SELECT 1 FROM library_source
+		 WHERE library_id = ? AND service_instance_id = ?
+		   AND container_kind = 'remote_library' AND container_ref = ?`,
+		libraryID, instanceID, c.RemoteID).Scan(&one)
+	switch {
+	case errors.Is(err, sql.ErrNoRows):
+		// Not bound before: whatever the upsert does next, it attaches.
+	case err != nil:
+		return false, fmt.Errorf("look up source %s on library %d: %w", c.RemoteID, libraryID, err)
+	}
+	attached := errors.Is(err, sql.ErrNoRows)
+
+	if _, err := tx.ExecContext(ctx, `
 		INSERT INTO library_source
 		  (library_id, service_instance_id, container_kind, container_ref, container_identity)
 		VALUES (?,?, 'remote_library', ?, ?)
 		ON CONFLICT (library_id, service_instance_id, container_kind, container_ref)
 		DO UPDATE SET container_identity = excluded.container_identity, missing_since = NULL`,
-		libraryID, instanceID, c.RemoteID, c.Name)
-	if err != nil {
-		return fmt.Errorf("bind source %s to library %d: %w", c.RemoteID, libraryID, err)
+		libraryID, instanceID, c.RemoteID, c.Name); err != nil {
+		return false, fmt.Errorf("bind source %s to library %d: %w", c.RemoteID, libraryID, err)
 	}
-	return nil
+	return attached, nil
 }
 
 // ApplyCatalogueBatch writes one batch of replicated items in ONE

@@ -674,7 +674,7 @@ CREATE TABLE service_instance (
   last_delta_sync_at TEXT,
   config_json        TEXT,
   deleted_at         TEXT              -- tombstone; id stays burned
-, indexers_fetched_at TEXT) STRICT;
+, indexers_fetched_at TEXT, arrivals_watermark TEXT) STRICT;
 
 -- table service_item_alias
 CREATE TABLE service_item_alias (

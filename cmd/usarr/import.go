@@ -112,6 +112,104 @@ func (g *registry) fullImportLocked(ctx context.Context, instanceID int64) (libs
 	return rep, err
 }
 
+// DeltaSync runs channel 3b against one instance: the arrivals walk, on demand.
+//
+// It claims the SAME mutual-exclusion guard a full import claims, and it must:
+// the two write the same rows through the same pipeline, and a delta racing a
+// full import would have two writers applying two overlapping item sets into one
+// batching loop.
+func (g *registry) DeltaSync(ctx context.Context, instanceID int64) (libsync.DeltaReport, error) {
+	if !g.beginImport(instanceID) {
+		return libsync.DeltaReport{}, fmt.Errorf("%w for service instance %d", httpapi.ErrImportInProgress, instanceID)
+	}
+	defer g.endImport(instanceID)
+	return g.deltaSyncLocked(ctx, instanceID)
+}
+
+// deltaSyncLocked is DeltaSync's body, with the guard ALREADY HELD.
+//
+// 🚩 THE ESCALATION CALLS fullImportLocked AND NOT FullImport, AND THE WRONG ONE
+// COMPILES. A delta that has claimed the guard and then calls the guard-claiming
+// entry point gets "an import is already in progress" — so NEITHER runs, and the
+// person who pressed the button is told a sync is running that is not. It fails
+// only on a run that actually escalates, i.e. on a newly-bound container or an
+// unbootstrapped instance, which is exactly the run nobody exercises by hand.
+func (g *registry) deltaSyncLocked(ctx context.Context, instanceID int64) (libsync.DeltaReport, error) {
+	rep, err := g.runDelta(ctx, instanceID)
+	if errors.Is(err, libsync.ErrEscalateToFullImport) {
+		g.log.Info("delta sync escalated to a full import",
+			"instance_id", instanceID, "reason", rep.EscalationReason)
+		full, ferr := g.fullImportLocked(ctx, instanceID)
+		rep.Report = full
+		return rep, ferr
+	}
+	if err != nil {
+		// The terminal frame is fullImportLocked's business and not this path's:
+		// a delta publishes no progress at all (libsync.Importer.Progress is nil
+		// below), so there is no run on screen for a stopped frame to end.
+		return rep, err
+	}
+	return rep, nil
+}
+
+// runDelta is deltaSyncLocked's body: everything that can fail.
+//
+// ⚠️ ONE OF THE THREE PER-CONTAINER RECORDERS RUNS HERE AND TWO DO NOT, AND THAT
+// ASYMMETRY IS THE WHOLE POINT OF THIS FUNCTION EXISTING SEPARATELY.
+//
+//   - recordCompleteness RUNS. The verdict is measured from
+//     GET /libraries/:id/stats against the WHOLE library, so it is
+//     window-independent and stays true no matter how little the delta read. The
+//     delta pays for that probe anyway, because the container bind runs it.
+//
+//   - recordSkippedItems and recordComicResidue DO NOT RUN. Both are tallies of
+//     WHAT THIS WALK READ — under a delta, of a five-minute arrivals window —
+//     while the vocabulary they write is a claim about the CONTAINER, and the
+//     Libraries screen's read is LATEST-WINS. So: a full import of `Fiction`
+//     finds 300 comics it cannot map and the screen reads "left out, 300"; one
+//     quiet delta poll writes a zero-count row; THE SCREEN NOW READS "none —
+//     nothing left out" AND THE 300 ARE STILL NOT IMPORTED. A window-scoped
+//     verdict overwriting a container-scoped one is a confident wrong answer on a
+//     shipped screen, produced by a channel that ships no UI of its own. The
+//     window-scoped numbers are not discarded: they ride in the delta_walk
+//     report's detail under names that say `window`, where that screen does not
+//     read them.
+func (g *registry) runDelta(ctx context.Context, instanceID int64) (libsync.DeltaReport, error) {
+	entry, err := g.entry(ctx, instanceID)
+	if err != nil {
+		return libsync.DeltaReport{}, err
+	}
+
+	log := g.log.With("instance_id", instanceID, "instance", entry.instance.Name)
+	src, err := catalogueSource(entry, log)
+	if err != nil {
+		return libsync.DeltaReport{}, err
+	}
+
+	im := &libsync.Importer{
+		Store:  g.st,
+		Source: src,
+		Log:    log,
+		UserID: store.SystemUserID,
+		// ⚠️ NIL, AND IT IS ONE WORD DOING REAL WORK. The importer publishes
+		// phase frames and the browser pins CLIENT_PHASES against them, so a
+		// delta that published would render an IMPORT IN PROGRESS on the Services
+		// screen every time it polled — with a stopped frame on failure — for a
+		// channel that shows nothing new in this slice.
+		Progress: nil,
+		Covers:   g.coverPipeline(entry, log),
+	}
+	rep, deltaErr := im.DeltaSync(ctx, instanceID)
+
+	if bo, ok := src.(*libsync.BookOrbitSource); ok {
+		// RECORDED WHETHER OR NOT THE RUN SUCCEEDED, on the full import's rule: a
+		// shortfall measured against library one is still true when the walk dies
+		// on library three.
+		g.recordCompleteness(ctx, instanceID, bo.Completeness(), log)
+	}
+	return rep, deltaErr
+}
+
 // runImport is fullImportLocked's body: everything that can fail, with nothing
 // between it and the publish above.
 func (g *registry) runImport(ctx context.Context, instanceID int64) (libsync.Report, error) {
