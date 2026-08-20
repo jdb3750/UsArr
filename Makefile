@@ -1019,11 +1019,14 @@ design: ## Run the design check (DESIGN-DIRECTION §13). Needs Chromium. NOT par
 # asked of any machine that can run the gate today.
 #
 # AND IT IS FIRST IN `check-offline`, AHEAD OF fmt-check. Measured on this
-# container: ~0.3 s wall for the whole node process against `make check`'s
-# ~4 minutes. Putting it first means a tree whose mockups are out of step fails
-# in under a second rather than after `pnpm install --frozen-lockfile` and a
-# full gofumpt sweep. A cheap check that can fail belongs before the expensive
-# ones that cannot fix it.
+# container, median of 10 runs: ~65 ms wall for the whole node process, 63-78 ms
+# observed, against `make check`'s ~4 minutes. That agrees with the ~70 ms
+# provenance.mjs's own header quotes. The ~0.3 s this line used to carry agreed
+# with neither, and nothing in the tree measures either number, so a wrong one
+# here survives until somebody times it by hand. Putting it first means a tree
+# whose mockups are out of step fails in well under a second rather than after
+# `pnpm install --frozen-lockfile` and a full gofumpt sweep. A cheap check that
+# can fail belongs before the expensive ones that cannot fix it.
 #
 # It exits 1 on a finding; this recipe failing makes `make` exit 2. Two
 # different numbers for two different things — do not quote one for the other.
