@@ -9552,6 +9552,29 @@ unit of work; decision 5 is what changes it, on evidence rather than on a guess.
 - **The next adapter inherits one rule**, and it is short: *a container you walked is a library you
   bind, whatever the walk made of its contents.* The counting rule (ADR-0063) and the binding rule
   now say the same thing about a container the import reached.
+  🔻 **2026-08-19 — that sentence is ruled to mean BIND VERSUS DECLINE, and nothing wider.** It is
+  ambiguous between *"you never decline a container over what was in it"* and a broad ban on a
+  library's **count or kind** depending on observed contents, and the narrow reading is the one that
+  governs. ⚠️ **No status mark, and no decision of this ADR changed** — this records which of two
+  readings was already the ratified rule, it does not amend one.
+  **(a) The broad reading would make this ADR contradict itself.** Decision 5's own implementation
+  mints the `comic` sibling **conditionally on observed contents**, and argues that it must:
+  `internal/store/catalogue.go:1382-1389` — *"Minting the comic library at bind time would therefore
+  give EVERY prose-only library a permanently empty comic sibling on the Libraries screen, which is
+  the 'empty screen that looks broken' principle 3 exists to prevent."* Under the broad reading,
+  decision 5 violates this sentence. A reading that leaves the document coherent beats one that makes
+  it self-contradictory.
+  **(b) This is a Consequence, not a Decision.** Consequences describe what follows and hand rules to
+  the next adapter; they do not legislate a constraint the Decision section never states, and no
+  decision above says a library's count or kind is fixed before the walk.
+  **(c) The sentence's evident purpose survives intact.** Do not drop a container on the floor because
+  you disliked its contents — under the narrow reading nothing is declined, every walked container
+  still gets a row, and decision 1 is untouched.
+  **(d) This ADR named its own expiry and we have reached it.** *"The kind stays `book` until comics
+  have a unit of work"* (`:9532-9533`), and the book-over-comics residual *"closes when comics get a
+  unit of work"* (`:9548`). [ADR-0068](#adr-0068) discharges that condition in those exact words —
+  *"and **this ADR is that unit of work**"* (`:9951`) — so the interval in which contents could not
+  inform a kind is over.
 
 ---
 
