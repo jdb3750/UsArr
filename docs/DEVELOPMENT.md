@@ -297,14 +297,28 @@ its own that is still enough. It also guards `docs/design/` — prose, tokens an
 which is a shipping artifact, and none of which can break the binary. Run it by hand when the design
 moves, overriding `PW_BROWSERS_PATH` to point at your own browser cache.
 
-**The "nothing to pin" half of that argument is now partly discharged, and the Makefile is
-authoritative for where it stands.** `web/package.json` pins `playwright-core` at `1.56.1` exactly,
-no caret; it declares no install script and downloads no browser, so a fresh install pays nothing
-for it. **What is not closed:** `check.mjs`'s resolution ladder asks for the specifier `playwright`,
-and the pinned package is `playwright-core`, so the pin does not satisfy the ladder and a fresh
-machine still falls through to the fallbacks. Finishing that is a change to `docs/design/check.mjs`.
-Until then the version is declared but not enforced, and a gate step that accepts whatever is
-installed is still not a gate.
+**The "nothing to pin" half of that argument is discharged, and the Makefile is authoritative for
+where it stands.** `web/package.json` pins `playwright-core` at `1.56.1` exactly, no caret; it
+declares no install script and downloads no browser, so a fresh install pays nothing for it.
+
+~~**What is not closed:** `check.mjs`'s resolution ladder asks for the specifier `playwright`, and
+the pinned package is `playwright-core`, so the pin does not satisfy the ladder and a fresh machine
+still falls through to the fallbacks. Finishing that is a change to `docs/design/check.mjs`. Until
+then the version is declared but not enforced, and a gate step that accepts whatever is installed is
+still not a gate.~~ 🚩 **STRUCK 2026-08-20 — the change to `docs/design/check.mjs` landed, and the
+sentence above was written "partly discharged" for this reason alone.** The ladder now carries
+`const PW_PACKAGES = ['playwright', 'playwright-core']` and expands **every** rung across both names
+— bare specifier, `web/node_modules`, npm global root — so the pin is what answers. `$PLAYWRIGHT_MODULE`
+is the one unexpanded rung, because it is a full module path rather than a package name. The
+standard the struck sentence set is the standard this now meets: the version is declared *and*
+enforced.
+
+`make check` is what puts the pinned copy on disk, without ever running the design check itself:
+`fmt-check`, `lint-web` and `test-web` all declare `web-deps`, which is `pnpm install
+--frozen-lockfile` in `web/`, and `playwright-core@1.56.1` is a devDependency in that lockfile. Both
+rungs were observed at `6df7222` on 2026-08-20: on a fresh worktree with no `web/node_modules` the
+script printed `playwright resolved via npm global root 'playwright'`, and after `make web-deps`,
+`playwright resolved via web/node_modules 'playwright-core'`.
 
 `docs/design/check.mjs` is on `main`: introduced in `f015655`, merged by `e0d4b26`. **Observed
 present at 2026-08-16 17:34 UTC after a `git fetch`** — a measurement, not a standing guarantee, and
