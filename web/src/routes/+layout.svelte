@@ -53,12 +53,13 @@
 	 * the application measurably slower in exchange for looking designed.
 	 */
 	import '../app.css';
-	// Imported for its side effect: reading the stored theme and density and
-	// stamping data-theme / data-density on <html> before anything renders. The
-	// CSP forbids the inline <script> that would normally do this in app.html,
-	// so it happens here, at module evaluation, which is still before first
-	// paint on an SPA whose served document has an empty body.
-	import '$lib/prefs.svelte';
+	// Imported for `prefs.shortcuts`, which gates `/` below, AND for the module's
+	// side effect: reading the stored theme and density and stamping data-theme /
+	// data-density on <html> before anything renders. The CSP forbids the inline
+	// <script> that would normally do this in app.html, so it happens here, at
+	// module evaluation, which is still before first paint on an SPA whose served
+	// document has an empty body. A named import runs it just the same.
+	import { prefs } from '$lib/prefs.svelte';
 	import { onMount, tick } from 'svelte';
 	import { afterNavigate, beforeNavigate, goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
@@ -68,6 +69,7 @@
 	import { MEDIA_TYPES, mediaTypeLabel } from '$lib/library';
 	import { session } from '$lib/session.svelte';
 	import { createScrollMemory, forwardScrollKey, type ScrollMemory } from '$lib/shellscroll';
+	import { opensSearch } from '$lib/shellkeys';
 
 	let { children } = $props();
 
@@ -384,38 +386,35 @@
 	 * spending the shell's one promise about focus order to save a Tab is not a
 	 * trade this file gets to make twice.
 	 *
-	 * IT IS GATED ON `showNav`, not on the key alone. Search is reachable where
-	 * the nav that reaches it is: signed out, on /login, or on the unreachable
-	 * screen, `/` is an ordinary character and stays one.
+	 * WHICH KEY PRESSES COUNT IS `opensSearch` ($lib/shellkeys), where it is a
+	 * pure function so the decision can be tested without a browser, exactly as
+	 * `scrollDeltaFor` is for the scroll keys. What stays here is the half that
+	 * needs the DOM: `focusTakesText` on the event's target, and the navigation.
 	 *
-	 * WHAT IT REFUSES TO SWALLOW:
+	 * IT IS GATED ON `prefs.shortcuts`, and that is not decoration. `/` is a
+	 * single-key shortcut with no modifier, Settings has one control that turns
+	 * the whole set off, and a shell that did not read it left that control
+	 * claiming a state it did not have. Turning the set off costs a keyboard
+	 * user nothing here: Search is a nav row on every screen `/` works on, one
+	 * Tab past the skip link, which is the route the key was only ever a
+	 * shortcut for.
 	 *
-	 *   · anything already claimed (`defaultPrevented`), on the same reasoning
-	 *     as `scrollDeltaFor`;
-	 *   · Ctrl, Alt and Meta combinations, which are browser and OS shortcuts —
-	 *     Meta+/ and Ctrl+/ both mean something to somebody;
-	 *   · a composition in progress, where the key belongs to the IME;
-	 *   · a repeat, so holding the key is one navigation and not a history run;
-	 *   · the field cases, via `focusTakesText`.
+	 * `?` IS NOT GATED because there is no `?` handler yet; when the shortcut
+	 * sheet lands it is deliberately exempt, since the sheet is where the toggle
+	 * is discovered ($lib/prefs.svelte).
 	 *
-	 * ⚠️ SHIFT IS DELIBERATELY NOT IN THAT LIST, and it is the one modifier that
-	 * would be wrong to exclude. On a US layout Shift+/ produces `?` and never
-	 * reaches this; on the German and French layouts `/` IS a shifted key, so
-	 * `event.key === '/'` arrives with `shiftKey` true and excluding it would
-	 * delete the shortcut on those keyboards. The test is the character the
-	 * layout produced, which is what `key` reports, not the keys pressed to
-	 * produce it. This is the opposite call from `scrollDeltaFor`, which drops
-	 * Shift because Shift is a selection modifier on a NAMED key; here the key
-	 * is a character and Shift may be part of typing it.
-	 *
-	 * Already on Search, it returns false rather than preventing: there is
-	 * nothing to navigate to, and swallowing the key to do nothing is worse
-	 * than letting it through.
+	 * The field cases are refused via `focusTakesText`: an element eating
+	 * characters gets its `/`. Already on Search, `opensSearch` returns false
+	 * rather than the caller preventing — there is nothing to navigate to, and
+	 * swallowing the key to do nothing is worse than letting it through.
 	 */
 	function openSearchKey(event: KeyboardEvent): boolean {
-		if (event.key !== '/' || event.defaultPrevented || event.repeat) return false;
-		if (event.ctrlKey || event.altKey || event.metaKey || event.isComposing) return false;
-		if (!showNav || page.url.pathname === searchPath) return false;
+		const open = opensSearch(event, {
+			shortcuts: prefs.shortcuts,
+			showNav,
+			onSearchScreen: page.url.pathname === searchPath
+		});
+		if (!open) return false;
 		if (focusTakesText(event.target)) return false;
 		event.preventDefault();
 		void goto(searchPath);

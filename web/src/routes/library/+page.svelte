@@ -29,12 +29,24 @@
 	 * disappeared and none reordered, and this screen did not quietly become a
 	 * different list under the same address.
 	 *
-	 * ⚠️ HOME'S BLOCK C KEEPS THE OTHER ENDPOINT, DELIBERATELY. §17.2 as amended
-	 * by ADR-0028 closes Block C at ONE table, ONE order and NO filters — a sixth
-	 * media type adds rows to it rather than a sixth region — and http-api.md §7
-	 * is explicit that the browse read *"is a different endpoint from §1, not a
-	 * superset of it"*. Home is that block and is unchanged. The two share a row
-	 * shape and a paging rule and share NO cursor (§7.5).
+	 * ⚠️ HOME'S BLOCK C KEEPS THE OTHER ENDPOINT, AND THE DELIBERATE PART IS THAT
+	 * THIS SWITCH WAS SCOPED TO THIS SCREEN — not that Block C was held back.
+	 * §17.2 as amended by ADR-0028 closes Block C at ONE table spanning every
+	 * media type, a sixth type adding rows to it rather than a sixth region; that
+	 * is a rule about Home's SHAPE, and it neither names an endpoint nor withholds
+	 * a control. ⚠️ THIS SENTENCE USED TO RUN ON — *"ONE order and NO filters"* —
+	 * AND THE ADDITION SAID THE OPPOSITE OF BOTH DOCUMENTS: §17.2 asks that same
+	 * table to sort, filter and Ctrl+F (§4.5), and ADR-0028 repeats it as *"the
+	 * unified table sorts, filters and Ctrl+Fs"*. Block C's single order is
+	 * `/library/recent`'s, an endpoint that parses `limit` and `cursor` and
+	 * nothing else, so the sort control this screen grew is one Block C has not
+	 * been given rather than one it was refused. Re-grounded 2026-08-20 on that
+	 * endpoint's parameter set, which is the only thing now holding this up. http-api.md §7 is explicit that
+	 * the browse read *"is a different endpoint from §1, not a superset of it"*,
+	 * which is true of the contract — though ⚠️ the reason §7 gives for it is that
+	 * same phantom, so take the split and leave the reason. Home is that block and
+	 * is unchanged. The two share a row shape and a paging rule and share NO
+	 * cursor (§7.5).
 	 *
 	 * ⚠️ A TO Z IS NOT ON THE SORT CONTROL, AND ITS ABSENCE IS STATED. `sort_title`
 	 * walks `ix_work_kind_sort`, which is `(kind, sort_title, id)`, and SQLite
@@ -108,12 +120,20 @@
 		libraryScopeLine,
 		MAX_LIBRARY_SLUGS,
 		nextBrowsePage,
+		NO_LIBRARY_NAMES,
 		readLibraryNames,
 		sameBrowseQuery,
 		type BrowseFeed,
 		type BrowseQuery,
 		type LibraryNames
 	} from '$lib/librarygrid';
+	import {
+		SCOPE_SELECT_LABEL,
+		scopeSelectOptions,
+		scopeSelectSearch,
+		scopeSelectValue,
+		scopeSelectWorthShowing
+	} from '$lib/scopeselect';
 	import { formatWhen } from '$lib/requests';
 
 	/**
@@ -384,13 +404,27 @@
 	let namesAsked = false;
 
 	/**
-	 * ⚠️ ASKED ONLY WHEN THE ADDRESS CARRIES A SCOPE, so the unscoped view — which
-	 * renders no scope line at all — costs no read. The effect rather than
-	 * `onMount` because the scope can arrive after mount: `pushState` moves the
-	 * address without remounting this component.
+	 * ⚠️ ASKED ON EVERY VISIT, INCLUDING THE UNSCOPED ONE — AND THE COMMENT HERE
+	 * USED TO SAY THE OPPOSITE, TRUTHFULLY, UNTIL THE SCOPE SELECT SHIPPED. It
+	 * read *"asked only when the address carries a scope, so the unscoped view —
+	 * which renders no scope line at all — costs no read"*, and that held while
+	 * these names did nothing but enrich a scope line an unscoped view never
+	 * renders. The scope select is offered on the UNSCOPED view too — that view is
+	 * precisely where switching INTO a library starts — and a control cannot
+	 * offer libraries nobody read. So the read is now unconditional, and the cost
+	 * it was avoiding is one local SQLite read per visit with no upstream call
+	 * behind it (`reference/http-api.md` §2), never awaited and never on the path
+	 * of a row.
+	 *
+	 * Still gated on a route that resolved: a `[type]` the router refused, or a
+	 * scope over `MAX_LIBRARY_SLUGS`, has an empty state rather than a toolbar,
+	 * and there is nothing there to put a control on.
+	 *
+	 * The effect rather than `onMount` because the address can move without
+	 * remounting this component: `pushState` is how both toolbar controls write.
 	 */
 	$effect(() => {
-		if ((query?.libraries.length ?? 0) === 0 || namesAsked) return;
+		if (query === undefined || namesAsked) return;
 		namesAsked = true;
 		untrack(() => void loadNames());
 	});
@@ -404,6 +438,58 @@
 	 * the whole reason the markup renders nothing there rather than an empty span.
 	 */
 	const scopeLine = $derived(libraryScopeLine(query?.libraries ?? [], names));
+
+	/**
+	 * THE SCOPE SELECT'S THREE DECISIONS, all `$lib/scopeselect`'s so that a test
+	 * can call them — `vitest.config.ts` compiles no component, so a rule left in
+	 * this file is a rule only a human can check.
+	 *
+	 * ⚠️ READ THAT MODULE'S HEADER BEFORE ASSUMING WHAT THIS IS. It is a
+	 * screen-local, single-select `<select>` that changes `?lib=` on this screen,
+	 * and it is NOT DESIGN-DIRECTION §8.1's scope chip — which is a shell-level
+	 * multi-select popover with a top-bar hoist, and which remains unbuilt.
+	 *
+	 * The options fall back to the empty map while the read is in flight, which
+	 * costs nothing: `showScopeSelect` is false until the read answers, so the
+	 * control appears with its libraries already in it rather than empty and then
+	 * filling.
+	 */
+	const scopeOptions = $derived(
+		scopeSelectOptions(names ?? NO_LIBRARY_NAMES, query?.libraries ?? [])
+	);
+	const scopeValue = $derived(scopeSelectValue(query?.libraries ?? []));
+	const showScopeSelect = $derived(scopeSelectWorthShowing(names));
+
+	/**
+	 * SWITCHING LIBRARY, WHICH IS THE WHOLE POINT OF THE CONTROL: these screens
+	 * could already ARRIVE at a scope and CLEAR one, and could not CHANGE one
+	 * without going back to Libraries.
+	 *
+	 * The same idiom as `onSort` above, deliberately and not by coincidence — one
+	 * toolbar, one way of writing the address. `pushState` rather than `goto`
+	 * because the screen is not going anywhere: nothing to re-run, no scroll to
+	 * reset, no focus to move off the control the user is still holding. It
+	 * pushes rather than replaces, so Back returns to the library you were
+	 * reading before.
+	 *
+	 * ⚠️ THE CURSOR RESET IS NOT HERE AND MUST NOT BE ADDED HERE. A cursor binds
+	 * to `sort` alone, so replaying one under a different LIBRARY SCOPE is a
+	 * `200 OK` that starts partway into a different corpus — rows skipped,
+	 * nothing reported. `browseFeedFor` owns that rule and the `$effect` above
+	 * applies it to the whole feed the moment `query` changes, which is exactly
+	 * what this `pushState` causes. Every other parameter survives, so switching
+	 * library keeps the order you were reading.
+	 */
+	function onScope(event: Event) {
+		const value = (event.currentTarget as HTMLSelectElement).value;
+		// `SvelteURLSearchParams` for `svelte/prefer-svelte-reactivity`, as `onSort`
+		// uses. `scopeSelectSearch` mutates it and returns the string; it DELETES
+		// `lib` rather than emptying it, because `?lib=` is a 400 and not "no
+		// scope".
+		const search = scopeSelectSearch(new SvelteURLSearchParams(page.url.search), value);
+		// eslint-disable-next-line svelte/no-navigation-without-resolve -- a ResolvedPathname cannot carry a query string; page.url.pathname is already resolved. Precedent: routes/search/+page.svelte's syncUrl.
+		pushState(search === '' ? page.url.pathname : `${page.url.pathname}?${search}`, page.state);
+	}
 
 	/**
 	 * The services read, and it is allowed to fail. Nothing on this screen is
@@ -498,6 +584,45 @@
 				<option value={sort}>{browseSortLabel(sort)}</option>
 			{/each}
 		</select>
+
+		{#if showScopeSelect}
+			<!--
+				THE SCOPE SELECT — the control that closes the gap these two screens
+				shipped with: they could ARRIVE at a `?lib=` scope (the Libraries screen
+				authors the link) and could CLEAR one ("Show every library" below), and
+				could not CHANGE one without navigating back to Libraries and picking a
+				different row.
+
+				⚠️ IT IS NOT DESIGN-DIRECTION §8.1's SCOPE CHIP, AND THE CHIP IS STILL
+				UNBUILT — nothing here discharges it. The chip is shell-level: hoisted
+				into the top bar, a popover, MULTI-select, with its own keyboard
+				behaviours and a live region, propagating the scope across navigation so
+				the sidebar agrees about it. This is screen-local and single-select, it
+				is a plain `<select>`, it lives in this toolbar only, and it claims
+				nothing about scope anywhere else in the app. `$lib/scopeselect` carries
+				the full statement of the difference.
+
+				A `<select>` DELIBERATELY IDENTICAL TO Sort BESIDE IT rather than a
+				control of its own design: one toolbar, one idiom, no new CSS and no new
+				pattern for a user to learn. It is a real form control, so it arrives
+				with the platform's own keyboard handling, its own type-ahead and its own
+				mobile picker — none of which this screen has to write, and all of which
+				a hand-built menu would have to earn back.
+
+				⚠️ AND IT IS ABSENT AT ZERO LIBRARIES rather than empty. A dropdown whose
+				only entry is the state you are already in reads as a broken screen; an
+				install with no libraries is the Libraries screen's news to break, and it
+				breaks it there. `scopeSelectWorthShowing` is the whole rule. At ONE
+				library it ships: that library and every library are two states you can
+				move between.
+			-->
+			<label class="toolbar__label" for="library-scope">{SCOPE_SELECT_LABEL}</label>
+			<select id="library-scope" class="select" value={scopeValue} onchange={onScope}>
+				{#each scopeOptions as option (option.value)}
+					<option value={option.value}>{option.label}</option>
+				{/each}
+			</select>
+		{/if}
 		{#if sortNote}
 			<!--
 				⚠️ STATED, NOT OFFERED-THEN-REFUSED, AND IN UsArr's OWN WORDS. The

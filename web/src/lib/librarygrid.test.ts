@@ -899,9 +899,17 @@ describe('all six media types are reachable from the shell', () => {
 	 * not a recently-added list, and the old label would contradict the screen.
 	 *
 	 * ⚠️ HOME'S BLOCK C KEEPS THE OLD WORDS, and that is not an inconsistency:
-	 * Block C really is recently added, being closed at one order and no filters
-	 * (§17.2, ADR-0028). `libraryscreen.test.ts` pins that the two screens still
-	 * agree about the EMPTY state, which is the fact they genuinely share.
+	 * Block C really is recently added, because the endpoint it reads is
+	 * hard-ordered `added_at DESC, id DESC` and parses no control that could move
+	 * it off that order. ⚠️ THAT REASON USED TO BE *"being closed at one order and
+	 * no filters (§17.2, ADR-0028)"*, WHICH NEITHER DOCUMENT SAYS — §17.2 asks
+	 * Block C's one table to sort, filter and Ctrl+F (§4.5), and ADR-0028 says the
+	 * same. So this label is accurate about what is BUILT rather than protected by
+	 * a rule, and it expires exactly the way `/library`'s did the moment Block C
+	 * is given the sort those two ask for. Re-grounded on the endpoint 2026-08-20;
+	 * the assertions below never read the retracted rule and are unaffected. `libraryscreen.test.ts` pins that the
+	 * two screens still agree about the EMPTY state, which is the fact they
+	 * genuinely share.
 	 */
 	it('labels the all-types view Library, not Recently added', () => {
 		expect(
@@ -1109,9 +1117,26 @@ describe('the libraries read is an enrichment, never a precondition', () => {
 			expect(guard, `${where}'s scope line is not behind the scoped test`).toBeGreaterThanOrEqual(
 				0
 			);
-			expect(code, `${where} asks for names on an unscoped view`).toContain(
-				'query?.libraries.length ?? 0) === 0'
-			);
+			/*
+			 * ⚠️ THIS USED TO PIN THAT THE NAMES WERE ASKED FOR ONLY ON A SCOPED
+			 * VIEW — it read `expect(code).toContain('query?.libraries.length ?? 0)
+			 * === 0')` — AND THAT RULE IS GONE ON PURPOSE RATHER THAN ERODED. It was
+			 * right for as long as the names did nothing but enrich the scope line
+			 * above, which an unscoped view never renders. `$lib/scopeselect`'s scope
+			 * select is offered on the UNSCOPED view too — that view is exactly where
+			 * switching INTO a library starts — and a control cannot offer libraries
+			 * nobody read, so the read is now unconditional. `scopeselect.test.ts`
+			 * holds the new rule.
+			 *
+			 * What survives is the half that was really about cost: ONE read per
+			 * visit. The latch is a plain `let`, never `$state`, so it can guard the
+			 * read without being a reason to re-render.
+			 */
+			expect(
+				code,
+				`${where} no longer latches the libraries read, so an effect that ` +
+					're-runs asks for them again'
+			).toContain('namesAsked = true;');
 		}
 	);
 });

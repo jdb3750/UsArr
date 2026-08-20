@@ -104,15 +104,71 @@
 > **No other line moved, no sweep happened, and every other line citation in this file is still
 > unvetted.** This pass cited symbols and distinctive strings throughout and added no `file:<n>`
 > citation of its own.
+>
+> **Extended 2026-08-20 by the Block-A / facet-consumer pass, to exactly FOUR places and to NOTHING
+> ELSE:** this paragraph · the baseline block, advanced and re-fired · §2's **Home Block A** item,
+> ticked with its scope and its unfired obligation written out · §2's **facet-consumer** item, in
+> **two places only** — its ⚠️ *"DO NOT TICK"* bullet list and its *Done when*, the latter now split
+> into its two legs with **leg 2 left open**. **Every other paragraph of that long item — the
+> ADR-0053 / ADR-0059 argument, the empty-state paragraph, the 🔍 budget inference and the
+> shared-action-string rider — was NOT re-read, and no line of it moved.** **No other line moved, no
+> sweep happened, and every other line citation in this file is still unvetted.** This pass cited
+> symbols and distinctive strings throughout and added no `file:<n>` citation of its own.
 
-**Last re-derived against:** `origin/main` `0a5d66e` (2026-08-20).
-⚠️ **Advanced from `4d95d36` by the comics-landed / stale-defect pass, which re-derived FIVE things
-and NOTHING ELSE**, and **the range is large and is emphatically not documentation-only** — 36
-non-merge commits carrying `internal/libsync`, `internal/store`, `internal/bookorbit`, `cmd/`,
-`web/src/`, `testdata/` and `CLAUDE.md` — so **read every box this pass does not name as attested at
-`4d95d36`**, not at the baseline line above.
+**Last re-derived against:** `origin/main` `6533f1c` (2026-08-20).
+⚠️ **Advanced from `0a5d66e` by the Block-A / facet-consumer pass, which re-derived THREE things and
+NOTHING ELSE**, and **the range is large and is emphatically not documentation-only** — 41 non-merge
+commits carrying `internal/repofiles` (a package that did not exist at the previous baseline),
+`internal/libsync`, `internal/store`, `internal/httpapi`, `internal/db`, `internal/bookorbit`,
+`cmd/usarr`, `web/src/`, `docs/`, `docs/design/`, `docs/reference/`, `README.md` and `CLAUDE.md` — so
+**read every box this pass does not name as attested at `0a5d66e`**, not at the baseline line above.
 
-**FIRED at `0a5d66e` by this pass, and this is the whole list:**
+**FIRED at `6533f1c` by this pass, and this is the whole list:**
+- **Home's block map and its facet call:** the ADR-0028 block map in `web/src/routes/+page.svelte`,
+  read in the file; the `fetchLibraryFacets` import and its call site; `librarySummary(facets,
+  health)` feeding `summaryRows`. Content commits `51a9e68` and `da33aa7`, attributed by `git log -S`
+  on `fetchLibraryFacets` and on the block-map string *"media-type summary    ≤6 rows           DRAWN"*
+  rather than by subject, and each confirmed **single-parent** before being cited.
+- **What Home does NOT draw:** the same file's `BLOCK A's COLUMNS, AND THE TWO §17.2 NAMES THAT ARE
+  DELIBERATELY ABSENT` paragraph and its `WHAT IS STILL NOT DRAWN` paragraph, both read whole; and
+  the read's own refusal — the declaration comment above `handleLibraryFacets` and the
+  `toMediaTypeCounts` allowlist in `internal/httpapi/facets.go`.
+- **The sidebar predicate:** `TYPE_NAV` in `web/src/routes/+layout.svelte`, read as an expression and
+  not as a claim about one, together with its two call sites; plus every `facet` mention under
+  `web/src` by `git grep -l` (nine files), with the four this box named opened on their §7.1
+  citations.
+- **The harness claim, fired rather than assumed:** `git grep -l 'render(' -- 'web/src/**/*.test.ts'`
+  (no hits) and the import header of `web/src/lib/home.test.ts`.
+
+**NOT fired by this pass, and therefore inherited:** no `ARCHITECTURE.md` read · no `REVIEW-LOG.md`
+read · **no migration read at all** · **no ADR text read at all**, so every ADR-0053 / ADR-0059
+sentence on the facet box is inherited unread · no Go outside `internal/httpapi/facets.go` · **no §2
+box this pass does not name** · **no line-citation sweep, again.**
+⚠️ **THE INHERITED ATTESTATION BELOW IS STALE IN FILES THIS PASS DID NOT RE-FIRE, AND THE RANGE SAYS
+WHICH.** `0a5d66e..6533f1c` touches `internal/libsync/bookorbit.go`,
+`internal/libsync/bookorbitfiles.go`, `internal/libsync/doc.go`, `internal/store/catalogue.go` and
+`docs/DECISIONS.md` — five files the `0a5d66e` pass fired on and this one did not re-open. **Read its
+five checks as attested at `0a5d66e`, not here.**
+⚠️ **This pass was handed three claims and all three held**, but **one was handed incomplete**: leg 1
+of the facet box is false as the brief says, and the 🔍 inference riding on it — that four `web/src`
+comments were stale — had **already been discharged in the tree**, which the brief did not say. That
+is recorded on the box rather than dropped. **Two corrections were also handed over and then found
+already landed on `origin/main`** — the zero-external-providers annotation (content `8cdf399`) and
+the box-is-a-bookmark preamble clause — and **neither was written a second time.**
+⚠️ **One stale sentence was SEEN AND DELIBERATELY LEFT**, because it is another lane's: §2's opening
+⚠️ still lists the *"zero-external-providers evidence clause"* among items *"None of them is
+re-pointed line by line here"*, and `8cdf399` re-pointed exactly that one. **Not this pass's to fix,
+and flagged rather than quietly corrected.**
+
+**INHERITED from the `0a5d66e` baseline. Its own attestation follows, unchanged and NOT re-fired:**
+⚠️ **That baseline advanced from `4d95d36` by the comics-landed / stale-defect pass, which
+re-derived FIVE things and NOTHING ELSE**, and **the range is large and is emphatically not
+documentation-only** — 36 non-merge commits carrying `internal/libsync`, `internal/store`,
+`internal/bookorbit`, `cmd/`, `web/src/`, `testdata/` and `CLAUDE.md` — so **read every box that pass
+does not name as attested at `4d95d36`**, not at its baseline line.
+
+**FIRED at `0a5d66e` by THAT pass — inherited verbatim, and *"this pass"* below means the
+comics-landed / stale-defect pass, not the one that advanced the baseline:**
 - **The BookOrbit file and credit sources:** `func (s *BookOrbitSource) StreamFiles`
   (`internal/libsync/bookorbitfiles.go`) and `func (s *BookOrbitSource) StreamCredits`
   (`internal/libsync/bookorbitcredits.go`), found by searching every non-`_test.go` file in
@@ -390,9 +446,14 @@ zero-external-providers evidence clause. **The work each names is real and sourc
 each owes is that same work pointed at BookOrbit. **None of them is re-pointed line by line here**,
 and the reason has changed: this used to say *"~~re-pointing them is the unwritten ADR's job~~"*, and
 the ADR landed — [ADR-0052](./DECISIONS.md#adr-0052) **deliberately declined to re-answer** ADR-0041
-clause 4's channel list, reopening it instead. So the per-item rewrite is owed by whoever writes the
-adapter, against §16's narrower channel sentence (§1), and **channel 3b's item in particular cannot
-simply be re-pointed** — for `work_comic` there is nothing at the far end to point it at (§3).
+clause 4's channel list, reopening it instead. ⚠️ **ONE OF THE FIVE IS NOW RE-POINTED, 2026-08-20 —
+THE ZERO-EXTERNAL-PROVIDERS EVIDENCE CLAUSE.** Its box below reads *"for BookOrbit"* and its body
+names BookOrbit's payloads. **CITE `8cdf399`, NOT EITHER MERGE.** Only the **source name** moved,
+which is a different defect from the per-item **rewrite** this sentence defers — the evidence
+obligation is still owed and its box is still open. **The other four are untouched by that pass, and
+this sentence still holds of them.** So the per-item rewrite is owed by whoever writes the adapter,
+against §16's narrower channel sentence (§1), and **channel 3b's item in particular cannot simply be
+re-pointed** — for `work_comic` there is nothing at the far end to point it at (§3).
 Items marked 🛑 **STOPPED** are the different case: those are stopped by the decision itself.
 
 - [ ] **Channel 3b — the ordered page-walk delta, for Kavita.** The watermark walk with an overlap
@@ -428,9 +489,44 @@ Items marked 🛑 **STOPPED** are the different case: those are stopped by the d
       prefix index. Both are named in `librarysearch.go`'s and the screen's headers rather than
       quietly omitted.
 
-- [ ] **Home Block A — the media-type summary.** Blocks B and C are drawn; A is not.
-      *Authority:* §17.2 as amended by [ADR-0028](./DECISIONS.md#adr-0028), §16 v0.1 entry.
-      *Done when:* `web/src/routes/+page.svelte`'s block map stops saying `Block A … NOT DRAWN`.
+- [x] **DRAWN 2026-08-20 — ~~Home Block A — the media-type summary. Blocks B and C are drawn; A is
+      not~~.** ⚠️ **THE TICK IS SCOPED TO WHAT IS DRAWN, AND IT IS NOT THE WHOLE OF §17.2's ROW. Read
+      the two riders under it before quoting this box.** `web/src/routes/+page.svelte`'s ADR-0028
+      block map now reads *"Block A · media-type summary · ≤6 rows · DRAWN in `library` mode"*,
+      beside Block B's *"DRAWN"* and Block C's *"DRAWN in `library` mode"*; the screen imports
+      `fetchLibraryFacets`, calls it, and feeds `librarySummary(facets, health)` into `summaryRows`.
+      The six rows are drawn and each carries one of §17.7's states. Content commits `51a9e68`
+      (*"feat(home): Block A draws the six media types off the facet read"*) and `da33aa7`
+      (*"fix(home): Block A's counts and its reach are read off the install, not the build"*),
+      attributed by `git log -S` on `fetchLibraryFacets` and on the block-map string
+      *"media-type summary    ≤6 rows           DRAWN"* rather than by subject, and each confirmed
+      **single-parent** before being cited.
+
+      ⚠️ **`Have` AND `Synced` ARE NOT DRAWN, AND THAT IS SCOPE RATHER THAN OMISSION.** §17.2's row
+      is `name · count · availability rollup · last import · see all`, and the refusal sits
+      **upstream of the screen**: `internal/httpapi/facets.go` answers only the first two and says so
+      at its own declaration — *"the rollup and the import time are their own aggregates and their
+      own commit"* — and `toMediaTypeCounts` is a hand-written allowlist in which *"every field is
+      named"*. `+page.svelte` says the same in terms, under `BLOCK A's COLUMNS, AND THE TWO §17.2
+      NAMES THAT ARE DELIBERATELY ABSENT`: a value in either column *"would be invented"*, and `Have`
+      in particular is a specified figure. **A screen cannot draw a column its read refuses to
+      answer**, so this is owed by those aggregates, not by Home.
+      ⚠️ **§17.7's `stale` state is not drawn either.** The same file's `WHAT IS STILL NOT DRAWN`
+      paragraph names it. `partial` **is** drawn — as *"first import running"* with no number beside
+      it. **So this tick says Block A is drawn; it does NOT say Block A is complete.**
+      *Authority:* §17.2 as amended by [ADR-0028](./DECISIONS.md#adr-0028), §16 v0.1 entry, §17.7.
+      *Done when:* ~~`web/src/routes/+page.svelte`'s block map stops saying `Block A … NOT DRAWN`~~
+      — **that criterion is satisfiable by a text editor alone, which is exactly what this file's
+      done-when rule refuses.** It is ticked against it anyway, on that rule's two conditions.
+      **The unfired obligation:** Home has never been rendered against a running UsArr over a
+      populated catalogue — nothing here has watched a count arrive on a screen.
+      **The missing prerequisites, named:** `web` has **no component-render harness at all**
+      (`git grep -l 'render(' -- 'web/src/**/*.test.ts'` returns nothing; `web/src/lib/home.test.ts`
+      is an `environment: 'node'` vitest over pure functions plus a copy guard that reads
+      `+page.svelte?raw` **as text**), and this environment has no live catalogue source to populate
+      the six counts from. **The running-system criterion this box now owes, and which nothing here
+      can take:** Home in `library` mode draws six rows whose counts equal
+      `GET /api/v1/library/facets` on a real install.
 
 - [ ] **Libraries — the auto-proposal flow and its Accept step.** The row view over
       `GET /api/v1/libraries` is drawn; the proposal step is not, and its storage question is now
@@ -963,12 +1059,25 @@ Items marked 🛑 **STOPPED** are the different case: those are stopped by the d
       ⚠️ **AND THE *"interim table"* FRAMING IS RETIRED WITH IT.** This item used to call `/library`
       *"~~a SLICE of this line item and NEVER a tick~~"*, whose missing type filter and sort control
       were *"~~simply not wired yet~~"*. **`/library` is not an interim anything**: it is ADR-0028's
-      Block C at full length, and §17.2 closes it at **one table, one order and no filters** on
-      purpose, so wiring a filter onto it would contradict the section rather than finish it. The
-      screen's own header says so, and names the trap — what it holds is a keyset **prefix** of the
-      catalogue, so a client-side control would present itself as operating on the library while
-      operating on whatever has been loaded. **The filters and the sort control belong to the
-      per-type grid, and that is where they shipped.**
+      Block C at full length.
+      ⚠️ **THE REASON THIS BOX GAVE FOR THAT WAS A PHANTOM CITATION AND IS STRUCK.** It read
+      *"~~§17.2 closes it at **one table, one order and no filters** on purpose, so wiring a filter
+      onto it would contradict the section rather than finish it~~"*, and §17.2 says the opposite.
+      §17.2 closes the **shape** — one table rather than one strip per type, so *"a sixth type adds
+      rows to an existing list rather than a sixth region to scan"* — and of that table requires, in
+      the same sentence, that *"it sorts, it filters, it Ctrl+Fs (§4.5)"*, while
+      [ADR-0028](./DECISIONS.md#adr-0028) puts Block C's *"scope … from the `?lib=` chip"*.
+      **No document forbids a filter on this screen**, so nothing here can be ticked or blocked on
+      one being forbidden.
+      ⚠️ **THE STRUCK SENTENCE'S SUPPORTING TRAP HAS EXPIRED TOO — FLAGGED, NOT RE-ARGUED.** It said
+      the screen holds *"~~a keyset **prefix** of the catalogue, so a client-side control would
+      present itself as operating on the library while operating on whatever has been loaded~~"*,
+      and *"~~the filters and the sort control belong to the per-type grid, and that is where they
+      shipped~~"*. `web/src/routes/library/+page.svelte`'s own header now records that the screen
+      moved **off** `GET /api/v1/library/recent` **onto** `GET /api/v1/library` for exactly that
+      reason, so the sort control and the `?lib=` scope select are applied **server-side over the
+      whole table** and are on this screen today. What it still omits is `media_type` — that is what
+      makes it the all-types view. **Read the route, not this box.**
       *Authority:* §16's v0.1 entry, §17.2, §17, §13's budget table, §4.5,
       `reference/http-api.md` §7.
       *Was done when:* a `/library/{type}` route exists under `web/src/routes/` and renders over
@@ -991,19 +1100,28 @@ Items marked 🛑 **STOPPED** are the different case: those are stopped by the d
       no metadata provider, no image fetch. It reads **no query parameter at all**, deliberately: no
       `?lib=`, no `?media_type=`, no paging. The wire contract is `reference/http-api.md` §8.
 
-      ⚠️ **DO NOT TICK THIS BOX. Its *Done when* has two legs and exactly ONE is met.**
+      ⚠️ **DO NOT TICK THIS BOX. Its *Done when* has two legs, and the one still open is the SECOND
+      — which is not the leg this box was opened for.**
       - ✅ **A documented read exists**, and it is its own endpoint rather than a rider on the browse
         response.
-      - 🔴 **NOTHING UNDER `web/src` READS IT.** Fired at the baseline: every `facet` mention in
-        `web/src` is a **comment asserting the opposite** — `web/src/lib/home.ts`,
-        `web/src/routes/+layout.svelte`, `web/src/routes/library/[type]/+page.svelte` and
-        `web/src/lib/librarygrid.test.ts` all still cite `http-api.md` §7.1's *"no facet counts
-        beside the chips"*. So §17.2's **Block A** is sourceless in the only sense a user meets: the
-        numbers exist and no screen fetches them. 🔍 Inference, labelled: those four comments are now
-        stale in exactly the way this item's own headline was, and they sit in another lane's files.
-      - 🔴 **`TYPE_NAV` still has no predicate.** `web/src/routes/+layout.svelte`'s `TYPE_NAV` is a
-        bare `MEDIA_TYPES.map` over the six-member `as const` in `web/src/lib/library.ts`, with no
-        filter, every entry resolving to `/library/[type]`.
+      - ✅ **A `web/src` consumer reads it — ~~NOTHING UNDER `web/src` READS IT~~, and that clause is
+        now FALSE.** `web/src/routes/+page.svelte` imports `fetchLibraryFacets`, calls it, and feeds
+        `librarySummary(facets, health)` into `summaryRows`; §17.2's **Block A** is drawn off it (the
+        Block A box above, content commits `51a9e68` and `da33aa7`). **This leg closed and this page
+        did not move when it did.**
+        ⚠️ **The 🔍 inference this leg carried was ALREADY DISCHARGED, and is struck rather than
+        inherited.** It read *"~~those four comments are now stale in exactly the way this item's own
+        headline was~~"* — of `web/src/lib/home.ts`, `web/src/routes/+layout.svelte`,
+        `web/src/routes/library/[type]/+page.svelte` and `web/src/lib/librarygrid.test.ts`. They are
+        not stale: `home.ts` now says *"`GET /api/v1/library/facets` ships and Block A is"* drawn,
+        and `+layout.svelte` says *"WHICH IS NO LONGER TRUE — Home's Block A is drawn off
+        `GET /api/v1/library/facets`"*. What those files still cite is `http-api.md` §7.1's *"no
+        facet counts beside the chips"*, **which is a claim about CHIPS and is still true** — it is
+        not this leg's subject and never was.
+      - 🔴 **`TYPE_NAV` still has no predicate — UNMOVED, and this is what holds the box open.**
+        `web/src/routes/+layout.svelte`'s `TYPE_NAV` is a bare `MEDIA_TYPES.map` over the six-member
+        `as const` in `web/src/lib/library.ts`, with no filter, every entry resolving to
+        `/library/[type]`.
 
       ⚠️ **AND THE SIDEBAR LEG IS NOT WAITING ON A CONSUMER. IT IS WAITING ON A DIFFERENT READ —
       READING THIS RESIDUE AS AN OVERSIGHT IS THE MISTAKE THIS PARAGRAPH EXISTS TO PREVENT.** The PM
@@ -1064,10 +1182,23 @@ Items marked 🛑 **STOPPED** are the different case: those are stopped by the d
       *Authority:* `reference/http-api.md` §8 (the read that shipped) and §7.1 (no counts beside the
       chips), [ADR-0059](./DECISIONS.md#adr-0059), [ADR-0053](./DECISIONS.md#adr-0053),
       `design/DESIGN-DIRECTION.md` §8.1, §17.2, §13.
-      *Done when:* a `web/src` consumer renders §17.2's Block A off `GET /api/v1/library/facets`,
-      **and** `TYPE_NAV` grows a predicate fed by an **existence** read over `edition.format` — not
-      by these counts. **An ADR recording a different answer also closes it. Amending ADR-0053 to
-      accept the counts does NOT, and that is the PM's ruling rather than this file's inference.**
+      *Done when — TWO LEGS, AND THEY HAVE COME APART. THE BOX STAYS OPEN.* The clause used to read
+      *"a `web/src` consumer renders §17.2's Block A off `GET /api/v1/library/facets`, **and**
+      `TYPE_NAV` grows a predicate fed by an **existence** read over `edition.format`"*, as one
+      conjunction. It is split here because one leg closed and the other did not move at all, and
+      ticking the box on the first would have claimed the second.
+      1. ✅ **A `web/src` consumer renders §17.2's Block A off `GET /api/v1/library/facets`.**
+         `+page.svelte` calls `fetchLibraryFacets` and draws the six rows (the Block A box above).
+         ⚠️ **Ticked against the written criterion, not against a run**, on the same terms as that
+         box: **the unfired obligation is that no facet count has been observed arriving on a
+         rendered screen**, and the missing prerequisites are the absent component-render harness
+         under `web` and a live catalogue source, both named in full on the Block A box.
+      2. ❌ **`TYPE_NAV` grows a predicate fed by an existence read over `edition.format` — not by
+         these counts.** Unmoved: still a bare `MEDIA_TYPES.map`, no filter. **The existence read it
+         is waiting on does not exist either**, so this leg is waiting on a DIFFERENT READ and not on
+         a consumer — the ⚠️ paragraph above is there to stop that being read as an oversight.
+         **An ADR recording a different answer also closes this leg. Amending ADR-0053 to accept the
+         counts does NOT, and that is the PM's ruling rather than this file's inference.**
 
 - [x] **SHIPPED 2026-08-19 — ~~The ALL-TYPES scoped view a Libraries row opens — DECIDED, MEASURED
       ON THE WIRE, unbuilt~~.** `web/src/routes/library/+page.svelte` is it, at `d0215fb`: the screen
@@ -1416,14 +1547,18 @@ Items marked 🛑 **STOPPED** are the different case: those are stopped by the d
       *Authority:* §13, §16 v0.1 entry.
       *Done when:* a recorded measurement exists in `docs/`.
 
-- [ ] **The zero-external-providers evidence clause for Kavita.** §16 says v0.1 needs no TMDB account
-      because the source carries its own metadata. That claim was evidenced against Radarr's
+- [ ] **The zero-external-providers evidence clause for BookOrbit.** §16 says v0.1 needs no TMDB
+      account because the source carries its own metadata. That claim was evidenced against Radarr's
       `MovieResource` and Sonarr's `SeriesResource`, and **neither is in v0.1 any more**; the
-      equivalent primary-source check against Kavita's payloads is **owed and undischarged in the
-      repo.** ⚠️ **That is NOT the claim that the check was never made** — see the header's
-      **absence rule**: a check can have been run and never written up, exactly as the cover probe
-      was. What is readable is only the repo's silence, which is the weaker claim, and an
-      undischarged obligation is still owed, so this box stays open.
+      equivalent primary-source check against BookOrbit's payloads is **owed and undischarged in the
+      repo.** ⚠️ **The source name here read *"Kavita"*** until
+      [ADR-0052](./DECISIONS.md#adr-0052) moved v0.1's catalogue source; only the subject changed,
+      and the obligation, its evidence standard and the *Done when* below are untouched — that
+      `grep` is a dated record of a check fired against the superseded subject, and re-firing it at
+      BookOrbit is part of what this box still owes. ⚠️ **That is NOT the claim that the check was
+      never made** — see the header's **absence rule**: a check can have been run and never written
+      up, exactly as the cover probe was. What is readable is only the repo's silence, which is the
+      weaker claim, and an undischarged obligation is still owed, so this box stays open.
       *Authority:* §16 v0.1 entry, which flags it against itself.
       *Done when:* `docs/RESEARCH.md` carries the citation. Fired at the baseline above:
       `grep -n -i kavita docs/RESEARCH.md` returns 9 lines — the API surface, the auth scheme, the

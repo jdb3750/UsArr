@@ -21,7 +21,15 @@ import (
 // arithmetic is explicit about why: six horizontal strips put ~16 items above a
 // 900 px fold against the design's own 25-item floor, on the screen whose entire
 // job is inventory. A sixth media type must add ROWS to this list, not a sixth
-// region to scan — so there is one query, one order and one page.
+// region to scan.
+//
+// WHAT §17.2 CLOSES IS THAT SHAPE, NOT THIS PARAMETER SET. It asks for "one
+// table sorted by `added_at DESC` spanning every type", and of that table it
+// says, in the same sentence, "it sorts, it filters, it Ctrl+Fs (§4.5)";
+// ADR-0028 reads the same way round — "the unified table sorts, filters and
+// Ctrl+Fs", and Block C's "scope comes from the `?lib=` chip". So the one query,
+// one order and one page below are what this handler serves today, not a ceiling
+// either document sets on it.
 //
 // IT IS A LOCAL READ (principle 1). One SQLite statement per page, no upstream
 // call, no *Arr, no metadata provider, no image fetch. This is the endpoint that
@@ -47,11 +55,15 @@ import (
 //     halves went stale: the commit landed, and ADR-0051 made the scope a
 //     WORK-DRIVEN EXISTS over library_member rather than a join, which is
 //     order-independent and so was never blocked by this endpoint's order.
-//     Block C carries no chip because §17.2 gives it one table, one order and
-//     no filters — not because the scope could not be built here.
+//     ⚠️ THE REASON THAT REPLACED IT WAS WORSE, because it looked checked:
+//     "Block C carries no chip because §17.2 gives it one table, one order and
+//     no filters" cited a sentence that says the opposite, and ADR-0028 puts
+//     Block C's scope on the chip outright. Block C carries no chip because
+//     nothing here reads one. That is the whole of the reason — no document
+//     declines it, and the bullet no longer claims one does.
 //
-//     Should Block C ever be given the chip, it MUST reuse that resolver and
-//     that EXISTS, and it MUST refuse an unresolvable slug rather than drop it:
+//     When Block C is given the chip, it MUST reuse that resolver and that
+//     EXISTS, and it MUST refuse an unresolvable slug rather than drop it:
 //     §7.3's rule is that dropping a slug WIDENS the page, so a filter has no
 //     safe direction to fail in the way `limit` does. The seam is unchanged —
 //     the scope is a parameter of the store call, not of the SQL string.
@@ -464,13 +476,24 @@ func posterKeyFor(s *Server, workID int64, key sql.NullString) string {
 // scope chip: the same corpus and the same row as Block C above, filtered by
 // media type and by library, in one of three orders, keyset-paginated.
 //
-// IT IS A DIFFERENT ENDPOINT FROM /library/recent AND NOT A SUPERSET OF IT.
-// §17.2 is emphatic that Block C is ONE table with ONE order and no filters — a
-// sixth media type adds rows to it, never a sixth region — so collapsing the two
-// into `/library/recent?media_type=…` would make the Home block a special case
-// of the grid and put a filter on the endpoint whose whole design is that it has
-// none. They share the row shape (recentWorkResponse) and the allowlist that
-// builds it (toRecentWorkResponse), by calling them.
+// IT IS A DIFFERENT ENDPOINT FROM /library/recent AND NOT A SUPERSET OF IT, AND
+// §17.2 IS NOT WHY. ⚠️ This comment used to say "§17.2 is emphatic that Block C
+// is ONE table with ONE order and no filters ... so collapsing the two into
+// `/library/recent?media_type=…` would ... put a filter on the endpoint whose
+// whole design is that it has none", and that inverts the sentence it cites.
+// What §17.2 is emphatic about is the SHAPE — one table rather than one strip
+// per type, "a sixth type adds rows to an existing list rather than a sixth
+// region to scan" — and of that table it requires in the same sentence that "it
+// sorts, it filters, it Ctrl+Fs (§4.5)"; ADR-0028 puts Block C's scope on the
+// `?lib=` chip outright. No document forbids a filter on either endpoint.
+//
+// The split is over the SHAPE OF THE QUERY, and internal/store/browse.go owns
+// that argument: this read is three orders, two filters and a cursor codec per
+// order, where /library/recent is one unfiltered statement in one order, and
+// collapsing them would make the simple statement an argument-dependent special
+// case of the filtered one. They share the row shape (recentWorkResponse) and
+// the allowlist that builds it (toRecentWorkResponse), by calling them; they
+// share no cursor (http-api.md §7.5).
 //
 // IT IS A LOCAL READ (principle 1). One SQLite statement per page — two on the
 // added_at/undated boundary internal/store documents — plus at most one small

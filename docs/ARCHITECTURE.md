@@ -1514,8 +1514,9 @@ deliberately rather than by drift (FUTURE.md §10).
    under this driver, whose SQLite is built with `MAX_MMAP_SIZE=0`, so it has been **dropped from
    the pragma list** rather than left in place looking tunable. `cache_size` is **per-connection**,
    so with a `NumCPU*2` read pool it multiplies by pool size + 1 rather than costing what it says;
-   the default is now **`-8000`** (~85 MB peak on 4 cores) rather than `-32000` (~237 MB), because a
-   default has to hold up on a small self-hosted box and this cost grows with core count.
+   the default is now **`-8000`** (~85 MiB peak on 4 cores) rather than `-32000` (~237 MiB; these
+   are MiB, not MB — §13), because a default has to hold up on a small self-hosted box and this
+   cost grows with core count.
    Unmeasured on arm64 (§13).
 5. **`ANALYZE` after bulk import.**
 
@@ -2163,8 +2164,8 @@ a third larger. Every p50/p99 below is against this library.
 | `POST` write ack (**measured during a concurrent full import**) | < 10 ms | < 40 ms |
 | `GET /stream/{id}` resolve + authorize (to first byte) | < 5 ms | < 20 ms |
 | Process start to listener accepting | < 300 ms | < 1 s |
-| Idle RSS | target < 80 MB — **storage layer measured at 10 MB** (x86-64, below) | < 120 MB |
-| Peak RSS during a 10k-item import | — | < 300 MB — **500k-row import measured at 50 MB** (x86-64) |
+| Idle RSS | target < 80 MB — **storage layer measured at 10 MiB** (x86-64, below) | < 120 MB |
+| Peak RSS during a 10k-item import | — | < 300 MB — **500k-row import measured at 50 MiB** (x86-64) |
 
 ⚠️ **The first row's parameter was corrected 2026-08-19.** It read
 `GET /api/v1/library?kind=movie`, which is wrong twice over: the parameter this endpoint takes is
@@ -2205,7 +2206,7 @@ cgo citation nor the WASM-runtime reasoning describes what UsArr will run.
 **That measurement now exists, on x86-64.** `make bench-rss` (`internal/db/spike`, behind the `bench`
 tag) builds a 500k-row fixture through the real `internal/db` open path, then measures process RSS
 from `/proc/self/status` in one child process per pragma cell. On the reference x86-64 run recorded
-in **ADR-0001**: **idle 10 MB**, **peak 50 MB** for the 500k-row import, and **peak ~237 MB** for a
+in **ADR-0001**: **idle 10 MiB**, **peak 50 MiB** for the 500k-row import, and **peak 237.1 MiB** for a
 saturating read workload at the then-shipped `cache_size = -32000` — because the page cache is
 **per-connection**, so `cache_size` multiplies by the pool. `mmap_size` is a **no-op** under this
 driver. The two ⚠️ markers in the budget table above are therefore lifted for x86-64, and §7.7's
@@ -2213,10 +2214,30 @@ pending note with them.
 
 **Both defaults moved on the strength of that run** (ADR-0001, amendment). `mmap_size` was dropped
 from the pragma list — it configured nothing — and `cache_size` was cut from `-32000` to **`-8000`**,
-which measures **~85 MB peak** on the same 4-core reference run. The read-workload figure this
-section budgets against is therefore ~85 MB, not ~237 MB. Note what the harness does **not** measure:
-query latency. `-8000` is chosen on the memory axis alone, and a latency benchmark that contradicts
-it would be grounds to revisit.
+which measures **~85 MiB peak** on the same 4-core reference run. The read-workload figure this
+section budgets against is therefore ~85 MiB, not ~237 MiB. Note what the harness does **not**
+measure: query latency. `-8000` is chosen on the memory axis alone, and a latency benchmark that
+contradicts it would be grounds to revisit.
+
+⚠️ **Every measured figure in the two paragraphs above is MiB, and read *"MB"* until 2026-08-20 —
+a relabel, not a rounding.** ADR-0001's sweep table is headed *"Read sweep, all MiB"* and
+`make bench-rss` prints MiB, so 237.1 MiB is ~249 MB decimal. **No number changed here**; three
+sites carried the wrong unit — these two paragraphs and §7.7's pragma bullet 4 — and all three
+moved in one pass, because a second pass over the same sentence is how the next one gets missed.
+**The budget table above followed on 2026-08-20**, in the commit that corrected this sentence: its
+two appended measurements now read `10 MiB` and `50 MiB`. **The targets beside them stay MB on
+purpose** — `< 80 MB`, `< 300 MB` and `< 120 MB` are chosen budgets, not measurements, so the unit
+question does not arise for them, and relabelling them would assert a precision nobody measured.
+**237.1 is the shipped row's `peak (VmHWM)` cell**, and that the figure descends from that column
+is **stated** — ADR-0001's amendment says it took the peak column at face value.
+⚠️ **Prose elsewhere in the repo reads *"235 MB peak"*, which is a different cell:** the same
+row's `8 readers` is 235.1. That 235 descends from *that* cell is **inference**
+from an exact numeric match, and no document records where it was read. The two descents are not
+equally evidenced and are not written here as if they were. **ADR-0001's table is the only
+surviving record of the run** — `git ls-files` carries no bench output at all, because the harness
+echoes its table to stdout and writes it to `.dev/rss-spike.md`, which `.gitignore` excludes — so
+prose corrects itself against that table, and the table corrects against nothing.
+Read it, cite it, leave it.
 
 **Not measured on arm64, and that is now the honest status.** The spike was written as a prerequisite
 to the schema work; the schema shipped, and the deployment target is x86-64, so the prerequisite is
@@ -2225,7 +2246,10 @@ arm64 has been measured, and until it is, the Pi 5 reference hardware in this se
 intent rather than a validated target. The command for that day already exists — run `make bench-rss`
 on the arm64 box and record it in ADR-0001 next to the x86-64 row. Page size and core count both move
 these numbers, so an arm64 result replaces nothing; it is a second row. Logged in
-`docs/REVIEW-LOG.md` §R2.6 so the change of a documented prerequisite is not silent.
+`docs/REVIEW-LOG.md` Round 2 §6 so the change of a documented prerequisite is not silent.
+⚠️ **That pointer read *"§R2.6"*, which resolved to an unrelated section rather than dangling** —
+`## R2.` exists and carries only R2.1 and R2.2 — so following it produced a confident wrong answer
+and no signal. **Round 2** is load-bearing: two `## 6.` headings exist in that file.
 
 If a figure ever lands materially above budget, the pragma defaults are the first thing to tune, not
 the driver.
@@ -2600,7 +2624,14 @@ written, v0.4 contained both a new southbound adapter and a new northbound proto
 is a scheduling correction, not a new feature — and it constrains the sequence above at one end:
 **Navidrome has to land before v0.4**, which the sequence satisfies at #1.
 
-### 16.1 The catalogue sequence, after v0.1
+### 16.1 The catalogue sequence after v0.1, and the version milestones it interleaves with
+
+⚠️ **This heading read *"The catalogue sequence, after v0.1"*, and it stood over v0.1's own scope
+entry.** `e7cbb1e` inserted it immediately above *"v0.1 — …"* and added no heading to reopen the
+milestone list, so every milestone from v0.1 to v1.0 fell inside a section titled *"after v0.1"*.
+**The section number is kept deliberately** — *"§16.1's v0.1 entry"* is how `CLAUDE.md` and
+`docs/REVIEW-LOG.md` already cite this text, and renumbering would strand those pointers to fix a
+title. The title is widened instead, to name both halves the section actually holds.
 
 Each of these is its own milestone with its own success criterion — *this source's library appears in
 the grid, is searchable, delta-syncs, and its Services row is honest about what it cannot do*. They
@@ -2883,14 +2914,27 @@ Owner account, Argon2id, cookie sessions, CSRF, encrypted credentials **with key
 a working `usarr key rotate`**, the SSRF egress policy, redaction middleware. **Zero external metadata
 providers** — **no TMDB account is required to see your own library**, because v0.1's source carries
 its own metadata. ⚠️ **The evidence for that clause named Radarr's `MovieResource` and Sonarr's
-`SeriesResource`, and neither is in v0.1 any more** (ADR-0041); the equivalent claim for **Kavita**'s
-series and volume payloads is **owed and not yet made here** — it needs the same primary-source check
-against Kavita's API that the \*Arr claim had, and this section will not assert it before that runs.
+`SeriesResource`, and neither is in v0.1 any more** (ADR-0041); the equivalent claim for
+**BookOrbit**'s catalogue payloads is **owed and not yet made here** — it needs the same
+primary-source check against BookOrbit's API that the \*Arr claim had, and this section will not
+assert it before that runs. ⚠️ **The source name here read *"Kavita"*, and its payloads *"series and
+volume"*,** until [ADR-0052](./DECISIONS.md#adr-0052) moved v0.1's catalogue source; only the subject
+changed, and the obligation, its evidence standard and the requirement below it are untouched.
 The *requirement* — zero external providers in v0.1 — is unchanged. Docker image, `VACUUM INTO`
 backups. In the gate: `EXPLAIN QUERY PLAN` + row-count assertions; `make bench` as a manual release
 gate. **There is no CI** — the gate is `make check`, which a person or an agent has to type, and a CI
 added later inherits this split unchanged (`docs/DEVELOPMENT.md` §8).
-**One day-one spike, before the schema is written:** the arm64 RSS spike (§13). **The catalogue
+⚠️ **One day-one spike, and its deadline passed unmet:** the arm64 RSS spike (§13). This clause read
+*"One day-one spike, before the schema is written: the arm64 RSS spike (§13)"*, which gated the schema
+work on the spike. Eleven migrations have since landed in `internal/db/migrations` and the arm64 run
+has not, so the deadline expired unmet rather than anyone waiving it. **The 2026-08-20 ruling
+ratifies the re-scope**, whose terms §13 already carried: an arm64 `make bench-rss` gates **claiming
+arm64 support**, not v0.1. v0.1 therefore owes no arm64 measurement, and this entry no longer holds
+one over the schema. **What this correction covered:** a search of `docs/ARCHITECTURE.md` for the
+pre-re-scope framing, which changed this clause and §13's REVIEW-LOG pointer, and no other sentence.
+It is
+blind to every other document — `docs/ROADMAP.md`'s arm64 item still cites this entry for the old
+deadline, and is not rewritten here. **The catalogue
 watermark probe was deferred out of day-one and has since been run.** ADR-0032 funded a day-one probe
 of Komga's `sort=lastModified,desc` and [ADR-0035](./DECISIONS.md#adr-0035) §2 retargeted it to
 Kavita's `LastChapterAdded`; ADR-0036 then took every catalogue source out of v0.1, which left it

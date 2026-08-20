@@ -73,10 +73,18 @@ provider, no image fetch. Requires an authenticated session; without one it is `
 | `limit` | integer | `50` | The page size **requested**. See §1.2 — it is a clamp, not a validated range, and the response says what was actually applied. |
 | `cursor` | opaque string | — | A token minted by a previous response's `next_cursor`. Never construct one; never edit one. A token that will not parse is `400 bad_request`, never a silent reset to page one. |
 
-There is **no `?lib=` scope here and no per-type filter here** — and both exist, on §7. §17.2 closes
-Block C at one table, one order and *no* filters, so this endpoint refuses the chip by design rather
-than by backlog; a client that wants the scope calls §7. Unrecognised parameters are **ignored, not
-refused**, so `?lib=…` sent here is `200` over the whole catalogue rather than a `400`.
+There is **no `?lib=` scope here and no per-type filter here** — and both exist, on §7. That is a
+fact about this endpoint's parameter set, **not a constraint §17.2 imposes**. What §17.2 closes is
+the *shape*: *"one table sorted by `added_at DESC` spanning every type … A sixth type adds rows to an
+existing list rather than a sixth region to scan"* — and of that table it says, in the same sentence,
+*"it sorts, it filters, it Ctrl+Fs (§4.5)"*. [ADR-0028](../DECISIONS.md#adr-0028) reads the same way
+round: *"the unified table sorts, filters and Ctrl+Fs"*, and Block C's *"scope comes from the `?lib=`
+chip"*. So a client that wants the scope calls §7 because §7 is where the scope is served, and Home's
+chip-scoped Block C is **unwired, not declined**. ⚠️ **This paragraph used to read *"§17.2 closes
+Block C at one table, one order and no filters, so this endpoint refuses the chip by design rather
+than by backlog"*, and it inverted the sentence it cited** — §17.2 requires that the table filters.
+Unrecognised parameters are **ignored, not refused**, so `?lib=…` sent here is `200` over the whole
+catalogue rather than a `400`.
 
 ### 1.2 `limit` is a clamp, not a validated range — and the echoed `limit` is authoritative
 
@@ -1643,11 +1651,22 @@ boundary §7.5 describes), plus at most one small statement to resolve `?lib=` s
 no metadata provider, no image fetch. Requires an authenticated session; without one it is
 `401 unauthorized`.
 
-**It is a different endpoint from §1, not a superset of it.** §17.2 closes Block C at *one* table,
-*one* order and *no* filters — a sixth media type adds rows to it, never a sixth region — so
-`/library/recent?media_type=…` would put a filter on the endpoint whose whole design is that it has
-none. The two share the row shape and the allowlist that builds it, and they page identically
-(§7.4). They do **not** share cursors (§7.5).
+**It is a different endpoint from §1, not a superset of it — and §17.2 is not why.** What §17.2
+closes is the *shape* of Home's Block C: one table spanning every type rather than one strip per
+type, so that *"a sixth type adds rows to an existing list rather than a sixth region to scan"*. Of
+that same table it then requires, in the same sentence, that *"it sorts, it filters, it Ctrl+Fs
+(§4.5)"*, and [ADR-0028](../DECISIONS.md#adr-0028) reads the same way round twice — *"the unified
+table sorts, filters and Ctrl+Fs"*, and Block C's *"scope comes from the `?lib=` chip"*. **No
+document forbids a filter on either endpoint.** The split is over the **shape of the query**, and
+`internal/store/browse.go` owns that argument: this read is three orders, two filters and a cursor
+codec per order, where §1 is one unfiltered statement in one order, and folding them together would
+make the simple statement an argument-dependent special case of the filtered one. The two share the
+row shape and the allowlist that builds it, and they page identically (§7.4). They do **not** share
+cursors (§7.5) — which is that difference showing on the wire. ⚠️ **This paragraph used to read
+*"§17.2 closes Block C at one table, one order and no filters — a sixth media type adds rows to it,
+never a sixth region — so `/library/recent?media_type=…` would put a filter on the endpoint whose
+whole design is that it has none"*, and it inverted the sentence it cited** — the same inversion
+§1.1 already carries struck.
 
 ### 7.1 Query parameters
 

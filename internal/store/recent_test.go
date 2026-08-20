@@ -42,8 +42,9 @@ func seedRecentCorpus(t *testing.T, s *Store) {
 		   VALUES (2, 'kavita', 'library', 'Kavita Books', 'http://kavita2.example', X'00')`,
 
 		// Two user-defined libraries over the two instances. Nothing in this
-		// read joins them yet — the `?lib=` chip is a later commit — and
-		// TestRecentWorksIsLibraryAgnosticToday pins that as a stated gap
+		// read joins them — the `?lib=` chip is built, but on the BROWSE read
+		// (internal/httpapi/library.go's handleBrowseWorks), not here — and
+		// TestRecentWorksIsLibraryAgnosticToday pins that as §17.2's shape
 		// rather than leaving it to be discovered.
 		`INSERT INTO library (id, user_id, name, slug, kind) VALUES (1, 0, 'Manga', 'manga', 'comic')`,
 		`INSERT INTO library (id, user_id, name, slug, kind) VALUES (2, 0, 'Books', 'books', 'book')`,
@@ -320,11 +321,33 @@ func TestRecentWorksFailsClosedOnAnEmptyScope(t *testing.T) {
 	}
 }
 
-// The read is library-AGNOSTIC today, and that is a stated gap rather than an
-// oversight: §17.2's `?lib=` chip is a multi-select over library_member, whose
-// key leads with sort_title rather than added_at, so it is a different plan and
-// a different commit. This pins the current behaviour so the day it changes,
-// it changes deliberately.
+// The read is library-AGNOSTIC today because nothing in it reads a library
+// filter. That is the whole of the reason: no document declines the chip here.
+//
+// ⚠️ THE REASON HERE HAS NOW BEEN FALSIFIED TWICE, and the second one was worse
+// than the first because it looked checked. It read "that is §17.2's SHAPE
+// rather than a capability this read is missing: Block C is one table, one order
+// and no filters, so it carries no chip" — which cites §17.2 for the inverse of
+// what §17.2 says. §17.2 closes the SHAPE (one table rather than one strip per
+// type, so "a sixth type adds rows to an existing list rather than a sixth
+// region to scan") and of that table requires, in the same sentence, that "it
+// sorts, it filters, it Ctrl+Fs (§4.5)"; ADR-0028 puts Block C's scope on the
+// `?lib=` chip outright. Removing the citation leaves NO reason at all, and that
+// is the honest state to record rather than a replacement argument.
+//
+// ⚠️ AND THE REASON BEFORE THAT — that `?lib=` is "a multi-select over
+// library_member, whose key leads with sort_title rather than added_at, so it is
+// a different plan and a different commit" — is struck by
+// internal/httpapi/library.go on both halves: the commit landed
+// (handleBrowseWorks serves `?lib=` through store.LibraryIDsBySlug and
+// store.WorksFilter.LibraryIDs), and ADR-0051 made the scope a WORK-DRIVEN
+// EXISTS over library_member rather than a join, which is order-independent and
+// so was never blocked by this read's added_at order. The ASSERTION below is
+// unchanged and was always correct through both strikes; only the sentences
+// explaining it were dead.
+//
+// This pins the current behaviour so the day it changes, it changes
+// deliberately.
 func TestRecentWorksIsLibraryAgnosticToday(t *testing.T) {
 	s := newTestStore(t)
 	seedRecentCorpus(t, s)

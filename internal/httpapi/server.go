@@ -292,9 +292,16 @@ func (s *Server) routes(mux *http.ServeMux) {
 	// than a join. See library.go.
 	//
 	// ⚠️ IT IS A SEPARATE ROUTE FROM /library/recent RATHER THAN A PARAMETER ON
-	// IT. §17.2 closes Block C at one table, one order and no filters; folding
-	// the two together would put a filter on the endpoint whose design is that
-	// it has none.
+	// IT, AND §17.2 IS NOT WHY. This comment used to say "§17.2 closes Block C
+	// at one table, one order and no filters", which is the inverse of what
+	// §17.2 says: of Block C's one table it says "it sorts, it filters, it
+	// Ctrl+Fs (§4.5)", and ADR-0028 puts Block C's scope on the `?lib=` chip.
+	// The routes are split over the SHAPE OF THE QUERY, and
+	// internal/store/browse.go owns that argument: this read is three orders,
+	// two filters and a cursor codec per order, where /library/recent is one
+	// unfiltered statement in one order, and folding them together would make
+	// the simple statement an argument-dependent special case of the filtered
+	// one.
 	mux.Handle("GET /api/v1/library", s.authenticated(s.wrap(s.handleBrowseWorks)))
 
 	// The per-type facet count: how many works of each of §17.2's six navigation
