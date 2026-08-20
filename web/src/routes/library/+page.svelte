@@ -40,7 +40,8 @@
 	 * unified table sorts, filters and Ctrl+Fs"*. Block C's single order is
 	 * `/library/recent`'s, an endpoint that parses `limit` and `cursor` and
 	 * nothing else, so the sort control this screen grew is one Block C has not
-	 * been given rather than one it was refused. http-api.md §7 is explicit that
+	 * been given rather than one it was refused. Re-grounded 2026-08-20 on that
+	 * endpoint's parameter set, which is the only thing now holding this up. http-api.md §7 is explicit that
 	 * the browse read *"is a different endpoint from §1, not a superset of it"*,
 	 * which is true of the contract — though ⚠️ the reason §7 gives for it is that
 	 * same phantom, so take the split and leave the reason. Home is that block and

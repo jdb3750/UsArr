@@ -45,7 +45,8 @@
 	 * type, a sixth type adding rows rather than a sixth region — which is a rule
 	 * about Home's layout and picks no endpoint. So Block C is missing a sort and
 	 * a scope rather than forbidden them, and this screen is not what stands in
-	 * the way. What does keep the two reads apart is the contract: http-api.md §7
+	 * the way. Re-grounded 2026-08-20 on how Block C is wired, not on a document,
+	 * so it moves the day Block C is rewired. What does keep the two reads apart is the contract: http-api.md §7
 	 * says the browse read *"is a different endpoint from §1, not a superset of
 	 * it"*, and the two share a row shape and a paging rule and share no cursor
 	 * (§7.5). ⚠️ Take §7 for that split and NOT for the reason it gives after it,

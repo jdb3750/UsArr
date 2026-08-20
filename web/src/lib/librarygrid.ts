@@ -23,7 +23,9 @@
  * close is the SHAPE — one table spanning every type, a sixth type adding rows
  * rather than a sixth region — and the single order below is this endpoint's, not
  * theirs. Block C has not been given the two controls; it was not refused them,
- * and no document is behind their absence. What changed is which screen uses
+ * and no document is behind their absence. That replacement ground is asserted
+ * as of 2026-08-20 and rests on the endpoint, so it expires if the endpoint
+ * learns a sort. What changed is which screen uses
  * which: `/library` now reads the BROWSE endpoint, because a screen that sorts
  * and scopes cannot be served by an endpoint that parses `limit` and `cursor`
  * and nothing else. At the default the two agree row for row and order for

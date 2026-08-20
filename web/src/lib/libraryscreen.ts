@@ -30,7 +30,8 @@
  * ADR-0028 says *"the unified table sorts, filters and Ctrl+Fs"*. What both close
  * is the table's SHAPE, one table rather than one strip per type — which this
  * module does not touch. The one order is the endpoint's own, and nothing
- * authorises it. Covers are absent from every one of these screens: no endpoint
+ * authorises it — which is the state of the ground as of 2026-08-20, and the
+ * three facts above are the whole of what carries this paragraph. Covers are absent from every one of these screens: no endpoint
  * in the mux serves an image.
  *
  * WHY THE COPY LIVES HERE RATHER THAN IN THE TEMPLATE. `vitest.config.ts` is

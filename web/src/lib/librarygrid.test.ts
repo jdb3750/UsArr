@@ -906,7 +906,8 @@ describe('all six media types are reachable from the shell', () => {
 	 * Block C's one table to sort, filter and Ctrl+F (§4.5), and ADR-0028 says the
 	 * same. So this label is accurate about what is BUILT rather than protected by
 	 * a rule, and it expires exactly the way `/library`'s did the moment Block C
-	 * is given the sort those two ask for. `libraryscreen.test.ts` pins that the
+	 * is given the sort those two ask for. Re-grounded on the endpoint 2026-08-20;
+	 * the assertions below never read the retracted rule and are unaffected. `libraryscreen.test.ts` pins that the
 	 * two screens still agree about the EMPTY state, which is the fact they
 	 * genuinely share.
 	 */

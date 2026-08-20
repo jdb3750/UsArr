@@ -130,13 +130,29 @@
 	 * filters"* — a rule neither §17.2 nor ADR-0028 contains, and both say the
 	 * opposite of the filter half: §17.2's Block C *"sorts, it filters, it
 	 * Ctrl+Fs (§4.5)"*, and ADR-0028 puts Block C's scope on the `?lib=` chip
-	 * outright. It is backlog. THE UNREACHABILITY IS UNCHANGED AND WHAT IT MEANS
-	 * IS NOT: DESIGN-DIRECTION §10 lists `scope-empty` as REQUIRED on Home, and
-	 * the wire Home reads cannot produce it YET — a gap the design documents
-	 * agree should close, not a standoff between two of them. Wiring the chip
-	 * onto Block C makes the state reachable and this paragraph wrong, and
-	 * whoever does it owns `scope-empty` here. `filtered-empty` needs a
-	 * filter.
+	 * outright. It is backlog.
+	 *
+	 * ⚠️ RE-GROUNDED 2026-08-20, BECAUSE A CONCLUSION WHOSE REASON DIED MUST NAME
+	 * WHAT IS STILL HOLDING IT UP RATHER THAN COAST ON THE READER. `scope-empty`
+	 * is still unreachable on Home, and the surviving ground is written out here
+	 * rather than left to be re-derived from the sentences above: it is the two
+	 * wire facts, and only those two. ONE, `/library/recent` accepts no `?lib=`
+	 * parameter at all. TWO, an unrecognised parameter is ignored rather than
+	 * rejected, so the chip cannot even fail loudly into the state. Both are
+	 * properties of `handleRecentWorks` in `internal/httpapi/library.go`, so
+	 * NEITHER of them borrowed anything from the retracted rule and neither moves
+	 * when it goes: a state no parameter can enter is unreachable whether or not
+	 * a document ever wanted it entered. That is the whole of the ground. If
+	 * either fact is falsified — the handler learns `?lib=`, or it starts
+	 * rejecting what it does not know — there is nothing else propping this up
+	 * and the conclusion goes with them.
+	 *
+	 * WHAT THE RETRACTION DID CHANGE IS THE TERM AND NOT THE TRUTH VALUE:
+	 * DESIGN-DIRECTION §10 lists `scope-empty` as REQUIRED on Home, and the wire
+	 * Home reads cannot produce it YET — a gap the design documents agree should
+	 * close, not a standoff between two of them. Wiring the chip onto Block C
+	 * makes the state reachable and this paragraph wrong, and whoever does it
+	 * owns `scope-empty` here. `filtered-empty` needs a filter.
 	 *
 	 * BLOCK ORDER IS A, B, C ON DESKTOP AND B, A, C BELOW 760 px, which is
 	 * §17.2's rule and is now two orders rather than one. ⚠️ THIS PARAGRAPH READ
