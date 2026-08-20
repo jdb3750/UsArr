@@ -99,7 +99,8 @@ well, and the three instances that earned it, every one of which compiled clean.
 
 **No invented status.** Never document a feature as existing when it does not.
 `docs/ARCHITECTURE.md` §16 is authoritative for what lands in which milestone; the README's
-status tables are generated from it. If §16 does not say a thing ships, it does not ship.
+status tables are maintained by hand against it — nothing in the repo generates them, so they lag
+§16 and have. If §16 does not say a thing ships, it does not ship.
 
 **Status is read off the tree, not off a document.** No document owns what is built —
 `web/src/routes`, `internal/` and `internal/db/migrations` do. When you find a status claim that
