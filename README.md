@@ -268,9 +268,15 @@ Known-risky things, called out rather than buried:
   matching. Tier 2 gives prefix and substring search, and the UI says so.
 - **Delegating playback means users run a second service.** That is the real objection to the whole
   approach, and the mitigation is a good wizard, not a rebuttal.
-- **The idle-memory budget is unmeasured.** It rested on a citation to Navidrome, which uses a
-  *cgo* SQLite driver that UsArr does not. A day-one spike on arm64 sets the real number before the
-  schema is written.
+- **The idle-memory budget is measured on x86-64, and unmeasured on arm64.** It had rested on a
+  citation to Navidrome, which uses a *cgo* SQLite driver that UsArr does not, which is why the
+  spike was run: `make bench-rss` records **idle 10 MB** and **peak 50 MB** for the 500k-row import
+  on x86-64 ([`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) §13, and ADR-0001 revision 3 in
+  [`docs/DECISIONS.md`](docs/DECISIONS.md)). **Nothing about arm64 has been measured**, so the
+  Raspberry Pi 5 reference hardware is design intent rather than a validated target, and an arm64
+  `make bench-rss` run is a prerequisite to *claiming arm64 support*. ⚠️ This bullet read *"The
+  idle-memory budget is unmeasured … A day-one spike on arm64 sets the real number before the schema
+  is written"*; the schema shipped, so that deadline went with the claim.
 - **Several upstream facts remain unverified** and are marked ⚠️ throughout — TMDB's and AniList's
   actual rate limits, `/history/since` behaviour parity, Tailscale's exact identity-header contract,
   and whether every Subsonic client tolerates our ID format.
