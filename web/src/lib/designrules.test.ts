@@ -457,7 +457,8 @@ function readCorpus(io: CorpusIO = nodeIO): readonly Source[] {
 				`landing in a shared tree — and it is not the diff being gated. It is reported ` +
 				`rather than retried: a read that has to be attempted twice has not seen one ` +
 				`coherent tree, and a loop around it would only hide that.\n` +
-				(e instanceof Error ? e.message : String(e))
+				(e instanceof Error ? e.message : String(e)),
+			{ cause: e }
 		);
 	}
 	const short = corpusShortfall(files);
