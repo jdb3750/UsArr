@@ -2225,7 +2225,10 @@ arm64 has been measured, and until it is, the Pi 5 reference hardware in this se
 intent rather than a validated target. The command for that day already exists — run `make bench-rss`
 on the arm64 box and record it in ADR-0001 next to the x86-64 row. Page size and core count both move
 these numbers, so an arm64 result replaces nothing; it is a second row. Logged in
-`docs/REVIEW-LOG.md` §R2.6 so the change of a documented prerequisite is not silent.
+`docs/REVIEW-LOG.md` Round 2 §6 so the change of a documented prerequisite is not silent.
+⚠️ **That pointer read *"§R2.6"*, which resolved to an unrelated section rather than dangling** —
+`## R2.` exists and carries only R2.1 and R2.2 — so following it produced a confident wrong answer
+and no signal. **Round 2** is load-bearing: two `## 6.` headings exist in that file.
 
 If a figure ever lands materially above budget, the pragma defaults are the first thing to tune, not
 the driver.
@@ -2600,7 +2603,14 @@ written, v0.4 contained both a new southbound adapter and a new northbound proto
 is a scheduling correction, not a new feature — and it constrains the sequence above at one end:
 **Navidrome has to land before v0.4**, which the sequence satisfies at #1.
 
-### 16.1 The catalogue sequence, after v0.1
+### 16.1 The catalogue sequence after v0.1, and the version milestones it interleaves with
+
+⚠️ **This heading read *"The catalogue sequence, after v0.1"*, and it stood over v0.1's own scope
+entry.** `e7cbb1e` inserted it immediately above *"v0.1 — …"* and added no heading to reopen the
+milestone list, so every milestone from v0.1 to v1.0 fell inside a section titled *"after v0.1"*.
+**The section number is kept deliberately** — *"§16.1's v0.1 entry"* is how `CLAUDE.md` and
+`docs/REVIEW-LOG.md` already cite this text, and renumbering would strand those pointers to fix a
+title. The title is widened instead, to name both halves the section actually holds.
 
 Each of these is its own milestone with its own success criterion — *this source's library appears in
 the grid, is searchable, delta-syncs, and its Services row is honest about what it cannot do*. They
@@ -2893,7 +2903,17 @@ The *requirement* — zero external providers in v0.1 — is unchanged. Docker i
 backups. In the gate: `EXPLAIN QUERY PLAN` + row-count assertions; `make bench` as a manual release
 gate. **There is no CI** — the gate is `make check`, which a person or an agent has to type, and a CI
 added later inherits this split unchanged (`docs/DEVELOPMENT.md` §8).
-**One day-one spike, before the schema is written:** the arm64 RSS spike (§13). **The catalogue
+⚠️ **One day-one spike, and its deadline passed unmet:** the arm64 RSS spike (§13). This clause read
+*"One day-one spike, before the schema is written: the arm64 RSS spike (§13)"*, which gated the schema
+work on the spike. Eleven migrations have since landed in `internal/db/migrations` and the arm64 run
+has not, so the deadline expired unmet rather than anyone waiving it. **The 2026-08-20 ruling
+ratifies the re-scope**, whose terms §13 already carried: an arm64 `make bench-rss` gates **claiming
+arm64 support**, not v0.1. v0.1 therefore owes no arm64 measurement, and this entry no longer holds
+one over the schema. **What this correction covered:** a search of `docs/ARCHITECTURE.md` for the
+pre-re-scope framing, which changed this clause and §13's REVIEW-LOG pointer, and no other sentence.
+It is
+blind to every other document — `docs/ROADMAP.md`'s arm64 item still cites this entry for the old
+deadline, and is not rewritten here. **The catalogue
 watermark probe was deferred out of day-one and has since been run.** ADR-0032 funded a day-one probe
 of Komga's `sort=lastModified,desc` and [ADR-0035](./DECISIONS.md#adr-0035) §2 retargeted it to
 Kavita's `LastChapterAdded`; ADR-0036 then took every catalogue source out of v0.1, which left it
