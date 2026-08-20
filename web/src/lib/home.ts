@@ -7,25 +7,24 @@
  * RULES rather than taste live here, because a rule inside a `{#if}` in a
  * template is a rule nothing can test.
  *
- * WHICH OF HOME'S THREE BLOCKS THIS FILE SERVES, AND WHY IT IS ONLY ONE.
+ * WHICH OF HOME'S THREE BLOCKS THIS FILE SERVES.
  *
  * ADR-0028 fixes Home at three blocks: A, a ≤6-row media-type summary; B, an
  * attention block hidden entirely when empty; C, one unified recently-added
  * table. ⚠️ THIS READ **"A and C have no data source in this build and are
- * therefore not drawn at all"**, on the ground that *"the `work` / `edition` /
- * `media_file` tables and the sync channels that would fill them are unbuilt"*.
- * **Half of that premise is dead.** A first-import channel exists for Kavita —
- * it fires when a Kavita client stack is built or on demand, with no periodic
- * re-sync behind it — and it writes those tables; `GET /api/v1/library/recent`
- * reads them. **So Block C IS drawn** (`routes/+page.svelte`, `library` mode).
- * **Block A is still not**, and it is worth being exact about which reason
- * survives, because the sweeping one did not: Block A's per-type rollup is a
- * SECOND read and nothing serves it, so every count in it would still have to
- * be invented. DESIGN-DIRECTION §9.6 closes that off in as many words: never
- * fabricated data in a shipped product surface. A zeroed table and a skeleton
- * are the same fabrication with different punctuation. Block B is what this
- * file computes, from GET /api/v1/services/health. It was the only block with a
- * real source on the day this was written; it is now one of two.
+ * therefore not drawn at all"**, and then **"Block A is still not"** once
+ * Block C's read landed. **Both are dead.** `GET /api/v1/library/facets` is the
+ * second read Block A was blocked on — `internal/httpapi/facets.go`, six counts
+ * over the local file — so this file computes Block A (`librarySummary` below)
+ * and Block B, and `$lib/library` computes Block C. **Read
+ * `web/src/routes/+page.svelte` for what is drawn, never this comment.**
+ *
+ * DESIGN-DIRECTION §9.6's ban is unchanged and is what shapes the block rather
+ * than what suppresses it: never fabricated data in a shipped product surface,
+ * so the section does not render before its read lands (no skeleton, no zeroed
+ * table), and it draws only the two columns the wire answers. §17.2's `Have`
+ * and `Synced` are *"their own aggregates and their own commit"*
+ * (`internal/httpapi/facets.go`) and are therefore not drawn at all.
  *
  * ⚠️ TWO THINGS ON HOME ARE NOT ONE OF THE THREE BLOCKS, and saying so here is
  * the point rather than a caveat. A release-search entry point and the recent
@@ -49,35 +48,19 @@
  * template is a rule nothing can test. The grabs themselves are
  * `$lib/requests`' vocabulary, reused rather than restated.
  *
- * §17.2's hard rule points the same way and is worth restating because it is
- * the one an implementer breaks first: a media type the user does not have is
- * not shown AT ALL, not in Block A, not in the sidebar, not as a search group.
- * ⚠️ THE REASON GIVEN FOR ZERO ROWS WAS **"with no catalogue there are no types
- * the user has"**, AND THAT PREMISE IS DEAD WITH THE TWO ABOVE: a connected
- * Kavita HAS a catalogue, and `mapLibraryType` (`internal/libsync/kavita.go`)
- * writes `comic` and `book` works into it, so two of §17.2's six types can be
- * genuinely present on a real install. **Zero is still the honest count, on the
- * reason the first block already gives**: what would decide which rows to draw
- * is a read of which media types are PRESENT IN `work` — split by
- * `edition.format` for the Ebooks/Audiobooks pair, since §17.2 makes those two
- * a `(kind, formats)` pair rather than a kind of their own — and that read does
- * not exist at any layer. No store method: `internal/store` ships
- * `ListRecentWorks` and nothing that rolls up BY TYPE. ⚠️ THAT USED TO READ
- * **"and nothing that aggregates"**, WHICH IS TOO STRONG AND WAS FALSIFIED BY
- * THE READ IT NAMES — `ListRecentWorks` aggregates plenty, just per WORK rather
- * than per type: its `RecentWork` carries `HaveCount`, `WantCount` and the
- * `MIN(edition.format = 'audiobook')` that `mediaTypeOf` reads
- * (`internal/store/recent.go`). Block A needs a DIFFERENT SHAPE — one row per
- * media type, counted across the catalogue — and that is the shape nothing
- * computes. No route
- * (`internal/httpapi/server.go` registers `GET /api/v1/library/recent` and no
- * per-type read), no aggregate wire type (`recentWorksResponse` is
- * `{items, limit, next_cursor}`, `internal/httpapi/library.go`), and not even
- * the `ix_edition_format` index §17.2 says is owed for exactly those two rows —
- * read `internal/db/migrations` rather than this comment for whether it has
- * since landed. So the rows would still be INVENTED, which is what
- * DESIGN-DIRECTION §9.6 closes off by name, and a shortage of catalogue is no
- * longer any part of it.
+ * §17.2's hard rule is the one an implementer breaks first: a media type the
+ * user does not have is not shown AT ALL, not in Block A, not in the sidebar,
+ * not as a search group. ⚠️ IT WAS ONCE READ HERE AS AN ARGUMENT FOR DRAWING
+ * NO ROWS, on the premise that *"with no catalogue there are no types the user
+ * has"*, and that premise died twice over: a connected catalogue source writes
+ * `book` and `comic` works, and the per-type read that would count them now
+ * exists. **The rule is satisfied by the `unconfigured` STATE rather than by
+ * omission** — §17.2 says so itself, and `design/DESIGN-DIRECTION.md` rule 13
+ * says why rows that carry a state, a cause and an action are not an empty
+ * section. `librarySummary` below is where that lands, and it explains which
+ * types this build can catalogue and how that was measured. ⚠️ Rule 13 counts
+ * FOUR such rows and this build draws three, which is the audiobooks
+ * disagreement `librarySummary` records rather than a second rule.
  *
  * 🕰️ THIS PARAGRAPH ONCE CONTINUED, TRULY OF THE TREE IT WAS WRITTEN AGAINST:
  * *"The sidebar draws none either (`routes/+layout.svelte`, whose `NAV_GROUPS`
@@ -101,10 +84,16 @@
  *
  * What the quote got WRONG, and why the sidebar could ship without the rollup:
  * the two rows are not the same KIND of thing. A sidebar row is a PLACE, and a
- * link needs no number to be honest; Block A's row IS a number and has none to
- * render. So Block A is still blocked on the read and the sidebar never was.
- * Block A is still not built from this side first either: inventing the counts
- * while the read is written is the thing §9.6 forbids, not a shortcut to it.
+ * link needs no number to be honest; Block A's row IS a number, and until
+ * `GET /api/v1/library/facets` landed it had none to render. So the sidebar was
+ * never blocked and Block A was, on that one read — which is why the two were
+ * never the single task the quote called them.
+ *
+ * ⚠️ AND `http-api.md` §7.1's *"no facet counts beside the chips"* IS STILL THE
+ * SIDEBAR'S RULE. ADR-0053 draws all six entries unconditionally and none of
+ * them carries a number; the facet read does NOT discharge that ADR's reopening
+ * condition, which ADR-0059 refined to an independent EXISTS over
+ * `edition.format` rather than to this count. Nothing here changes the sidebar.
  *
  * WHAT MODE THE SCREEN IS IN IS DERIVED FROM THE API AND NEVER FROM A
  * CONSTANT. §8.5 defines Search-and-Grab mode as "activated when no configured
@@ -115,6 +104,7 @@
  */
 
 import type { ServiceHealth, ServicesHealth } from './api';
+import { MEDIA_TYPES, mediaTypeLabel, type MediaType, type MediaTypeCounts } from './library';
 import {
 	isIndexer,
 	needsAttention,
@@ -329,4 +319,170 @@ export function headline(mode: HomeMode | undefined, services: number, count: st
 	const state = count === '' ? 'Nothing needs attention.' : `${count}.`;
 	if (mode === 'search-and-grab') return `Search-and-Grab mode. ${connected} ${state}`;
 	return `${connected} ${state}`;
+}
+
+/* ── BLOCK A: the media-type summary ──────────────────────────────────────── */
+
+/**
+ * WHICH MEDIA TYPES THIS BUILD CAN CATALOGUE AT ALL, AND WHAT ONE OF ITS ROWS
+ * COUNTS.
+ *
+ * §17.2 gives Block A six rows and two shapes for them: a type with a catalogue
+ * source renders a COUNT, and a type without one renders §17.7's per-type
+ * `unconfigured` state — *"the type, `no catalogue source connected`, the
+ * service that will populate it and the milestone it arrives in, and a link to
+ * Add"*. `design/DESIGN-DIRECTION.md` rule 13 is what makes the second shape
+ * legal beside the "never render a section with no content" rule: those rows
+ * carry a state, a cause and an action, which is not nothing.
+ *
+ * ⚠️ THE SPLIT IS READ OFF `internal/libsync`, NOT OFF A DOCUMENT, AND THE TWO
+ * DISAGREE ABOUT AUDIOBOOKS. `DESIGN-DIRECTION.md` §8.4 says v0.1 leaves
+ * *"movies, TV, music and audiobooks"* sourceless, on the stated premise that
+ * *"BookOrbit's media types are Kavita's"*. That premise is false in this tree:
+ * Kavita serves no audio and says so (`internal/libsync/kavita.go`, the
+ * `LibraryTypeBook` arm: *"Kavita serves no audio, so nothing here can produce
+ * one"*), while BookOrbit does — `bookOrbitEditionFormat` maps m4b, mp3, m4a,
+ * opus, ogg and flac onto `edition.format = 'audiobook'` and its own header
+ * calls that *"the line the Audiobooks screen depends on"*, having been written
+ * to fix the bug where every BookOrbit book rendered as an ebook. So a
+ * BookOrbit install has audiobooks, `GET /api/v1/library?media_type=audiobooks`
+ * lists them, and telling that user Audiobooks has *no catalogue source* would
+ * be false on the screen whose entire job is "what do I have?". The truthful
+ * split ships and the conflict is reported; §8.4 is not this file's to edit.
+ *
+ * WHAT IS ACTUALLY MEASURED, kind by kind. `store.recentWorkKinds` is the
+ * counted allowlist — `movie`, `series`, `artist`, `album`, `book`, `comic` —
+ * and NOTHING in `internal/libsync` writes the first four:
+ *
+ *   movies       no writer. Radarr, v0.2 (ADR-0045).
+ *   tv           no writer. Sonarr, v0.2 (ADR-0045).
+ *   music        no writer. Navidrome, §16.1 slot #1, after v0.1.
+ *   ebooks       `book` works, minus the audiobook half.
+ *   audiobooks   `book` works whose primary edition is `format = 'audiobook'`.
+ *   comics       `comic` works. ⚠️ THE SERIES, NEVER THE ISSUE — ADR-0068
+ *                decision 1 mints one `comic_issue` per file UNDER a `comic`
+ *                parent, and `comic_issue` is one of the child kinds
+ *                `recentWorkKinds` excludes (ADR-0030: *"a manga library's
+ *                chapters would swamp the number and Block A's row would report
+ *                chapters where the user reads series"*). So §17.2's *"comics
+ *                are `series` in all three places"* is what the code counts.
+ *
+ * A ROW GAINS ITS UNIT NOUN EXACTLY WHEN IT GAINS A SOURCE, which is why the
+ * noun lives on this arm of the union and not in a table of six. §17.2 requires
+ * one noun per type across the banner, the block and the sidebar, and a noun
+ * declared for a type nothing counts is a noun nobody has had to make true yet
+ * — §17.2's own `artists` for Music is already wrong against this read, which
+ * sums `artist` AND `album` works into one number.
+ */
+type TypeSource =
+	{ k: 'catalogued'; unit: string } | { k: 'sourceless'; service: string; milestone: string };
+
+const TYPE_SOURCE: Record<MediaType, TypeSource> = {
+	movies: { k: 'sourceless', service: 'Radarr', milestone: 'v0.2' },
+	tv: { k: 'sourceless', service: 'Sonarr', milestone: 'v0.2' },
+	music: { k: 'sourceless', service: 'Navidrome', milestone: 'after v0.1' },
+	// The mockup's own noun for this row (`424 books`). §17.2 gives worked
+	// examples for three of the six — `films`, `artists`, `series` — and leaves
+	// the book pair to the screen.
+	ebooks: { k: 'catalogued', unit: 'books' },
+	// `audiobooks` and not `books`, even though both rows count `book` works.
+	// The two counts ARE comparable, so §17.2's mixed-unit argument does not
+	// force a distinct noun here; what does is that the Ebooks row already took
+	// the general word, and one column reading `424 books` above `118 books`
+	// invites the reading that the second is a subset of the first. It is not:
+	// every book lands in exactly one of the two (ADR-0059).
+	audiobooks: { k: 'catalogued', unit: 'audiobooks' },
+	// §17.2, verbatim: "comics are `series` in all three places, not `comic
+	// series` in one of them". ADR-0068 is why that is also what is counted.
+	comics: { k: 'catalogued', unit: 'series' }
+};
+
+/** §17.7's words for a type nothing can fill. One sentence, §9.6. */
+export const NO_CATALOGUE_SOURCE = 'no catalogue source connected';
+
+/**
+ * Grouped, en-GB, because six numbers in one column are read against each other
+ * and `1204` beside `553` is a comparison the reader has to do twice.
+ * `$lib/libraries` takes the same formatter for the same column on Libraries.
+ */
+const COUNT = new Intl.NumberFormat('en-GB');
+
+/** One row of Block A, in `MEDIA_TYPES` order. */
+export interface SummaryRow {
+	mediaType: MediaType;
+	/** The Type cell. `$lib/library`'s label, never a second copy of it. */
+	label: string;
+	/** Whether this build has an adapter that writes works of this type. */
+	catalogued: boolean;
+	/**
+	 * The Items cell, unit noun included — `1,204 films`, `553 series` — or ''
+	 * on a sourceless row, which has no number and must not be given a `0`.
+	 *
+	 * ⚠️ THE NOUN IS IN THE CELL AND NOT IN THE HEADER, which §17.2 makes a
+	 * correctness rule rather than a layout preference: the six units are not
+	 * comparable, so *"rendered bare, `Music 612` reads as a smaller library than
+	 * `Movies 1,204` when it is 4,118 albums"*, and *"a mixed-unit column labels
+	 * its unit or it is misinformation"*.
+	 */
+	items: string;
+	/** The service that will catalogue this type, or '' where one already does. */
+	service: string;
+	/** The milestone it arrives in, or ''. */
+	milestone: string;
+}
+
+/**
+ * Block A's six rows, from the six counts.
+ *
+ * ⚠️ A ZERO IS RENDERED AS A ZERO AND NEVER AS "HIDDEN". `internal/store/
+ * facets.go` collapses a restricted scope onto the same `0` an empty type
+ * produces, deliberately and in one direction only, because publishing
+ * "restricted" as its own value *"would turn every hidden type into a positive
+ * statement that content exists"*. So `0 books` on a catalogued row is the
+ * whole of what this screen may say, and it is true either way: the caller can
+ * see no books of that type.
+ *
+ * ⚠️ AND A SOURCELESS ROW IS NOT GIVEN THAT ZERO. Its count is `0` on the wire
+ * too, and rendering `0 films` would read as "you have no films" on an install
+ * where nothing has ever looked for one. The row says what is actually the
+ * case — that nothing catalogues films yet, and what will.
+ *
+ * ALL SIX ROWS ARE RETURNED. §17.2's *"a type the user does not have is not
+ * shown at all"* is satisfied by the `unconfigured` state rather than by
+ * omission (rule 13), and dropping the sourceless rows leaves a Home showing
+ * only the types one source covers, *"from which the only available inference
+ * is that UsArr does not do the others"*.
+ */
+export function librarySummary(counts: MediaTypeCounts): SummaryRow[] {
+	return MEDIA_TYPES.map((mediaType) => {
+		const source = TYPE_SOURCE[mediaType];
+		const row: SummaryRow = {
+			mediaType,
+			label: mediaTypeLabel(mediaType),
+			catalogued: source.k === 'catalogued',
+			items: '',
+			service: '',
+			milestone: ''
+		};
+		if (source.k === 'catalogued') {
+			row.items = `${COUNT.format(counts[mediaType])} ${source.unit}`;
+		} else {
+			row.service = source.service;
+			row.milestone = source.milestone;
+		}
+		return row;
+	});
+}
+
+/**
+ * The count beside the heading: `6 media types, 3 catalogued`.
+ *
+ * BOTH CLAUSES, because the first alone is true and misleading — half the rows
+ * hold no number, and a reader who takes `6 media types` as the subject of the
+ * table below has been told the wrong thing about it. It is derived from the
+ * rows rather than written down, so it cannot disagree with them.
+ */
+export function summaryCount(rows: readonly SummaryRow[]): string {
+	const catalogued = rows.filter((r) => r.catalogued).length;
+	return `${rows.length} media types, ${catalogued} catalogued`;
 }

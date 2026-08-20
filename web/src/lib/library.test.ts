@@ -1,7 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import {
 	EMPTY_RECENT_FEED,
+	LIBRARY_FACETS_URL,
 	LIBRARY_RECENT_URL,
+	NO_MEDIA_TYPE_COUNTS,
+	toMediaTypeCounts,
 	MEDIA_TYPES,
 	appendPage,
 	availabilityMark,
@@ -553,5 +556,83 @@ describe('the poster key', () => {
 			const item = toRecentItem(wireRow({ poster_key: bad })) as RecentItem;
 			expect(posterUrl(item)).toBeUndefined();
 		}
+	});
+});
+
+/**
+ * BLOCK A's WIRE HALF. `GET /api/v1/library/facets`, whose whole body is six
+ * numbers under one key.
+ *
+ * Every fixture is shaped from `internal/httpapi/facets.go`'s own structs:
+ * `libraryFacetsResponse{Counts mediaTypeCountsResponse}`, six `int64` fields,
+ * none of them `omitempty`.
+ */
+describe('the per-media-type facet counts', () => {
+	/** One body as `internal/httpapi/facets.go` marshals it. */
+	function wireFacets(over: Record<string, unknown> = {}): Record<string, unknown> {
+		return {
+			counts: { movies: 0, tv: 0, music: 0, ebooks: 424, audiobooks: 118, comics: 553, ...over }
+		};
+	}
+
+	it('reads the endpoint server.go actually routes', () => {
+		expect(LIBRARY_FACETS_URL).toBe('/api/v1/library/facets');
+	});
+
+	it('carries no query parameter, because the endpoint reads none', () => {
+		// facets.go refuses `?lib=`, `?media_type=`, `limit` and `cursor` by name.
+		// A URL built with one here would be a client coding against a filter the
+		// server does not have — and, worse, one ignored rather than rejected.
+		expect(LIBRARY_FACETS_URL).not.toContain('?');
+	});
+
+	it('unwraps the nested envelope onto the six counts', () => {
+		expect(toMediaTypeCounts(wireFacets())).toEqual({
+			movies: 0,
+			tv: 0,
+			music: 0,
+			ebooks: 424,
+			audiobooks: 118,
+			comics: 553
+		});
+	});
+
+	it('answers six zeros for a body that is not the envelope', () => {
+		// The safe default is a value this wire produces for real — six zeros is
+		// what a restricted scope returns — so a renderer that handles the
+		// response at all handles this. A throw would take Home down over a
+		// summary.
+		for (const bad of [null, undefined, 42, 'counts', [], [1, 2], {}, { counts: null }]) {
+			expect(toMediaTypeCounts(bad)).toEqual(NO_MEDIA_TYPE_COUNTS);
+		}
+	});
+
+	it('reads a missing or non-numeric key as zero and never as absent', () => {
+		// facets.go: "an absent key and a zero are different values a consumer
+		// would have to tell apart, and the whole point of §17.2's closed enum is
+		// that there is nothing to tell apart". So the parsed value has all six
+		// members whatever arrived, and none of them is undefined.
+		const parsed = toMediaTypeCounts({
+			counts: { movies: '12', tv: null, ebooks: Number.NaN, comics: 3 }
+		});
+		expect(parsed).toEqual({ ...NO_MEDIA_TYPE_COUNTS, comics: 3 });
+		expect(Object.keys(parsed).sort()).toEqual([
+			'audiobooks',
+			'comics',
+			'ebooks',
+			'movies',
+			'music',
+			'tv'
+		]);
+	});
+
+	it('keeps a restricted scope byte-identical to an empty library', () => {
+		// The collapse `internal/store/facets.go` builds deliberately and in one
+		// direction only. Nothing on this side may widen a zero back into
+		// "hidden" or "unknown", so the two must parse to the same value.
+		const restricted = toMediaTypeCounts({
+			counts: { movies: 0, tv: 0, music: 0, ebooks: 0, audiobooks: 0, comics: 0 }
+		});
+		expect(restricted).toEqual(NO_MEDIA_TYPE_COUNTS);
 	});
 });

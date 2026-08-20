@@ -639,3 +639,92 @@ export function cursorRejected(error: unknown, sentCursor: string | undefined): 
 	if (sentCursor === undefined) return false;
 	return error instanceof ApiError && error.status === 400 && error.code === 'bad_request';
 }
+
+/* ── 7. the per-media-type facet counts ───────────────────────────────────── */
+
+/** The endpoint, as `internal/httpapi/server.go` routes it. */
+export const LIBRARY_FACETS_URL = '/api/v1/library/facets';
+
+/**
+ * `GET /api/v1/library/facets`, whose whole body is six numbers.
+ *
+ * ⚠️ ALL SIX KEYS ARE ALWAYS PRESENT ON THE WIRE AND NONE CARRIES
+ * `omitempty` — `internal/httpapi/facets.go` states that as the contract rather
+ * than as a formatting accident, because *"an absent key and a zero are
+ * different values a consumer would have to tell apart"*. So this interface has
+ * no optional member and no `null`: there is one spelling of "none", and it is
+ * `0`.
+ *
+ * ⚠️ AND ZERO NEVER WIDENS INTO "HIDDEN" OR "UNKNOWN". `internal/store/
+ * facets.go` is categorical that a type the caller cannot see and a type with
+ * genuinely no rows are INDISTINGUISHABLE here, deliberately and in one
+ * direction only: restriction renders as zero. A renderer that turns a zero
+ * into "hidden" would publish the existence oracle that collapse exists to
+ * remove, so nothing downstream of this may do it.
+ */
+export interface MediaTypeCounts {
+	movies: number;
+	tv: number;
+	music: number;
+	ebooks: number;
+	audiobooks: number;
+	comics: number;
+}
+
+/**
+ * The safe default, and the value a malformed body parses to.
+ *
+ * It is six zeros rather than six `undefined`s because six zeros is already a
+ * value this wire produces for a real caller — it is what a restricted scope
+ * looks like — so a renderer that handles the response at all handles this. An
+ * "unknown" state would be a seventh thing to render that the endpoint itself
+ * refuses to have.
+ */
+export const NO_MEDIA_TYPE_COUNTS: MediaTypeCounts = {
+	movies: 0,
+	tv: 0,
+	music: 0,
+	ebooks: 0,
+	audiobooks: 0,
+	comics: 0
+};
+
+/**
+ * The envelope, narrowed. `counts` is NESTED under one key on the wire and is
+ * unwrapped here; `internal/httpapi/facets.go` explains the nesting — the
+ * availability rollup and the last-import time are *"their own aggregates and
+ * their own commit"*, and the object leaves them somewhere to land.
+ *
+ * A body that is not that shape yields `NO_MEDIA_TYPE_COUNTS` rather than a
+ * throw, which is `toRecentPage`'s precedent above and is the right side to
+ * fail on for a summary: a screen that cannot count is not a screen that has to
+ * stop.
+ */
+export function toMediaTypeCounts(payload: unknown): MediaTypeCounts {
+	if (!isRecord(payload)) return NO_MEDIA_TYPE_COUNTS;
+	const counts = payload.counts;
+	if (!isRecord(counts)) return NO_MEDIA_TYPE_COUNTS;
+	return {
+		movies: num(counts.movies) ?? 0,
+		tv: num(counts.tv) ?? 0,
+		music: num(counts.music) ?? 0,
+		ebooks: num(counts.ebooks) ?? 0,
+		audiobooks: num(counts.audiobooks) ?? 0,
+		comics: num(counts.comics) ?? 0
+	};
+}
+
+/**
+ * The six counts. A LOCAL SQLITE READ (principle 1): `internal/store/facets.go`
+ * is two statements against the local file, with no *Arr call, no metadata
+ * provider and no image fetch behind it, so this never puts a render path
+ * behind a service.
+ *
+ * IT TAKES NO ARGUMENTS BECAUSE THE ENDPOINT READS NO QUERY PARAMETER. No
+ * `?lib=`, no `?media_type=`, no paging — `internal/httpapi/facets.go` lists
+ * each refusal and its reason. The access scope comes off the session and a
+ * caller cannot widen it, which is why it is not a parameter here either.
+ */
+export async function fetchLibraryFacets(): Promise<MediaTypeCounts> {
+	return toMediaTypeCounts(await getJson(LIBRARY_FACETS_URL));
+}

@@ -2570,17 +2570,26 @@ select[multiple] {
 	 *
 	 * NO SHIPPED SCREEN CAN REACH IT. `List.svelte` stamps `tbl--stack` and
 	 * `tbl--2line` only; `tbl--2up` could arrive through its `class` prop and
-	 * nothing passes one. The block it was written for is Home's Block A, which
-	 * ADR-0028 and `lib/home.ts` keep undrawn until `work` / `edition` /
-	 * `media_file` exist. Fixing it now would mean choosing a split for content
-	 * that does not exist, from mockup strings that are not the real ones.
+	 * nothing passes one.
 	 *
-	 * SO THE FIX IS OWED BY WHOEVER WIRES BLOCK A UP, at this line: replace the
-	 * `auto` with a fixed second track measured off the real cell — the same
-	 * reserve-plus-`flex-wrap` shape routes/requests, routes/services and
-	 * routes/+page use — because no guard can catch this one. `gridTemplate()`
-	 * refuses content-sized tracks it is given; a hand-written per-row
-	 * `grid-template-columns` never passes through it. */
+	 * ⚠️ AND BLOCK A IS NOW DRAWN WITHOUT IT, which is a narrowing of this note
+	 * rather than a discharge of it. This read "the block it was written for is
+	 * Home's Block A, which ADR-0028 and `lib/home.ts` keep undrawn until `work`
+	 * / `edition` / `media_file` exist" — those tables exist and
+	 * `routes/+page.svelte` draws the block off `GET /api/v1/library/facets`. It
+	 * takes `stack="two-line"` and not this class, because the pair this rule
+	 * splits on is not on the screen: §17.2's four columns are Type, Items, Have
+	 * and Synced, and only the first two have a read behind them — the other two
+	 * are their own aggregates and their own commit.
+	 *
+	 * SO THE FIX IS STILL OWED, AND BY THE SAME HAND AS BEFORE: whoever lands
+	 * `Have` and `Synced`, at which point Block A has four columns, this class
+	 * becomes the right fork for it, and the cells to measure exist. At this
+	 * line: replace the `auto` with a fixed second track measured off the real
+	 * cell — the same reserve-plus-`flex-wrap` shape routes/requests,
+	 * routes/services and routes/+page use — because no guard can catch this one.
+	 * `gridTemplate()` refuses content-sized tracks it is given; a hand-written
+	 * per-row `grid-template-columns` never passes through it. */
 	.tbl--2up tbody tr:not([hidden]) {
 		grid-template-columns: minmax(0, 1fr) auto;
 		column-gap: var(--space-4);

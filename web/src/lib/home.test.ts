@@ -11,8 +11,12 @@ import {
 	headline,
 	homeMode,
 	HOME_SEARCH_SCOPE_NOTE,
-	needsAttention
+	librarySummary,
+	needsAttention,
+	NO_CATALOGUE_SOURCE,
+	summaryCount
 } from './home';
+import { MEDIA_TYPES, NO_MEDIA_TYPE_COUNTS, type MediaTypeCounts } from './library';
 // §17.5's ban list, imported rather than restated: Home renders the same grab
 // vocabulary the Requests block does, and two copies of a ban list is two lists.
 import { FORBIDDEN_OUTCOME_WORDS } from './requests';
@@ -352,5 +356,201 @@ describe('the banned vocabulary, in Home’s Recent-grabs chrome', () => {
 		// it. This sentence is the point of the banner: a local read failing says
 		// something about UsArr, not about whether anything was ever grabbed.
 		expect(HOME_GRAB_MARKUP).toContain('a grab did not happen');
+	});
+});
+
+/* =============================================================================
+ * BLOCK A — the media-type summary (§17.2, ADR-0028)
+ * ========================================================================== */
+
+/** Counts as `GET /api/v1/library/facets` answers them on a real BookOrbit. */
+function counts(over: Partial<MediaTypeCounts> = {}): MediaTypeCounts {
+	return { ...NO_MEDIA_TYPE_COUNTS, ebooks: 424, audiobooks: 118, comics: 553, ...over };
+}
+
+describe('Block A’s rows', () => {
+	it('draws all six types, in the media-type enum’s own order', () => {
+		// §17.2 rejects dropping the sourceless rows explicitly: a Home showing
+		// only the types one source covers leaves "the only available inference …
+		// that UsArr does not do the others". The order is MEDIA_TYPES', not a
+		// second list that could drift from the sidebar's.
+		const rows = librarySummary(counts());
+		expect(rows.map((r) => r.mediaType)).toEqual([...MEDIA_TYPES]);
+		expect(rows.map((r) => r.label)).toEqual([
+			'Movies',
+			'TV',
+			'Music',
+			'Ebooks',
+			'Audiobooks',
+			'Comics'
+		]);
+	});
+
+	it('names its unit in every cell that carries a number', () => {
+		// §17.2 makes this a correctness rule, not a layout preference: "a
+		// mixed-unit column labels its unit or it is misinformation", because
+		// rendered bare "Music 612 reads as a smaller library than Movies 1,204
+		// when it is 4,118 albums".
+		const rows = librarySummary(counts());
+		const items = Object.fromEntries(rows.map((r) => [r.mediaType, r.items]));
+		expect(items.ebooks).toBe('424 books');
+		expect(items.audiobooks).toBe('118 audiobooks');
+		// §17.2, verbatim: "comics are `series` in all three places". It is also
+		// what is counted — ADR-0068 mints a `comic_issue` under a `comic` parent,
+		// and `recentWorkKinds` excludes the child kind, so the number is series.
+		expect(items.comics).toBe('553 series');
+	});
+
+	it('groups a large count rather than printing it bare', () => {
+		const rows = librarySummary(counts({ comics: 1204, ebooks: 28904 }));
+		const items = Object.fromEntries(rows.map((r) => [r.mediaType, r.items]));
+		expect(items.comics).toBe('1,204 series');
+		expect(items.ebooks).toBe('28,904 books');
+	});
+
+	it('gives every sourceless row a service and a milestone, and no number', () => {
+		// §17.7's per-type `unconfigured` state, which is what makes these rows
+		// legal beside §17.1's "never render a section with no content" rule
+		// (DESIGN-DIRECTION rule 13): a state, a cause and an action.
+		const rows = librarySummary(counts());
+		const sourceless = rows.filter((r) => !r.catalogued);
+		expect(sourceless.map((r) => [r.mediaType, r.service, r.milestone])).toEqual([
+			['movies', 'Radarr', 'v0.2'],
+			['tv', 'Sonarr', 'v0.2'],
+			['music', 'Navidrome', 'after v0.1']
+		]);
+		// No number on any of them. Their count is zero on the wire like every
+		// other uncatalogued type, and "0 films" on an install where nothing has
+		// ever looked for a film is a claim about the library, not the pipeline.
+		expect(sourceless.map((r) => r.items)).toEqual(['', '', '']);
+	});
+
+	it('counts audiobooks as catalogued, because this build catalogues them', () => {
+		/* THE ONE ROW A DOCUMENT AND THE CODE DISAGREE ABOUT.
+		   `design/DESIGN-DIRECTION.md` §8.4 lists audiobooks among v0.1's
+		   sourceless types, on the premise that "BookOrbit's media types are
+		   Kavita's". They are not: Kavita serves no audio and its adapter says so
+		   (`internal/libsync/kavita.go`, the LibraryTypeBook arm), while
+		   BookOrbit's `bookOrbitEditionFormat` maps m4b/mp3/m4a/opus/ogg/flac onto
+		   `edition.format = 'audiobook'` and calls that "the line the Audiobooks
+		   screen depends on". Telling a user with an imported audiobook library
+		   that Audiobooks has no catalogue source is false on the screen whose
+		   whole job is "what do I have?". */
+		const rows = librarySummary(counts());
+		const audiobooks = rows.find((r) => r.mediaType === 'audiobooks');
+		expect(audiobooks?.catalogued).toBe(true);
+		expect(audiobooks?.service).toBe('');
+		expect(audiobooks?.milestone).toBe('');
+	});
+
+	it('renders an empty catalogue as a zero and never as “hidden”', () => {
+		// `internal/store/facets.go` collapses a restricted scope onto the same
+		// zero an empty type gives, deliberately and in one direction only:
+		// "restriction renders as zero, and zero never widens into hidden or
+		// unknown". Publishing "restricted" would be the existence oracle with a
+		// label on it, so this side may not reintroduce it.
+		const rows = librarySummary(NO_MEDIA_TYPE_COUNTS);
+		const items = rows.filter((r) => r.catalogued).map((r) => r.items);
+		expect(items).toEqual(['0 books', '0 audiobooks', '0 series']);
+		for (const row of rows) {
+			expect(`${row.items} ${row.service} ${row.milestone}`.toLowerCase()).not.toContain('hidden');
+			expect(`${row.items} ${row.service} ${row.milestone}`.toLowerCase()).not.toContain('unknown');
+			expect(`${row.items} ${row.service} ${row.milestone}`.toLowerCase()).not.toContain(
+				'restricted'
+			);
+		}
+	});
+
+	it('is unchanged by a restricted scope, which is the same six zeros', () => {
+		// The two are byte-identical on the wire by construction, so the rows they
+		// produce must be identical too. A screen that could tell them apart would
+		// be the oracle the collapse exists to remove.
+		expect(librarySummary(NO_MEDIA_TYPE_COUNTS)).toEqual(
+			librarySummary({ movies: 0, tv: 0, music: 0, ebooks: 0, audiobooks: 0, comics: 0 })
+		);
+	});
+
+	it('says how many of the six have a source, beside how many there are', () => {
+		// "6 media types" alone is true and misleading while half of them hold no
+		// number. Derived from the rows, so the head cannot disagree with them.
+		expect(summaryCount(librarySummary(counts()))).toBe('6 media types, 3 catalogued');
+		expect(summaryCount([])).toBe('0 media types, 0 catalogued');
+	});
+
+	it('states the sourceless case in one sentence and without an em dash', () => {
+		// §9.6: one sentence, no container, no centring. §13: no em dash in copy
+		// short enough not to need one.
+		expect(NO_CATALOGUE_SOURCE).toBe('no catalogue source connected');
+		expect(NO_CATALOGUE_SOURCE).not.toContain('—');
+	});
+});
+
+/**
+ * BLOCK A's CHROME, over the markup that actually ships.
+ *
+ * The ROWS are not read here and cannot be: every value in them is interpolated
+ * from `librarySummary` above, so the template carries no label, no noun and no
+ * service name to grep for. What IS written inline is the region's own copy —
+ * the heading, the count beside it, the list's accessible label and the whole
+ * uncountable-library banner — and none of that was covered by any guard.
+ */
+const HOME_SUMMARY_MARKUP = sectionsMarkup(userFacingMarkup(HOME_SOURCE), 'id="home-summary"').join(
+	'\n'
+);
+
+describe('Block A’s chrome, in the markup', () => {
+	it('is reading the region it thinks it is reading', () => {
+		// An empty string passes every not.toContain there is, so the positive
+		// assertions come first and each names something only this section has.
+		expect(HOME_SUMMARY_MARKUP.length).toBeGreaterThan(200);
+		expect(HOME_SUMMARY_MARKUP).toContain('Your library');
+		expect(HOME_SUMMARY_MARKUP).toContain('Your library could not be counted');
+		expect(HOME_SUMMARY_MARKUP).toContain('Library by media type');
+	});
+
+	it('declares exactly the three columns the wire can answer', () => {
+		/* The column set is a `<script>` constant, which `userFacingMarkup` strips
+		   — so this reads the RAW source, the way libraryscreen.test.ts reads
+		   Home's `emptyTitle`. There is no other position to read it from: the
+		   headers never appear in the template.
+
+		   §17.2's row is `name · count · availability rollup · last import · see
+		   all`, and `internal/httpapi/facets.go` answers the first two: the rollup
+		   and the import time "are their own aggregates and their own commit". A
+		   `Have` or `Synced` column would promise a figure this screen has not
+		   computed, which is §9.6's fabrication ban applied to a column instead of
+		   to a row. And `Have` is the one word the third column may not take,
+		   because that is the availability rollup's own name (§9.5's
+		   `have / total · N missing`). */
+		const literal = /const SUMMARY_COLUMNS: ListColumn\[\] = \[([\s\S]*?)\n\t\];/.exec(HOME_SOURCE);
+		expect(literal, 'SUMMARY_COLUMNS is not in routes/+page.svelte any more').not.toBeNull();
+		const headers = [...(literal as RegExpExecArray)[1].matchAll(/header: '([^']+)'/g)].map(
+			(m) => m[1]
+		);
+		expect(headers).toEqual(['Type', 'Items', 'Status']);
+	});
+
+	it('never explains a zero as something being hidden from the caller', () => {
+		const said = HOME_SUMMARY_MARKUP.toLowerCase();
+		expect(said).not.toContain('hidden');
+		expect(said).not.toContain('restricted');
+		expect(said).not.toContain('not permitted');
+	});
+
+	it('keeps saying that an uncountable library is not an empty one', () => {
+		// The counter-case, pinned so a later tightening has to face it. A local
+		// read failing says something about UsArr and nothing about how much the
+		// user has, and the banner is the one place that could imply otherwise.
+		expect(HOME_SUMMARY_MARKUP).toContain('says nothing about how much you have');
+	});
+
+	it('draws no skeleton, no shimmer and no placeholder row', () => {
+		// Six zeros is a real answer this endpoint gives, so a zeroed placeholder
+		// is not a placeholder, it is a claim. §9.6 bans fabricated data in a
+		// shipped surface and §7.2 Tier 0 bans the entrance animation by name.
+		const said = HOME_SUMMARY_MARKUP.toLowerCase();
+		for (const banned of ['skeleton', 'shimmer', 'placeholder', 'loadingnote', 'animation']) {
+			expect(said).not.toContain(banned);
+		}
 	});
 });

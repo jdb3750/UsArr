@@ -6,7 +6,7 @@
 	 * ADR-0028 fixes Home at three blocks whose combined height is O(1) in the
 	 * number of media types:
 	 *
-	 *   Block A   media-type summary    ≤6 rows          NOT DRAWN — no source
+	 *   Block A   media-type summary    ≤6 rows           DRAWN in `library` mode
 	 *   Block B   attention             hidden when empty      DRAWN
 	 *   Block C   recently added        one unified table      DRAWN in `library` mode
 	 *
@@ -36,42 +36,33 @@
 	 * place. Nothing was added beside the three blocks that could not be put
 	 * inside something already on the screen.
 	 *
-	 * WHY BLOCK A IS STILL ABSENT WHILE BLOCK C IS DRAWN, AND WHY THAT IS THE
-	 * CORRECT RENDERING RATHER THAN A HALF-FINISHED ONE. The two blocks want
-	 * different reads and only one of them exists. `GET /api/v1/library/recent`
-	 * is Block C's, and it landed; Block A's per-type rollup is its own read and
-	 * has not, so every count in it would have to be invented. DESIGN-DIRECTION
-	 * §9.6 closes that off in as many words — never fabricated data in a shipped
-	 * product surface — and a zeroed table and a skeleton shimmer are the same
-	 * fabrication with different punctuation. §17.2's own hard rule reaches the
-	 * same place from the other side: a media type the user does not have is not
-	 * shown AT ALL, not in Block A, not in the sidebar, not as a search group,
-	 * and nothing on this screen can yet say which types the user has.
+	 * ⚠️ BLOCK A WAS ABSENT HERE FOR AS LONG AS ITS READ WAS, AND THE READ HAS
+	 * LANDED. The two blocks want different reads: `GET /api/v1/library/recent`
+	 * is Block C's, and `GET /api/v1/library/facets` is Block A's — six counts
+	 * over the local file, `internal/httpapi/facets.go`. Until it existed every
+	 * count in Block A would have had to be invented, which DESIGN-DIRECTION
+	 * §9.6 closes off by name. That constraint still SHAPES the block rather than
+	 * suppressing it: the section does not render before the read lands, and it
+	 * draws only the two of §17.2's five row fields the wire answers. `Have` and
+	 * `Synced` are "their own aggregates and their own commit" and are therefore
+	 * not drawn at all — see SUMMARY_COLUMNS.
 	 *
-	 * ⚠️ §17.2 DOES specify Block A's sourceless rows for a v0.1 install — the
-	 * type, `no catalogue source connected`, the service that will populate it,
-	 * the milestone it arrives in, and a link to Add (§17.2) — and that is NOT
-	 * what is missing here. ⚠️ THE EXEMPLAR HERE READ `Comics · no catalogue
-	 * source · Kavita · after v0.1 · Add`, AND IT IS FALSE ON BOTH OF ITS
-	 * CLAIMS: comics HAS a catalogue source, and that source is IN v0.1.
-	 * ADR-0041 made Kavita v0.1's one catalogue source and the sync core's first
-	 * adapter, so §16 — authoritative for scope — puts v0.1's catalogue at books
-	 * and comics/manga (ARCHITECTURE §16.0, "the catalogue is books and
-	 * comics/manga, because Kavita is the source that ships"), and §16.1's
-	 * post-v0.1 table no longer lists Kavita because it moved INTO v0.1 rather
-	 * than being cut. §17.2 has stopped naming which types are sourceless at all
-	 * and defers to §16, so the exemplar has to come from there: `Music · no
-	 * catalogue source connected · Navidrome · after v0.1 · Add`, Navidrome
-	 * being §16.1's slot #1 and the source that lights music up. Those rows are
-	 * the shape for an install where the OTHER rows carry real counts, and no
-	 * per-type count is readable yet — not for books and comics either, whose
-	 * counts a rollup read would now have something true to put in.
-	 * Rendering six rows of which six are `no catalogue source` is not §17.2's
-	 * screen; it is a table with no data in it, and rule 13's own bound — the
-	 * ban is on a region that says NOTHING — does not rescue a block whose every
-	 * row says the same nothing. The block arrives with the read that fills it.
-	 * §17.7's `partial` and `stale` states arrive with a per-instance sync clock,
-	 * which is a different read again and is not one of the two above.
+	 * ⚠️ THE SIX ROWS ARE ALL DRAWN, AND THE ONES WITH NO SOURCE ARE §17.7's
+	 * `unconfigured` STATE rather than an omission: the type, `no catalogue
+	 * source connected`, the service that will populate it, the milestone it
+	 * arrives in, and a link to Add. §17.2's hard rule — "a media type the user
+	 * does not have is not shown AT ALL" — is satisfied by that state, which
+	 * `design/DESIGN-DIRECTION.md` rule 13 says in as many words.
+	 *
+	 * ⚠️ AN EXEMPLAR HERE ONCE READ `Comics · no catalogue source · Kavita ·
+	 * after v0.1 · Add` AND WAS FALSE ON BOTH CLAIMS, which is why the shipped
+	 * split is computed in `$lib/home` off `internal/libsync` and not copied out
+	 * of a document. `librarySummary` names what was measured, and names the
+	 * document it disagrees with.
+	 *
+	 * WHAT IS STILL NOT DRAWN: §17.7's `partial` and `stale` states, which want a
+	 * per-instance sync clock — a different read again, and not one of the three
+	 * above.
 	 *
 	 * WHAT IS LEFT IS THE STATE THE OWNER IS ACTUALLY IN, and §8.5 names it
 	 * rather than leaving it as an implicit empty app: Prowlarr configured, no
@@ -122,12 +113,15 @@
 	 * design asks for and this wire cannot serve. `filtered-empty` needs a
 	 * filter.
 	 *
-	 * BLOCK B COMES FIRST, and §17.2 supplies the argument for it: "Block B is
-	 * hidden when empty, so it costs nothing when nothing is wrong — which is
-	 * exactly why it can go first." The rule is written for the phone fork,
-	 * where a screen of counts above the block that reports a rejected API key
-	 * is the wrong order; with no counts to scroll past it holds at every
-	 * width, so there is one order rather than two.
+	 * BLOCK ORDER IS A, B, C ON DESKTOP AND B, A, C BELOW 760 px, which is
+	 * §17.2's rule and is now two orders rather than one. ⚠️ THIS PARAGRAPH READ
+	 * "with no counts to scroll past it holds at every width, so there is one
+	 * order rather than two", and the premise was Block A being undrawn. §17.2's
+	 * argument for promoting B on a phone is unchanged and is measured — a
+	 * stacked Block A costs ~105 px per media type, which puts the block that
+	 * reports a rejected API key below an 844 px fold — and it now has counts to
+	 * apply to. The mechanism, and which of the two widths gets a DOM that
+	 * disagrees with the screen, is at `.home-blocks` in the markup below.
 	 *
 	 * A PROBLEM IS STATED CANONICALLY ONCE PER SCREEN (§17.3). Block B says
 	 * WHAT is wrong and links to that instance's row on Services; it does not
@@ -166,10 +160,13 @@
 		appendPage,
 		cursorRejected,
 		EMPTY_RECENT_FEED,
+		fetchLibraryFacets,
 		fetchRecentPage,
 		hasMore,
 		mediaTypeLabel,
 		nextRequest,
+		NO_MEDIA_TYPE_COUNTS,
+		type MediaTypeCounts,
 		type RecentFeed,
 		type RecentItem
 	} from '$lib/library';
@@ -178,8 +175,12 @@
 		headline,
 		homeMode,
 		HOME_SEARCH_SCOPE_NOTE,
+		librarySummary,
+		NO_CATALOGUE_SOURCE,
+		summaryCount,
 		type AttentionRow,
-		type HomeMode
+		type HomeMode,
+		type SummaryRow
 	} from '$lib/home';
 	import { LIVE_SEARCH_LIMIT, LiveSearch, type LiveRegion } from '$lib/livesearch';
 	import { formatWhen, KNOWLEDGE_STOPS_NOTE, requestsSearchHref } from '$lib/requests';
@@ -226,6 +227,77 @@
 	 * label is a compile-time constant, so the reserve above is its widest state
 	 * by construction. A second control added to this cell needs the class.
 	 */
+	/**
+	 * BLOCK A's COLUMNS, AND THE TWO §17.2 NAMES THAT ARE DELIBERATELY ABSENT.
+	 *
+	 * §17.2's row is `name · count · availability rollup · last import · see
+	 * all`. `GET /api/v1/library/facets` answers the first two and says so at its
+	 * own declaration: the rollup and the import time *"are their own aggregates
+	 * and their own commit"*. So `Have` and `Synced` are NOT DRAWN — a value in
+	 * either would be invented, which is what DESIGN-DIRECTION §9.6 closes off by
+	 * name, and `Have` in particular is a specified figure (§9.5's `have / total ·
+	 * N missing`) that this screen would be claiming to have computed.
+	 *
+	 * ⚠️ THE THIRD COLUMN IS `Status` AND NOT `Source`, WHICH IS A HONESTY CALL
+	 * RATHER THAN A SYNONYM. What the cell carries is §17.7's per-type
+	 * `unconfigured` STATE plus its cause and its action; it carries no service
+	 * instance and cannot, because `internal/httpapi/facets.go` refuses to
+	 * publish which instance a count came from — *"naming it would publish the
+	 * topology of the install to every future non-owner user"*. A header reading
+	 * `Source` would promise an answer three of the six rows are not allowed to
+	 * give. `Have` is the one word it may not be: that is the availability
+	 * rollup's name, and this column is not it.
+	 *
+	 * ⚠️ EVERY TRACK IS `fr`, WHICH THE DEV GUARD IN `gridTemplate()` ENFORCES.
+	 * ADR-0029 makes every row its own grid, so a content-sized track resolves
+	 * against its own row's contents and the header cannot agree with the body.
+	 * Block B's `Action` track below documents the measured failure in detail.
+	 *
+	 * `Items` IS LEFT-ALIGNED AND CARRIES `.num` ON ITS DIGITS INSTEAD OF
+	 * `align: 'end'`. The cell is a number PLUS a unit noun (§17.2: *"a
+	 * mixed-unit column labels its unit or it is misinformation"*), so its right
+	 * edge is the end of a word whose length varies row to row — right-aligning
+	 * it would leave the digits ragged, which is the opposite of what the
+	 * alignment buys. Left-aligned, every count starts at the same x and
+	 * `tabular-nums` on the digits does the rest.
+	 *
+	 * THE PHONE FORK IS THE TWO-LINE ONE, AND IT IS NOT `.tbl--2up`. §17.2 asks
+	 * below 760 px for a two-line row with no `Type` label, and app.css carries a
+	 * `.tbl--2up` rule written for that — for §17.2's FOUR columns, splitting
+	 * identity-plus-count from availability-plus-sync. That pair does not exist
+	 * here: two of the four are not drawn. Its own note records an unfixed 22 px
+	 * shear from the `auto` second track and says the fix needs a measurement off
+	 * a real cell, and the cells it would be measured off are precisely the two
+	 * this build does not have. So this list takes `stack="two-line"`, the fork
+	 * `List.svelte` already stamps and Block C already uses, and `.tbl--2up`
+	 * stays unreached.
+	 *
+	 * `Type` IS LINE 1 AND `Status` IS LINE 2; `Items` IS LINE 1 BESIDE THE NAME.
+	 * The two-line fork emits a `·` before every second-line cell except the
+	 * first, unconditionally and without looking at whether the cell has
+	 * anything in it — so a column that is empty on half the rows may not sit on
+	 * line 2 beside another, or those rows render a dangling separator. `Status`
+	 * is empty on a catalogued row and `Items` is empty on a sourceless one, so
+	 * exactly one of them can be there, and it is the one whose text is a
+	 * sentence rather than a figure. Both empties collapse to nothing, which is
+	 * what keeps every row two lines: name over count where there is a count,
+	 * name over state where there is not.
+	 */
+	const SUMMARY_COLUMNS: ListColumn[] = [
+		{ id: 'type', header: 'Type', width: 'minmax(0, 1fr)', stackLabel: false, stackLine: 1 },
+		{ id: 'items', header: 'Items', width: 'minmax(0, 1.2fr)', stackLabel: false, stackLine: 1 },
+		{ id: 'status', header: 'Status', width: 'minmax(0, 2.4fr)', stackLine: 2 }
+	];
+
+	/**
+	 * A sourceless row carries a sub-line — the service, the milestone and the
+	 * Add link — so it is the same two-line shape as Block B's and Block C's rows
+	 * and takes the same measured figure. `ROW_INTRINSIC`'s default is measured
+	 * on a ONE-line row and would be wrong by half, which shows as scroll-height
+	 * jitter.
+	 */
+	const ROW_INTRINSIC_SUMMARY = 44;
+
 	const COLUMNS: ListColumn[] = [
 		{ id: 'state', header: 'State', width: 'minmax(0, 1.1fr)' },
 		{ id: 'what', header: 'What is wrong', width: 'minmax(0, 2.6fr)' },
@@ -420,6 +492,23 @@
 	let recentRejected = $state(false);
 
 	/**
+	 * BLOCK A's STATE.
+	 *
+	 * `facetsLoaded` is separate from the counts on purpose, and it is the one
+	 * distinction this block cannot infer: six zeros is a REAL answer here — it
+	 * is what an empty catalogue returns and what a restricted scope returns —
+	 * so "all six are zero" can never mean "the read has not landed". Before it
+	 * lands the section does not render at all: no skeleton, no shimmer and no
+	 * zeroed table, because §9.6 bans fabricated data in a shipped surface and a
+	 * placeholder row is fabricated data with rounded corners.
+	 */
+	let facets = $state<MediaTypeCounts>(NO_MEDIA_TYPE_COUNTS);
+	let facetsLoaded = $state(false);
+	let facetsError = $state('');
+	/** The server's own `action`: the one thing it says fixes this. */
+	let facetsAction = $state('');
+
+	/**
 	 * Re-read on a timer so the relative clauses stay true rather than freezing
 	 * at whatever they said on arrival. `paused` carries "retrying 14:19, in 4
 	 * minutes", and a number that goes on saying "in 4 minutes" for an hour is
@@ -431,6 +520,12 @@
 
 	const count = $derived(rollupCount(rows));
 	const meta = $derived(headline(mode, services, count));
+
+	/* Block A's rows and the count beside its heading, both derived from the one
+	 * response so the head and the table cannot disagree about how many types
+	 * have a source. `$lib/home` owns which types those are and why. */
+	const summaryRows = $derived(librarySummary(facets));
+	const summaryTotals = $derived(summaryCount(summaryRows));
 
 	/**
 	 * The href the submit button would follow with scripting off, and the one
@@ -474,6 +569,39 @@
 		// is on another screen. Recent grabs is excluded from the timer for the
 		// same reason.
 		if (mode === 'library' && !recent.loaded) void loadRecent();
+		// BLOCK A, ON THE SAME CONDITION AND THE SAME ONCE-ONLY GUARD. It is asked
+		// for here rather than in `onMount` because the mode is not known until
+		// the health read answers, and it is asked for ONCE: `facetsLoaded` is
+		// what keeps it off the 60-second timer. That timer exists because Block
+		// B's clauses go stale — "retrying in 4 minutes" is wrong a minute later
+		// — and a count carries no such clause, so re-reading it every minute
+		// would be a repeated query for a table that changes only while the user
+		// is on another screen. Recent grabs is excluded for the same reason.
+		if (mode === 'library' && !facetsLoaded) void loadFacets();
+	}
+
+	/**
+	 * BLOCK A's SIX COUNTS. A LOCAL SQLITE READ, which is what lets Home make it
+	 * at all (principle 1): `internal/store/facets.go` is two statements against
+	 * the local file, with pinned plans, and no *Arr, metadata provider or image
+	 * fetch behind either. A degraded upstream makes these counts STALE, never
+	 * an error.
+	 *
+	 * `facetsLoaded` is set in `finally` so a failure still ends the unrendered
+	 * state: the error arm has something true to say and silence would leave the
+	 * screen implying the library has nothing in it.
+	 */
+	async function loadFacets() {
+		try {
+			facets = await fetchLibraryFacets();
+			facetsError = '';
+			facetsAction = '';
+		} catch (error) {
+			facetsError = error instanceof ApiError ? error.detail : String(error);
+			facetsAction = error instanceof ApiError ? error.action : '';
+		} finally {
+			facetsLoaded = true;
+		}
 	}
 
 	/**
@@ -618,28 +746,181 @@
 {/if}
 
 <!--
-	BLOCK B. Hidden entirely when empty (§17.2, ADR-0028) — the green "all good"
-	panel is the thing it must never become — which is why this is an {#if} on
-	the row count and not a List with an empty state.
+	BLOCKS A AND B, IN ONE FLEX COLUMN BECAUSE THEIR ORDER CHANGES AT 760 px AND
+	NOTHING ELSE ON THIS PAGE'S DOES.
+
+	§17.2 fixes the desktop order at A, B, C, and then: "Below 760 px: Block A is
+	a two-line row … and Block B moves above it." The reason is measured — a
+	stacked Block A costs ~105 px per media type, which puts the block that
+	reports a rejected API key 914 px down an 844 px viewport — so this is a rule
+	about what a user reaches first, not about layout.
+
+	⚠️ THE DOM ORDER IS THE PHONE ORDER, AND THE SWAP IS ON THE DESKTOP SIDE.
+	`order` moves boxes and leaves reading order alone, so one of the two widths
+	gets a DOM that disagrees with the screen and the choice is which. It is the
+	desktop, because that is the width where the disagreement is harmless: both
+	sections are on screen at once, neither is below a fold, and no user reaches
+	one only by scrolling past the other. On a phone the whole point of the rule
+	is that Block A is a screenful you must not have to get past first — and a
+	screen reader gets past it the same way a scrollbar does. So the markup below
+	is B then A, and the desktop rule promotes A.
+
+	⚠️ THIS FILE'S HEADER USED TO ARGUE THAT B CAME FIRST AT EVERY WIDTH, on the
+	ground that "with no counts to scroll past it holds at every width, so there
+	is one order rather than two". That premise was Block A being undrawn. There
+	are counts now, so there are two orders, and §17.2's is the one implemented.
 -->
-{#if rows.length > 0}
-	<section class="section" id="home-attention">
-		<div class="section__head">
-			<h2>Needs attention</h2>
-			<span class="section__count">{count}</span>
+<div class="home-blocks">
+	<!--
+		BLOCK B. Hidden entirely when empty (§17.2, ADR-0028) — the green "all
+		good" panel is the thing it must never become — which is why this is an
+		{#if} on the row count and not a List with an empty state.
+	-->
+	{#if rows.length > 0}
+		<section class="section" id="home-attention">
+			<div class="section__head">
+				<h2>Needs attention</h2>
+				<span class="section__count">{count}</span>
+			</div>
+			<List
+				label="Services needing attention"
+				columns={COLUMNS}
+				{rows}
+				key={(row) => String(row.id)}
+				total={rows.length}
+				rowIntrinsic={ROW_INTRINSIC_ATTENTION}
+				stack="labels"
+				{cell}
+			/>
+		</section>
+	{/if}
+
+	<!--
+		BLOCK A. THE MEDIA-TYPE SUMMARY (§17.2, ADR-0028), read from
+		GET /api/v1/library/facets.
+
+		A TABLE, NOT TILES, AND NOT A ROW OF STAT CARDS. §17.1 and
+		DESIGN-DIRECTION §5.4 both settle it on the same test: a media-type
+		summary's primary content is a COUNT, and a card is justified only where
+		the primary content is cover art. There is no hero here, no stat banner,
+		no animated counter and no box around a number.
+
+		ALL SIX ROWS RENDER, IN THE MEDIA-TYPE ENUM'S OWN ORDER, and the ones with
+		no catalogue source render §17.7's per-type `unconfigured` state rather
+		than being dropped. §17.2 rejects dropping them explicitly: a Home showing
+		only the types one source covers leaves "the only available inference …
+		that UsArr does not do the others", which is the misreading principle 3
+		exists to prevent. DESIGN-DIRECTION rule 13 is why those rows are not the
+		empty section §17.1 bans — they carry a state, a cause and an action.
+
+		WHICH TYPES THOSE ARE IS `$lib/home`'s, READ OFF `internal/libsync` AND
+		NOT OFF A DOCUMENT, and it does not agree with every document. See
+		`librarySummary`, which names the disagreement and what was measured.
+
+		DRAWN ONLY IN `library` MODE, and that is principle 3 rather than an
+		omission — the same gate Block C and the search box take, for the same
+		reason. With no library-bearing service every one of the six rows would
+		say `no catalogue source connected`, and §17.2 rules on exactly that
+		shape: "Rendering six rows of which six are `no catalogue source` is not
+		§17.2's screen; it is a table with no data in it, and rule 13's own bound
+		— the ban is on a region that says NOTHING — does not rescue a block whose
+		every row says the same nothing." An `unconfigured` install goes to the
+		wizard and never to a home page at all (§17.7).
+
+		NOTHING IS DRAWN BEFORE THE READ LANDS. No skeleton, no shimmer, no zeroed
+		table: six zeros is a real answer this endpoint gives, so a zeroed
+		placeholder is not a placeholder, it is a claim.
+	-->
+	{#if mode === 'library' && facetsLoaded}
+		<section class="section" id="home-summary">
+			<div class="section__head">
+				<h2>Your library</h2>
+				{#if !facetsError}
+					<!--
+						Both clauses, derived from the rows. "6 media types" alone is true
+						and misleading while half of them hold no number.
+					-->
+					<span class="section__count num">{summaryTotals}</span>
+				{/if}
+			</div>
+
+			{#if facetsError}
+				<div class="banner banner--err" role="alert">
+					<Icon name="x-circle" />
+					<div class="banner__body">
+						<div class="banner__title">Your library could not be counted</div>
+						<div class="banner__text">
+							This is a local read from UsArr’s own database, so it failing is not an upstream
+							problem and it says nothing about how much you have. No count is shown here rather
+							than a zero, because a zero is an answer this read gives for real.
+						</div>
+						<p class="verbatim">{facetsError}</p>
+						{#if facetsAction}<p class="banner__text">{facetsAction}</p>{/if}
+					</div>
+				</div>
+			{:else}
+				<List
+					label="Library by media type"
+					columns={SUMMARY_COLUMNS}
+					rows={summaryRows}
+					key={(row: SummaryRow) => row.mediaType}
+					total={summaryRows.length}
+					rowIntrinsic={ROW_INTRINSIC_SUMMARY}
+					stack="two-line"
+					cell={summaryCellRender}
+				/>
+			{/if}
+		</section>
+	{/if}
+</div>
+
+{#snippet summaryCellRender(row: SummaryRow, column: ListColumn)}
+	{#if column.id === 'type'}
+		<!--
+			THE NAME IS THE LINK, AND ONLY WHERE THERE IS SOMETHING BEHIND IT.
+			§17.2's row ends in "see all"; a separate column for it would be a
+			second control on every row of a six-row list, so the identity carries
+			it — which is what the mockup does too. A sourceless row's name is
+			plain text: the screen behind it is an empty grid, and a link to an
+			empty table is the thing this row exists instead of.
+		-->
+		{#if row.catalogued}
+			<a class="cell-title trunc" href={resolve('/library/[type]', { type: row.mediaType })}>
+				{row.label}
+			</a>
+		{:else}
+			<span class="cell-title trunc">{row.label}</span>
+		{/if}
+	{:else if column.id === 'items'}
+		<!--
+			THE UNIT NOUN IS PART OF THE CELL (§17.2). A sourceless row renders
+			NOTHING here rather than a `0` or a dash: its count is zero on the wire
+			like every other type nothing has catalogued, and "0 films" on an
+			install where nothing has ever looked for a film is a claim about the
+			library rather than about the pipeline. The next cell says what is
+			actually the case.
+		-->
+		{#if row.items}<span class="num">{row.items}</span>{/if}
+	{:else if !row.catalogued}
+		<!--
+			§17.7's per-type `unconfigured` state: the state, then its cause and its
+			action on the muted sub-line. The vocabulary is the Services screen's
+			own — nothing here is broken and nothing failed, so this is neither an
+			error nor a warning tone.
+
+			The link is to Services rather than a second copy of the add flow:
+			§17.3's rule that a problem is stated canonically once per screen, and
+			there is one place a service gets added.
+		-->
+		<span class="st st--none">
+			<Icon name="dash-circle" size="sm" />
+			{NO_CATALOGUE_SOURCE}
+		</span>
+		<div class="cell-sub">
+			{row.service} · {row.milestone} · <a href={servicesPath}>Add</a>
 		</div>
-		<List
-			label="Services needing attention"
-			columns={COLUMNS}
-			{rows}
-			key={(row) => String(row.id)}
-			total={rows.length}
-			rowIntrinsic={ROW_INTRINSIC_ATTENTION}
-			stack="labels"
-			{cell}
-		/>
-	</section>
-{/if}
+	{/if}
+{/snippet}
 
 {#snippet cell(row: AttentionRow, column: ListColumn)}
 	{#if column.id === 'state'}
@@ -1447,6 +1728,42 @@
 	 */
 	.home-note {
 		margin-top: var(--space-5);
+	}
+
+	/*
+	 * BLOCKS A AND B, AND THE ONLY THING THIS CONTAINER DOES IS MAKE `order`
+	 * AVAILABLE TO THEM. It is not a panel, a card or a background step: no
+	 * padding, no border, no radius and no background, so the two sections sit
+	 * exactly where they sat as siblings of `.main__inner`.
+	 *
+	 * `column` with no `gap`, deliberately. `.section` carries its own
+	 * `padding: 0 var(--space-6) var(--space-7)`, so the spacing between these
+	 * two is already the spacing between every other pair of sections on this
+	 * page; a gap here would make this one pair further apart than the rest and
+	 * the region would read as a group, which it is not.
+	 *
+	 * The default order is the markup order, B then A, which is the phone's.
+	 */
+	.home-blocks {
+		display: flex;
+		flex-direction: column;
+	}
+
+	/*
+	 * ABOVE 760 px, §17.2's block order: A, B, C. The breakpoint is the list
+	 * primitive's own — `app.css`'s single `@media (max-width: 760px)` is where
+	 * every table on this screen becomes a stack — so the two forks change at one
+	 * width rather than at two, and `min-width: 761px` is that same boundary
+	 * written from the other side.
+	 *
+	 * ⚠️ ONE DECLARATION, ON BLOCK A, AND NOT A PAIR. Giving B an explicit
+	 * `order: 2` as well would be two values that must agree; a single negative
+	 * order on A promotes it past any sibling and cannot disagree with anything.
+	 */
+	@media (min-width: 761px) {
+		#home-summary {
+			order: -1;
+		}
 	}
 
 	/*
