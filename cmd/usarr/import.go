@@ -48,11 +48,25 @@ import (
 // NO TIMER. There is no periodic re-import here and adding one would be the
 // wrong shape anyway: a re-read of the whole library every N hours is channel
 // 4's job (the reconciliation sweep, which compares hashes and touches <1% of
-// rows), not channel 1's. Neither channel 4 nor channel 3b is built here — which
-// is also why this is a FULL re-import rather than a delta: internal/libsync has
-// exactly one channel, and a delta walk over ADR-0035 §2a's watermark would
-// revisit only what changed upstream and so could never repair a row UsArr
-// itself wrote wrongly.
+// rows), not channel 1's.
+//
+// ⚠️ THIS PARAGRAPH CONTINUED *"Neither channel 4 nor channel 3b is built here —
+// which is also why this is a FULL re-import rather than a delta: internal/libsync
+// has exactly one channel"*, AND THIS FILE NOW FALSIFIES THE SECOND HALF OF IT.
+// Channel 3b IS built: DeltaSync below is its trigger. Channel 4 is still not.
+// What the struck sentence got RIGHT and what survives it is the reason a delta
+// is not a substitute for this function: an arrivals walk revisits only what
+// arrives upstream, so it can never repair a row UsArr itself wrote wrongly, can
+// never repair a skip or a deletion, and cannot clear a tie wedge. THE FULL
+// IMPORT MUST STAY REACHABLE AND MUST NEVER BE MADE TO LOOK UNNECESSARY BY THE
+// DELTA SHIPPING — every residual channel 3b declines is assigned to the full
+// import, because assigning it to channel 4 would be assigning it to nothing.
+//
+// ⚠️ AND THE CHANNEL-4 CLAIM IN THE FIRST PARAGRAPH IS ITSELF UNDER CORRECTION
+// ELSEWHERE — the sweep is measured deaf to the credits class, so "channel 4's
+// job" does not cover everything a re-read repairs. That correction is not this
+// change's and is deliberately not made here; it is named so the next reader
+// does not take the silence for agreement.
 
 // FullImport runs channel 1 against one instance. It is the manual trigger.
 //
