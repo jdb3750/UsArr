@@ -21,7 +21,15 @@ import (
 // arithmetic is explicit about why: six horizontal strips put ~16 items above a
 // 900 px fold against the design's own 25-item floor, on the screen whose entire
 // job is inventory. A sixth media type must add ROWS to this list, not a sixth
-// region to scan — so there is one query, one order and one page.
+// region to scan.
+//
+// WHAT §17.2 CLOSES IS THAT SHAPE, NOT THIS PARAMETER SET. It asks for "one
+// table sorted by `added_at DESC` spanning every type", and of that table it
+// says, in the same sentence, "it sorts, it filters, it Ctrl+Fs (§4.5)";
+// ADR-0028 reads the same way round — "the unified table sorts, filters and
+// Ctrl+Fs", and Block C's "scope comes from the `?lib=` chip". So the one query,
+// one order and one page below are what this handler serves today, not a ceiling
+// either document sets on it.
 //
 // IT IS A LOCAL READ (principle 1). One SQLite statement per page, no upstream
 // call, no *Arr, no metadata provider, no image fetch. This is the endpoint that
@@ -47,11 +55,15 @@ import (
 //     halves went stale: the commit landed, and ADR-0051 made the scope a
 //     WORK-DRIVEN EXISTS over library_member rather than a join, which is
 //     order-independent and so was never blocked by this endpoint's order.
-//     Block C carries no chip because §17.2 gives it one table, one order and
-//     no filters — not because the scope could not be built here.
+//     ⚠️ THE REASON THAT REPLACED IT WAS WORSE, because it looked checked:
+//     "Block C carries no chip because §17.2 gives it one table, one order and
+//     no filters" cited a sentence that says the opposite, and ADR-0028 puts
+//     Block C's scope on the chip outright. Block C carries no chip because
+//     nothing here reads one. That is the whole of the reason — no document
+//     declines it, and the bullet no longer claims one does.
 //
-//     Should Block C ever be given the chip, it MUST reuse that resolver and
-//     that EXISTS, and it MUST refuse an unresolvable slug rather than drop it:
+//     When Block C is given the chip, it MUST reuse that resolver and that
+//     EXISTS, and it MUST refuse an unresolvable slug rather than drop it:
 //     §7.3's rule is that dropping a slug WIDENS the page, so a filter has no
 //     safe direction to fail in the way `limit` does. The seam is unchanged —
 //     the scope is a parameter of the store call, not of the SQL string.

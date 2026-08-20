@@ -73,10 +73,18 @@ provider, no image fetch. Requires an authenticated session; without one it is `
 | `limit` | integer | `50` | The page size **requested**. See §1.2 — it is a clamp, not a validated range, and the response says what was actually applied. |
 | `cursor` | opaque string | — | A token minted by a previous response's `next_cursor`. Never construct one; never edit one. A token that will not parse is `400 bad_request`, never a silent reset to page one. |
 
-There is **no `?lib=` scope here and no per-type filter here** — and both exist, on §7. §17.2 closes
-Block C at one table, one order and *no* filters, so this endpoint refuses the chip by design rather
-than by backlog; a client that wants the scope calls §7. Unrecognised parameters are **ignored, not
-refused**, so `?lib=…` sent here is `200` over the whole catalogue rather than a `400`.
+There is **no `?lib=` scope here and no per-type filter here** — and both exist, on §7. That is a
+fact about this endpoint's parameter set, **not a constraint §17.2 imposes**. What §17.2 closes is
+the *shape*: *"one table sorted by `added_at DESC` spanning every type … A sixth type adds rows to an
+existing list rather than a sixth region to scan"* — and of that table it says, in the same sentence,
+*"it sorts, it filters, it Ctrl+Fs (§4.5)"*. [ADR-0028](../DECISIONS.md#adr-0028) reads the same way
+round: *"the unified table sorts, filters and Ctrl+Fs"*, and Block C's *"scope comes from the `?lib=`
+chip"*. So a client that wants the scope calls §7 because §7 is where the scope is served, and Home's
+chip-scoped Block C is **unwired, not declined**. ⚠️ **This paragraph used to read *"§17.2 closes
+Block C at one table, one order and no filters, so this endpoint refuses the chip by design rather
+than by backlog"*, and it inverted the sentence it cited** — §17.2 requires that the table filters.
+Unrecognised parameters are **ignored, not refused**, so `?lib=…` sent here is `200` over the whole
+catalogue rather than a `400`.
 
 ### 1.2 `limit` is a clamp, not a validated range — and the echoed `limit` is authoritative
 
