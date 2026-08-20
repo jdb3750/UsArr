@@ -283,7 +283,7 @@ closes `FI-12` in `docs/REVIEW-LOG.md` as coded rather than as documented.
 | `make docker` | ⚠️ **`deploy/Dockerfile` is now in the tree, but the image is unbuilt and unverified: `make docker` needs a Docker daemon (§8) and the agent container has none, so it has never run.** Intended shape: digest-pinned base enforced, `--provenance` + `--sbom`. To deploy, build and install the binary instead: §12. |
 | `make design` | `docs/design/check.mjs` — DESIGN-DIRECTION §13 made runnable: bans, token drift, contrast, overflow, row heights, roving tabindex, the webfont. Needs a browser; **not** part of `check`. |
 | `make build-tagged` | `go build -tags=bench ./...`. **Gating.** The packages `go list ./...` cannot see — `internal/db/spike` is behind `//go:build bench`, so a type error in it passed the entire gate until this step existed. |
-| `make check-offline` | `fmt-check` + `lint` + `build-tagged` + `modverify` + `secrets` + `test`. Fully hermetic. |
+| `make check-offline` | `provenance` + `fmt-check` + `lint` + `build-tagged` + `modverify` + `secrets` + `test`. Fully hermetic. |
 | `make check` | **The pre-commit gate**: `check-offline` + `vuln`. |
 
 `check` runs `fmt-check` (verify-only), not `fmt` (rewrite), so it never mutates your tree while
