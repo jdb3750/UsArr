@@ -1572,9 +1572,14 @@ The family this joins, each named by its own wording so it stays findable howeve
   asserting that nothing else exists*, whose enforcement is a qualifier that reads as hedging and is
   doing the opposite.
 * The **active voice** required of the arm64 ratification's corrections, where the agent — which
-  rider does what — is the load-bearing half and an agentless passive drops it. ⚠️ **Not in the tree
-  at the tip this was written against**, and named as forthcoming rather than given a citation it
-  does not have.
+  rider does what — is the load-bearing half and an agentless passive drops it. ✅ **Forthcoming
+  marker retired — ADR-0072 landed, and it states this requirement rather than merely obeying it.**
+  Its `Status:` line says the entry *"names it, dates it and writes it in the active voice on
+  purpose — the 2026-08-16 re-scope it ratifies named nobody, and that is the defect this entry
+  repairs"*, and ADR-0001's rider quotes the ruling's own words for it: *"the ratification is
+  written in the active voice, with the agent named, the date, and both what it does and what it
+  does not do"*. In `docs/DECISIONS.md`, landed in `f5ce60fdbd2195bbd8d2e077d5d5db3a47df78b9`,
+  *"docs: ADR-0072 ratifies the arm64 RSS re-scope, and ADR-0001 gains a rider"*.
 
 So: when you write a rule whose only guard is its own wording, **say in the rule what the shape is
 doing**; and when you edit one, ask what the shape is for before improving it.
@@ -1596,9 +1601,12 @@ addressed to are editing while it is being drafted.
 
 The form that survives is the one the ADR-0001 arm64 rider takes: it names the sites the ruling
 reaches, and then says *"Whether each already reads that way is a question for the tree, not for this
-rider."* ⚠️ **Cited as forthcoming, and deliberately without a SHA** — that rider is not in
-`docs/DECISIONS.md` at the tip this was written against, and inventing a citation for it would be
-this same defect one level up.
+rider."* ✅ **Forthcoming marker retired — the rider landed, and this is the citation it was
+written without.** It stands in `docs/DECISIONS.md` under ADR-0001, opening *"Rider 2026-08-20 —
+the UsArr project-manager thread ratified this re-scope, and the pointer it cites has never
+resolved"* and reading, in part, `**Ratified by [ADR-0072](#adr-0072)**, which records the ruling in
+full.` It landed in `f5ce60fdbd2195bbd8d2e077d5d5db3a47df78b9`, *"docs: ADR-0072 ratifies the arm64
+RSS re-scope, and ADR-0001 gains a rider"*.
 
 ### A disclosure lives where the person who would be misled will encounter it
 
