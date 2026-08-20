@@ -91,15 +91,70 @@
 > *Done when* · §3's **ADR-0039 `write_queue` validator** row. **No other line moved, no sweep
 > happened, and every other line citation in this file is still unvetted.** This pass cited symbols and section numbers throughout
 > and added no `file:<n>` citation of its own.
+>
+> **Extended 2026-08-20 by the comics-landed / stale-defect pass, to exactly FIVE places and to
+> NOTHING ELSE:** the baseline block, advanced and re-fired · §2's **per-series volume and chapter
+> walk** item, its *Done when* **only**, which is split into its two legs · §2's **"not identified"
+> badge** item, its opening clause and its *Done when* **only** · the **one item that pass added**,
+> recording the comics import · §3's 🔴 **open-defect** block on the BookOrbit adapter, struck in
+> place together with the three-hop chain beneath it and everything that reasoned from it, down to
+> and including the 🔍 facet-count inference. **The *"Verified facts"* bullets that follow that block
+> were NOT re-read** — they are about BookOrbit's own source, not about UsArr's, and no line of them
+> moved.
+> **No other line moved, no sweep happened, and every other line citation in this file is still
+> unvetted.** This pass cited symbols and distinctive strings throughout and added no `file:<n>`
+> citation of its own.
 
-**Last re-derived against:** `origin/main` `4d95d36` (2026-08-19).
-⚠️ **Advanced from `a51d3c3` by the two-stale-opens pass, which re-derived FIVE things and NOTHING
-ELSE**, and **the range is large and is emphatically not documentation-only** — it carries
+**Last re-derived against:** `origin/main` `0a5d66e` (2026-08-20).
+⚠️ **Advanced from `4d95d36` by the comics-landed / stale-defect pass, which re-derived FIVE things
+and NOTHING ELSE**, and **the range is large and is emphatically not documentation-only** — 36
+non-merge commits carrying `internal/libsync`, `internal/store`, `internal/bookorbit`, `cmd/`,
+`web/src/`, `testdata/` and `CLAUDE.md` — so **read every box this pass does not name as attested at
+`4d95d36`**, not at the baseline line above.
+
+**FIRED at `0a5d66e` by this pass, and this is the whole list:**
+- **The BookOrbit file and credit sources:** `func (s *BookOrbitSource) StreamFiles`
+  (`internal/libsync/bookorbitfiles.go`) and `func (s *BookOrbitSource) StreamCredits`
+  (`internal/libsync/bookorbitcredits.go`), found by searching every non-`_test.go` file in
+  `internal/libsync` for both method names; the `FileSource` and `CreditSource` type assertions in
+  `internal/libsync/importer.go`. Content commit `373df3f`, read as a diff.
+- **The comics import:** the `bookorbit.MediaKindComic` arm of the `MediaKind()` switch in
+  `internal/libsync/bookorbit.go`, and `mapComic`. Content commits `1c35d18` (the import slice),
+  `10444a4`, `ff13582`, `04d1620` and `0a5d66e`, each read as a diff rather than as a subject and
+  each confirmed **single-parent** before being cited.
+- **The `work_comic_issue` writer:** `INSERT INTO work_comic_issue` across all Go outside `_test.go`
+  — one hit, the `case "comic_issue"` arm of `internal/store/catalogue.go` — plus every
+  non-`_test.go` file that names the table at all (six).
+- **The per-series walk's other leg:** `SeriesVolumes` on the source interface in
+  `internal/libsync/kavita.go`, and `func (s *KavitaSource) StreamFiles`
+  (`internal/libsync/files.go`), read against ADR-0052's sunset clause.
+- **[ADR-0068](./DECISIONS.md#adr-0068)** — its status block and its four numbered done-checks — and
+  **[ADR-0052](./DECISIONS.md#adr-0052)**'s status block, both read directly in `DECISIONS.md`.
+
+**NOT fired by this pass, and therefore inherited:** no `ARCHITECTURE.md` read · no `REVIEW-LOG.md`
+read, so **every LS-260 paragraph on the image item is still inherited unread** · **no migration
+read at all**, so nothing about the schema was re-verified · no `web/src/` read · no Go outside the
+files named above · **no ADR text beyond ADR-0052 and ADR-0068** · **no §2 box this pass does not
+name** — the image-pipeline item, channel 3b, channel 4 and the zero-external-providers clause were
+**not re-read**, and the first three still reason from Kavita · **no line-citation sweep, again.**
+⚠️ **This pass was handed five defects to verify and found its brief wrong on one of them**: the
+brief named `ff13582` as the comics *import* slice, and it is not — `ff13582` names a sibling
+library for its kind. The import slice is `1c35d18`, and the corrected chain is written on the box
+rather than the one handed over.
+⚠️ **One of the five had been stale since before the previous baseline and was not caught then.**
+`373df3f` (2026-08-19 13:47Z) is an **ancestor of `4d95d36`** (18:55Z), so §3's open-defect block was
+already false at the moment it was attested. That is why it is **struck in place rather than
+deleted** — the record of an alarming box having been wrong is worth more than a clean page.
+
+**INHERITED from the `4d95d36` baseline. Its own attestation follows, unchanged and NOT re-fired:**
+⚠️ **That baseline advanced from `a51d3c3` by the two-stale-opens pass, which re-derived FIVE things
+and NOTHING ELSE**, and **the range is large and is emphatically not documentation-only** — it carries
 `internal/imagepipeline` (a whole new package), `internal/store`, `internal/libsync`, `cmd/` and
-`deploy/` — so **read every box this pass does not name as attested at `a51d3c3`**, not at the
-baseline line above.
+`deploy/` — so **read every box that pass does not name as attested at `a51d3c3`**, not at its
+baseline line.
 
-**FIRED at `4d95d36` by this pass, and this is the whole list:**
+**FIRED at `4d95d36` by THAT pass — inherited verbatim, and *"this pass"* below means the
+two-stale-opens pass, not the one that advanced the baseline:**
 - **The image writer:** `INSERT INTO image_asset` across all Go outside `_test.go` (one hit,
   `internal/store/imagewrite.go`); `PosterAsset.validate`'s calls to `ValidImageFormat` and
   `checkImageSourceURL`; `PutPosterAsset`'s `INSERT` column list; `ssrf.IsCredentialParam`.
@@ -387,15 +442,86 @@ Items marked 🛑 **STOPPED** are the different case: those are stopped by the d
 - [ ] **The per-series volume and chapter walk, and the rows it writes.** Phase A is served; the walk
       that fills `work_comic_issue` and `media_file` is not fetched and is not faked.
       *Authority:* §7.2, `internal/libsync/doc.go`.
-      *Done when:* `internal/libsync/kavita.go` performs the walk and `work_comic_issue` has a writer
-      in non-test Go.
+      *Done when — TWO LEGS, AND THEY HAVE COME APART. THE BOX STAYS OPEN.* The clause used to read
+      *"`internal/libsync/kavita.go` performs the walk **and** `work_comic_issue` has a writer in
+      non-test Go"*, as one conjunction. It is split here because one leg closed and the other lost
+      its subject, and ticking the box on the first would have claimed the second.
+      1. ✅ **`work_comic_issue` has a writer in non-test Go, and it is reached.** `INSERT INTO
+         work_comic_issue` has exactly one hit outside `_test.go` — the `case "comic_issue"` arm of
+         `internal/store/catalogue.go` — and the comics import reaches it (the box below). **This
+         leg closed silently**: nothing on this page moved when it did.
+         ⚠️ **Ticked against the written criterion, not against a run.** The criterion is
+         *"has a writer"*, which a text editor can satisfy, so this file's own Done-when rule applies
+         — **the unfired obligation is that no `work_comic_issue` row has been observed from a real
+         import**, and the missing prerequisite is a live BookOrbit instance, which is §4's and which
+         no test in this repo can stand in for.
+      2. ❌ **`internal/libsync/kavita.go` performs the walk** — and this leg names **a source v0.1
+         no longer takes** ([ADR-0052](./DECISIONS.md#adr-0052)). The Kavita walk is genuinely absent
+         as written: `kavita.go` declares `SeriesVolumes` on its source interface, and the file walk
+         that consumes it lives in `internal/libsync/files.go`, not in `kavita.go`. **But re-pointing
+         the leg at BookOrbit is not a rename** — BookOrbit has no volume/chapter level to walk, so
+         what this leg owes against the current source is **undecided**, and §2's opening ⚠️ already
+         says whoever writes that decision owns it. **Nothing here decides it.**
 
-- [ ] **The "not identified" badge and the column under it.** Free Kavita returns null identifier
-      fields, so this is v0.1's ordinary case, not an edge one. The badge is v0.1; **the remedy is
+- [x] **Comics import as ISSUES under series works — LANDED, AND UNVERIFIED AGAINST REAL DATA.**
+      `internal/libsync/bookorbit.go` **no longer early-returns on `MediaKindComic`**: the
+      `bookorbit.MediaKindComic` arm of its `MediaKind()` switch calls `mapComic`, and
+      `internal/store/catalogue.go` writes the parent series work and the child issue in **one
+      transaction**, so `parent_work_id` is never null on a child. This is
+      [ADR-0068](./DECISIONS.md#adr-0068) — *a BookOrbit comic is one file, so it is an issue* — and
+      **ADR-0066 decision 5 activated with it**: a `comic` series is filed into a `comic` library
+      minted lazily over the same `library_source` container ref, so one container ref may
+      legitimately name two libraries.
+      *Authority:* [ADR-0068](./DECISIONS.md#adr-0068), [ADR-0066](./DECISIONS.md#adr-0066)
+      decision 5, [ADR-0030](./DECISIONS.md#adr-0030)'s series/issue model, §16 v0.1 entry.
+      *The chain, content commits only, each confirmed single-parent before being cited:* `1c35d18`
+      **the import slice** · `10444a4` keys the parent cache by container as well as upstream id ·
+      `ff13582` names the sibling library for its kind and records a kind change · `04d1620` makes a
+      container's libraries follow what the walk actually found · `0a5d66e` stops a mixed container's
+      names encoding traversal order. ⚠️ **`ff13582` is NOT the import slice**, and was handed to
+      this pass as though it were; it is the fourth commit in the chain, and `1c35d18` is the first.
+      *Ticked against the written criterion:* `internal/libsync/bookorbit.go` maps comics rather than
+      skipping them, and `INSERT INTO work_comic_issue` has a non-test writer that path reaches.
+      **No migration, no column, no DDL, no new wire field** — the acquisition cost was four fields
+      on the existing allowlist and **zero extra HTTP**.
+
+      ❗ **THE UNFIRED OBLIGATION, STATED BENEATH THE BOX BECAUSE THE TICK IS NOT A CLAIM THAT THIS
+      WORKS. NOTHING HERE IS VERIFIED AGAINST REAL DATA.** Every check behind the tick is against
+      **fixtures** — recorded cassettes and Go tests — and the owner's own import is the **first real
+      contact**. **The missing prerequisite is a live BookOrbit instance with comics in it**, which
+      is §4's and which no test in this repo can perform. ADR-0068 states its own done-check as
+      *"after a live import against a real BookOrbit, all four must hold"*, and **none of the four
+      has been run**:
+      1. `work.kind = 'comic_issue'` rows exist, and **zero** have `parent_work_id IS NULL`.
+      2. `work.kind = 'comic'` rows exist and are **strictly and substantially fewer** than the issue
+         rows. ⚠️ **Parity here is a FAILURE, not a near-miss** — it is the per-row implementation
+         passing itself off as the accepted one, and it is the only outcome worse than not shipping.
+      3. `/library/comics` renders **series, not issues**, with a non-zero facet count.
+      4. The latest `items_skipped` row's `Comics` field reads **0**.
+      Only check 2 can tell the accepted shape from the refused one. **Until the import runs, this
+      box records that the code exists and is gated — not that a comic has ever reached a screen.**
+
+- [ ] **The "not identified" badge and the column under it.** ~~Free Kavita returns null identifier
+      fields, so this is v0.1's ordinary case, not an edge one.~~ The badge is v0.1; **the remedy is
       not** — see §3.
+      ⚠️ **STRUCK 2026-08-20: THE ARGUMENT, NOT THE ITEM.** That clause reasons from **Kavita** as
+      v0.1's source, and [ADR-0052](./DECISIONS.md#adr-0052) moved v0.1's source to **BookOrbit**.
+      **What replaces it is not written here, because this pass did not measure it** — how often a
+      BookOrbit card carries no external identifier is a question about BookOrbit's payloads, and
+      nobody has run the count. §3's *"Verified facts"* bullets are the nearest thing on this page to
+      an answer and they are narrower than one: `comicvineId` **exists**, and MangaUpdates, AniList
+      and MyAnimeList ids are **absent**. **Neither settles the prose case.** ⚠️ **Do not read the
+      strike as *"the ordinary case is now identified"*** — it says only that the sentence's
+      evidence is about a sunset source. **The badge is owed either way**, which is why the box is
+      untouched.
       *Authority:* §6.4, §16 v0.1 entry, [ADR-0035](./DECISIONS.md#adr-0035) §1.
-      *Done when:* the state is rendered in `web/src/routes` off a column that exists in
-      `internal/db/migrations`.
+      *Done when:* a work whose identifier column is null **renders the badge in the browser**, off a
+      column that exists in `internal/db/migrations`, on a library imported from a real instance.
+      ⚠️ **The clause used to read *"~~the state is rendered in `web/src/routes` off a column that
+      exists in `internal/db/migrations`~~"*, which a text editor alone can satisfy** — a `.svelte`
+      file and a migration both being present is true of a tree nothing has run. **Strengthened
+      under this file's own Done-when rule**, and deliberately **not** ticked: the run it now names
+      has not been taken.
 
 - [ ] **The image pipeline's FETCH HALF — NARROWER AGAIN. The writer, the renderer and the import
       call site all landed; what is left is §4.4.1's cold-start plan and a first run against a real
@@ -1536,42 +1662,66 @@ Tier 0 adapter, and ADR-0052 backs it.
       loud. **The Kavita adapter is untouched and serves no verdict**, which renders as an absent
       key: that is the seam, not an omission.
 
-      🔴 **OPEN DEFECT — EVERY BOOKORBIT BOOK RENDERS AS AN EBOOK, AND `/library/audiobooks` RETURNS
+      ✅ **CLOSED — STRUCK 2026-08-20, AND KEPT IN PLACE ON PURPOSE. THE BLOCK BELOW WAS ALREADY
+      FALSE WHEN IT WAS ATTESTED.** `BookOrbitSource` implements **both** interfaces:
+      `func (s *BookOrbitSource) StreamFiles` is in `internal/libsync/bookorbitfiles.go` and
+      `func (s *BookOrbitSource) StreamCredits` is in `internal/libsync/bookorbitcredits.go`, closed
+      by content commit `373df3f` (*"BookOrbit credits, files and year — an audiobook renders as
+      one"*). So hop 1 fails, hops 2 and 3 never start, and the user-visible wrong answer this box
+      announced does not exist.
+      ⚠️ **`373df3f` IS AN ANCESTOR OF `4d95d36`, THE BASELINE THIS BOX CITES AS ITS OWN
+      EVIDENCE** — 13:47Z against 18:55Z on 2026-08-19. **A re-derivation pass read this page,
+      advanced the baseline past the fix, and left the box standing.** That is the failure worth
+      keeping: *"verified against the tree at the baseline above"* was written over a tree that
+      already contradicted it, and nothing on the page could tell the reader so. **This is the
+      loudest box on the page, so its wrongness is deleted last, not first.**
+      ❗ **What is NOT claimed by this strike.** The interfaces exist and the assertion in
+      `internal/libsync/importer.go` now succeeds — that is a reading, and readings are what this
+      file's own Done-when rule refuses on their own. **No `edition` row has been observed for a real
+      BookOrbit audiobook**, and no Type cell or `/library/audiobooks` grid has been rendered off
+      one. **The missing prerequisite is the same one §4 owes: an import against the owner's own
+      instance.** Until then the correct statement is *"the cause this box named is gone"*, not
+      *"audiobooks render correctly"*.
+
+      ~~🔴 **OPEN DEFECT — EVERY BOOKORBIT BOOK RENDERS AS AN EBOOK, AND `/library/audiobooks` RETURNS
       NONE OF THEM. Verified against the tree at the baseline above.** This is a **user-visible wrong
       answer**, not a missing feature, and it is recorded here because slice 1's *"does not"* list
-      makes it read as a scoped omission.
-      **The cause is one missing interface, and it is a three-hop chain:**
-      1. **`BookOrbitSource` implements no `FileSource`.** `internal/libsync/importer.go` asserts
+      makes it read as a scoped omission.~~
+      ~~**The cause is one missing interface, and it is a three-hop chain:**~~
+      1. ~~**`BookOrbitSource` implements no `FileSource`.** `internal/libsync/importer.go` asserts
          `src, ok := im.Source.(FileSource)` and treats a failed assertion as **not an error** —
          by design, per its own comment — so the assertion **silently returns false** and nothing
-         anywhere reports it.
-      2. **So no `edition` row is ever written for a BookOrbit book.** `internal/libsync/files.go`'s
+         anywhere reports it.~~
+      2. ~~**So no `edition` row is ever written for a BookOrbit book.** `internal/libsync/files.go`'s
          `FileSource` is the only thing that produces them, and slice 1's file says so in terms:
          *"CREDITS AND EDITIONS … authors, narrators and `files[]` all ride the card this walk
          already reads"*, costing **zero extra HTTP** — which is precisely why it was held back as a
-         slice of its own rather than taken for free.
-      3. **And both sides of the media-type answer read `edition.format`.** `mediaTypeOf`
+         slice of its own rather than taken for free.~~
+      3. ~~**And both sides of the media-type answer read `edition.format`.** `mediaTypeOf`
          (`internal/store/recent.go`) returns `MediaTypeAudiobooks` for `kind = 'book'` **only** when
          the `allAudiobook` aggregate is `1`, and its own comment states the fallback: *"A book with
          NO editions is Ebooks … an absent edition is not evidence of an audiobook."* The grid filter
          agrees by construction — `browseAudiobookPredicate` (`internal/store/browse.go`) opens with
          `EXISTS (SELECT 1 FROM edition ea WHERE ea.format = ? AND ea.work_id = w.id)`, which
-         **cannot be satisfied by a work with no edition rows at all.**
-      **So a BookOrbit audiobook is filed under Ebooks in its Type cell AND excluded from the
+         **cannot be satisfied by a work with no edition rows at all.**~~
+      ~~**So a BookOrbit audiobook is filed under Ebooks in its Type cell AND excluded from the
       Audiobooks grid — consistently.** ⚠️ **The consistency is NOT a mitigation.** `mediaTypeOf` and
       the predicate agreeing is exactly what `TestBrowseFilterAgreesWithMediaTypeOf` exists to hold,
       and here **they agree on the wrong answer, because both are reading an absence.** A guard that
-      pins two readers to one rule cannot notice that the rule's input is missing.
-      ⚠️ **BookOrbit'S OWN `MediaKind()` ALREADY DISTINGUISHES THEM, AND THE INFORMATION IS DISCARDED
+      pins two readers to one rule cannot notice that the rule's input is missing.~~
+      ~~⚠️ **BookOrbit'S OWN `MediaKind()` ALREADY DISTINGUISHES THEM, AND THE INFORMATION IS DISCARDED
       ONE LAYER UP.** `StreamItems` switches on `bookorbit.MediaKindEbook` and
       `bookorbit.MediaKindAudiobook` — it can already tell an M4B from an EPUB — and maps **both**
       through the same `mapBook`, because `store.CatalogueItem` has no format field to carry it on.
-      **The fix is the deferred `FileSource` slice, not a new signal:** the adapter already knows.
-      🔍 **Inference, labelled, and NOT separately measured by this pass:** the same absence should
+      **The fix is the deferred `FileSource` slice, not a new signal:** the adapter already knows.~~
+      ~~🔍 **Inference, labelled, and NOT separately measured by this pass:** the same absence should
       also zero the `audiobooks` **facet count** for a BookOrbit-only install, since ADR-0059's split
       binds this same `browseAudiobookPredicate`. If so it is §2's facet consequence arriving from the
       other direction — there a count under-reports a type whose content is real, here the
-      **editions themselves** are absent, so nothing downstream has anything to under-report from.
+      **editions themselves** are absent, so nothing downstream has anything to under-report from.~~
+      ⚠️ **The struck inference is struck with its premise and is NOT thereby answered.** Whether a
+      BookOrbit-only install's `audiobooks` facet count is right is now an ordinary open question
+      about a shipped path, and it is **§2's facet item's**, not this box's.
       **Verified facts, read off BookOrbit's own source at HEAD `73b7877`, release `v2.6.0`** — carry
       these into the ADR rather than re-deriving them:
       - ✅ **§14 IS SATISFIED, and this falsifies the *"no inbound API key"* finding above.**
