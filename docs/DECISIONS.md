@@ -3084,7 +3084,7 @@ corrects a statement of fact and amends nothing. · 🚩 **One member is reverse
 owner runs Kavita. · 🚩 **The milestone is re-sequenced by [ADR-0036](#adr-0036): no catalogue source
 ships in v0.1.** All four still arrive, one at a time after v0.1. **This is re-sequencing, not
 rejection** — the deferral of the command sinks, the honest costing, and every argument below stand
-unchanged; only *when* the catalogue sources land moves. Read this ADR through both amendments.
+unchanged; only *when* the catalogue sources land moves. Read this ADR through its amendments.
 
 ### Context
 
