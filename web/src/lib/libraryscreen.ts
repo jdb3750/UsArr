@@ -3,7 +3,7 @@
  *
  * ⚠️ THIS HEADER HAS BEEN WRONG THREE TIMES AND EVERY CORRECTION IS KEPT. The
  * first two share a shape: each described the `/library` SCREEN, and the screen
- * moved. The third is at the end of this header and is a different mistake — a
+ * moved. The third is four paragraphs below and is a different mistake — a
  * document cited for a rule it does not contain.
  *
  *   It first said the per-type grid could not be built because there was no
