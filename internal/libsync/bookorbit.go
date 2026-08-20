@@ -559,16 +559,19 @@ func (s *BookOrbitSource) Containers(ctx context.Context) ([]store.CatalogueCont
 // silently empty join rather than a compile error.
 func containerRef(id int64) string { return strconv.FormatInt(id, 10) }
 
-// StreamItems walks every container's books and hands the PROSE ones to fn.
+// StreamItems walks every container's books and hands the MAPPABLE ones to fn —
+// a prose book as a 'book', a comic as a 'comic_issue' under its series
+// (ADR-0068). An unknown media kind is skipped and counted.
 //
 // # One walk per container, in the order Containers returned them
 //
 // BookCard carries no libraryId, so the per-library route is what supplies the
 // container id every item needs. The count returned is the number of books the
-// WALK DELIVERED to this adapter — including the comics it then skipped —
-// because Report.ItemsRead is documented as "how far the read got, never how
-// many rows are correct", and a count that silently excluded the skips would
-// make a 20,000-comic library look like a 40-book one that read fine.
+// WALK DELIVERED to this adapter — including the ones it then skipped, which
+// since ADR-0068 are the unknown kinds rather than the comics — because
+// Report.ItemsRead is documented as "how far the read got, never how many rows
+// are correct", and a count that silently excluded the skips would make a
+// library that was read in full look like only the part of it that mapped.
 //
 // # Partial delivery
 //

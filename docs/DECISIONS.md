@@ -9559,9 +9559,10 @@ unit of work; decision 5 is what changes it, on evidence rather than on a guess.
   readings was already the ratified rule, it does not amend one.
   **(a) The broad reading would make this ADR contradict itself.** Decision 5's own implementation
   mints the `comic` sibling **conditionally on observed contents**, and argues that it must:
-  `internal/store/catalogue.go`'s `resolveBinding`, at `:1594-1601` on the tree this rider ships in
-  and at `:1382-1389` on the tree it was ruled against — the comment moved with the mint, in the
-  change this rider licenses, and it is quoted rather than only cited for exactly that reason —
+  `internal/store/catalogue.go`'s `resolveBinding`, under its *"It is LAZY, and that is the difference
+  between decision 5 and an empty screen"* heading — and at `:1382-1389` on the tree it was ruled
+  against — the comment moved with the mint, in the change this rider licenses, and it is quoted
+  rather than only cited for exactly that reason —
   *"Minting the comic library at bind time would therefore give EVERY prose-only library a
   permanently empty comic sibling on the Libraries screen, which is the 'empty screen that looks
   broken' principle 3 exists to prevent."* Under the broad reading,
@@ -9576,8 +9577,17 @@ unit of work; decision 5 is what changes it, on evidence rather than on a guess.
   **(d) This ADR named its own expiry and we have reached it.** *"The kind stays `book` until comics
   have a unit of work"* (`:9532-9533`), and the book-over-comics residual *"closes when comics get a
   unit of work"* (`:9548`). [ADR-0068](#adr-0068) discharges that condition in those exact words —
-  *"and **this ADR is that unit of work**"* (`:9954`) — so the interval in which contents could not
-  inform a kind is over.
+  *"and **this ADR is that unit of work**"* (its **Decision 5**) — so the interval in which contents
+  could not inform a kind is over.
+  ⚠️ **2026-08-20 — two of this rider's live line citations were re-anchored, and nothing it says
+  changed.** Both had rotted within a day of being written: `resolveBinding`'s comment moved out from
+  under `:1594-1601` as the comics slice landed, and ADR-0068's sentence moved out from under `:9954`
+  because the 2026-08-20 rider directly below inserted 27 lines above it (`0a5d66e`, `27 0
+  docs/DECISIONS.md`) — a rider displacing a citation made in the same document is the sharpest form
+  of the defect. No new offsets are minted here: both now name a symbol and a heading, on
+  `docs/DEVELOPMENT.md`'s *"Cite symbols, not line numbers, while `main` is moving"*. The `:1382-1389`
+  cite is left standing — it is dated to the tree it was ruled against, and a citation inside a dated
+  record is history, not staleness.
 - 🔻 **2026-08-20 — WHICH of decision 5's two libraries keeps the container's plain name, ruled.**
   A mixed container becomes `Fiction` and `Fiction (Comics)`; nothing above said which half gets
   which, and the implementation answered *whichever kind the walk reached first* — the eager bind

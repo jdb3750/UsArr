@@ -4512,11 +4512,18 @@ would make the shortfalls that ARE actionable harder to find.
 ⚠️ **Two values on the wire, three readings, and the third is an absent key.** `left_out` renders;
 `none` — an import observed this library and recorded nothing left out — renders **nothing**, which
 keeps this column's standing invariant that no positive claim is made on it; and a library nothing
-observed carries no verdict at all. The last two are separate values because in the database they
+observed carries no verdict at all. ~~The last two are separate values because in the database they
 are the same silence: a skip is recorded only when something was skipped, so the read pairs that
-absence with the completeness record, which is written for every container an import observed. The
-sentence above the table is where the difference becomes visible — it names the total, and once it
-has made a claim it says how many rows the claim does **not** cover.
+absence with the completeness record, which is written for every container an import observed.~~
+🚩 **STRUCK 2026-08-20 by [ADR-0063](./DECISIONS.md#adr-0063) — every container an import WALKED
+records an `items_skipped` row, zero or not.** The struck sentence's premise is false rather than
+superseded: `none` is a **zero-count row** and absent is **no row**, which are two different things
+in the database and not one silence, and the completeness pairing it describes was **retired rather
+than kept as a fallback**. ⚠️ **Nothing above the strike changes** — ADR-0063 moved the evidence and
+not the vocabulary, so the three readings and both render rules stand exactly as stated.
+`internal/store/skips.go`'s `SyncReportItemsSkipped` carries the current rule and its own retraction
+of the old one. The sentence above the table is where the difference becomes visible — it names the
+total, and once it has made a claim it says how many rows the claim does **not** cover.
 
 ⚠️ **And a skip count is not a completeness check.** It says how many items were left out and why. It
 does **not** say the rest of the library arrived, and it does not say the credential saw the whole
