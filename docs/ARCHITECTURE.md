@@ -2719,7 +2719,13 @@ not cut, and neither is this write path** — the owner's explicit condition, re
 > **What "six media types" does and does not mean in v0.1**, because the phrase is load-bearing and
 > was previously overstated. The **schema** is six-type — it has to be, migration 0001 cannot be
 > edited. **Requesting** is six-type — Prowlarr covers all six categories. **The catalogue is books
-> and comics/manga**, because Kavita is the source that ships (ADR-0041). A media type with no
+> and comics/manga**, ~~because Kavita is the source that ships (ADR-0041)~~ 🚩 **STRUCK 2026-08-20
+> by [ADR-0052](./DECISIONS.md#adr-0052) — BookOrbit is v0.1's source. The conclusion above is
+> unaffected: BookOrbit's own media types are Kavita's, so the catalogue is still books and
+> comics/manga on either source. ⚠️ But note what that makes the conclusion — a claim about which
+> sources happen to be configured, not about the milestone — so it is right by coincidence and any
+> replacement enumeration would go stale the same way. What an install has is `librarySummary`'s
+> answer, derived per install from the connected service kinds.** A media type with no
 > configured source says so on screen rather than rendering an empty grid.
 
 **Schema, enumerated — because §16 is authoritative for scope and an implementer reads this line,
