@@ -3146,8 +3146,22 @@ audiobook only when the files share a folder, and everything else treats them as
 *schema* handles it (an audiobook is an `edition` of a `book` work, §6.1) and the **resolution pass
 that would populate it is deferred**, with its cost and its seam, to [`FUTURE.md`](./FUTURE.md) §16.
 What v0.3 ships is the cross-media machinery the pass would eventually plug into. **The visible
-*"not identified"* state is *not* deferred with it** — the column and the badge are a v0.1 rule
-(§6.4) because they cannot be retrofitted. ⚠️ **They are also exercised in v0.1 now, not merely
+*"not identified"* state is *not* deferred with it** — the **column** is a v0.1 rule (§6.4), and the
+retrofit argument is what carries it: §6.4 settles the **stored marker** (*"A work with no resolvable
+identity is kept, marked, and stays searchable — and that is a v0.1 rule, not a later one"*), and a
+marker genuinely cannot be retrofitted, because a row written without one cannot be re-marked
+afterwards — the evidence that it was unidentified is gone by then. ⚠️ **THAT REASON REACHES THE
+COLUMN AND DOES NOT REACH THE BADGE, and the badge is named here rather than quietly dropped along
+with it.** A chip renders whatever the data carries, whenever it is built, so a badge added over a
+v0.1 column at any later milestone displays the state perfectly; the retrofit argument is therefore
+**no verdict on the badge in either direction**, and §6.4 — whose operative word *"marked"* is a
+**data** word, establishing the stored marker and nothing about pixels — is **no citation for a
+rendering obligation**. ⚠️ **This sentence accordingly decides NO MILESTONE for the badge.** Fixing a
+justification is not the same act as settling what that justification used to be offered in support
+of, and a reason that fails to reach its object leaves the question where it found it rather than
+answering it in the negative; where the badge's milestone is settled is not this sentence's business.
+**The column and the badge are both still this passage's subject** — what changed is which of the two
+the retrofit reason actually covers. ⚠️ **They are also exercised in v0.1 now, not merely
 present:** this read *"v0.1's Sonarr-and-Radarr catalogue rarely reaches the state"*, and
 [ADR-0041](./DECISIONS.md#adr-0041) replaced that catalogue with Kavita, whose free tier returns null
 identifier fields — so *"not identified"* is **v0.1's ordinary case** (ADR-0035 §1), not a later
