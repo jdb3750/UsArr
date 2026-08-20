@@ -1372,18 +1372,24 @@ delta time, and the library row (§17.8) carries the same, with the last full-co
 freshness number that is not backed by a delta must never be rendered with the same weight as one
 that is.
 
-⚠️ **Per-source status. Kavita ships in v0.1 and the other three do not** (§16.1,
-[ADR-0041](./DECISIONS.md#adr-0041)) — they arrive one at a time afterwards, in the order the rows are
-written. This framing sentence read *"No source in this table ships in v0.1"* until ADR-0041 moved
-Kavita into v0.1; it is amended here rather than left to contradict §16 on the same screen. **The
+⚠️ **Per-source status. BookOrbit is v0.1's catalogue source and the other four are not** (§16.1,
+[ADR-0052](./DECISIONS.md#adr-0052)) — they arrive one at a time afterwards, in the order the rows
+beneath Kavita's are written. This framing sentence read *"No source in this table ships in v0.1"*
+until [ADR-0041](./DECISIONS.md#adr-0041) moved Kavita into v0.1, and then *"Kavita ships in v0.1 and
+the other three do not"* until ADR-0052 put BookOrbit in that slot; it is amended each time rather
+than left to contradict §16 on the same screen. ⚠️ **"Sunset" is not "deleted"** — Kavita's row, its
+dated record and its adapter all stay, and stay green (§16.1); what stopped is investment. **The
 status cells below are dated records and are not touched** — they say what was probed, when, and
 against what, and `DEVELOPMENT.md` §11 is explicit that a citation inside a dated record is history
 rather than staleness. Dated 2026-08-16, **amended 2026-08-17: Kavita's row is now verified against a
 live instance** and is no longer one of "the two that carry the strategy are both unverified" —
-Komga's is.
+Komga's is. **Amended 2026-08-20: BookOrbit gains a row**, first because it is the source that
+ships, and its status cell carries an honest zero rather than an absence — the table previously
+omitted the one source v0.1 actually uses, which read as if that source had nothing to declare.
 
 | Source | Ordering key | Status |
 |---|---|---|
+| BookOrbit | `books.addedAt`, **server-side filtered** — one `after(addedAt)` rule on `POST /api/v1/libraries/{id}/books`, ordered `addedAt ASC`, with the server's unconditional `books.id ASC` final tier ([ADR-0070](./DECISIONS.md#adr-0070)). ⚠️ **Not `updatedAt`**, which is sort-only here and does not move on tag, genre, author or narrator edits | 🚩 **NEVER PROBED — no live BookOrbit has ever been contacted by this project.** Not contradicted, and not probed and failed: **never probed.** Every fixture and every fake in the tree is **transcribed from source**, read at `bookorbit/bookorbit@73b7877d`, and reading source tells you what the code says it does, which is a different claim from what a running service does. ⚠️ **So the ordering guarantee channel 3b rests on is UNVERIFIED for this source** — namely that `addedAt ASC` plus the appended `books.id` tiebreaker is a total order the server returns as a stable *prefix* across pages. Kavita's row below carries a ✅ because a live instance answered; **this row cannot, and nothing in it is to be read as though it did.** A live-run verification is an **install fact**: it can come only from the owner's own server against a running BookOrbit holding real data, and **no lane in this repo can manufacture it** — a green suite over transcribed fixtures is a statement about UsArr, not about BookOrbit. **If the guarantee fails**, a page stops being a prefix of the ordering, the tie mitigation's soundness argument falls with it, and arrivals can be **skipped** rather than merely re-read; the backstops are the two the walk already names — channel 4's sweep, and the manual full import, which is the only repair for a skip. 🚩 **A second gap is independent of the probe and will not be closed by one:** `addedAt` is not immutable (`PATCH /books/:id/added-at`), so a book moved **backwards** past the watermark is never redelivered by an after-filter |
 | Navidrome | `getScanStatus.lastScan` as a cheap change *signal*, then an `updated_at`-ordered walk of the native API | 🔍 inference from the model; probe at connect |
 | Audiobookshelf | `LibraryItem.updatedAt` | 🔍 probe at connect |
 | Kavita | `LastChapterAdded` ordering on `POST /api/Series/all-v2` | ✅ **VERIFIED 2026-08-17 against a live instance** (Kavita 0.9.0.2, 151 series, page size 10 — the run and its numbers are in [ADR-0035](./DECISIONS.md#adr-0035) §2a). Clause (a) ordering **PASS**; clause (b) resumability **PASS** (no id overlap between pages, page 1 byte-identical across two fetches); clause (c) settled from Kavita's source rather than live — `UpdateLastChapterAdded()` has one production call site, in the new-chapter branch, so the key moves on a **chapter add** and not on edits, deletions, retitles or cover changes. 🚩 **With one qualification that changes the mechanism:** `SeriesFilterField` has **no timestamp member**, so there is no server-side since-filter — resumption is a **sorted page walk with a client-side stop**, not a re-request at the watermark. `SortField.LastModifiedDate` exists but `SeriesDto` returns **no** last-modified property, so that key remains unusable. |
