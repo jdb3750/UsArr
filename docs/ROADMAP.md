@@ -115,13 +115,21 @@
 > sweep happened, and every other line citation in this file is still unvetted.** This pass cited
 > symbols and distinctive strings throughout and added no `file:<n>` citation of its own.
 
-**Last re-derived against:** `origin/main` `6533f1c` (2026-08-20).
-⚠️ **Advanced from `0a5d66e` by the Block-A / facet-consumer pass, which re-derived THREE things and
-NOTHING ELSE**, and **the range is large and is emphatically not documentation-only** — 41 non-merge
-commits carrying `internal/repofiles` (a package that did not exist at the previous baseline),
+**Last re-derived against:** `origin/main` `b3413a6` (2026-08-20).
+⚠️ **Advanced from `6533f1c` by the seven-motion correction pass, which re-derived ONLY the sites its
+own seven motions name** — the `?lib=` re-measure box, the arm64 spike, the struck BookOrbit-types
+duplicate, `remoteHash()`, the `/api/v1/library/recent` sentence, and the per-type `ok` state. **The
+range is 36 non-merge commits and is NOT documentation-only**, touching `internal/store`,
+`internal/httpapi`, `internal/db`, `internal/bookorbit`, `web/src/`, `Makefile`, `docs/`,
+`docs/design/`, `docs/reference/` and `CLAUDE.md` — so **read every box this pass does not name as
+attested at `6533f1c`**, and every box neither pass names as attested at `0a5d66e`, not at the
+baseline line above.
+⚠️ **The previous baseline line advanced from `0a5d66e` by the Block-A / facet-consumer pass, which
+re-derived THREE things and NOTHING ELSE**, over a range likewise not documentation-only — 41
+non-merge commits carrying `internal/repofiles` (a package that did not exist at that baseline),
 `internal/libsync`, `internal/store`, `internal/httpapi`, `internal/db`, `internal/bookorbit`,
-`cmd/usarr`, `web/src/`, `docs/`, `docs/design/`, `docs/reference/`, `README.md` and `CLAUDE.md` — so
-**read every box this pass does not name as attested at `0a5d66e`**, not at the baseline line above.
+`cmd/usarr`, `web/src/`, `docs/`, `docs/design/`, `docs/reference/`, `README.md` and `CLAUDE.md`.
+**Kept because the attestation floor it sets is still live** for every box neither pass has named.
 
 **FIRED at `6533f1c` by this pass, and this is the whole list:**
 - **Home's block map and its facet call:** the ADR-0028 block map in `web/src/routes/+page.svelte`,
