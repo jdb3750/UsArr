@@ -23816,7 +23816,7 @@ of this change is this entry and the quotations above.
 
 ---
 
-## LS-386 — Home's Block A stated two things it could not know: that a first-run library is empty, and that this build's adapter list is this install's. Twelve findings, ten applied, two recorded as misreporting
+## LS-386 — Home's Block A stated two things it could not know: that a first-run library is empty, and that this build's adapter list is this install's. Every finding is enumerated and dispositioned below, and none is dropped
 
 **`LS-386`, allocated by the coordinator, and re-checked at this lane's tip rather than taken on
 report.** Run before a line of this entry was written, at `290327b35e29` (the merge of `origin/main`
@@ -23843,8 +23843,27 @@ is never amended, rebased or force-pushed.** Everything below lands on top of it
 | 2 | `docs(web): sweep the comments the facets landing and ADR-0052 falsified` | `7437ab44b3da` |
 | 3 | `docs: strike §16's Kavita ground for the six-media-types claim, dated` | `81a472117147` |
 
-The review returned **1 blocking finding, 6 should-fix and 5 notes**. Ten are applied, two are
-recorded here as misreporting by the builder rather than as defects in the tree. **None is dropped.**
+The review returned one blocking finding, then a band of should-fix findings, then a band of notes.
+**Each is enumerated `F1`, `F2`, … in its own heading below, and each heading carries that finding's
+own disposition — applied, or recorded here as misreporting by the builder rather than as a defect in
+the tree. The enumeration in the body is the count; neither this preamble nor the heading above
+restates it.** **None is dropped.**
+
+> 🔻 **Corrected 2026-08-20 — this entry used to count itself, and the count was wrong.** The heading
+> read *"Twelve findings, ten applied, two recorded as misreporting"* and this preamble read *"The
+> review returned **1 blocking finding, 6 should-fix and 5 notes**. Ten are applied, two are recorded
+> here as misreporting by the builder rather than as defects in the tree."* The body carries
+> **`F1`–`F13`**: `F1` blocking, `F2`–`F8` should-fix (**seven**, not six), `F9`–`F13` notes — so the
+> real disposition is **thirteen findings, eleven applied, two recorded**. ✅ ***"None is dropped"* was
+> true and stays true**: all thirteen are dispositioned in the text, so this was a miscount and not a
+> lost finding. **The fix is not a bigger number.** A count in a heading or a preamble is maintained
+> by a different act than the body it counts, so it diverges invisibly — which is exactly what
+> happened here — and writing *"thirteen"* would only reset the clock on the same defect. The heading
+> and the preamble now describe the pass and leave the enumeration to be the count.
+> ⚠️ **`e258179baa65`'s commit subject carries the same miscount** — *"docs: LS-386 records the Block A
+> adversarial pass, twelve findings, none dropped"* — and that commit is pushed and was reported, so
+> it is never amended, rebased or force-pushed. **It cannot be corrected in place, and this rider is
+> the whole record of it.**
 
 ### F1 (BLOCKING) — applied. A first-run install read as an empty library
 
