@@ -37,6 +37,16 @@ fourth where it is needed:
 4. **The falsified sentence itself** keeps a dated inline flag wherever a reader could otherwise
    take it as live, since anchors and search land people mid-document.
 
+**The standing-original default yields where the quotation would reproduce the fault.** Leaving the
+original text standing is what makes an ADR a record, but a struck quote is still text in the
+document, so preserving a defective sentence preserves its defect alongside the evidence for it.
+Where the two collide the annotation keeps the correction and drops the quotation. [ADR-0032](#adr-0032)'s
+closing sentence told the reader to read the ADR through a stated number of amendments; `2ad0767`
+replaced *"both amendments"* with *"its amendments"* and deliberately carried **no** struck-quote
+rider, because quoting the old wording directly above the fix would have put the very number the
+correction exists to remove straight back into the file. **The test is what the quotation does in the
+document it lands in**, not whether the original would otherwise be worth keeping.
+
 **The decision lives in the superseding ADR; the amendment note points at it and does not re-argue
 it.** This is the rule [`DEVELOPMENT.md`](./DEVELOPMENT.md) §11 already states for `REVIEW-LOG.md` —
 *"a citation inside a dated record is history, not staleness"* — and it is deliberately the opposite
@@ -4606,8 +4616,18 @@ source is no longer Kavita; see the second flag below.
 
 > ⚠️ **AMENDED 2026-08-19 by [ADR-0052](#adr-0052): clause 1's source is now BookOrbit, and
 > clause 4 is REOPENED rather than re-answered.** The owner is sunsetting Kavita entirely and moving
-> his books, comics and manga to BookOrbit — his decision, his word for it *"phenomenal"*. **What
-> falls:** clause 1's *"v0.1's catalogue source is **Kavita**"*, and clause 4's *"v0.1's sync channels
+> his books, comics and manga to BookOrbit — his decision, his word for it *"phenomenal"*.
+> ⚠️ **Rider 2026-08-20 — *books, comics and manga* records what the owner decided to move, and it is
+> not a claim about what BookOrbit covers.** [`ARCHITECTURE.md`](./ARCHITECTURE.md) §16.1 *The
+> catalogue sequence, after v0.1* **struck the same enumeration on 2026-08-20**, in its **v0.1**
+> entry, as a coverage claim the tree does not support: `bookorbit.MediaKindOf`
+> (`internal/bookorbit/catalogue.go`) classifies `m4b`, `mp3`, `m4a`, `opus`, `ogg` and `flac` as
+> audiobooks and `bookOrbitEditionFormat` (`internal/libsync/bookorbitfiles.go`) writes that through
+> to `edition.format = 'audiobook'`, **so BookOrbit yields audiobooks too**. That section writes
+> **no replacement enumeration** in its place, and **the record here is neither struck nor
+> reworded** — it is a dated record of the owner's own decision, which is annotated and not
+> rewritten.
+> **What falls:** clause 1's *"v0.1's catalogue source is **Kavita**"*, and clause 4's *"v0.1's sync channels
 > for its catalogue source are 1, 3b and 4"*, which rested on [ADR-0035](#adr-0035) §2a's live probe
 > of **Kavita** and has no BookOrbit equivalent — ADR-0052 carries it as an open question with the
 > probe named. **What stands, unchanged:** clause 2 (*the count is unchanged at one*), clause 3 (the
@@ -7062,6 +7082,19 @@ had. So it is stated exactly.
 BookOrbit takes everything Kavita held. His word for it, verbatim, is **"phenomenal"**. He runs a
 sidecar of his own that pulls data from MangaBaka into BookOrbit today, and he expects official
 BookOrbit support for MangaBaka **"in the near future"**.
+
+⚠️ **Rider 2026-08-20 — the *books, comics and manga* list records what the owner said he is moving,
+and it has stopped describing what BookOrbit yields.**
+[`ARCHITECTURE.md`](./ARCHITECTURE.md) §16.1 *The catalogue sequence, after v0.1* **struck its own
+copy of that enumeration on 2026-08-20**, in the **v0.1** entry, on the tree's own evidence:
+`bookorbit.MediaKindOf` (`internal/bookorbit/catalogue.go`) classifies `m4b`, `mp3`, `m4a`, `opus`,
+`ogg` and `flac` as audiobooks, and `bookOrbitEditionFormat` (`internal/libsync/bookorbitfiles.go`)
+writes that through to `edition.format = 'audiobook'` — **so BookOrbit yields audiobooks too**, and
+*"BookOrbit takes everything Kavita held"* is a true statement about Kavita's holdings without being
+a bound on BookOrbit's. **No sentence of this record is struck and none is reworded, and that is the
+point:** it is the owner's decision in his own words, an ADR body is annotated rather than rewritten,
+and a record of what he said is not an agent's to edit. The coverage question is answered in §16.1,
+which deliberately writes **no replacement enumeration** in the struck one's place.
 
 🔍 **Provenance, marked because it is not first-hand to this ADR.** Those words reached this record
 through the coordinating thread rather than from the owner directly in it. The repository's own
@@ -10131,6 +10164,16 @@ After a live import against a real BookOrbit, all four must hold. **The middle c
    shipping.
 3. **`/library/comics` renders SERIES, NOT ISSUES**, with a non-zero facet count.
 4. **The latest `items_skipped` row's `Comics` field reads 0.**
+   ⚠️ **Rider 2026-08-20 — this was a valid TRANSITION check and it is not a valid standing one; do
+   not cite it as evidence.** Measured by the sync lane and ruled 2026-08-20: **nothing increments
+   `Comics` any more.** `SkipTally.Comics` (`internal/libsync/bookorbit.go`) is declared, summed by
+   `Total()` and logged, and **no line in the tree assigns it** — the walk's only incrementer is
+   `tally.Unknown++` — so the field reads 0 on a tree where the comics import is entirely broken,
+   and a green here discriminates nothing. It was worth asserting while the field still counted,
+   which is why it is annotated rather than struck. **What still discriminates is the STRICTLY AND
+   SUBSTANTIALLY FEWER check**, `work.kind = 'comic'` rows against the issue rows, stated as check
+   (2) — a reader who came here for evidence that the rows arrived should read that one instead of
+   *"checks (1) and (4) prove the rows arrived"*.
 
 Checks (1) and (4) prove the rows arrived. Check (3) proves they arrived in the layer the user reads.
 **Only check (2) can tell the accepted shape from the refused one**, which is why it is stated as a

@@ -1554,16 +1554,13 @@ paragraph describing a repo that no longer exists.
   with the new date and the new tree, leaving the original standing (`docs/REVIEW-LOG.md` §6.1
   *Amended dispositions*, whose closing line is *"No existing entry's id, text or severity
   changed"*).
-* **The quote-what-you-replace rule yields when the quotation would reproduce the fault.** Leaving
-  the original standing is the default — *a citation inside a dated record is history, not
-  staleness* says it of a review-log entry, and `docs/DECISIONS.md`'s *How an ADR is amended when the
-  world moves under it* says it of an ADR — but a struck quote is still text in the document, so
-  preserving a defective sentence preserves the defect alongside the evidence. ADR-0032's closing
-  sentence told the reader to read the ADR through a stated number of amendments; `2ad0767` replaced
-  *"both amendments"* with *"its amendments"* and deliberately carried **no** struck-quote rider,
-  because quoting the old wording directly above the fix would have put the very number the
-  correction exists to remove straight back into the file. The test is what the quotation does in the
-  document it lands in, not whether the original would otherwise be worth keeping.
+* **The exception to quoting what you replace is stated with the rule it excepts, in
+  `docs/DECISIONS.md` under *How an ADR is amended when the world moves under it*.** That heading
+  owns the leave-the-original-standing default, so the case where the quotation would itself
+  reproduce the fault is written under it and is deliberately not restated here: one authoritative
+  copy and one pointer, because a cross-file duplicate is two things to keep in sync. The default is
+  this file's too — *a citation inside a dated record is history, not staleness* is the same rule
+  for `docs/REVIEW-LOG.md` entries — so read that exception as governing those as well.
 * **Cross-reference another repo document by heading or anchor, never by line number.** *Cite
   symbols, not line numbers, while `main` is moving* is the code half and *a citation inside a dated
   record is history, not staleness* is the dated-record carve-out; this is the prose half, and it
