@@ -1044,9 +1044,21 @@ Items marked 🛑 **STOPPED** are the different case: those are stopped by the d
       ⚠️ **THE FOURTH FALSIFIED CLAIM, and it is this item's own: *"~~What is still missing is the
       FRONTEND … there is no `/library/{type}` route and no grid~~"*.** There is:
       `web/src/routes/library/[type]/` exists, and `web/src/routes/library/+page.svelte` — the
-      unified newest-first table over `/api/v1/library/recent` — is **kept beside it rather than
+      all-types view, the same read with `media_type` omitted — is **kept beside it rather than
       replaced**, because §17.2 keeps both and `reference/http-api.md` §7 calls the browse read *"a
       different endpoint from §1, not a superset of it"*.
+      ⚠️ **A STATUS CLAIM WAS REMOVED FROM THE LINE ABOVE RATHER THAN REFRESHED, 2026-08-20.** It
+      called that screen *"~~the unified newest-first table over `/api/v1/library/recent`~~"*, and
+      both halves had gone stale: the screen reads **`GET /api/v1/library`**, and its order is now a
+      server-side sort control rather than a fixed newest-first. **No fresher endpoint name is
+      written here on purpose** — `CLAUDE.md` is explicit that status is read off the tree and that a
+      stale status claim earns a pointer, not a newer claim, and this exact sentence is the
+      demonstration: it was true when written, the screen moved, and the sentence stayed. **➡️ Read
+      `web/src/routes/library/+page.svelte`'s own header**, which carries a dated ⚠️ *"IT USED TO
+      READ `GET /api/v1/library/recent` AND NO LONGER DOES"* plus the reason and the guard, and which
+      moves with the screen because it lives in it. The item's own point — **both screens exist and
+      neither replaces the other** — is §17.2's and does not depend on which endpoint either one
+      reads, so it stands unchanged above.
       ⚠️ **THE `sort_title` (A–Z) DEFERRAL NOW HAS TWO BLOCKED CONSUMERS, NOT ONE, AND ITS
       SINGLE-CONSUMER PREMISE HAS EXPIRED — FLAGGED HERE, NOT RE-DECIDED.**
       [ADR-0051](./DECISIONS.md#adr-0051)'s amendment defers the index behind `sort_title` over more
