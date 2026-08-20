@@ -363,10 +363,55 @@ interface Hit {
 	readonly groups: Record<string, string | undefined>;
 }
 
+/**
+ * A MANDATORY-LITERAL PREFILTER, and the reason `scan` takes options at all.
+ *
+ * `anchor` is a source FRAGMENT of the rule it accompanies, never a rule of its
+ * own. `scan` compiles it with the RULE'S flags, so it can never be stricter
+ * than the rule is about the same characters, and it refuses an anchor whose
+ * source is not literally part of the rule's. When the fragment is a mandatory
+ * tail — every alternative has to reach it to match — a file that does not
+ * contain the fragment cannot contain a hit, so skipping that file changes no
+ * result. The substring refusal is the mechanical half of that argument; the
+ * other half is that the pattern must be BUILT from the fragment, which is why
+ * `CENTER` below is assembled from `CENTRED` rather than retyped around it.
+ *
+ * IT EXISTS BECAUSE ONE RULE WAS QUADRATIC AND SILENT ABOUT IT. `CENTER`'s
+ * `[^{}]{0,200}\{[^{}]{0,400}?` prefix is retried at every offset of the
+ * corpus: measured on 2026-08-20 it cost 855 ms over 1,176,416 characters and
+ * returned nothing — 97% of this file's entire run, rising with the corpus, and
+ * one loaded machine away from tripping vitest's 5 s per-test DEFAULT and
+ * turning red on whoever happened to be gating. The anchor puts it at 1 ms by
+ * never starting the expensive scan on a file that cannot match.
+ *
+ * Fixing the cost rather than the bound is the point. Nothing here asserts an
+ * elapsed time and nothing should: `CLAUDE.md` rules that "wall-clock
+ * benchmarks belong in `make bench`, never in a merge gate", so vitest's
+ * timeout stays what it is meant to be — a guard against a hang — and this
+ * check stays far enough under it that the guard never has an opinion about it.
+ */
+interface ScanOpts {
+	/** A source fragment of `re`, compiled with `re`'s own flags. */
+	readonly anchor?: RegExp;
+	/** The corpus to read. Defaults to the whole of `FILES`. */
+	readonly over?: readonly Source[];
+}
+
 /** check.mjs's `scan()`: every stripped source, one regex, named groups kept. */
-function scan(re: RegExp): Hit[] {
+function scan(re: RegExp, opts: ScanOpts = {}): Hit[] {
+	let sources: readonly Source[] = opts.over ?? FILES;
+	if (opts.anchor) {
+		if (!re.source.includes(opts.anchor.source)) {
+			throw new Error(
+				`mis-wired anchor: /${opts.anchor.source}/ is not part of the rule's own pattern, ` +
+					`so prefiltering on it could skip a file that holds a real hit.`
+			);
+		}
+		const pre = new RegExp(opts.anchor.source, re.flags.replace('g', ''));
+		sources = sources.filter((f) => pre.test(f.src));
+	}
 	const hits: Hit[] = [];
-	for (const f of FILES) {
+	for (const f of sources) {
 		const r = new RegExp(re.source, re.flags.includes('g') ? re.flags : re.flags + 'g');
 		let m: RegExpExecArray | null;
 		while ((m = r.exec(f.src)) !== null) {
@@ -406,14 +451,18 @@ interface Exemption {
 	readonly match: RegExp;
 }
 
-function applyRule(re: RegExp, exempt?: Exemption): { hits: Hit[]; exempted: number } {
+function applyRule(
+	re: RegExp,
+	exempt?: Exemption,
+	opts?: ScanOpts
+): { hits: Hit[]; exempted: number } {
 	if (exempt && !re.source.includes(`(?<${exempt.group}>`)) {
 		throw new Error(
 			`mis-wired rule: the exemption tests the named group "${exempt.group}", but the ` +
 				`pattern has no (?<${exempt.group}>…) group, so it could never fire.`
 		);
 	}
-	const all = scan(re);
+	const all = scan(re, opts);
 	const hits: Hit[] = [];
 	let exempted = 0;
 	for (const h of all) {
@@ -2110,35 +2159,87 @@ describe('DESIGN-DIRECTION §13 — the static rules, over web/src', () => {
 		expect(bad, '§13 type: banned family in a font stack').toEqual([]);
 	});
 
+	/* check.mjs's CENTER pattern verbatim. The `where` group is the mechanism,
+	   not decoration: the exemption is about WHERE the declaration sits, so the
+	   pattern captures the selector (CSS) or the element and its attributes (an
+	   inline style) and hands THAT to the exemption.
+
+	   ASSEMBLED FROM `CENTRED` RATHER THAN TYPED AROUND IT, so the anchor handed
+	   to `scan` is the pattern's own mandatory tail by construction and cannot
+	   drift from it under editing. `.source` is unchanged — the drill below pins
+	   it character for character against check.mjs's line. */
+	const CENTRED = /text-align\s*:\s*center/;
+	const CENTER = new RegExp(
+		`(?<where>[^{}]{0,200}\\{[^{}]{0,400}?|<[a-z][^<>]{0,300}?)${CENTRED.source}`,
+		'i'
+	);
+	/* ⚠️ `dialog|modal`, NOT check.mjs's `dialog|modal|toast` — a deliberate,
+	   ruled divergence rather than a copying slip, and the only one in this
+	   file. §13 names dialog components and nothing else; design ruled on
+	   2026-08-17 that §13 governs here and is changing check.mjs's side to
+	   match. The reasoning is worth keeping because it generalises: an unused
+	   exemption costs nothing to remove, and silently grants everything the
+	   day someone builds the component it names. `toast` matched nothing in
+	   either tree — it was a carve-out waiting for its first customer. */
+	const CENTER_EXEMPT: Exemption = { group: 'where', match: /dialog|modal/i };
+	/* Reported as `file  selector` rather than `file:line`, because the selector
+	   is what a reader has to go and look at. There is no allowlist here and no
+	   exception to key one on: `.th__arrow` was the tree's only hit and its
+	   declaration was deleted rather than excused. */
+	const centreKey = (h: Hit): string => {
+		const where = h.groups.where ?? '';
+		const brace = where.lastIndexOf('{');
+		return `${h.file}  ${collapse(brace === -1 ? where : where.slice(0, brace))}`;
+	};
+
 	it('§13 type: no text-align:center outside a dialog', () => {
-		/* check.mjs's CENTER pattern verbatim. The `where` group is the mechanism,
-		   not decoration: the exemption is about WHERE the declaration sits, so the
-		   pattern captures the selector (CSS) or the element and its attributes (an
-		   inline style) and hands THAT to the exemption. */
-		const CENTER =
-			/(?<where>[^{}]{0,200}\{[^{}]{0,400}?|<[a-z][^<>]{0,300}?)text-align\s*:\s*center/i;
-		/* ⚠️ `dialog|modal`, NOT check.mjs's `dialog|modal|toast` — a deliberate,
-		   ruled divergence rather than a copying slip, and the only one in this
-		   file. §13 names dialog components and nothing else; design ruled on
-		   2026-08-17 that §13 governs here and is changing check.mjs's side to
-		   match. The reasoning is worth keeping because it generalises: an unused
-		   exemption costs nothing to remove, and silently grants everything the
-		   day someone builds the component it names. `toast` matched nothing in
-		   either tree — it was a carve-out waiting for its first customer. */
-		const { hits } = applyRule(CENTER, { group: 'where', match: /dialog|modal/i });
-		/* Reported as `file  selector` rather than `file:line`, because the selector
-		   is what a reader has to go and look at. There is no allowlist here and no
-		   exception to key one on: `.th__arrow` was the tree's only hit and its
-		   declaration was deleted rather than excused. */
-		const key = (h: Hit): string => {
-			const where = h.groups.where ?? '';
-			const brace = where.lastIndexOf('{');
-			return `${h.file}  ${collapse(brace === -1 ? where : where.slice(0, brace))}`;
-		};
+		const { hits } = applyRule(CENTER, CENTER_EXEMPT, { anchor: CENTRED });
 		expect(
-			hits.map(key),
+			hits.map(centreKey),
 			'§13 type: text-align:center outside a dialog.\n' + hits.map(fmt).join('\n')
 		).toEqual([]);
+	});
+
+	it('§13 type: fires on a planted text-align:center, and the anchor keeps it', () => {
+		/* THE DRILL, MADE PERMANENT, and it guards two properties that a green run
+		   cannot tell apart on its own. A rule with no hits and a rule that never
+		   ran report the same nothing, so the anchor prefilter above — which decides
+		   which files the rule runs on at all — is invisible unless something is
+		   planted for it to keep. Fired through `applyRule`, the real path, not a
+		   re-implementation of it. */
+		const planted: readonly Source[] = [
+			{ file: 'web/src/planted.css', kind: 'css', src: '.row__cell {\n\ttext-align: center;\n}\n' },
+			{
+				file: 'web/src/planted-dialog.css',
+				kind: 'css',
+				src: '.dialog__foot {\n\ttext-align: center;\n}\n'
+			},
+			{
+				file: 'web/src/planted-clean.css',
+				kind: 'css',
+				src: '.row__cell {\n\ttext-align: start;\n}\n'
+			}
+		];
+		const { hits, exempted } = applyRule(CENTER, CENTER_EXEMPT, {
+			anchor: CENTRED,
+			over: planted
+		});
+		expect(hits.map(centreKey), 'the planted declaration did not fire the rule').toEqual([
+			'web/src/planted.css  .row__cell'
+		]);
+		expect(exempted, 'the dialog exemption did not fire on `.dialog__foot`').toBe(1);
+
+		/* The anchor's own mis-wiring guard, fired rather than assumed — an anchor
+		   that is not part of the rule must throw, not quietly filter the corpus
+		   down to nothing and report a clean tree. */
+		expect(() => scan(CENTER, { anchor: /nothing-of-the-sort/ })).toThrow(/mis-wired anchor/);
+
+		/* And `verbatim` kept honest. The comment above claims this is check.mjs's
+		   line; assembling it from `CENTRED` is only safe while that stays true. */
+		expect(CENTER.source, "CENTER has drifted from check.mjs's pattern").toBe(
+			'(?<where>[^{}]{0,200}\\{[^{}]{0,400}?|<[a-z][^<>]{0,300}?)text-align\\s*:\\s*center'
+		);
+		expect(CENTER.flags).toBe('i');
 	});
 
 	it('reads a copy corpus big enough to be the corpus', () => {
