@@ -120,14 +120,22 @@
 	 * has a source. `scope-empty` is unreachable — ⚠️ but NOT because there is
 	 * no `library` table, which is what this said until migration 00005 created
 	 * one and `?lib=` landed on `GET /api/v1/library` (`http-api.md` §7.3). The
-	 * scope exists; Block C's endpoint is what has none. §17.2 closes that block
-	 * at one table, one order and no filters, so `/library/recent` refuses the
-	 * chip by design rather than by backlog, and refuses it SILENTLY: an
+	 * scope exists; Block C's endpoint is what has none. `/library/recent` parses
+	 * `limit` and `cursor` and nothing else, and it drops the chip SILENTLY: an
 	 * unrecognised parameter is ignored, not rejected, so `?lib=` on this URL is
 	 * 200 over the whole catalogue (`http-api.md` §1.1, and the header of
 	 * `internal/httpapi/library.go`). No URL can empty a scope Home never reads.
-	 * DESIGN-DIRECTION §10 lists the state as REQUIRED on Home, so it is one the
-	 * design asks for and this wire cannot serve. `filtered-empty` needs a
+	 * ⚠️ THIS USED TO CALL THAT REFUSAL *"by design rather than by backlog"*, on
+	 * the strength of *"§17.2 closes that block at one table, one order and no
+	 * filters"* — a rule neither §17.2 nor ADR-0028 contains, and both say the
+	 * opposite of the filter half: §17.2's Block C *"sorts, it filters, it
+	 * Ctrl+Fs (§4.5)"*, and ADR-0028 puts Block C's scope on the `?lib=` chip
+	 * outright. It is backlog. THE UNREACHABILITY IS UNCHANGED AND WHAT IT MEANS
+	 * IS NOT: DESIGN-DIRECTION §10 lists `scope-empty` as REQUIRED on Home, and
+	 * the wire Home reads cannot produce it YET — a gap the design documents
+	 * agree should close, not a standoff between two of them. Wiring the chip
+	 * onto Block C makes the state reachable and this paragraph wrong, and
+	 * whoever does it owns `scope-empty` here. `filtered-empty` needs a
 	 * filter.
 	 *
 	 * BLOCK ORDER IS A, B, C ON DESKTOP AND B, A, C BELOW 760 px, which is

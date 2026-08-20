@@ -1,9 +1,10 @@
 /**
  * THE EMPTY-STATE COPY THE CATALOGUE SCREENS SHARE.
  *
- * ⚠️ THIS HEADER HAS BEEN WRONG TWICE AND BOTH CORRECTIONS ARE KEPT, because
- * the shape of the mistake is the same each time: it described the `/library`
- * SCREEN, and the screen moved.
+ * ⚠️ THIS HEADER HAS BEEN WRONG THREE TIMES AND EVERY CORRECTION IS KEPT. The
+ * first two share a shape: each described the `/library` SCREEN, and the screen
+ * moved. The third is at the end of this header and is a different mistake — a
+ * document cited for a rule it does not contain.
  *
  *   It first said the per-type grid could not be built because there was no
  *   `GET /api/v1/library`. There is one, and `routes/library/[type]` is it.
@@ -20,9 +21,17 @@
  * screens are; this file is not the place to look it up.
  *
  * `GET /api/v1/library/recent` still parses only `limit` and `cursor` and is
- * still hard-ordered, and Home's Block C is still its one caller (§17.2,
- * ADR-0028: one table, one order, no filters). Covers are absent from every one
- * of these screens: no endpoint in the mux serves an image.
+ * still hard-ordered, and Home's Block C is still its one caller. Those are
+ * three facts about the wire, checkable in `internal/httpapi/library.go` and in
+ * `routes/+page.svelte`. ⚠️ THE CITATION THAT USED TO FOLLOW THEM — *"(§17.2,
+ * ADR-0028: one table, one order, no filters)"* — IS THE THIRD WRONG THING, and
+ * it is worse than the first two because it looked checked. Neither document
+ * says it: §17.2 asks Block C's one table to sort, filter and Ctrl+F (§4.5), and
+ * ADR-0028 says *"the unified table sorts, filters and Ctrl+Fs"*. What both close
+ * is the table's SHAPE, one table rather than one strip per type — which this
+ * module does not touch. The one order is the endpoint's own, and nothing
+ * authorises it. Covers are absent from every one of these screens: no endpoint
+ * in the mux serves an image.
  *
  * WHY THE COPY LIVES HERE RATHER THAN IN THE TEMPLATE. `vitest.config.ts` is
  * `environment: 'node'` with no Svelte plugin, so a rule inside an `{#if}` in a

@@ -14,8 +14,16 @@
  * library is a SCOPE carried as `?lib=` rather than a place of its own.
  *
  * ⚠️ `GET /api/v1/library/recent` IS STILL A DIFFERENT ENDPOINT AND STILL HAS A
- * CLIENT — `$lib/library`'s — because Home's Block C is closed at one table, one
- * order and no filters (§17.2, ADR-0028). What changed is which screen uses
+ * CLIENT — `$lib/library`'s — because Block C sorts nothing and scopes nothing
+ * TODAY, so `limit` and `cursor` are the whole of what it asks for. ⚠️ THAT USED
+ * TO READ *"because Home's Block C is closed at one table, one order and no
+ * filters (§17.2, ADR-0028)"*, AND IT INVERTED BOTH DOCUMENTS IT NAMED: of Block
+ * C's one table §17.2 says *"it sorts, it filters, it Ctrl+Fs (§4.5)"*, and
+ * ADR-0028 says *"the unified table sorts, filters and Ctrl+Fs"*. What those two
+ * close is the SHAPE — one table spanning every type, a sixth type adding rows
+ * rather than a sixth region — and the single order below is this endpoint's, not
+ * theirs. Block C has not been given the two controls; it was not refused them,
+ * and no document is behind their absence. What changed is which screen uses
  * which: `/library` now reads the BROWSE endpoint, because a screen that sorts
  * and scopes cannot be served by an endpoint that parses `limit` and `cursor`
  * and nothing else. At the default the two agree row for row and order for

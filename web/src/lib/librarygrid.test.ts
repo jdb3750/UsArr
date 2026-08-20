@@ -899,9 +899,16 @@ describe('all six media types are reachable from the shell', () => {
 	 * not a recently-added list, and the old label would contradict the screen.
 	 *
 	 * ⚠️ HOME'S BLOCK C KEEPS THE OLD WORDS, and that is not an inconsistency:
-	 * Block C really is recently added, being closed at one order and no filters
-	 * (§17.2, ADR-0028). `libraryscreen.test.ts` pins that the two screens still
-	 * agree about the EMPTY state, which is the fact they genuinely share.
+	 * Block C really is recently added, because the endpoint it reads is
+	 * hard-ordered `added_at DESC, id DESC` and parses no control that could move
+	 * it off that order. ⚠️ THAT REASON USED TO BE *"being closed at one order and
+	 * no filters (§17.2, ADR-0028)"*, WHICH NEITHER DOCUMENT SAYS — §17.2 asks
+	 * Block C's one table to sort, filter and Ctrl+F (§4.5), and ADR-0028 says the
+	 * same. So this label is accurate about what is BUILT rather than protected by
+	 * a rule, and it expires exactly the way `/library`'s did the moment Block C
+	 * is given the sort those two ask for. `libraryscreen.test.ts` pins that the
+	 * two screens still agree about the EMPTY state, which is the fact they
+	 * genuinely share.
 	 */
 	it('labels the all-types view Library, not Recently added', () => {
 		expect(
