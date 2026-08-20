@@ -293,15 +293,6 @@ interface Source {
 	readonly src: string;
 }
 
-function walk(dir: string, out: string[] = []): string[] {
-	for (const entry of readdirSync(dir).sort()) {
-		const p = join(dir, entry);
-		if (statSync(p).isDirectory()) walk(p, out);
-		else out.push(p);
-	}
-	return out;
-}
-
 function kindOf(p: string): Kind | null {
 	if (p.endsWith('.svelte')) return 'svelte';
 	if (p.endsWith('.html')) return 'html';
@@ -331,26 +322,156 @@ function strip(text: string, kind: Kind): string {
 	return out;
 }
 
-const FILES: readonly Source[] = walk(SRC)
-	.filter((p) => kindOf(p) !== null && !p.endsWith('.test.ts') && !p.includes('__fixtures__'))
-	.map((p) => {
-		const kind = kindOf(p) as Kind;
-		return { file: relative(REPO, p), kind, src: strip(readFileSync(p, 'utf8'), kind) };
-	});
-
 /**
  * The least credible size of the scanned corpus, in characters.
  *
  * DERIVED, NOT ROUNDED, which is check.mjs's own test for a floor: one with
  * enough slack to survive the regression it exists to catch is not a floor.
- * Today the stripped corpus is 643,899 characters over 29 files. The two largest
- * are `app.css` (95,077) and `routes/requests/+page.svelte` (94,290), and losing
- * either is exactly the failure this floor is for — a glob that stops matching,
- * a file that moves. 560,000 sits below today's figure by 83,899, which is less
- * than either of them, so losing one fails; and 83,899 characters is far more
- * source than ordinary editing removes.
+ * ⚠️ RE-DERIVED 2026-08-20, because it had stopped being one. It was 560,000,
+ * derived when the stripped corpus was 643,899 characters over 29 files — a gap
+ * of 83,899, smaller than either of the two largest files, so losing one failed.
+ * The corpus has since reached 1,179,473 characters over 42 files, which left
+ * that gap at 616,416: the two largest files could BOTH have vanished and the
+ * floor would still have passed. A floor that cannot fail is not a floor, and
+ * this one silently stopped being one purely by the tree growing past it.
+ *
+ * Re-derived on the same rule. The two largest are `app.css` (105,273) and
+ * `routes/+page.svelte` (104,457). 1,080,000 sits below today's figure by
+ * 99,473 — less than either, so losing one fails — and 99,473 characters is far
+ * more source than ordinary editing removes.
  */
-const CORPUS_FLOOR = 560_000;
+const CORPUS_FLOOR = 1_080_000;
+
+/**
+ * The least credible NUMBER of files, which is the char floor's blind spot:
+ * twenty small components can disappear without moving the character count much.
+ *
+ * Derived against losing a DIRECTORY, the shape a broken walk actually takes.
+ * On 2026-08-20 the walk reads 42 files — 25 under `lib/`, 15 under `routes/`,
+ * 2 at the root. Losing `routes/` leaves 27 and losing `lib/` leaves 17, so 30
+ * fails on either, and the remaining 12 files of slack is more than ordinary
+ * churn moves.
+ */
+const FILE_FLOOR = 30;
+
+/**
+ * ONE PREDICATE, TWO CALLERS, and that is the point: the corpus read consults it
+ * before vouching for what it has, and the test below fires it. A floor asserted
+ * only in a test is a floor that a filtered run (`vitest -t …`) skips, which is
+ * the run someone reaches for when they are chasing one rule.
+ *
+ * Returns the complaint, or `null` when the corpus is credible.
+ */
+function corpusShortfall(files: readonly Source[]): string | null {
+	if (files.length < FILE_FLOOR) {
+		return (
+			`${files.length} source file(s) read under web/src, below the floor of ${FILE_FLOOR} — ` +
+			`the walk is looking at the wrong tree, or a directory has gone missing from it`
+		);
+	}
+	const chars = files.reduce((n, f) => n + f.src.length, 0);
+	if (chars < CORPUS_FLOOR) {
+		return (
+			`scanned ${chars} characters over ${files.length} files, below the floor of ` +
+			`${CORPUS_FLOOR}. A check that matches nothing is not a check that passed: ` +
+			`something moved, was renamed, or stopped being parsed.`
+		);
+	}
+	return null;
+}
+
+/**
+ * THE THREE FILESYSTEM CALLS THE CORPUS READ MAKES, BEHIND AN INTERFACE, so the
+ * read's behaviour under a tree that is changing beneath it can be DRILLED
+ * rather than asserted. Nothing in the gate substitutes this; only the drills do.
+ */
+interface CorpusIO {
+	readonly list: (dir: string) => string[];
+	readonly isDir: (p: string) => boolean;
+	readonly read: (p: string) => string;
+}
+
+const nodeIO: CorpusIO = {
+	list: (dir) => readdirSync(dir).sort(),
+	isDir: (p) => statSync(p).isDirectory(),
+	read: (p) => readFileSync(p, 'utf8')
+};
+
+/** One whole-tree walk-and-read. All of it, or it throws — there is no partial return. */
+function collect(io: CorpusIO): Source[] {
+	const paths: string[] = [];
+	const walk = (dir: string): void => {
+		for (const entry of io.list(dir)) {
+			const p = join(dir, entry);
+			if (io.isDir(p)) walk(p);
+			else paths.push(p);
+		}
+	};
+	walk(SRC);
+	return paths
+		.filter((p) => kindOf(p) !== null && !p.endsWith('.test.ts') && !p.includes('__fixtures__'))
+		.map((p) => {
+			const kind = kindOf(p) as Kind;
+			return { file: relative(REPO, p), kind, src: strip(io.read(p), kind) };
+		});
+}
+
+/**
+ * THE READ IS TAKEN ONCE, AND IT IS NEVER NARROWED. This is the second way this
+ * check failed under a shared checkout: `web/src` is walked live, so a merge
+ * landing in another lane can unlink or half-write a file between the `readdir`
+ * that lists it and the `read` that opens it. The symptom was this check failing
+ * outright, on a run whose own diff was three Go files.
+ *
+ * ⚠️ THERE IS NO RETRY, AND THAT IS THE RULING, NOT AN OVERSIGHT. Design ruled on
+ * 2026-08-20 that reading a tree while another process rewrites it is a real
+ * concurrency defect in the same family as two agents sharing one checkout — not
+ * flakiness — and that "a retry would make the symptom vanish and leave a test
+ * that silently reads inconsistent trees". A loop that eventually gets a clean
+ * pass has not read a coherent tree; it has read several incoherent ones and
+ * kept the one that did not complain.
+ *
+ * ⚠️ AND NO PER-FILE `catch`, for the same reason arriving by the other door.
+ * Skipping the file that threw makes the check pass by reading LESS, and
+ * green-because-nothing-was-wrong and green-because-nothing-was-read are then
+ * the same colour. So `collect` produces the whole tree or throws, and this
+ * function turns either an incomplete walk or a corpus below its floors into one
+ * loud failure that says what happened and whose diff it is not about.
+ *
+ * A STABLE SOURCE WAS CONSIDERED AND REFUSED. Reading from a fixed git ref would
+ * be perfectly coherent, and would stop testing the thing the rule is for: this
+ * runs in a PRE-COMMIT gate, so the `text-align: center` it exists to catch is
+ * by definition not committed yet. A check that never flinches but reads the
+ * wrong tree is worse than one that reports the real condition of this one.
+ */
+function readCorpus(io: CorpusIO = nodeIO): readonly Source[] {
+	let files: Source[];
+	try {
+		files = collect(io);
+	} catch (e) {
+		throw new Error(
+			`web/src could not be read whole, so every §13 rule below would have been scanning ` +
+				`a corpus this file cannot vouch for.\n` +
+				`A file moved between the readdir that listed it and the read that opened it. ` +
+				`That is another process rewriting this checkout while the suite ran — a merge ` +
+				`landing in a shared tree — and it is not the diff being gated. It is reported ` +
+				`rather than retried: a read that has to be attempted twice has not seen one ` +
+				`coherent tree, and a loop around it would only hide that.\n` +
+				(e instanceof Error ? e.message : String(e))
+		);
+	}
+	const short = corpusShortfall(files);
+	if (short !== null) {
+		throw new Error(
+			`web/src was read without error and came back too small to be web/src, which is the ` +
+				`failure that would otherwise have gone GREEN — every rule reports a clean sheet ` +
+				`over a corpus that is not there.\n${short}`
+		);
+	}
+	return files;
+}
+
+const FILES: readonly Source[] = readCorpus();
 
 function lineOf(text: string, index: number): number {
 	return text.slice(0, index).split('\n').length;
@@ -1637,17 +1758,90 @@ const COLOUR_SKIPS: Record<string, string> = {
 
 describe('DESIGN-DIRECTION §13 — the static rules, over web/src', () => {
 	it('scans a corpus large enough to be the corpus', () => {
-		const chars = FILES.reduce((n, f) => n + f.src.length, 0);
+		expect(corpusShortfall(FILES)).toBeNull();
+	});
+
+	it('the corpus floors fire on a starved corpus, and on a lost directory', () => {
+		/* THE FLOORS DRILLED, not assumed. Both of them had gone quiet at some point
+		   — the character floor by the tree growing past it — and a floor nobody has
+		   watched fail is a number, not a guard. Fired on the real predicate the
+		   read and the test above both consult. */
+		expect(corpusShortfall(FILES.slice(0, FILE_FLOOR - 1))).toMatch(/below the floor of 30/);
+
+		/* THE CHARACTER FLOOR ON THE PROPERTY ITS DERIVATION CLAIMS — losing the
+		   single largest file must fail — fired against the real corpus with that
+		   one file removed, so the number above is checked rather than believed.
+		   This is the assertion that was silently false before the re-derivation. */
+		const largest = [...FILES].sort((a, b) => b.src.length - a.src.length)[0];
+		const lost = FILES.filter((f) => f.file !== largest.file);
 		expect(
-			FILES.length,
-			'no source files matched under web/src — the walk is looking at the wrong tree'
-		).toBeGreaterThanOrEqual(20);
-		expect(
-			chars,
-			`scanned ${chars} characters over ${FILES.length} files, below the floor of ` +
-				`${CORPUS_FLOOR}. A check that matches nothing is not a check that passed: ` +
-				`something moved, was renamed, or stopped being parsed.`
-		).toBeGreaterThanOrEqual(CORPUS_FLOOR);
+			lost.length,
+			'removing the largest file must not trip the FILE floor'
+		).toBeGreaterThanOrEqual(FILE_FLOOR);
+		expect(corpusShortfall(lost), `losing ${largest.file} did not trip the floor`).toMatch(
+			/below the floor of 1080000/
+		);
+
+		/* And the negative half — the real corpus must NOT trip either floor, or the
+		   two assertions above pass for the wrong reason. */
+		expect(corpusShortfall(FILES)).toBeNull();
+	});
+
+	it('fails on a file that moved under the walk, once, and does not read on without it', () => {
+		/* THE SECOND FAILURE MODE, DRILLED AS FAR AS IT HONESTLY CAN BE. A concurrent
+		   merge cannot be summoned on demand, so what is simulated is not the tree
+		   but the FILESYSTEM's answer — one ENOENT between the readdir and the read,
+		   which is exactly what the walk sees either way. What is NOT claimed is
+		   coverage of a real concurrent rewrite; that is unreproducible here.
+
+		   Three properties, and the third is the ruling. The read must turn red; it
+		   must say the failure is not the gated diff, so it is not misattributed to
+		   whoever was unlucky enough to be gating; and it must NOT try again —
+		   `attempts` is 1, pinned, because a loop that eventually gets a clean pass
+		   has read several incoherent trees rather than one coherent one. */
+		const flakyOnce = (): { io: CorpusIO; walks: () => number } => {
+			let walks = 0;
+			return {
+				walks: () => walks,
+				io: {
+					list: (dir) => {
+						if (dir === SRC) walks++;
+						return nodeIO.list(dir);
+					},
+					isDir: nodeIO.isDir,
+					read: (p) => {
+						if (walks === 1 && p.endsWith('app.css')) {
+							throw new Error(`ENOENT: no such file or directory, open '${p}'`);
+						}
+						return nodeIO.read(p);
+					}
+				}
+			};
+		};
+
+		/* The ENOENT is thrown on the FIRST walk only, so a read that tried again
+		   would succeed and return a corpus — which is precisely the green this
+		   must not produce. It turning red is the no-retry property. */
+		const first = flakyOnce();
+		expect(() => readCorpus(first.io)).toThrow(/could not be read whole/);
+		expect(first.walks(), 'the read walked twice — a retry is the fix design ruled out').toBe(1);
+
+		const second = flakyOnce();
+		expect(() => readCorpus(second.io)).toThrow(/it is not the diff being gated/);
+	});
+
+	it('fails on a corpus that came back too small, which is the case that would be green', () => {
+		/* THE DEAF-GUARD CASE, and the reason the floors are consulted by the READ
+		   and not only by the test above. A tree that lists almost nothing raises no
+		   error at all: every read succeeds, the corpus is simply tiny, and every
+		   rule reports a clean sheet. Nothing is red anywhere. */
+		const emptied: CorpusIO = {
+			list: (dir) => (dir === SRC ? ['app.css'] : []),
+			isDir: () => false,
+			read: nodeIO.read
+		};
+		expect(() => readCorpus(emptied)).toThrow(/below the floor of 30/);
+		expect(() => readCorpus(emptied)).toThrow(/would otherwise have gone GREEN/);
 	});
 
 	it('strips comments, so a rule cannot fire on the prose that documents it', () => {
