@@ -169,6 +169,12 @@ type fakeClient struct {
 	searchErrs      map[int32]error
 	searchDelays    map[int32]time.Duration
 
+	// searchBudgets records, per indexer, how much context budget the leg was
+	// handed when it was called. That is a fact about the deadline the caller
+	// installed, not a measurement of how fast this box is, which is what lets
+	// the per-indexer-deadline test assert without a stopwatch.
+	searchBudgets map[int32]time.Duration
+
 	// grabResponses is consumed in order, so a 404 can be followed by a success.
 	grabResponses []error
 
@@ -209,6 +215,15 @@ func (f *fakeClient) Search(ctx context.Context, req servarr.SearchRequest) ([]s
 	if len(call.indexerIDs) == 1 {
 		id = call.indexerIDs[0]
 	}
+	if dl, ok := ctx.Deadline(); ok {
+		f.mu.Lock()
+		if f.searchBudgets == nil {
+			f.searchBudgets = make(map[int32]time.Duration)
+		}
+		f.searchBudgets[id] = time.Until(dl)
+		f.mu.Unlock()
+	}
+
 	if d := f.searchDelays[id]; d > 0 {
 		select {
 		case <-time.After(d):
@@ -245,6 +260,16 @@ func (f *fakeClient) calls() []searchCall {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	return append([]searchCall(nil), f.searchCalls...)
+}
+
+// searchBudget reports the context budget the leg for id was handed, and whether
+// it was handed a deadline at all. A leg with no deadline is a leg nothing
+// bounds, so the two cases are distinguished rather than collapsed into zero.
+func (f *fakeClient) searchBudget(id int32) (time.Duration, bool) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	d, ok := f.searchBudgets[id]
+	return d, ok
 }
 
 // ---- shared fixtures ------------------------------------------------------

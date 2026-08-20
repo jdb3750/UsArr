@@ -10,13 +10,19 @@ import (
 	"github.com/jdb3750/UsArr/internal/servarr"
 )
 
+// testPerIndexerTimeout is the per-indexer deadline every service in this file
+// is built with. Tests assert against it by name so that the budget a leg is
+// handed is compared with the budget that was configured, rather than with a
+// number typed twice.
+const testPerIndexerTimeout = 200 * time.Millisecond
+
 func newTestService(t *testing.T, c *fakeClient, st Store) *Service {
 	t.Helper()
 	svc, err := NewService(Config{
 		InstanceID:        testInstanceID,
 		Client:            c,
 		Store:             st,
-		PerIndexerTimeout: 200 * time.Millisecond,
+		PerIndexerTimeout: testPerIndexerTimeout,
 		OverallTimeout:    5 * time.Second,
 		Concurrency:       4,
 	})
@@ -281,21 +287,29 @@ func TestSearchTimesOutOneIndexerWithoutStallingTheRest(t *testing.T) {
 		searchByIndexer: map[int32][]servarr.ReleaseResource{
 			1: {release("g1", "A", 1, "Alpha", servarr.ProtocolTorrent, 2000)},
 		},
-		// Longer than the 200 ms per-indexer deadline, shorter than the overall one.
+		// Longer than the per-indexer deadline, shorter than the overall one.
 		searchDelays: map[int32]time.Duration{2: 2 * time.Second},
 	}
 	svc := newTestService(t, c, newFakeStore())
 
-	start := time.Now()
 	ch, err := svc.Search(context.Background(), ownerScope, Query{Text: "dune"})
 	if err != nil {
 		t.Fatalf("Search: %v", err)
 	}
 	results, outcomes, report := collect(ch)
-	elapsed := time.Since(start)
 
-	if elapsed > 1500*time.Millisecond {
-		t.Errorf("search took %s; the per-indexer deadline must cut the slow leg", elapsed)
+	// What stops one molasses indexer from holding the whole search is that its
+	// leg is scoped to the per-indexer deadline rather than to the overall
+	// budget, so that is what gets asserted: the budget the leg was actually
+	// handed, read off its context. No stopwatch — a loaded box can only shrink
+	// the remaining budget below the configured deadline, never raise it above,
+	// so this cannot go red because a sibling process is busy.
+	budget, ok := c.searchBudget(2)
+	if !ok {
+		t.Error("the slow leg was handed a context with no deadline; the per-indexer timeout is not installed")
+	} else if budget > testPerIndexerTimeout {
+		t.Errorf("the slow leg was handed %s of budget, want at most the configured %s: a leg "+
+			"scoped to the overall search budget stalls every other indexer behind it", budget, testPerIndexerTimeout)
 	}
 	if len(results) != 1 {
 		t.Errorf("got %d results, want the fast indexer's one", len(results))
