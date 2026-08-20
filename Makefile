@@ -966,7 +966,7 @@ build-tagged: ## Compile packages hidden behind build tags (`bench`: internal/db
 # the file the sources produce, which is a different claim from (3)'s "token
 # drift in a mockup cannot break the binary". It now lives in its own file,
 # docs/design/provenance.mjs, and runs in both places: here through check.mjs,
-# and first in `check-offline` through the `provenance` target below.
+# and in `check-offline` through the `provenance` target below.
 
 # Overridable. The default is the browser cache this repo's agent container
 # preinstalls; a workstation's is usually ~/.cache/ms-playwright.
@@ -1018,20 +1018,25 @@ design: ## Run the design check (DESIGN-DIRECTION §13). Needs Chromium. NOT par
 # declare `web-deps`, which runs pnpm, which runs on node. Nothing new is being
 # asked of any machine that can run the gate today.
 #
-# AND IT IS FIRST IN `check-offline`, AHEAD OF fmt-check. Measured on this
-# container, median of 10 runs: ~65 ms wall for the whole node process, 63-78 ms
-# observed, against `make check`'s ~4 minutes. That agrees with the ~70 ms
-# provenance.mjs's own header quotes. The ~0.3 s this line used to carry agreed
-# with neither, and nothing in the tree measures either number, so a wrong one
-# here survives until somebody times it by hand. Putting it first means a tree
-# whose mockups are out of step fails in well under a second rather than after
-# `pnpm install --frozen-lockfile` and a full gofumpt sweep. A cheap check that
-# can fail belongs before the expensive ones that cannot fix it.
+# AND IT RUNS AHEAD OF fmt-check IN `check-offline`. What makes that true is
+# prerequisite order plus `.NOTPARALLEL:` at the top of this file: make walks a
+# prerequisite list left to right only while it holds a single job slot, so
+# under `-j` the position below would be an intent nothing enforced.
+#
+# Measured on this container, median of 10 runs: ~65 ms wall for the whole node
+# process, 63-78 ms observed, against `make check`'s ~4 minutes. That agrees
+# with the ~70 ms provenance.mjs's own header quotes. The ~0.3 s this line used
+# to carry agreed with neither, and nothing in the tree measures either number,
+# so a wrong one here survives until somebody times it by hand. Running it
+# ahead of the rest means a tree whose mockups are out of step fails in well
+# under a second rather than after `pnpm install --frozen-lockfile` and a full
+# gofumpt sweep. A cheap check that can fail belongs before the expensive ones
+# that cannot fix it.
 #
 # It exits 1 on a finding; this recipe failing makes `make` exit 2. Two
 # different numbers for two different things — do not quote one for the other.
 .PHONY: provenance
-provenance: ## Assert prototype.html is in step with its stamped sources. GATING, first in `check`.
+provenance: ## Assert prototype.html is in step with its stamped sources. GATING, via `check-offline`.
 	@test -f $(PROVENANCE_CHECK) || { \
 		echo "no $(PROVENANCE_CHECK) — this check cannot run, and its absence is not a pass."; \
 		exit 1; }
