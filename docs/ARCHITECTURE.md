@@ -28,6 +28,19 @@ in [`reference/`](./reference/) and is linked per section.
 
 Facts about upstream APIs were read from a shipped OpenAPI spec or from source. Judgements say so.
 ⚠️ = **unverified**. 🔍 = **inference** from verified facts, not itself verified.
+✅ = **verified**: checked against the artefact that would falsify the claim — a primary source or a
+live run for an external fact, the code itself for a claim about this tree. **Never another document
+agreeing**: two statements of the same thing are one source in two hats. This extends
+`RESEARCH.md`'s legend onto this tree and states that exclusion; it does not depart from it.
+🚩 = **correction**: a clause struck by a later ADR, or a fact that contradicts the assumption a
+reader would otherwise make. ℹ️ = **aside**, detail or derivation that changes nothing above it.
+📌 = **pin**, kept so a later reader does not narrow it.
+🚩 **Sites below use ✅ where this definition does not reach — for build state, that a migration
+landed or something shipped, and for one part of this design agreeing with another.** LS-390 in
+`REVIEW-LOG.md` tracks the follow-on motion that re-words them and retires this note; they are known
+non-conformances, not a second sense.
+🔍 **Those four entries are a reconstruction, not a recovery (2026-08-20):** the wording is inferred
+from how this document already uses each glyph, not restored from the lost commit that defined them.
 
 ---
 

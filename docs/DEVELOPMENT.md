@@ -283,7 +283,7 @@ closes `FI-12` in `docs/REVIEW-LOG.md` as coded rather than as documented.
 | `make docker` | ⚠️ **`deploy/Dockerfile` is now in the tree, but the image is unbuilt and unverified: `make docker` needs a Docker daemon (§8) and the agent container has none, so it has never run.** Intended shape: digest-pinned base enforced, `--provenance` + `--sbom`. To deploy, build and install the binary instead: §12. |
 | `make design` | `docs/design/check.mjs` — DESIGN-DIRECTION §13 made runnable: bans, token drift, contrast, overflow, row heights, roving tabindex, the webfont. Needs a browser; **not** part of `check`. |
 | `make build-tagged` | `go build -tags=bench ./...`. **Gating.** The packages `go list ./...` cannot see — `internal/db/spike` is behind `//go:build bench`, so a type error in it passed the entire gate until this step existed. |
-| `make check-offline` | `fmt-check` + `lint` + `build-tagged` + `modverify` + `secrets` + `test`. Fully hermetic. |
+| `make check-offline` | `provenance` + `fmt-check` + `lint` + `build-tagged` + `modverify` + `secrets` + `test`. Fully hermetic. |
 | `make check` | **The pre-commit gate**: `check-offline` + `vuln`. |
 
 `check` runs `fmt-check` (verify-only), not `fmt` (rewrite), so it never mutates your tree while
@@ -1572,9 +1572,14 @@ The family this joins, each named by its own wording so it stays findable howeve
   asserting that nothing else exists*, whose enforcement is a qualifier that reads as hedging and is
   doing the opposite.
 * The **active voice** required of the arm64 ratification's corrections, where the agent — which
-  rider does what — is the load-bearing half and an agentless passive drops it. ⚠️ **Not in the tree
-  at the tip this was written against**, and named as forthcoming rather than given a citation it
-  does not have.
+  rider does what — is the load-bearing half and an agentless passive drops it. ✅ **Forthcoming
+  marker retired — ADR-0072 landed, and it states this requirement rather than merely obeying it.**
+  Its `Status:` line says the entry *"names it, dates it and writes it in the active voice on
+  purpose — the 2026-08-16 re-scope it ratifies named nobody, and that is the defect this entry
+  repairs"*, and ADR-0001's rider quotes the ruling's own words for it: *"the ratification is
+  written in the active voice, with the agent named, the date, and both what it does and what it
+  does not do"*. In `docs/DECISIONS.md`, landed in `f5ce60fdbd2195bbd8d2e077d5d5db3a47df78b9`,
+  *"docs: ADR-0072 ratifies the arm64 RSS re-scope, and ADR-0001 gains a rider"*.
 
 So: when you write a rule whose only guard is its own wording, **say in the rule what the shape is
 doing**; and when you edit one, ask what the shape is for before improving it.
@@ -1596,9 +1601,12 @@ addressed to are editing while it is being drafted.
 
 The form that survives is the one the ADR-0001 arm64 rider takes: it names the sites the ruling
 reaches, and then says *"Whether each already reads that way is a question for the tree, not for this
-rider."* ⚠️ **Cited as forthcoming, and deliberately without a SHA** — that rider is not in
-`docs/DECISIONS.md` at the tip this was written against, and inventing a citation for it would be
-this same defect one level up.
+rider."* ✅ **Forthcoming marker retired — the rider landed, and this is the citation it was
+written without.** It stands in `docs/DECISIONS.md` under ADR-0001, opening *"Rider 2026-08-20 —
+the UsArr project-manager thread ratified this re-scope, and the pointer it cites has never
+resolved"* and reading, in part, `**Ratified by [ADR-0072](#adr-0072)**, which records the ruling in
+full.` It landed in `f5ce60fdbd2195bbd8d2e077d5d5db3a47df78b9`, *"docs: ADR-0072 ratifies the arm64
+RSS re-scope, and ADR-0001 gains a rider"*.
 
 ### A disclosure lives where the person who would be misled will encounter it
 
@@ -1648,14 +1656,66 @@ next finding, not a roster of stale sites; the tree answers for its own state.
 
 **A symbol is a disclosure only to a reader who is already decoding symbols.** That lead does carry
 a marker, and it is one this project defines: `ARCHITECTURE.md`'s preamble, in the paragraph
-beginning *"Facts about upstream APIs were read from a shipped OpenAPI spec or from source"*, states
-**⚠️ = unverified. 🔍 = inference from verified facts, not itself verified.** `docs/DECISIONS.md`
-defines nothing of the kind — at `efaa4c9` it carries a status vocabulary and an amendment procedure
-and no legend anywhere, while eleven distinct glyphs stand at the head of a bullet or a bolded lead
-in it. So the reader who most needs the key is inside the document that does not hold one, and the
-reader who does know the convention still has to stop skimming to apply it. Markers are worth
-keeping and how they are used is settled where they are defined; what this rule asks of one is only
-that the words a skimmer actually reads say what the marker says.
+beginning *"Facts about upstream APIs were read from a shipped OpenAPI spec or from source"*, is
+where the glyphs are defined, and the one on that lead reads **🔍 = inference from verified facts,
+not itself verified.** That paragraph defines others too and is where they are settled, so read the
+set there rather than from the single entry quoted here. `docs/DECISIONS.md` defines nothing of the
+kind — at `efaa4c9` it carries a status vocabulary and an amendment procedure and no legend
+anywhere, while eleven distinct glyphs stand at the head of a bullet or a bolded lead in it. So the
+reader who most needs the key is inside the document that does not hold one, and the reader who does
+know the convention still has to stop skimming to apply it. Markers are worth keeping and how they
+are used is settled where they are defined; what this rule asks of one is only that the words a
+skimmer actually reads say what the marker says.
+
+### A large "unpushed commits" count is a claim about the remote pointer, not about the branch
+
+That number arrives from more than one direction and does not say which. **No upstream is
+configured**, so there is nothing to compare against and every reachable commit counts as
+unpushed — the figure is then roughly the clone's visible depth. Or **an upstream exists and its
+remote ref is a strict ancestor far behind the local tip**, so the figure is the distance the
+*pointer* has fallen behind and says nothing about whether the commits are anywhere else. What
+separates the two is ahead/behind against the remote ref: `git rev-parse --abbrev-ref @{u}`
+answers whether an upstream exists at all, and
+`git rev-list --left-right --count origin/<branch>...<branch>` answers in which direction, if
+either, the two have parted. This is *`git rev-list --count` measures the clone's visible depth,
+not the commit* pointed at a second instrument — that bullet closes on ahead/behind against your
+own `origin/…` as the reading that survives the trip between containers, and a hook's raw count is
+exactly the reading that does not.
+
+**The case, relayed from a measurement taken earlier on 2026-08-20 in this agent container** and
+not re-measured at the tip walked below, at `origin/main` =
+`969a884f9c2c68ad15f029484da4029341bb79e1`: a repo hook reported **1,228 unpushed commits** on
+`claude/hearth-thread-n24vh5`. `origin/claude/hearth-thread-n24vh5` stood at
+`cb57e43f5f647aeda5a64ee46c54a9c38cb82c56`, a strict ancestor 1,228 commits back, while
+`git rev-list --count origin/main..claude/hearth-thread-n24vh5` was **0** — not one commit on the
+branch was missing from mainline — and the reverse count,
+`claude/hearth-thread-n24vh5..origin/main`, was **0** as well, so the two had not parted in either
+direction. `git rev-parse --abbrev-ref @{u}` resolved to `origin/claude/hearth-thread-n24vh5`, and
+that is what settles the mechanism: an upstream was configured, so this was the stale pointer and
+not the missing upstream — **which was the hypothesis offered first**, and the raw count sits
+equally well with both. The lane had absorbed `origin/main` several times without re-pushing,
+which is how a pointer falls that far behind a branch that mainline still contains.
+
+**Measured here rather than relayed**, in a clone reporting
+`git rev-parse --is-shallow-repository` false with no `.git/shallow`, walking tip
+`65a44af330cb3f1b02d37031c82d0679c4aa1c2c`: `cb57e43f5f647aeda5a64ee46c54a9c38cb82c56` is still an
+ancestor of that tip, and `git rev-list --count cb57e43f5f647aeda5a64ee46c54a9c38cb82c56..HEAD`
+reads **1,232**. 🔍 The four-commit gap against the relayed figure agrees with
+`git rev-list --count origin/main..claude/hearth-thread-n24vh5` reading **4** at that same tip,
+which is consistency between two readings taken on different tips rather than a re-measurement of
+the earlier one.
+
+**The rule earns its space on what the number invites.** A four-figure "unpushed" reads as work at
+risk, and the response it invites is a force-push — the one move in this family that can destroy
+something rather than merely waste time. Where the measurement shows nothing genuinely unpushed,
+what fits is an ordinary fast-forward push, or nothing at all.
+
+**And the half that outlives the case: establishing that a warning is stale is not licence to make
+it go away.** A silenced warning and a fixed problem read identically a day later, and the reader
+a day later has no way to tell which one happened — *a guard that cannot speak when it fires*
+arriving by a different route, with the guard muted by whoever has just proved it was crying wolf.
+Record the finding where the warning surfaces, and take an action only when that action carries a
+justification of its own, independent of the warning.
 
 ### Working alongside other threads
 
