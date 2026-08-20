@@ -2660,8 +2660,16 @@ real data, because it is the source the owner runs — plus **Prowlarr in Search
 [ADR-0052](./DECISIONS.md#adr-0052), and this entry read *"one Tier 0 Go adapter in front of it:
 Kavita — which is what proves the replica thesis on real data, because it is the source the owner
 runs and the only one whose delta has been verified against a live instance (ADR-0035 §2a)"*.** The
-owner is **sunsetting Kavita entirely**; BookOrbit takes its media types, which are unchanged — books,
-comics and manga. 🚩 **The struck half is the verification clause, and its loss is real:** BookOrbit
+owner is **sunsetting Kavita entirely**. ~~BookOrbit takes its media types, which are unchanged —
+books, comics and manga.~~ 🚩 **STRUCK 2026-08-20 by [ADR-0052](./DECISIONS.md#adr-0052) — a third
+copy of the catalogue enumeration that ADR struck in §16.0 and in this entry's own closing blockquote,
+and the one the sweep did not reach.** It is a coverage enumeration standing seventy lines above the
+blockquote that says this section does not enumerate, so the entry contradicted itself inside itself;
+and the list is **independently false**, because `bookOrbitEditionFormat`
+(`internal/libsync/bookorbitfiles.go`) maps audio to `edition.format = 'audiobook'` — the same fact
+that forced the blockquote's second pass. **No replacement enumeration is written**; the blockquote
+below carries the reason, and it is not restated here. 🚩 **The half struck from the quoted wording
+above is the verification clause, and its loss is real:** BookOrbit
 has had **no equivalent of ADR-0035 §2a's live probe**, so the channel sentence below is **re-derived
 from a source read** rather than inherited — and it comes out **narrower**, not merely unproven. ⚠️ **"Sunset" does not mean deleted** — `internal/kavita`,
 `internal/libsync/kavita.go`, both vendored specs and [ADR-0046](./DECISIONS.md#adr-0046)'s contract
@@ -2941,12 +2949,14 @@ question and is two.
   back here rather than restating the membership. **§16 is that mapping**, and it covers all six of
   §1's types: `movies` and `tv` → **Sonarr and Radarr, v0.2**
   ([ADR-0045](./DECISIONS.md#adr-0045)); `music` → **Navidrome**, §16.1 #1; `audiobooks` →
-  **Audiobookshelf**, §16.1 #2; `ebooks` and `comics` → **Kavita, v0.1**, with Komga a second comics
-  source at §16.1 #3. What a renderer needs for this half is a constant derived from this section,
+  **Audiobookshelf**, §16.1 #2; `ebooks` and `comics` → **BookOrbit, v0.1**, with Komga a second comics
+  source at §16.1 #3. ⚠️ **The source name here read *"Kavita, v0.1"*** until
+  [ADR-0052](./DECISIONS.md#adr-0052) moved v0.1's catalogue source; only the name changed, and the
+  mapping's shape, milestones and Komga clause are untouched. What a renderer needs for this half is a constant derived from this section,
   not a field from a server. **It is unblocked and it stays a requirement with no caveat on it.**
 * **Whether an *already connected* source in fact covers a type is not answerable on any wire UsArr
-  has**, and Kavita is what creates the case: this section says Kavita covers books, so an install
-  whose Kavita holds only comic libraries has an `ebooks` type whose named source is connected,
+  has**, and BookOrbit is what creates the case: this section says BookOrbit covers books, so an install
+  whose BookOrbit holds only comic libraries has an `ebooks` type whose named source is connected,
   healthy, and behind no rows — and nothing served separates that from an import that has not run.
   `GET /api/v1/library/recent` returns `{items, limit, next_cursor}` and carries no per-type facet
   (`recentWorksResponse`, `internal/httpapi/library.go`); `GET /api/v1/services/health` carries
