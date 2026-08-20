@@ -118,6 +118,7 @@ because no ADR ever decided it. Annotating leaves that failure mode nowhere to h
 | [0066](#adr-0066) | A wholly skipped BookOrbit library is **bound with an honest zero**, never declined; and the whole-library sentence says **what happened**, not just how many | **Accepted** — 2026-08-19; **builds on [ADR-0063](#adr-0063)** — the zero-count skip row is what makes an all-skipped library representable, so this ADR is about **what the screen says**, not about the schema — and **amends no ADR's reasoning**, editing no other entry in this file; **it is the ADR `internal/libsync/bookorbit.go` asked for by name**: *"Splitting one container into two libraries is a deviation from §17.8 that needs an ADR, and it is comics' slice to ask for"*; **the case is not hypothetical** — comics are skipped inside the walk today (`StreamItems`: `case bookorbit.MediaKindComic: tally.Comics++; return nil`, on the unit-of-work gap its package doc names, BookOrbit's series having no library to bind a comic's series work to) while **no container is declined at all** (`Containers()`: *"NOTHING IS DECLINED HERE… BookOrbit says nothing, so there is no answer to decline on"*, its `libraries` table carrying no type/kind/mediaType column), and **the owner's own BookOrbit keeps comics and prose in SEPARATE libraries** — his words, 2026-08-19, *"libraries are split up"* — so on the install v0.1 is proven against a comics library **walks, reports and yields nothing**, which is a whole library on his screen rather than an edge case; **the decision**: such a container is **BOUND** with an item count of zero and a sentence, and **no adapter declines one for being wholly skipped** — ratifying what the code already does, precisely because the tempting change is the one that makes the row disappear; ⚠️ **and the whole-library case gets its OWN sentence, because the count is not the message** — *"42 items were read and not mapped"* is a report **on the remainder** and reads as *some of this arrived*, so when the 42 IS the library the identical sentence reads as *this is broken*; the specified pair is *"Nothing in this library is imported yet"* over *"All 412 items were read. UsArr does not import comics yet."*, with **three acceptance criteria rather than taste** — it asserts the read succeeded with the count as evidence, it names the **media type** and the reason, and **it must be impossible to mistake for a connection failure**; **the condition is DERIVED and no wire field is added** — `item_count == 0` ∧ `skipped.state == "left_out"` ∧ `skipped.items > 0`, both fields shipping today, with the **empty upstream library** staying distinct for free since it walks clean to `state: "none"` with `items` absent; 🔍 **`skipEffect`'s remainder clause is measured FALSE on this shape and recorded as false rather than left to be found on a screen** — *"every other book in the library was imported"*, when there is no other book (it travels to `sync_report` and not to the cell, on §9.1's split, which bounds the blast radius and not the wrongness); **the MIXED container is decided too, and it becomes TWO library records** — `library.kind` is *"Exactly one, required"* under a `CHECK` that **already permits `'comic'`**, and `library_source`'s uniqueness is per `(library_id, …, container_ref)`, so two libraries may name one container and **no migration is needed**; until comics import, a mixed container binds exactly as today, one `book` library with its comics counted, which is the partial case and renders the partial sentence; ⚠️ **that half is DESIGNED AND UNTESTED, stated plainly so untested does not read as unsupported** — the owner's split libraries mean **his data will never exercise it**, and the precedent for the distinction is this project's own **synthetic-cassette rule** (`internal/bookorbit/vcr_test.go`: *"A SYNTHETIC CASSETTE PROVES THIS CLIENT'S PARSING, NOT THE SERVER'S BEHAVIOUR"*), where a green is **spec evidence only** and the tests are kept and trusted for exactly what they cover; 🚫 **DECLINING THE LIBRARY IS THE ALTERNATIVE THIS ADR CLOSES**, and it loses on three counts — invisible reads as broken, since §17.8 renders `library` joined to `library_source` and a declined container has neither, leaving a green Services row, a library the owner can see upstream and **no row at all**, which is principle 3's *"empty screen that looks broken"* exactly; the decline lands in `container_declined`, which is **measured to have no reader** in `internal/store`, `internal/httpapi` or `web/`; and it makes the state **unstable across a release**, a library materialising out of nowhere with a full catalogue the day comics import, where binding now turns that day into a zero becoming a number on a row the user has already seen; 🚫 **also rejected**: rendering nothing (`none` is the **measured negative** meaning *nothing was left out*, so using it where **everything** was would make the column's one honest silence say the opposite of the truth), reusing the partial sentence, a `whole_library` wire field or a third `SkipState` member (**"and also"** — derivable from two shipping fields, and a second thing that can be absent or disagree, on ADR-0063's own ground for declining a fourth state), and giving the row `kind = 'comic'` today (it could only be inferred **from the tally**, i.e. from what the walk happened to read, and §6.4's cascade makes a wrong `work.kind` unmergeable); ⚠️ **one residual is recorded rather than closed** — the row's kind is `book` while its contents are comics, mitigated only by `kind` being *"EDITABLE (§6.5 rule 4)"*, and closed when comics get a unit of work; **adds no migration, no column, no DDL and no wire field**, owes the implementing slice exactly **two strings**, and **nothing here is built** — it rules behaviour the §17.8 screen and the comics slice implement → **2026-08-19: decision 5 is built** — the comics import, content `10444a4`, with tonight's rulings on it in `ff13582`; read it off `internal/store/catalogue.go`'s `resolveBinding` and `bindOneContainer`, where a MIXED container's `comic` sibling is minted lazily on the first comic reached and named `Fiction (Comics)` for its kind — ⚠️ **this named `parentBinding` and that pointer is now one hop short**: `parentBinding` is three lines that delegate, and the mint moved to `resolveBinding` when a comics-ONLY container stopped getting a `book` library it never had contents for. **The qualifier is unchanged for the mixed case and is now absent where it was never earned**: a container yielding only comics is ONE library, named for the container, kind `comic`, its row retyped in place rather than minted beside an empty one. ⚠️ **Decision 1 is untouched and is pinned rather than argued** — a container whose every item is skipped is still bound, still eagerly, at the fallback kind, by `cmd/usarr.TestAWhollySkippedBookOrbitContainerIsSTILLBOUND`. **Decision 1 needed nothing built** — it *"ratifies what the code already does"* in its own words, and `bindOneContainer` still binds a wholly skipped container. **Decisions 2–4 measured unbuilt the same day**: the specified word and detail (*"Nothing in this library is imported yet"*) appear nowhere under `web/`, decision 3's derived condition — `item_count == 0` AND `left_out` AND `items > 0` — is written nowhere, and `skipEffect`'s remainder clause still reads *"every other book in the library was imported"* at `cmd/usarr/import.go`. ⚠️ **No status mark, because no decision changed.** The text above stands unreworded and this is a dated pointer at the tree, not a fresher status claim — and the tree, not this row, is what is authoritative for any of it. |
 | [0067](#adr-0067) | A pasted BookOrbit **magic link is accepted and reduced to its token**; the refusal becomes the fallback | **Accepted** — 2026-08-19; **reverses a ruling taken the same morning and records both**, because the first one was correct reasoning on a premise that turned out to be false — `ab9e0f3` refused a pasted magic-link URL on the belief that BookOrbit's copy button *"yields a URL, while POST /api/v1/auth/magic-links/login wants the bare token"*, read as *an artefact its own API cannot consume*; **reading the consumer falsified it** — `client/src/router/index.ts` declares a public `/magic` route, `MagicLinkLoginView.vue` takes `route.query.token` and strips it from history, and `useAuth.loginWithMagicLink` POSTs `{"token": raw}`, so **URL in / bare token out is an adapter BookOrbit already implements**, and `MagicLinksSettings.vue` offers the operator nothing else (the table renders the label, the account, the expiry and the use count, never the raw value); **measured at `73b7877d2fede2221b0ca360af9bfced7c3797f3`, cited as a commit because the tag `v2.6.0` was NOT verified to point at it**; **found by a live failure on the owner's install**, not by review; **leaves [ADR-0060](#adr-0060) standing and unreworded**; the price is named rather than buried — the accept rule is a **whitelist**, so an upstream token-format change would have UsArr refuse a valid credential |
 | [0068](#adr-0068) | A BookOrbit comic is an **issue**, and issues are **minted under series works**; `seriesId` null synthesizes a one-shot series, extra memberships are **recorded, not resolved** | **Accepted** — 2026-08-19; **this is the "unit of work" [ADR-0066](#adr-0066) decision 5 was waiting for** — *"The kind stays `book` until comics have a unit of work"* — so it activates that decision's two-library split rather than reopening it; **[ADR-0030](#adr-0030)'s model is applied, not amended**: `comic` is the series, `comic_issue` the issue, verified at migration `00005_library_sync.sql:256` (*"'comic' is the SERIES, 'comic_issue' the issue or chapter"*) and `00006_kavita_subtypes.sql`'s header; **the parent binding is MEASURED, not inferred** — `BookCard.seriesId` is not an arbitrary `memberships[0]` and is not null under multi-membership, it is BookOrbit's own maintained **primary** (`series-membership.service.ts`, `displayOrder = 0`, round-tripped by `syncPrimaryMetadata` and `syncPrimaryFromMetadata`, at commit `73b7877d2fede2221b0ca360af9bfced7c3797f3`); **`seriesMemberships[]` beyond the primary is RECORDED and not acted on**, on [ADR-0063](#adr-0063)'s precedent, the fuzzy tier that would resolve it staying v0.3 via `work_relation`; **`is_oneshot` is WRITTEN rather than merely tolerated** — *"a column with a DEFAULT 0 and no writer is a deaf column"*; **both residue defaults emit a `sync_report` row**, so sizing comes from instrumentation rather than from estimates; **no migration, no column, no DDL and no new wire field** — `sync_report.kind` carries no `CHECK` by design and `library.kind` already permits `'comic'`; ⚠️ **the done-check FAILS if series count equals issue count**, because that is the per-row shape [ADR-0066](#adr-0066) already pre-emptively refused |
+| [0069](#adr-0069) | The library-skips payload carries a **per-container breakdown** beside the library total; **apportioning** a library's total across its containers is refused | **Accepted** — 2026-08-20; **does not reverse [ADR-0063](#adr-0063)** — that is a write rule and nothing in the writer, the schema or `SkipState` is touched |
 
 ---
 
@@ -10088,3 +10089,193 @@ After a live import against a real BookOrbit, all four must hold. **The middle c
 Checks (1) and (4) prove the rows arrived. Check (3) proves they arrived in the layer the user reads.
 **Only check (2) can tell the accepted shape from the refused one**, which is why it is stated as a
 failure condition rather than as a number to look at.
+
+---
+
+<a id="adr-0069"></a>
+## ADR-0069 — The library-skips payload carries a **per-container breakdown**; **apportioning** a library total across its containers is refused
+
+**Status:** Accepted — 2026-08-20 ·
+**This is a WIRE decision, not a write decision. It does not reverse [ADR-0063](#adr-0063)** —
+no migration, no column, no `sync_report` writer and no `SkipState` member is touched ·
+⚠️ **The per-reason vocabulary stays off the wire**: `skipped_comics` and `skipped_unknown` do not
+travel, and the refusal recorded at `internal/store/skips.go:116-120` and
+`internal/httpapi/libraries.go:215-221` still holds word for word ·
+**Ships no code here**: the change this ADR governs is built on another branch and lands behind it ·
+⚠️ **The numbers below are MEASURED, not argued** — they were read off a real two-instance import
+body at `0a5d66e`, and each one names what produced it.
+
+### Context
+
+#### 1 · What the sentence above the table is for, and the question it answers
+
+`skippedNote` (`web/src/lib/libraries.ts:784`) renders one sentence above the Libraries table. Its
+job is the screen-wide question — *how many items did this import read and not map, across
+everything I am looking at?* — because the per-row State mark already answers the per-library one.
+Answering it means summing across libraries, and summing across libraries is where the arithmetic
+gets hard.
+
+#### 2 · A skip is a fact about a CONTAINER, and libraries are not a partition of containers
+
+The server joins `library` → `library_source` → `sync_report` on the container ref
+(`internal/store/libraries.go:702`, `containerReportSQL`), so a skip row is filed under
+`(service_instance_id, container_kind, container_ref)` and never under a library.
+[ADR-0066](#adr-0066) decision 5 then puts **two** libraries over **one** container whenever the
+container holds both prose and comics. So the mapping from libraries to containers is many-to-many
+in both directions, and the client's fold has to cope with that.
+
+It copes by folding on a **library-level container signature** — `containerSignature`
+(`web/src/lib/libraries.ts:757`) sorts and joins the library's whole source set into one string, and
+identical signatures are counted once. That is exact for the shape it was written against: sibling
+libraries from one mixed container carry the *same single* source row, so they collapse onto each
+other and the count is taken once. `cmd/usarr/bookorbit_import_e2e_test.go:635-650` pins that case.
+
+#### 3 · What it is not exact for, and the number it produced
+
+The fold is on the **whole set**, so it is right when two libraries' container sets are *identical*
+and right when they are *disjoint*. It is wrong for every shape in between. Two libraries that share
+one container but not another get two different signatures, fold to themselves, and the shared
+container's skips are counted **once per library that binds it**.
+
+Measured on a real two-instance import body at `0a5d66e`, the shipped client rendered
+**"4 items in 3 libraries"** where ground truth was **2**.
+
+#### 4 · The worse half: in exactly that shape, the caveat is absent
+
+`skippedNote` has a second sentence for precisely this hazard — *"N of those rows share an upstream
+container with another row, so the same skip is reported on each of them and is counted once here."*
+It is gated on `shared = left.length - perContainer.size`. In the partial-overlap shape every
+signature is distinct, so `perContainer.size === left.length`, so `shared` computes to **zero** and
+the sentence does not render.
+
+⚠️ **The reader therefore gets an inflated total with nothing warning them it is inflated.** The one
+guard the function has against this class of error is disarmed by the same condition that causes the
+error. A wrong number that announces its own uncertainty is a nuisance; a wrong number that presents
+itself as clean is the defect.
+
+#### 5 · This is missing data, not a client bug — and that was tested, not assumed
+
+The client cannot dedupe correctly **because it was never sent what it needs**. It is sent a library
+total (`items`) and a list of the library's sources; it is not sent which of those sources the total
+came from. No arithmetic downstream recovers that, because the information is not in the payload.
+
+The demonstration is the negative one. Strip `containers` from the body and hand it to the **new**
+client, and the new client reproduces the wrong **4** exactly. Same code, data withheld, wrong answer
+returns. That is what makes this a data decision rather than a client-logic decision.
+
+#### 6 · The server already computes the breakdown, then folds it away
+
+`foldSkips` (`internal/store/libraries.go:905`) is handed one container's row at a time and
+accumulates `Items`, `Containers` and `Reason` into a single `*LibrarySkips`. The per-container
+numbers exist, in hand, in that loop. Publishing them unfolded is **strictly less work than what the
+server does today** — it is the fold that costs something, not the breakdown.
+
+### Decision
+
+**1 · `skipped` gains a per-container breakdown beside the library total.** Every container that
+contributed a skip row to a library's verdict appears in its own entry, carrying that container's own
+count.
+
+**2 · The breakdown is keyed on the triple `sources[]` already publishes** —
+`(service_instance_id, container_kind, container_ref)`, the same three fields on
+`librarySourceResponse` (`internal/httpapi/libraries.go:70-90`). Nothing new about a container
+crosses the boundary; the key is a join key the browser already holds, which is what lets the client
+recognise the *same* container seen from two libraries.
+
+**3 · `items` still carries the library total.** Nothing is un-folded and no field changes meaning.
+The breakdown sits **beside** the total, so a client that only wants the per-library number reads
+exactly what it read before.
+
+**4 · Apportioning a library's total across its containers is REFUSED.** The breakdown is the
+server's real per-container measurements or it is not published. Deriving per-container numbers by
+dividing a library total is not permitted, here or later.
+
+**5 · There is no compatibility fallback, and §7 below is why.**
+
+### Why
+
+**The client is given the fact it lacks, and nothing else.** The defect in §3 is that a total arrives
+without the container identities behind it. §2's key is the smallest thing that fixes that: it lets
+the client union containers across libraries and count each one once, which is the arithmetic
+`containerSignature` was reaching for and could not reach with a library-level signature.
+
+**It is cheaper than the status quo.** §6 — the numbers are already computed and then discarded.
+
+**It generalises past BookOrbit.** The triple is UsArr's own vocabulary, published by `sources[]`
+since the Libraries screen shipped. A second adapter's containers key the same way. The per-reason
+tallies would not have — see the boundary in §7.
+
+### Alternatives rejected
+
+**1 · Apportion the library total across its containers.** Rejected. Apportioning invents precision
+that does not exist: a library total split N ways produces N numbers, none of which was ever
+measured, and the reader has no way to tell an apportioned number from a real one. A skip is a
+**container** fact and not a library fact (§2), so a per-container number that was derived from a
+per-library number is a claim about a place the measurement never came from. This is the same
+reasoning that decided the sibling-library naming case — [ADR-0066](#adr-0066) decision 5's
+2026-08-20 amendment refused a name that encoded traversal order because *"it is an implementation
+fact no reader can interpret"*, and an apportioned count is that with arithmetic on top.
+
+**2 · Leave it.** Rejected. The number on the owner's screen is wrong, and by §4 it is un-caveated in
+exactly the shape where it is wrong. "Rare shape" is not a defence when the rarity is what suppresses
+the warning.
+
+**3 · Drop the cross-library sum instead — render only per-row counts and no screen-wide total.**
+Rejected. ⚠️ **Nobody proposed this, and it is recorded precisely because it is the tempting
+simplification a year from now**: it makes the hard arithmetic go away, it is a small diff, and it
+would pass every test that remains after it deletes the ones it breaks. **The answer to a hard
+question is not to stop asking it.** *How many items did this import leave out, across everything on
+this screen?* is a question a reader genuinely asks, and §1 is why the sentence exists at all.
+Removing the sum does not make the reader stop wanting the number — it makes them add the row counts
+themselves and get the same inflated **4**, with no sentence anywhere to warn them.
+
+### ⚠️ What this does NOT decide
+
+**1 · It does not reverse [ADR-0063](#adr-0063).** ADR-0063 is a **write** rule: a walked container
+records a zero-count `items_skipped` row so that "none skipped" stops reading as an absence. This ADR
+touches no migration, no `sync_report` writer, and no member of `SkipState` — `SkipsLeftOut` and
+`SkipsNone` are exactly as ADR-0063 left them, and a zero-count row is still the measured negative
+that `foldSkips`' doc comment describes.
+
+**2 · It does not put the per-reason vocabulary on the wire.** `skipped_comics` and `skipped_unknown`
+stay in `sync_report.detail` for whoever is reading the database. The refusal stands as written — *"a
+second adapter will decline items for reasons that are neither, and an API field named `comics` would
+then have to be lied to"* — and it applies to the breakdown exactly as it applies to the total. The
+breakdown is keyed on the container triple and carries a count; it does not carry a reason vocabulary.
+
+**3 · `items` still carries the library total.** Restated here because it is a thing a later reader
+will otherwise assume was un-folded. The fold still happens, the field still means what it meant, and
+the breakdown is additive.
+
+**4 · It is not the `Reason` attribution defect.** `foldSkips` takes `Reason` from the **first**
+non-zero container only (`internal/store/libraries.go:911-913`), so a library over two containers
+that skipped for *different* reasons silently drops one of them. That is a genuine defect, it is
+**separate** from this one — it is about which sentence is shown, not about which number is
+summed — and it is **explicitly still open**. Nothing here fixes it and nothing here should be read
+as having fixed it.
+
+### Consequences
+
+**A client that unions containers across libraries and counts each once gets the right total.** In
+the §3 shape it renders **2**. The sibling-library shape pinned by
+`cmd/usarr/bookorbit_import_e2e_test.go` is unaffected: identical container sets fold identically
+whether the fold is on a library signature or on a container key.
+
+**The sharing caveat can be gated on a fact instead of a proxy.** `shared = rows − buckets` is an
+inference about overlap drawn from bucket arithmetic; a container key that appears under more than
+one library is overlap, directly. §4's failure mode — the guard disarmed by the condition it guards
+against — cannot recur, because the guard no longer depends on the signatures being equal.
+
+**⚠️ There is NO compatibility fallback for an old server withholding `containers`, and that is
+deliberate.** The shape *is* reachable in testing — §5's demonstration constructs it on purpose — so
+the next reader will find a known-reachable case with no handling and be tempted to add handling for
+it. They should not. **The SPA is embedded in the binary** (`internal/web/web.go:33`,
+`//go:embed all:spa`), so the client can never be newer than the server that served it: the browser
+gets its JavaScript from the same binary that answers its API calls. A new client talking to an old
+server is not a deployment this project can produce. A fallback for it would be dead code that looks
+like a supported path, and the first person to trust it would be trusting a shape that cannot occur
+in a shipped build.
+
+**The gate attests nothing about any of this.** This ADR changes one Markdown file. No arm of
+`make check` reads `docs/` for content; gitleaks is the only arm that touches this diff at all, and
+it attests that the prose contains no credential — not that the prose is true.
