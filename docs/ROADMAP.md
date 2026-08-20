@@ -1433,9 +1433,16 @@ Items marked 🛑 **STOPPED** are the different case: those are stopped by the d
       schedule. What none of it covers is listed under *What this does NOT cover* in
       `api/specs/SOURCES.md`. **Original item kept below for its reasoning.**
 
-- [ ] ~~**NEW OBLIGATION — VENDOR BookOrbit's `packages/types` UNDER `docs/reference/`, WITH A DRIFT
+- ~~**NEW OBLIGATION — VENDOR BookOrbit's `packages/types` UNDER `docs/reference/`, WITH A DRIFT
       CHECK. Rated ABOVE ordinary hygiene, and the reason is the item.**~~ (superseded by the row
       above)
+      ➡️ **DE-BOXED 2026-08-20, KEPT VERBATIM. This is no longer a `- [ ]`, and nothing about it was
+      cut.** It was a struck duplicate of the row above, which is `[x]` and landed on 2026-08-19, so
+      the checkbox stood for **no work at all** while still counting against the open total — one
+      unit of backlog that could never be worked off, because the work was already done. The
+      reasoning below is why the row above exists and is worth keeping, so it stays here in full,
+      under a plain bullet rather than a task box. **Cite the `[x]` row for status; cite this block
+      for why.**
       **Why it is not hygiene: BookOrbit is now v0.1's ONLY catalogue source (§1), so upstream drift
       is a single point of failure for the WHOLE library** — not the degradation of one source among
       several, which is what the same bug would have been while more than one adapter was in play. A
@@ -1467,9 +1474,10 @@ Items marked 🛑 **STOPPED** are the different case: those are stopped by the d
       that raised the obligation.
       *Authority:* §1, [ADR-0046](./DECISIONS.md#adr-0046), [ADR-0047](./DECISIONS.md#adr-0047),
       `CLAUDE.md`'s *verify, don't assert*.
-      *Done when:* a vendored copy of BookOrbit's `packages/types` exists at a named upstream commit
-      **and** a check fails when it diverges from upstream — offline for the identity pin, on the
-      network for the drift, so `make check-offline` still runs.
+      *Was done when:* a vendored copy of BookOrbit's `packages/types` exists at a named upstream
+      commit **and** a check fails when it diverges from upstream — offline for the identity pin, on
+      the network for the drift, so `make check-offline` still runs. **Discharged by the row above,
+      which names the commit, the tree and all four guards.**
 
 - [ ] **System tags `type:`, `format:`, `source:`, `quality:`, `indexer:` with the `downloadId`
       provenance join.**
