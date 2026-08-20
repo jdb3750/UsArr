@@ -49,8 +49,16 @@
 	 * so it moves the day Block C is rewired. What does keep the two reads apart is the contract: http-api.md §7
 	 * says the browse read *"is a different endpoint from §1, not a superset of
 	 * it"*, and the two share a row shape and a paging rule and share no cursor
-	 * (§7.5). ⚠️ Take §7 for that split and NOT for the reason it gives after it,
-	 * which is the same phantom this note is about.
+	 * (§7.5). ⚠️ THIS USED TO ADD *"Take §7 for that split and NOT for the reason
+	 * it gives after it, which is the same phantom this note is about"*, AND THAT
+	 * CAUTION WENT STALE. §7 has since been corrected: its live reason is the
+	 * SHAPE OF THE QUERY — three orders, two filters and a cursor codec per order
+	 * against §1's one unfiltered statement in one order, attributed to
+	 * `internal/store/browse.go` — and it now states outright that *"No document
+	 * forbids a filter on either endpoint."* The phantom text survives in §7 only
+	 * inside §7's own withdrawal note. Re-read at `origin/main` 2026-08-20, blob
+	 * `8424519ad3f36c86949e3920b12c68f5c741d2a1`. §7 is now safe to take for its
+	 * reason as well as for its split.
 	 *
 	 * A LOCAL SQLITE READ, so principle 1 holds all the way through: one
 	 * statement per page plus at most one small statement to resolve `?lib=`

@@ -47,12 +47,27 @@
 	 * and are not drawn at all — see SUMMARY_COLUMNS.
 	 *
 	 * THREE COLUMNS SHIP AND ONLY TWO OF THEM ARE THE FACET READ's. `Type` and
-	 * `Items` are its two answers; `Status` is §17.7's per-type state and comes
+	 * `Items` are its two answers; `Status` is §17.2's per-type state and comes
 	 * off the SERVICES read, which is the same read Block B is drawn from. So the
 	 * block has two sources, not one, and neither is invented.
 	 *
-	 * ⚠️ THE SIX ROWS ARE ALL DRAWN, AND EVERY ONE CARRIES ONE OF §17.7's THREE
-	 * STATES rather than an omission. A type no connected service can write gets
+	 * ⚠️ THAT READ `§17.7's per-type state` UNTIL 2026-08-20. The per-type row
+	 * state is `docs/ARCHITECTURE.md:3325` (§17.2); §17.7 specifies install-level
+	 * screens and contains the word `unconfigured` nowhere. The install-level
+	 * §17.7 citations in this file — the header, and the `HomeMode` block below —
+	 * are SOUND and were deliberately left alone. §17.2:3325 writes the state
+	 * `(§17.7)` itself, so the mis-citation originates in the design document and
+	 * `web/` copied it faithfully.
+	 *
+	 * ⚠️ THE SIX ROWS ARE ALL DRAWN, AND EVERY ONE CARRIES ONE OF THIS SCREEN'S
+	 * THREE STATES rather than an omission. ⚠️ THIS READ `ONE OF §17.7's THREE
+	 * STATES` UNTIL 2026-08-20, and §17.7 specifies none of them: two are §17.2's
+	 * — `unconfigured` at `docs/ARCHITECTURE.md:3325`, `importing` at `:3364` —
+	 * and `ok`'s citation is withdrawn rather than re-pointed, no source for it
+	 * having been found in `docs/ARCHITECTURE.md` or
+	 * `docs/design/DESIGN-DIRECTION.md` (see `$lib/home`'s `SUMMARY_STATE`).
+	 *
+	 * A type no connected service can write gets
 	 * `unconfigured` — the type, `no catalogue source connected`, the service that
 	 * would populate it, the milestone it arrives in, and a link to Add; a type
 	 * with a source and no finished import gets `first import running` and no
@@ -287,8 +302,10 @@
 	 * N missing`) that this screen would be claiming to have computed.
 	 *
 	 * ⚠️ THE THIRD COLUMN IS `Status` AND NOT `Source`, WHICH IS A HONESTY CALL
-	 * RATHER THAN A SYNONYM. What the cell carries is §17.7's per-type
-	 * `unconfigured` STATE plus its cause and its action; it carries no service
+	 * RATHER THAN A SYNONYM. What the cell carries is §17.2's per-type
+	 * `unconfigured` STATE (`docs/ARCHITECTURE.md:3325`) plus its cause and its
+	 * action — ⚠️ cited as §17.7's until 2026-08-20, which specifies
+	 * install-level screens and never this one; it carries no service
 	 * instance and cannot, because `internal/httpapi/facets.go` refuses to
 	 * publish which instance a count came from — *"naming it would publish the
 	 * topology of the install to every future non-owner user"*. A header reading
@@ -930,8 +947,14 @@
 		no animated counter and no box around a number.
 
 		ALL SIX ROWS RENDER, IN THE MEDIA-TYPE ENUM'S OWN ORDER, and the ones with
-		no catalogue source render §17.7's per-type `unconfigured` state rather
-		than being dropped. §17.2 rejects dropping them explicitly: a Home showing
+		no catalogue source render §17.2's per-type `unconfigured` state rather
+		than being dropped. ⚠️ CITED AS §17.7's UNTIL 2026-08-20; the state is
+		specified at `docs/ARCHITECTURE.md:3325`, and §17.7 — whose install-level
+		citations elsewhere in this file are SOUND and were left alone — does not
+		contain the word `unconfigured` at all. §17.2:3325 writes it `(§17.7)`
+		itself, so the mis-citation originates in the design document.
+
+		§17.2 rejects dropping them explicitly: a Home showing
 		only the types one source covers leaves "the only available inference …
 		that UsArr does not do the others", which is the misreading principle 3
 		exists to prevent. DESIGN-DIRECTION rule 13 is why those rows are not the
@@ -1046,14 +1069,25 @@
 		{#if row.items}<span class="num">{row.items}</span>{/if}
 	{:else}
 		<!--
-			§17.7's PER-TYPE STATE, AND EVERY ROW HAS ONE.
+			§17.2's PER-TYPE STATE, AND EVERY ROW HAS ONE. ⚠️ Read `§17.7's` until
+			2026-08-20: `unconfigured` is `docs/ARCHITECTURE.md:3325` and
+			`importing` is `:3364`, both §17.2, and §17.7 specifies install-level
+			screens only. §17.2:3325 writes the state `(§17.7)` itself, so the
+			mis-citation originates in the design document and `web/` copied it
+			faithfully.
 
 			⚠️ THIS ARM WAS `{:else if !row.catalogued}` AND THE `Status` COLUMN WAS
 			BLANK ON EVERY ROW THAT HAD A STATUS. A header promising a state above an
 			empty box reads as *status unknown*, not as *status fine*, on exactly the
-			three rows the screen is most confident about. §17.7 has an `ok` state and
-			the services read says which rows are in it, so the column delivers what
-			its header promises rather than being renamed down to what it managed.
+			three rows the screen is most confident about. `$lib/home` has an `ok`
+			state and the services read says which rows are in it, so the column
+			delivers what its header promises rather than being renamed down to what
+			it managed. ⚠️ THIS READ *"§17.7 has an `ok` state"* UNTIL 2026-08-20;
+			that citation is WITHDRAWN, not re-pointed. No source for a per-type `ok`
+			state was found in `docs/ARCHITECTURE.md` or
+			`docs/design/DESIGN-DIRECTION.md` — that two-document search is the whole
+			boundary of the claim, and it does not say the state is invented,
+			unspecified or wrong. See `$lib/home`'s `SUMMARY_STATE` note.
 
 			The vocabulary is `$lib/home`'s `SUMMARY_STATE`, carried on the row, so
 			there is no second copy of the mapping in a template.

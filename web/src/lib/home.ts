@@ -23,8 +23,16 @@
  * than what suppresses it: never fabricated data in a shipped product surface,
  * so the section does not render before its read lands (no skeleton, no zeroed
  * table). Three columns ship and only two of them are the facet read's: `Type`
- * and `Items` are its answers, and `Status` is §17.7's per-type state off the
- * SERVICES read. §17.2's `Have` and `Synced` are *"their own aggregates and
+ * and `Items` are its answers, and `Status` is §17.2's per-type state off the
+ * SERVICES read. ⚠️ THAT READ `§17.7's per-type state` UNTIL 2026-08-20. The
+ * per-type row state is specified at `docs/ARCHITECTURE.md:3325` (§17.2);
+ * §17.7 specifies install-level screens and does not contain the word
+ * `unconfigured` anywhere. The install-level §17.7 citations beside it are
+ * SOUND and were deliberately left alone. §17.2:3325 writes this state
+ * `(§17.7)` itself, so the mis-citation originates in the design document and
+ * `web/` copied it faithfully.
+ *
+ * §17.2's `Have` and `Synced` are *"their own aggregates and
  * their own commit"* (`internal/httpapi/facets.go`) and are not drawn at all.
  *
  * ⚠️ TWO THINGS ON HOME ARE NOT ONE OF THE THREE BLOCKS, and saying so here is
@@ -489,10 +497,23 @@ export function summaryCaption(health: ServicesHealth | undefined): string {
  * COUNTED.
  *
  * §17.2 gives Block A six rows and two shapes for them: a type with a catalogue
- * source renders a COUNT, and a type without one renders §17.7's per-type
+ * source renders a COUNT, and a type without one renders §17.2's per-type
  * `unconfigured` state — *"the type, `no catalogue source connected`, the
  * service that will populate it and the milestone it arrives in, and a link to
- * Add"*. `design/DESIGN-DIRECTION.md` rule 13 is what makes the second shape
+ * Add"*, at `docs/ARCHITECTURE.md:3325`.
+ *
+ * ⚠️ THAT ATTRIBUTION READ *"§17.7's per-type `unconfigured` state"* UNTIL
+ * 2026-08-20, ABOVE THIS SAME QUOTED SENTENCE. The quotation was accurate and
+ * the section number was not — the sentence is §17.2's, and §17.7 does not
+ * contain the word `unconfigured` anywhere. This site outlasted the rest of the
+ * set for exactly that reason: quotation marks raise apparent verification
+ * without raising actual verification, so a correct quote under a wrong
+ * citation reads as the most careful comment in the file. The install-level
+ * §17.7 citations beside it are SOUND and were deliberately left alone.
+ * §17.2:3325 writes this state `(§17.7)` itself, so the mis-citation
+ * originates in the design document and `web/` copied it faithfully.
+ *
+ * `design/DESIGN-DIRECTION.md` rule 13 is what makes the second shape
  * legal beside the "never render a section with no content" rule: those rows
  * carry a state, a cause and an action, which is not nothing.
  *
@@ -551,7 +572,15 @@ const TYPE_FACTS: Record<MediaType, TypeFacts> = {
 	comics: { unit: 'series', service: 'BookOrbit or Kavita', milestone: 'v0.1' }
 };
 
-/** §17.7's words for a type nothing can fill. One sentence, §9.6. */
+/**
+ * §17.2's words for a type nothing can fill. One sentence, §9.6.
+ *
+ * ⚠️ READ *"§17.7's words"* UNTIL 2026-08-20. This exact string is quoted at
+ * `docs/ARCHITECTURE.md:3325` (§17.2); §17.7 specifies no per-type state. The
+ * install-level §17.7 citations beside it are SOUND and were deliberately left
+ * alone. §17.2:3325 writes this state `(§17.7)` itself, so the mis-citation
+ * originates in the design document and `web/` copied it faithfully.
+ */
 export const NO_CATALOGUE_SOURCE = 'no catalogue source connected';
 
 /**
@@ -567,9 +596,26 @@ const COUNT = new Intl.NumberFormat('en-GB');
  * ⚠️ A `Status` COLUMN THAT IS BLANK ON A HEALTHY ROW READS AS *status
  * unknown*, NOT AS *status fine*, and that is what shipped: the cell rendered
  * content only on a sourceless row, so Ebooks, Audiobooks and Comics each had a
- * header promising a state above an empty box. §17.7 has an `ok` state and the
- * services read now says which rows are in it, so the column keeps its header
- * and delivers on it rather than being renamed down to what it managed.
+ * header promising a state above an empty box. This module has an `ok` state
+ * and the services read now says which rows are in it, so the column keeps its
+ * header and delivers on it rather than being renamed down to what it managed.
+ *
+ * ⚠️ THAT SENTENCE READ *"§17.7 has an `ok` state"* UNTIL 2026-08-20, and the
+ * citation is WITHDRAWN rather than re-pointed, because no replacement was
+ * located. Two documents were searched: `docs/ARCHITECTURE.md` (§17.7 and
+ * §17.2 both) and `docs/design/DESIGN-DIRECTION.md`, whose §10 required-state
+ * table has rows for `empty`, `filtered-empty`, `scope-empty`, `partial`,
+ * `stale`, `error` and `unconfigured` and none for `ok`. DESIGN-DIRECTION
+ * §3.2:294 does define a status COLOUR role named `ok` (*"healthy, synced,
+ * file present"*), which is a chroma token rather than a component state; this
+ * note neither rules it in nor out as the origin.
+ *
+ * THAT TWO-DOCUMENT SEARCH IS THE WHOLE BOUNDARY OF THE CLAIM. Nothing here
+ * says the state is invented, unspecified or wrong — only that a source for it
+ * was not found in those two files. Whether §17 gains a third state or this
+ * code's state changes is §17's owner's decision, already queued as a named
+ * design gap. The two neighbouring states ARE specified, both in §17.2:
+ * `unconfigured` at `:3325` and `importing` at `:3364`.
  *
  * `Catalogued` is deliberately not `Up to date`. There is no periodic re-sync in
  * this build — `cmd/usarr/import.go` runs at most one import per instance per
@@ -582,7 +628,10 @@ export const SUMMARY_STATE = {
 	unconfigured: NO_CATALOGUE_SOURCE,
 	/** A connected service writes this type and no import has finished yet. */
 	importing: 'first import running',
-	/** §17.7's `ok`: an import completed and this number came out of it. */
+	/** `ok`: an import completed and this number came out of it. ⚠️ This read
+	 *  "§17.7's `ok`" until 2026-08-20; that citation is withdrawn and no
+	 *  replacement is supplied — see the `SUMMARY_STATE` note above for the
+	 *  bounded two-document search behind the withdrawal. */
 	ok: 'catalogued'
 } as const;
 
@@ -601,7 +650,14 @@ export interface SummaryRow {
 	 * `catalogueReach`.
 	 */
 	catalogued: boolean;
-	/** §17.7's state for this row, which every row has. */
+	/** §17.2's state for this row, which every row has — `unconfigured` at
+	 *  `docs/ARCHITECTURE.md:3325`, `importing` at `:3364`. ⚠️ Read `§17.7's`
+	 *  until 2026-08-20; §17.7 carries install-level screens, not this state.
+	 *  `ok` is the exception and its citation is withdrawn, not re-pointed:
+	 *  see the `SUMMARY_STATE` note above. The install-level §17.7 citations
+	 *  beside it are SOUND and were deliberately left alone. §17.2:3325 writes
+	 *  this state `(§17.7)` itself, so the mis-citation originates in the design
+	 *  document and `web/` copied it faithfully. */
 	state: SummaryState;
 	/** The word the Status cell renders. `SUMMARY_STATE[state]`, carried on the
 	 *  row so the template holds no second copy of the mapping. */

@@ -436,9 +436,17 @@ describe('Block A’s rows', () => {
 	});
 
 	it('gives every sourceless row a service and a milestone, and no number', () => {
-		// §17.7's per-type `unconfigured` state, which is what makes these rows
-		// legal beside §17.1's "never render a section with no content" rule
-		// (DESIGN-DIRECTION rule 13): a state, a cause and an action.
+		// §17.2's per-type `unconfigured` state (`docs/ARCHITECTURE.md:3325`),
+		// which is what makes these rows legal beside §17.1's "never render a
+		// section with no content" rule (DESIGN-DIRECTION rule 13): a state, a
+		// cause and an action.
+		//
+		// ⚠️ CITED §17.7 UNTIL 2026-08-20. §17.7 does not contain the word
+		// `unconfigured` anywhere; it specifies install-level screens, and the
+		// install-level §17.7 citations in this file's header are SOUND and were
+		// left alone. §17.2:3325 writes this state `(§17.7)` itself, so the
+		// mis-citation originates in the design document and `web/` copied it
+		// faithfully.
 		const rows = librarySummary(counts(), bookorbit());
 		const sourceless = rows.filter((r) => !r.catalogued);
 		expect(sourceless.map((r) => [r.mediaType, r.service, r.milestone])).toEqual([
@@ -661,9 +669,21 @@ describe('Block A while the first import runs', () => {
 		expect(countBasis(payload({ services: [health()] }))).toBe('not-counted');
 	});
 
-	it('gives a counted row §17.7’s ok state and never leaves Status blank', () => {
+	it('gives a counted row the ok state and never leaves Status blank', () => {
 		// A column headed `Status` that is empty on a healthy row reads as *status
 		// unknown*, not as *status fine*. Every row carries a word.
+		//
+		// ⚠️ THIS CASE WAS NAMED *"gives a counted row §17.7’s ok state…"* UNTIL
+		// 2026-08-20, and the citation in that name was false: searching
+		// `docs/ARCHITECTURE.md` and `docs/design/DESIGN-DIRECTION.md` found no
+		// design source for a per-type `ok` state — that two-document search is
+		// the whole boundary of the claim, and it does NOT say the state is
+		// invented, unspecified or wrong. See `$lib/home`'s `SUMMARY_STATE` note.
+		// The name was changed rather than annotated because a test name is
+		// shipped descriptive text, and a false design citation inside quotation
+		// marks is no more true than one after a `//`. The two states this case
+		// also asserts, `unconfigured` and `importing`, ARE specified, both in
+		// §17.2 — `docs/ARCHITECTURE.md:3325` and `:3364`.
 		const rows = librarySummary(counts(), bookorbit());
 		expect(rows.map((r) => r.status)).toEqual([
 			'no catalogue source connected',

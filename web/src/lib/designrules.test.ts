@@ -341,12 +341,46 @@ function strip(text: string, kind: Kind): string {
  * floor would still have passed. A floor that cannot fail is not a floor, and
  * this one silently stopped being one purely by the tree growing past it.
  *
- * Re-derived on the same rule. The two largest are `app.css` (105,273) and
- * `routes/+page.svelte` (104,457). 1,080,000 sits below today's figure by
- * 99,473 — less than either, so losing one fails — and 99,473 characters is far
- * more source than ordinary editing removes.
+ * ⚠️ AND THAT RE-DERIVATION WAS ITSELF WRONG. It is recorded here as an error
+ * rather than quietly restated with fresh figures, because a comment that
+ * acquires new numbers looks maintained and gives nobody a reason to check it.
+ * It read: *"The two largest are `app.css` (105,273) and `routes/+page.svelte`
+ * (104,457). 1,080,000 sits below today's figure by 99,473 — less than either,
+ * so losing one fails."* IT NAMED THE WRONG LARGEST FILE. At the very tree it
+ * was committed against, `routes/+page.svelte` was already 106,129 characters,
+ * not 104,457 — bigger than `app.css`, so `app.css` was not the largest and
+ * 99,473 was not the gap the rule needed checking against. Those figures never
+ * described their own tree.
+ *
+ * The floor still fired, but by 881 characters, and 881 is a coincidence rather
+ * than a derivation: ONE comment-only documentation pass over `web/src` added
+ * 6,231 characters and the drill below went deaf. That is this guard's own
+ * warning about itself — *"a floor nobody has watched fail is a number, not a
+ * guard"* — happening to it a second time.
+ *
+ * RE-DERIVED AGAIN 2026-08-20, on the final tree of that same pass, and stated
+ * WITH ITS MARGIN, because a reader deciding whether an edit is safe needs that
+ * number visible rather than recomputable:
+ *
+ *     corpus                                    1,191,479  over 42 files
+ *     largest   `routes/+page.svelte`             108,247
+ *     second    `app.css`                         105,273
+ *     floor                                     1,100,000
+ *     gap     corpus − floor                       91,479
+ *     MARGIN  floor − (corpus − largest)           16,768
+ *
+ * The GAP is under both file sizes, so losing EITHER of the two largest files
+ * fails the floor — the property the rule has always claimed — and 91,479
+ * characters is far more source than ordinary editing removes, which is what
+ * stops the floor firing on an honest deletion.
+ *
+ * THE MARGIN IS THE NUMBER THAT GOES STALE, and it is the one the last two
+ * derivations left unstated. It is how far the corpus may GROW before this floor
+ * can no longer fail. It was 881. It is 16,768. When a change to `web/src` adds
+ * more than that, this floor stops being a floor and must be re-derived — and
+ * the drill below is what will say so.
  */
-const CORPUS_FLOOR = 1_080_000;
+const CORPUS_FLOOR = 1_100_000;
 
 /**
  * The least credible NUMBER of files, which is the char floor's blind spot:
@@ -1786,7 +1820,7 @@ describe('DESIGN-DIRECTION §13 — the static rules, over web/src', () => {
 			'removing the largest file must not trip the FILE floor'
 		).toBeGreaterThanOrEqual(FILE_FLOOR);
 		expect(corpusShortfall(lost), `losing ${largest.file} did not trip the floor`).toMatch(
-			/below the floor of 1080000/
+			/below the floor of 1100000/
 		);
 
 		/* And the negative half — the real corpus must NOT trip either floor, or the
