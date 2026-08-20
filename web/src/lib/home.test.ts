@@ -4,9 +4,11 @@ import { describe, expect, it } from 'vitest';
 // list run over inline markup in an `environment: 'node'` vitest run with no
 // Svelte plugin. See `$lib/copyguard` for why the stripping is not written here.
 import HOME_SOURCE from '../routes/+page.svelte?raw';
-import { sectionsMarkup, userFacingMarkup } from './copyguard';
+import { sectionsMarkup, snippetMarkup, userFacingMarkup } from './copyguard';
 import {
 	attention,
+	catalogueReach,
+	countBasis,
 	hasIndexer,
 	headline,
 	homeMode,
@@ -14,7 +16,9 @@ import {
 	librarySummary,
 	needsAttention,
 	NO_CATALOGUE_SOURCE,
-	summaryCount
+	summaryCaption,
+	summaryCount,
+	SUMMARY_CAPTION
 } from './home';
 import { MEDIA_TYPES, NO_MEDIA_TYPE_COUNTS, type MediaTypeCounts } from './library';
 // §17.5's ban list, imported rather than restated: Home renders the same grab
@@ -368,13 +372,36 @@ function counts(over: Partial<MediaTypeCounts> = {}): MediaTypeCounts {
 	return { ...NO_MEDIA_TYPE_COUNTS, ebooks: 424, audiobooks: 118, comics: 553, ...over };
 }
 
+/**
+ * A library-bearing instance that has COMPLETED a full import, which is the
+ * state every count assertion below needs and the state a first-run install is
+ * not in. The timestamp is read for `null` versus not-null and never rendered,
+ * so its value only has to be a string.
+ */
+function imported(over: Partial<ServiceHealth> = {}): ServiceHealth {
+	return health({
+		id: 2,
+		name: 'BookOrbit',
+		kind: 'bookorbit',
+		role: 'library',
+		lastFullSyncAt: '2026-08-16T13:02:00Z',
+		workCount: 1095,
+		...over
+	});
+}
+
+/** The whole health payload for an install with one imported BookOrbit. */
+function bookorbit(over: Partial<ServiceHealth> = {}): ServicesHealth {
+	return payload({ services: [imported(over)] });
+}
+
 describe('Block A’s rows', () => {
 	it('draws all six types, in the media-type enum’s own order', () => {
 		// §17.2 rejects dropping the sourceless rows explicitly: a Home showing
 		// only the types one source covers leaves "the only available inference …
 		// that UsArr does not do the others". The order is MEDIA_TYPES', not a
 		// second list that could drift from the sidebar's.
-		const rows = librarySummary(counts());
+		const rows = librarySummary(counts(), bookorbit());
 		expect(rows.map((r) => r.mediaType)).toEqual([...MEDIA_TYPES]);
 		expect(rows.map((r) => r.label)).toEqual([
 			'Movies',
@@ -391,7 +418,7 @@ describe('Block A’s rows', () => {
 		// mixed-unit column labels its unit or it is misinformation", because
 		// rendered bare "Music 612 reads as a smaller library than Movies 1,204
 		// when it is 4,118 albums".
-		const rows = librarySummary(counts());
+		const rows = librarySummary(counts(), bookorbit());
 		const items = Object.fromEntries(rows.map((r) => [r.mediaType, r.items]));
 		expect(items.ebooks).toBe('424 books');
 		expect(items.audiobooks).toBe('118 audiobooks');
@@ -402,7 +429,7 @@ describe('Block A’s rows', () => {
 	});
 
 	it('groups a large count rather than printing it bare', () => {
-		const rows = librarySummary(counts({ comics: 1204, ebooks: 28904 }));
+		const rows = librarySummary(counts({ comics: 1204, ebooks: 28904 }), bookorbit());
 		const items = Object.fromEntries(rows.map((r) => [r.mediaType, r.items]));
 		expect(items.comics).toBe('1,204 series');
 		expect(items.ebooks).toBe('28,904 books');
@@ -412,7 +439,7 @@ describe('Block A’s rows', () => {
 		// §17.7's per-type `unconfigured` state, which is what makes these rows
 		// legal beside §17.1's "never render a section with no content" rule
 		// (DESIGN-DIRECTION rule 13): a state, a cause and an action.
-		const rows = librarySummary(counts());
+		const rows = librarySummary(counts(), bookorbit());
 		const sourceless = rows.filter((r) => !r.catalogued);
 		expect(sourceless.map((r) => [r.mediaType, r.service, r.milestone])).toEqual([
 			['movies', 'Radarr', 'v0.2'],
@@ -425,7 +452,7 @@ describe('Block A’s rows', () => {
 		expect(sourceless.map((r) => r.items)).toEqual(['', '', '']);
 	});
 
-	it('counts audiobooks as catalogued, because this build catalogues them', () => {
+	it('counts audiobooks as catalogued on a BookOrbit, because that adapter writes them', () => {
 		/* THE ONE ROW A DOCUMENT AND THE CODE DISAGREE ABOUT.
 		   `design/DESIGN-DIRECTION.md` §8.4 lists audiobooks among v0.1's
 		   sourceless types, on the premise that "BookOrbit's media types are
@@ -436,7 +463,7 @@ describe('Block A’s rows', () => {
 		   screen depends on". Telling a user with an imported audiobook library
 		   that Audiobooks has no catalogue source is false on the screen whose
 		   whole job is "what do I have?". */
-		const rows = librarySummary(counts());
+		const rows = librarySummary(counts(), bookorbit());
 		const audiobooks = rows.find((r) => r.mediaType === 'audiobooks');
 		expect(audiobooks?.catalogued).toBe(true);
 		expect(audiobooks?.service).toBe('');
@@ -449,31 +476,47 @@ describe('Block A’s rows', () => {
 		// "restriction renders as zero, and zero never widens into hidden or
 		// unknown". Publishing "restricted" would be the existence oracle with a
 		// label on it, so this side may not reintroduce it.
-		const rows = librarySummary(NO_MEDIA_TYPE_COUNTS);
+		const rows = librarySummary(NO_MEDIA_TYPE_COUNTS, bookorbit());
 		const items = rows.filter((r) => r.catalogued).map((r) => r.items);
 		expect(items).toEqual(['0 books', '0 audiobooks', '0 series']);
 		for (const row of rows) {
-			expect(`${row.items} ${row.service} ${row.milestone}`.toLowerCase()).not.toContain('hidden');
-			expect(`${row.items} ${row.service} ${row.milestone}`.toLowerCase()).not.toContain('unknown');
-			expect(`${row.items} ${row.service} ${row.milestone}`.toLowerCase()).not.toContain(
-				'restricted'
-			);
+			const said = `${row.items} ${row.service} ${row.milestone} ${row.status}`.toLowerCase();
+			expect(said).not.toContain('hidden');
+			expect(said).not.toContain('unknown');
+			expect(said).not.toContain('restricted');
 		}
 	});
 
-	it('is unchanged by a restricted scope, which is the same six zeros', () => {
-		// The two are byte-identical on the wire by construction, so the rows they
-		// produce must be identical too. A screen that could tell them apart would
-		// be the oracle the collapse exists to remove.
-		expect(librarySummary(NO_MEDIA_TYPE_COUNTS)).toEqual(
-			librarySummary({ movies: 0, tv: 0, music: 0, ebooks: 0, audiobooks: 0, comics: 0 })
+	it('renders a restricted scope with the SAME strings an empty library gets', () => {
+		/* ⚠️ THIS TEST USED TO COMPARE `librarySummary(NO_MEDIA_TYPE_COUNTS)`
+		   AGAINST `librarySummary({six literal zeros})` — two deep-equal literals
+		   — SO IT ASSERTED ONLY THAT THE FUNCTION IS DETERMINISTIC. Proved by
+		   mutation: reversing the row order broke three tests in this file and
+		   left that one green, because a reversal applies equally to both sides.
+
+		   What the collapse actually requires is a claim about the RENDERED
+		   STRINGS, so it is those that are pinned. `internal/store/facets.go`
+		   answers a restricted scope with the same six zeros an empty library
+		   gives, in one direction only, and a screen that could tell the two apart
+		   would be the existence oracle the collapse exists to remove. */
+		const restricted = librarySummary(
+			{ movies: 0, tv: 0, music: 0, ebooks: 0, audiobooks: 0, comics: 0 },
+			bookorbit()
 		);
+		expect(restricted.map((r) => [r.label, r.items, r.status, r.service, r.milestone])).toEqual([
+			['Movies', '', 'no catalogue source connected', 'Radarr', 'v0.2'],
+			['TV', '', 'no catalogue source connected', 'Sonarr', 'v0.2'],
+			['Music', '', 'no catalogue source connected', 'Navidrome', 'after v0.1'],
+			['Ebooks', '0 books', 'catalogued', '', ''],
+			['Audiobooks', '0 audiobooks', 'catalogued', '', ''],
+			['Comics', '0 series', 'catalogued', '', '']
+		]);
 	});
 
 	it('says how many of the six have a source, beside how many there are', () => {
 		// "6 media types" alone is true and misleading while half of them hold no
 		// number. Derived from the rows, so the head cannot disagree with them.
-		expect(summaryCount(librarySummary(counts()))).toBe('6 media types, 3 catalogued');
+		expect(summaryCount(librarySummary(counts(), bookorbit()))).toBe('6 media types, 3 catalogued');
 		expect(summaryCount([])).toBe('0 media types, 0 catalogued');
 	});
 
@@ -486,6 +529,174 @@ describe('Block A’s rows', () => {
 });
 
 /**
+ * WHICH ROWS HAVE A SOURCE IS A PROPERTY OF THE INSTALL, NOT OF THE BUILD.
+ *
+ * The defect these pin: `catalogued` was a static record, so a Kavita-only
+ * install was told `Audiobooks · 0 audiobooks` — the exact claim about the
+ * library, rather than about the pipeline, that the sourceless rows exist to
+ * avoid. Kavita serves no audio (`internal/libsync/kavita.go`, LibraryTypeBook).
+ */
+describe('Block A’s reach, per install', () => {
+	it('gives a Kavita install ebooks and comics, and no audiobooks at all', () => {
+		const kavita = payload({
+			services: [imported({ name: 'Kavita', kind: 'kavita', workCount: 553 })]
+		});
+		expect([...catalogueReach(kavita)].sort()).toEqual(['comics', 'ebooks']);
+		const rows = librarySummary(counts(), kavita);
+		const audiobooks = rows.find((r) => r.mediaType === 'audiobooks');
+		// The row the static table got wrong, and the whole of the fix: no number,
+		// the service that would fill it, and the state that says why.
+		expect(audiobooks?.catalogued).toBe(false);
+		expect(audiobooks?.items).toBe('');
+		expect(audiobooks?.status).toBe('no catalogue source connected');
+		expect(audiobooks?.service).toBe('BookOrbit');
+		expect(summaryCount(rows)).toBe('6 media types, 2 catalogued');
+	});
+
+	it('gives a BookOrbit install the audio half as well', () => {
+		expect([...catalogueReach(bookorbit())].sort()).toEqual(['audiobooks', 'comics', 'ebooks']);
+	});
+
+	it('unions the two when both are connected', () => {
+		const both = payload({
+			services: [imported(), imported({ id: 3, name: 'Kavita', kind: 'kavita' })]
+		});
+		expect([...catalogueReach(both)].sort()).toEqual(['audiobooks', 'comics', 'ebooks']);
+	});
+
+	it('gives a Prowlarr-only install no reach at all', () => {
+		// `search-and-grab` mode, where Block A is not drawn anyway. The function
+		// still has to answer honestly rather than fall back to the build's list.
+		expect([...catalogueReach(payload({ services: [health()] }))]).toEqual([]);
+		expect([...catalogueReach(undefined)]).toEqual([]);
+	});
+
+	it('reads the kind and not the role, so an unadapted library kind reaches nothing', () => {
+		// `internal/httpapi.serviceKinds` may register a kind as `library` before
+		// `cmd/usarr/import.go` has an adapter for it; `role` would then promise
+		// rows nothing can write. A kind with no entry gets no types.
+		const komga = payload({ services: [imported({ kind: 'komga' })] });
+		expect([...catalogueReach(komga)]).toEqual([]);
+	});
+
+	it('counts a disabled instance, because its rows are already in the local file', () => {
+		expect([...catalogueReach(bookorbit({ enabled: false }))].sort()).toEqual([
+			'audiobooks',
+			'comics',
+			'ebooks'
+		]);
+	});
+
+	it('declares a unit noun for exactly the types some adapter can write', () => {
+		/* The two halves of one fact, pinned against each other. `unit: ''` marks a
+		   type no adapter in this build writes, and `KIND_CATALOGUES` is what
+		   decides which those are; a noun declared for a type nothing counts is a
+		   noun nobody has had to make true yet, and §17.2's own `artists` for Music
+		   is already wrong against this read. */
+		const everyKind = payload({
+			services: [imported(), imported({ id: 3, name: 'Kavita', kind: 'kavita' })]
+		});
+		const reachable = catalogueReach(everyKind);
+		const rows = librarySummary(counts(), everyKind);
+		for (const row of rows) {
+			expect(row.catalogued).toBe(reachable.has(row.mediaType));
+			// A reachable row has a noun after its digits; an unreachable one has no
+			// cell at all rather than a bare number.
+			if (row.catalogued) expect(row.items).toMatch(/^[\d,]+ [a-z]+$/);
+			else expect(row.items).toBe('');
+		}
+	});
+});
+
+/**
+ * WHAT THE SIX COUNTS MEAN WHILE THE FIRST IMPORT IS RUNNING.
+ *
+ * The defect these pin: the block rendered as soon as the facet read landed,
+ * which is before the first walk had written a row, so a user who had just
+ * connected a service was told `Ebooks 0 books · Audiobooks 0 audiobooks ·
+ * Comics 0 series` for the several minutes it ran. §17.2 legislates this exact
+ * moment and requires a caption above the block.
+ */
+describe('Block A while the first import runs', () => {
+	/** The install a first-run user is on: connected, walking, nothing written. */
+	const firstRun = payload({ services: [imported({ lastFullSyncAt: null, workCount: 0 })] });
+
+	it('draws no number at all before anything has been counted', () => {
+		const rows = librarySummary(NO_MEDIA_TYPE_COUNTS, firstRun);
+		expect(rows.map((r) => r.items)).toEqual(['', '', '', '', '', '']);
+		// And the three that DO have a source say which state they are in, so the
+		// absence is explained on the row rather than left as a blank cell.
+		expect(rows.filter((r) => r.catalogued).map((r) => r.status)).toEqual([
+			'first import running',
+			'first import running',
+			'first import running'
+		]);
+	});
+
+	it('shows the committed batches of a partial import, and says they are partial', () => {
+		// services.ts makes the same call for its own `Partial import` cell: "a
+		// partial import's committed rows are real and are shown". What may not be
+		// claimed is that they are totals, and the caption is where that is said.
+		const partial = payload({ services: [imported({ lastFullSyncAt: null, workCount: 300 })] });
+		expect(countBasis(partial)).toBe('partial');
+		const rows = librarySummary(counts(), partial);
+		expect(rows.map((r) => r.items)).toEqual([
+			'',
+			'',
+			'',
+			'424 books',
+			'118 audiobooks',
+			'553 series'
+		]);
+		expect(rows[3].status).toBe('first import running');
+	});
+
+	it('calls a completed import counted, and only then', () => {
+		expect(countBasis(bookorbit())).toBe('counted');
+		expect(countBasis(firstRun)).toBe('not-counted');
+		expect(countBasis(undefined)).toBe('not-counted');
+		// An indexer reports null/0 exactly like an unsynced catalogue source, so
+		// reading the two fields without `role` would leave a Prowlarr-only install
+		// permanently "not counted" and, worse, would let one count for a library.
+		expect(countBasis(payload({ services: [health()] }))).toBe('not-counted');
+	});
+
+	it('gives a counted row §17.7’s ok state and never leaves Status blank', () => {
+		// A column headed `Status` that is empty on a healthy row reads as *status
+		// unknown*, not as *status fine*. Every row carries a word.
+		const rows = librarySummary(counts(), bookorbit());
+		expect(rows.map((r) => r.status)).toEqual([
+			'no catalogue source connected',
+			'no catalogue source connected',
+			'no catalogue source connected',
+			'catalogued',
+			'catalogued',
+			'catalogued'
+		]);
+		for (const row of rows) expect(row.status).not.toBe('');
+	});
+
+	it('captions the block with what the read supports, and never §17.2’s own string', () => {
+		/* §17.2 writes the caption out — "Totals reported by each service." — and
+		   that literal string is refused: `internal/store/facets.go` is
+		   `SELECT COUNT(*)` over local rows and never asks a service for a declared
+		   total, so shipping those words would put a provenance on screen UsArr has
+		   not got (§9.6). The requirement is kept; the sentence is one this read
+		   can support. */
+		for (const caption of Object.values(SUMMARY_CAPTION)) {
+			expect(caption).not.toContain('Totals reported by each service');
+			expect(caption).not.toContain('—');
+			expect(caption.length).toBeGreaterThan(20);
+		}
+		expect(summaryCaption(firstRun)).toContain('No import has finished yet');
+		expect(summaryCaption(bookorbit())).toContain('Counted in UsArr’s own catalogue');
+		expect(summaryCaption(payload({ services: [imported({ lastFullSyncAt: null })] }))).toContain(
+			'still running'
+		);
+	});
+});
+
+/**
  * BLOCK A's CHROME, over the markup that actually ships.
  *
  * The ROWS are not read here and cannot be: every value in them is interpolated
@@ -494,18 +705,38 @@ describe('Block A’s rows', () => {
  * the heading, the count beside it, the list's accessible label and the whole
  * uncountable-library banner — and none of that was covered by any guard.
  */
-const HOME_SUMMARY_MARKUP = sectionsMarkup(userFacingMarkup(HOME_SOURCE), 'id="home-summary"').join(
-	'\n'
-);
+/**
+ * ⚠️ THE SECTION AND THE SNIPPET THAT DRAWS ITS ROWS, AND THE SECOND HALF WAS
+ * MISSING. This read `sectionsMarkup(…, 'id="home-summary"')` alone, which
+ * slices to the first `</section>` — and every row of Block A is rendered by
+ * `{#snippet summaryCellRender}`, which Svelte requires at the top level of the
+ * component and which therefore lies outside every section on the page. Proved
+ * by injection: `restricted · hidden · skeleton shimmer placeholder` was put
+ * into the rendered sub-line of every sourceless row and all 99 tests passed.
+ *
+ * Both halves stripped by the same `userFacingMarkup` pass, so the guards below
+ * cannot disagree with each other about what a reader can see.
+ */
+const HOME_SUMMARY_STRIPPED = userFacingMarkup(HOME_SOURCE);
+const HOME_SUMMARY_MARKUP = [
+	...sectionsMarkup(HOME_SUMMARY_STRIPPED, 'id="home-summary"'),
+	snippetMarkup(HOME_SUMMARY_STRIPPED, 'summaryCellRender')
+].join('\n');
 
 describe('Block A’s chrome, in the markup', () => {
-	it('is reading the region it thinks it is reading', () => {
+	it('is reading the region it thinks it is reading, snippet included', () => {
 		// An empty string passes every not.toContain there is, so the positive
 		// assertions come first and each names something only this section has.
 		expect(HOME_SUMMARY_MARKUP.length).toBeGreaterThan(200);
 		expect(HOME_SUMMARY_MARKUP).toContain('Your library');
 		expect(HOME_SUMMARY_MARKUP).toContain('Your library could not be counted');
 		expect(HOME_SUMMARY_MARKUP).toContain('Library by media type');
+		// ⚠️ AND THE SNIPPET HALF, NAMED SEPARATELY. The three assertions above all
+		// live inside the `<section>`, so every one of them passed while the rows'
+		// own markup was outside the corpus. `Add` is the sourceless row's link and
+		// exists nowhere else on this screen.
+		expect(HOME_SUMMARY_MARKUP).toContain('>Add</a>');
+		expect(HOME_SUMMARY_MARKUP).toContain('cell-sub');
 	});
 
 	it('declares exactly the three columns the wire can answer', () => {
@@ -528,6 +759,33 @@ describe('Block A’s chrome, in the markup', () => {
 			(m) => m[1]
 		);
 		expect(headers).toEqual(['Type', 'Items', 'Status']);
+	});
+
+	it('keeps exactly one column on the phone fork’s second line', () => {
+		/* ⚠️ A TRIPWIRE FOR A CSS OVERRIDE, NOT A PREFERENCE ABOUT COLUMNS.
+		   §17.2 wants "name and count on line one" and `.tbl--2line` gives every
+		   line-1 cell `display: block`, so a second line-1 column starts its own
+		   line — `424 books` rendered as a second title under `Ebooks`, measured at
+		   390 px. `routes/+page.svelte`'s `<style>` block fixes it by making the
+		   line-1 cells inline and BLOCKIFYING line 2 to end the line, scoped to
+		   `#home-summary`.
+
+		   That blockification is only correct while line 2 has exactly ONE cell.
+		   `List.svelte` emits `.stacksep`'s inline `·` before every second-line
+		   cell but the first, so a second one would carry its separator onto a
+		   third line. §17.2 wants this block to grow `Have` and `Synced`, which is
+		   precisely the change that would break it, so the constraint is asserted
+		   here instead of trusted to a comment. If this fails: either keep the new
+		   column on line 1, or rework the override in `+page.svelte` — and
+		   re-measure at 390 px either way. */
+		const literal = /const SUMMARY_COLUMNS: ListColumn\[\] = \[([\s\S]*?)\n\t\];/.exec(HOME_SOURCE);
+		expect(literal, 'SUMMARY_COLUMNS is not in routes/+page.svelte any more').not.toBeNull();
+		const secondLine = [...(literal as RegExpExecArray)[1].matchAll(/stackLine: 2/g)];
+		expect(secondLine).toHaveLength(1);
+		// And the override itself, so a rename of the section id cannot silently
+		// unscope it or delete it.
+		expect(HOME_SOURCE).toContain("#home-summary :global(.tbl--2line td[data-line='2'])");
+		expect(HOME_SOURCE).toContain("#home-summary :global(.tbl--2line td[data-line='1'])");
 	});
 
 	it('never explains a zero as something being hidden from the caller', () => {

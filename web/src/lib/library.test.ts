@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
 	EMPTY_RECENT_FEED,
+	FACETS_BODY_UNREADABLE,
 	LIBRARY_FACETS_URL,
 	LIBRARY_RECENT_URL,
 	NO_MEDIA_TYPE_COUNTS,
@@ -575,7 +576,15 @@ describe('the per-media-type facet counts', () => {
 		};
 	}
 
-	it('reads the endpoint server.go actually routes', () => {
+	it('pins the facets path as a literal, so a rename has to be deliberate', () => {
+		/* ⚠️ THE NAME USED TO SAY *"reads the endpoint server.go actually routes"*,
+		   AND NOTHING HERE READS Go. This compares one literal against another, so
+		   what it can catch is an accidental edit to `LIBRARY_FACETS_URL`, and what
+		   it cannot catch is the client and the server disagreeing. The value IS
+		   correct — `internal/httpapi/server.go` registers
+		   `GET /api/v1/library/facets` — and that was checked by hand rather than
+		   by this assertion. A test whose name overstates what it verifies is a
+		   green nobody re-reads. */
 		expect(LIBRARY_FACETS_URL).toBe('/api/v1/library/facets');
 	});
 
@@ -597,14 +606,28 @@ describe('the per-media-type facet counts', () => {
 		});
 	});
 
-	it('answers six zeros for a body that is not the envelope', () => {
-		// The safe default is a value this wire produces for real — six zeros is
-		// what a restricted scope returns — so a renderer that handles the
-		// response at all handles this. A throw would take Home down over a
-		// summary.
+	it('answers null for a body that is not the envelope, and never six zeros', () => {
+		/* ⚠️ IT ANSWERED `NO_MEDIA_TYPE_COUNTS` UNTIL THIS WAS MEASURED, AND THE
+		   CALLER TREATED THAT AS SUCCESS — so a renamed envelope key shipped
+		   "0 books / 0 audiobooks / 0 series" on Home with no error anywhere and
+		   the screen's own banner unreachable.
+
+		   A restricted scope's zeros are TRUE and a malformed body's zeros are
+		   UNKNOWN, and six zeros is not an inert state the way `toSessionState`'s
+		   SIGNED_OUT is: it is an assertion about the user's library, made off a
+		   body the client could not read, on the one screen whose whole job is
+		   "what do I have?". */
 		for (const bad of [null, undefined, 42, 'counts', [], [1, 2], {}, { counts: null }]) {
-			expect(toMediaTypeCounts(bad)).toEqual(NO_MEDIA_TYPE_COUNTS);
+			expect(toMediaTypeCounts(bad)).toBeNull();
 		}
+	});
+
+	it('has a sentence for the unreadable body, because there is no upstream text', () => {
+		// The banner renders `facetsError` verbatim, and a 200 UsArr could not
+		// parse has no upstream words to quote. One sentence naming the endpoint
+		// and what was wrong with the answer.
+		expect(FACETS_BODY_UNREADABLE).toContain('/api/v1/library/facets');
+		expect(FACETS_BODY_UNREADABLE).not.toContain('—');
 	});
 
 	it('reads a missing or non-numeric key as zero and never as absent', () => {
@@ -616,7 +639,11 @@ describe('the per-media-type facet counts', () => {
 			counts: { movies: '12', tv: null, ebooks: Number.NaN, comics: 3 }
 		});
 		expect(parsed).toEqual({ ...NO_MEDIA_TYPE_COUNTS, comics: 3 });
-		expect(Object.keys(parsed).sort()).toEqual([
+		// A present `counts` is a shape this function CAN read, so it is never the
+		// null a missing envelope gets: the departure is at the envelope, not
+		// inside it.
+		expect(parsed).not.toBeNull();
+		expect(Object.keys(parsed ?? {}).sort()).toEqual([
 			'audiobooks',
 			'comics',
 			'ebooks',
@@ -634,5 +661,8 @@ describe('the per-media-type facet counts', () => {
 			counts: { movies: 0, tv: 0, music: 0, ebooks: 0, audiobooks: 0, comics: 0 }
 		});
 		expect(restricted).toEqual(NO_MEDIA_TYPE_COUNTS);
+		// And it is a VALUE, not the `null` a body this function cannot read gets:
+		// the two states the endpoint distinguishes must not collapse on this side.
+		expect(restricted).not.toBeNull();
 	});
 });

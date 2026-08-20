@@ -60,9 +60,18 @@
 	 * of a document. `librarySummary` names what was measured, and names the
 	 * document it disagrees with.
 	 *
-	 * WHAT IS STILL NOT DRAWN: §17.7's `partial` and `stale` states, which want a
-	 * per-instance sync clock — a different read again, and not one of the three
-	 * above.
+	 * WHAT IS STILL NOT DRAWN: §17.7's `stale` state — the non-modal banner
+	 * naming a degraded instance and the time its rows were cached from. ⚠️ THIS
+	 * READ *"`partial` and `stale`, which want a per-instance sync clock — a
+	 * different read again"*, AND BOTH HALVES WERE WRONG AGAINST THIS SAME FILE
+	 * 570 LINES BELOW. The clock is not a different read: it is
+	 * `ServiceHealth.lastFullSyncAt` off GET /api/v1/services/health, which this
+	 * screen already fetches for Block B and now keeps whole. And `partial` is
+	 * drawn — Block A's rows carry it, as `first import running` with no number
+	 * beside it, off `$lib/home`'s `countBasis`. What `stale` still wants is the
+	 * BANNER, which is a rendering decision §17.7 specifies and nothing here has
+	 * made: non-modal, naming the instance by the user's own name, linking to
+	 * Services, and not greying the catalogue.
 	 *
 	 * WHAT IS LEFT IS THE STATE THE OWNER IS ACTUALLY IN, and §8.5 names it
 	 * rather than leaving it as an implicit empty app: Prowlarr configured, no
@@ -150,7 +159,13 @@
 	import { onMount } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
-	import { ApiError, fetchRecentGrabs, fetchServicesHealth, type RecentGrab } from '$lib/api';
+	import {
+		ApiError,
+		fetchRecentGrabs,
+		fetchServicesHealth,
+		type RecentGrab,
+		type ServicesHealth
+	} from '$lib/api';
 	import HaveCell from '$lib/HaveCell.svelte';
 	import Icon from '$lib/Icon.svelte';
 	import List from '$lib/List.svelte';
@@ -160,6 +175,7 @@
 		appendPage,
 		cursorRejected,
 		EMPTY_RECENT_FEED,
+		FACETS_BODY_UNREADABLE,
 		fetchLibraryFacets,
 		fetchRecentPage,
 		hasMore,
@@ -176,7 +192,7 @@
 		homeMode,
 		HOME_SEARCH_SCOPE_NOTE,
 		librarySummary,
-		NO_CATALOGUE_SOURCE,
+		summaryCaption,
 		summaryCount,
 		type AttentionRow,
 		type HomeMode,
@@ -272,16 +288,34 @@
 	 * `List.svelte` already stamps and Block C already uses, and `.tbl--2up`
 	 * stays unreached.
 	 *
-	 * `Type` IS LINE 1 AND `Status` IS LINE 2; `Items` IS LINE 1 BESIDE THE NAME.
-	 * The two-line fork emits a `·` before every second-line cell except the
-	 * first, unconditionally and without looking at whether the cell has
-	 * anything in it — so a column that is empty on half the rows may not sit on
-	 * line 2 beside another, or those rows render a dangling separator. `Status`
-	 * is empty on a catalogued row and `Items` is empty on a sourceless one, so
-	 * exactly one of them can be there, and it is the one whose text is a
-	 * sentence rather than a figure. Both empties collapse to nothing, which is
-	 * what keeps every row two lines: name over count where there is a count,
-	 * name over state where there is not.
+	 * `Type` AND `Items` ARE LINE 1 AND `Status` IS LINE 2 — and the split is
+	 * §17.2's, *"name and count on line one"*, which took a page-scoped override
+	 * to reach.
+	 *
+	 * ⚠️ THIS PARAGRAPH CLAIMED THE SPLIT WITHOUT IT AND WAS FALSE ON THE SCREEN.
+	 * It read *"`Items` IS LINE 1 BESIDE THE NAME"* and, two sentences later,
+	 * *"name over count"*, which contradict each other; the render matched the
+	 * second. Measured at 390 px on the shipped build at `51a9e68`: `Ebooks` at
+	 * top 338 and `424 books` at top 356, both 18 px tall at weight 600 — a
+	 * SECOND TITLE under the first, not a count beside a name. The cause is
+	 * `.tbl--2line td[data-line='1'] { display: block }`, which gives a second
+	 * line-1 column its own line. The style element at the foot of this file
+	 * carries the override and what scopes it.
+	 *
+	 * WHY `Items` DID NOT SIMPLY MOVE TO LINE 2. `List.svelte` emits a `·` before
+	 * every second-line cell except `firstSecondLine`, unconditionally and without
+	 * looking at whether the cell has anything in it — so a column that is empty
+	 * on half the rows may not sit on line 2 beside another, or those rows render
+	 * a dangling separator. `Status` is on every row and `Items` is empty on a
+	 * sourceless one, so that pairing was never available.
+	 *
+	 * ⚠️ AND THAT IS WHY THE OVERRIDE BINDS `Status` AS THE ONLY LINE-2 COLUMN.
+	 * The override blockifies line 2 to end line 1, which is only safe while there
+	 * is exactly ONE second-line cell — a second one would carry its inline `·`
+	 * onto a third line. §17.2 wants this block to grow `Have` and `Synced`
+	 * eventually, so the constraint is a tripwire in `home.test.ts` rather than a
+	 * sentence: whoever adds a second line-2 column here fails a test that names
+	 * the CSS.
 	 */
 	const SUMMARY_COLUMNS: ListColumn[] = [
 		{ id: 'type', header: 'Type', width: 'minmax(0, 1fr)', stackLabel: false, stackLine: 1 },
@@ -290,13 +324,31 @@
 	];
 
 	/**
-	 * A sourceless row carries a sub-line — the service, the milestone and the
-	 * Add link — so it is the same two-line shape as Block B's and Block C's rows
-	 * and takes the same measured figure. `ROW_INTRINSIC`'s default is measured
-	 * on a ONE-line row and would be wrong by half, which shows as scroll-height
-	 * jitter.
+	 * `contain-intrinsic-size`'s estimate for a row of this list: THE TALLER OF
+	 * THE TWO SHAPES, measured, and not a figure copied off another table.
+	 *
+	 * ⚠️ THIS READ 44 AND CLAIMED IT WAS *"the same measured figure"* AS BLOCK B's
+	 * AND BLOCK C's, AND NO MEASUREMENT HAD BEEN TAKEN ON THIS LIST. Measured in
+	 * Chromium at 1440×900 against the shipped compiled CSS and the real
+	 * `List.svelte` row DOM, the two shapes are not one number and 44 was neither
+	 * of them:
+	 *
+	 *   a row with a source    30 px content box (28 border box before the
+	 *                          `Status` word landed on it, which is `.st`'s icon)
+	 *   a sourceless row       48 px content box, carrying the service /
+	 *                          milestone / Add sub-line
+	 *
+	 * So 44 was UNDER-reserving on half the rows rather than over-reserving on
+	 * the other half, which is the error direction this constant most wants to
+	 * avoid: `list.ts`'s own note records that `auto` in front of the length makes
+	 * the browser discard the estimate for the row's own size the moment the row
+	 * has been laid out once, so the whole of the cost is scrollbar drift on rows
+	 * that have never been on screen — and over-reserving settles the scrollbar
+	 * DOWNWARD as rows resolve while under-reserving pushes content away from a
+	 * reader chasing it. 48 is the taller shape exactly and over-reserves the
+	 * other three by 18 px.
 	 */
-	const ROW_INTRINSIC_SUMMARY = 44;
+	const ROW_INTRINSIC_SUMMARY = 48;
 
 	const COLUMNS: ListColumn[] = [
 		{ id: 'state', header: 'State', width: 'minmax(0, 1.1fr)' },
@@ -410,6 +462,20 @@
 	let services = $state(0);
 	let rows = $state<AttentionRow[]>([]);
 	let loadError = $state('');
+	/**
+	 * THE WHOLE HEALTH RESPONSE, because Block A asks it two questions the
+	 * services COUNT cannot answer.
+	 *
+	 * ⚠️ THIS WAS `health.services.length` AND NOTHING ELSE, and both of Block A's
+	 * false sentences came out of that: with no `kind` on hand the block could
+	 * only say which types the BUILD catalogues, so a Kavita-only install was told
+	 * `Audiobooks · 0 audiobooks`; and with no `lastFullSyncAt` on hand it could
+	 * not tell a finished import from a walk that started a minute ago, so a
+	 * first-run user was told `Ebooks 0 books` for the several minutes it ran.
+	 * `$lib/home` holds both derivations — `catalogueReach` and `countBasis` — so
+	 * a test can read them.
+	 */
+	let health = $state<ServicesHealth | undefined>(undefined);
 
 	/**
 	 * WHAT THE USER TYPES. It does two things now, and it did one before.
@@ -521,11 +587,14 @@
 	const count = $derived(rollupCount(rows));
 	const meta = $derived(headline(mode, services, count));
 
-	/* Block A's rows and the count beside its heading, both derived from the one
-	 * response so the head and the table cannot disagree about how many types
-	 * have a source. `$lib/home` owns which types those are and why. */
-	const summaryRows = $derived(librarySummary(facets));
+	/* Block A's rows, the count beside its heading and the caption above it, all
+	 * three derived from the same two responses so none of them can disagree with
+	 * the table. `$lib/home` owns which types have a source on this install, what
+	 * the six counts mean while an import is running, and why the caption is not
+	 * §17.2's literal string. */
+	const summaryRows = $derived(librarySummary(facets, health));
 	const summaryTotals = $derived(summaryCount(summaryRows));
+	const summaryNote = $derived(summaryCaption(health));
 
 	/**
 	 * The href the submit button would follow with scripting off, and the one
@@ -548,10 +617,11 @@
 
 	async function load() {
 		try {
-			const health = await fetchServicesHealth();
-			mode = homeMode(health);
-			services = health.services.length;
-			rows = attention(health.services, now);
+			const answer = await fetchServicesHealth();
+			health = answer;
+			mode = homeMode(answer);
+			services = answer.services.length;
+			rows = attention(answer.services, now);
 			loadError = '';
 		} catch (error) {
 			loadError = error instanceof ApiError ? error.detail : String(error);
@@ -577,7 +647,17 @@
 		// — and a count carries no such clause, so re-reading it every minute
 		// would be a repeated query for a table that changes only while the user
 		// is on another screen. Recent grabs is excluded for the same reason.
-		if (mode === 'library' && !facetsLoaded) void loadFacets();
+		//
+		// ⚠️ AND A FAILED READ IS RETRIED, WHICH `!facetsLoaded` ALONE REFUSED.
+		// `facetsLoaded` is set in `finally`, so one transient 500 flipped it and
+		// then gated every later attempt off: the timer went on calling `load()`
+		// every minute and this line went on declining to ask again, leaving the
+		// banner on screen for the rest of the session over a failure that had
+		// already passed. `facetsError` is the second half of the condition and it
+		// is cleared on success, so a healed endpoint heals the block on the next
+		// tick and a permanently broken one is asked once a minute — the cadence
+		// the health read next to it already runs at, not a spin.
+		if (mode === 'library' && (!facetsLoaded || facetsError !== '')) void loadFacets();
 	}
 
 	/**
@@ -593,7 +673,19 @@
 	 */
 	async function loadFacets() {
 		try {
-			facets = await fetchLibraryFacets();
+			const counts = await fetchLibraryFacets();
+			// ⚠️ A MALFORMED 200 IS A FAILURE AND IS RENDERED AS ONE. `null` is what
+			// `toMediaTypeCounts` answers for a body that is not the counts
+			// envelope, and it used to answer six zeros — so a renamed key on the
+			// wire shipped "0 books / 0 audiobooks / 0 series" with no error
+			// anywhere and the banner below unreachable. A restricted scope's zeros
+			// are TRUE; a body the client could not read supports no number at all.
+			if (counts === null) {
+				facetsError = FACETS_BODY_UNREADABLE;
+				facetsAction = '';
+				return;
+			}
+			facets = counts;
 			facetsError = '';
 			facetsAction = '';
 		} catch (error) {
@@ -859,6 +951,25 @@
 					</div>
 				</div>
 			{:else}
+				<!--
+					§17.2's ONE CAPTION ABOVE THE BLOCK, AND DELIBERATELY NOT §17.2's
+					OWN WORDS.
+
+					§17.2 writes the sentence out — "`Items` is the source's declared
+					total from first contact, and it says so once above the block —
+					'Totals reported by each service.'" — and that literal string is
+					REFUSED here. `internal/store/facets.go` is `SELECT COUNT(*)` over
+					local rows under the caller's access scope: it never asks a service
+					for a declared total, and no field on the wire carries one. Printing
+					§17.2's sentence would put a number's provenance on screen that UsArr
+					has not got, which is DESIGN-DIRECTION §9.6's fabrication ban wearing
+					a caption. The REQUIREMENT is kept in full — one sentence, once, above
+					the block — and what it says is what this read can support, including
+					the thing §17.2 wanted a caption for: that a number under an
+					unfinished import is not a total. `$lib/home`'s SUMMARY_CAPTION holds
+					the three sentences and the argument.
+				-->
+				<p class="note summary-note">{summaryNote}</p>
 				<List
 					label="Library by media type"
 					columns={SUMMARY_COLUMNS}
@@ -901,24 +1012,45 @@
 			actually the case.
 		-->
 		{#if row.items}<span class="num">{row.items}</span>{/if}
-	{:else if !row.catalogued}
+	{:else}
 		<!--
-			§17.7's per-type `unconfigured` state: the state, then its cause and its
-			action on the muted sub-line. The vocabulary is the Services screen's
-			own — nothing here is broken and nothing failed, so this is neither an
-			error nor a warning tone.
+			§17.7's PER-TYPE STATE, AND EVERY ROW HAS ONE.
+
+			⚠️ THIS ARM WAS `{:else if !row.catalogued}` AND THE `Status` COLUMN WAS
+			BLANK ON EVERY ROW THAT HAD A STATUS. A header promising a state above an
+			empty box reads as *status unknown*, not as *status fine*, on exactly the
+			three rows the screen is most confident about. §17.7 has an `ok` state and
+			the services read says which rows are in it, so the column delivers what
+			its header promises rather than being renamed down to what it managed.
+
+			The vocabulary is `$lib/home`'s `SUMMARY_STATE`, carried on the row, so
+			there is no second copy of the mapping in a template.
+
+			⚠️ ALL THREE TAKE THE SAME GREY, INCLUDING `ok`, AND THAT IS THE DESIGN'S
+			RULE RATHER THAN AN OVERSIGHT. Nothing here is broken and nothing failed —
+			a type with no source and a walk still running are both ordinary — so
+			neither an error nor a warning tone is available; and `st--ok`'s green on
+			the three healthy rows would turn Block A into the reassurance panel
+			DESIGN-DIRECTION §9.5 rules out, *"chroma marks what is wrong, not what is
+			fine"*. `.st--none`'s own note says grey is load-bearing for exactly this.
+			The icon is what separates the three, which is `.st`'s rule too: icon and
+			text together, never colour alone. `check` and `dash-circle` are two of
+			`Icon.svelte`'s six names; no seventh is minted for a distinction the
+			words already carry.
 
 			The link is to Services rather than a second copy of the add flow:
 			§17.3's rule that a problem is stated canonically once per screen, and
 			there is one place a service gets added.
 		-->
 		<span class="st st--none">
-			<Icon name="dash-circle" size="sm" />
-			{NO_CATALOGUE_SOURCE}
+			<Icon name={row.state === 'ok' ? 'check' : 'dash-circle'} size="sm" />
+			{row.status}
 		</span>
-		<div class="cell-sub">
-			{row.service} · {row.milestone} · <a href={servicesPath}>Add</a>
-		</div>
+		{#if !row.catalogued}
+			<div class="cell-sub">
+				{row.service} · {row.milestone} · <a href={servicesPath}>Add</a>
+			</div>
+		{/if}
 	{/if}
 {/snippet}
 
@@ -1731,6 +1863,16 @@
 	}
 
 	/*
+	 * §17.2's caption above Block A — placement only. `.note` is the class and
+	 * the whole of the appearance; this adds the gap that keeps it off the
+	 * section rule above it and off the table below it. `.section__head` already
+	 * carries the space above, so only the space below is written here.
+	 */
+	.summary-note {
+		margin-bottom: var(--space-4);
+	}
+
+	/*
 	 * BLOCKS A AND B, AND THE ONLY THING THIS CONTAINER DOES IS MAKE `order`
 	 * AVAILABLE TO THEM. It is not a panel, a card or a background step: no
 	 * padding, no border, no radius and no background, so the two sections sit
@@ -1763,6 +1905,53 @@
 	@media (min-width: 761px) {
 		#home-summary {
 			order: -1;
+		}
+	}
+
+	/*
+	 * §17.2's PHONE ROW: "name and count on line one".
+	 *
+	 * ⚠️ THE SHARED FORK CANNOT DO THIS AND MUST NOT BE MADE TO. `.tbl--2line`
+	 * gives every `data-line="1"` cell `display: block`, so a second line-1 column
+	 * starts its own line — `424 books` rendered at 13px semibold on a line of its
+	 * own, which is a second title rather than a count beside a name. The obvious
+	 * repair, moving `Items` to line 2, is closed off by `List.svelte`: the fork
+	 * emits a `·` before every line-2 cell except `firstSecondLine`, without
+	 * looking at whether the cell has anything in it, and `Items` is empty on a
+	 * sourceless row while `Status` is empty on none — so the pair would render a
+	 * dangling separator on half the rows.
+	 *
+	 * So the two line-1 cells go inline and the line-2 cell takes the block that
+	 * ends the line. THIS IS SCOPED TO `#home-summary` AND MUST STAY THERE: the
+	 * `display: block` on line 2 is only safe on a list with exactly ONE
+	 * second-line column, because `.stacksep` is `display: inline` and a
+	 * blockified second cell would carry its `·` onto a third line. Block C and
+	 * every other `stack="two-line"` list has two, and none of them is touched by
+	 * an id selector on this section.
+	 *
+	 * `:global()` because the cells are `List.svelte`'s, not this file's; the id
+	 * is what keeps the reach to this one table.
+	 */
+	@media (max-width: 760px) {
+		#home-summary :global(.tbl--2line td[data-line='1']) {
+			display: inline;
+		}
+
+		/* The gap between the name and its count. Not a `gap` — there is no flex
+		 * or grid container on this line any more — and not markup whitespace,
+		 * which the compiler is free to collapse away. */
+		#home-summary :global(.tbl--2line td[data-col='type']) {
+			padding-right: var(--space-3);
+		}
+
+		#home-summary :global(.tbl--2line td[data-col='type'] .trunc),
+		#home-summary :global(.tbl--2line td[data-col='items'] .num) {
+			display: inline-block;
+			vertical-align: top;
+		}
+
+		#home-summary :global(.tbl--2line td[data-line='2']) {
+			display: block;
 		}
 	}
 

@@ -324,8 +324,154 @@ export function headline(mode: HomeMode | undefined, services: number, count: st
 /* ── BLOCK A: the media-type summary ──────────────────────────────────────── */
 
 /**
- * WHICH MEDIA TYPES THIS BUILD CAN CATALOGUE AT ALL, AND WHAT ONE OF ITS ROWS
- * COUNTS.
+ * WHICH MEDIA TYPES A CONNECTED SERVICE KIND CAN WRITE WORKS OF.
+ *
+ * ⚠️ THIS IS A PROPERTY OF THE INSTALL, NOT OF THE BUILD, AND IT SHIPPED AS THE
+ * SECOND ONE. A static table of "types v0.1 catalogues" told a Kavita-only user
+ * `Audiobooks · 0 audiobooks`, which is the exact claim `librarySummary` below
+ * argues no row may make: a claim about the library where the true fact is
+ * about the pipeline. Kavita serves no audio and says so
+ * (`internal/libsync/kavita.go`, the `LibraryTypeBook` arm: *"Kavita serves no
+ * audio, so nothing here can produce one"*), so on that install the Audiobooks
+ * row has no source and must say so.
+ *
+ * READ OFF `internal/libsync`, KIND BY KIND, never off a document:
+ *
+ *   kavita     `LibraryTypeBook` → `book` works, and no audio at all, so
+ *              EBOOKS; `LibraryTypeComic` / `ComicVine` / `Manga` → `comic`
+ *              works, so COMICS.
+ *   bookorbit  the same two work kinds plus the audio half: its
+ *              `bookOrbitEditionFormat` maps m4b, mp3, m4a, opus, ogg and flac
+ *              onto `edition.format = 'audiobook'` (ADR-0059), so EBOOKS,
+ *              AUDIOBOOKS and COMICS.
+ *
+ * `cmd/usarr/import.go` is the bound on this map: it refuses any kind but those
+ * two, in as many words, so a kind absent here catalogues nothing whatever its
+ * `role` says. A kind that is registered as `library` in
+ * `internal/httpapi.serviceKinds` but has no adapter would fall through to no
+ * types at all, which is the truthful answer rather than a default.
+ *
+ * ⚠️ THE SPLIT DISAGREES WITH `design/DESIGN-DIRECTION.md` §8.4, WHICH LISTS
+ * AUDIOBOOKS AMONG v0.1's SOURCELESS TYPES on the premise that *"BookOrbit's
+ * media types are Kavita's"*. They are not — the audio arm above is the whole
+ * difference — and telling a user with an imported audiobook library that
+ * Audiobooks has *no catalogue source* would be false on the screen whose whole
+ * job is "what do I have?". The truthful split ships and the conflict is
+ * reported; §8.4 is not this file's to edit.
+ *
+ * ⚠️ COMICS IS THE SERIES, NEVER THE ISSUE. ADR-0068 decision 1 mints one
+ * `comic_issue` per file UNDER a `comic` parent, and `comic_issue` is one of the
+ * child kinds `store.recentWorkKinds` excludes (ADR-0030: *"a manga library's
+ * chapters would swamp the number and Block A's row would report chapters where
+ * the user reads series"*). So §17.2's *"comics are `series` in all three
+ * places"* is what the code counts.
+ */
+const KIND_CATALOGUES: Record<string, readonly MediaType[]> = {
+	kavita: ['ebooks', 'comics'],
+	bookorbit: ['ebooks', 'audiobooks', 'comics']
+};
+
+/**
+ * The media types SOME CONNECTED SERVICE can write works of, on this install.
+ *
+ * The precedent is `librarygrid`'s `browseEmptyState`, which already separates
+ * "a library-bearing service is connected" from "this type has no rows" off the
+ * same services read rather than off a constant. Same read, same separation,
+ * one block earlier.
+ *
+ * Read off `kind` and not off `role`: `role` says a service HAS a catalogue,
+ * and this question is which SIX-TYPE ROWS that catalogue can ever fill, which
+ * only the adapter knows. A disabled instance still counts — its rows are in the
+ * local file and the six counts include them — so nothing here reads `enabled`.
+ */
+export function catalogueReach(health: ServicesHealth | undefined): ReadonlySet<MediaType> {
+	const reach = new Set<MediaType>();
+	for (const service of health?.services ?? []) {
+		for (const type of KIND_CATALOGUES[service.kind] ?? []) reach.add(type);
+	}
+	return reach;
+}
+
+/**
+ * WHAT THE SIX COUNTS MEAN ON THIS INSTALL, which is a different question from
+ * what they are.
+ *
+ * ⚠️ THE STATE THIS EXISTS FOR IS THE FIRST-RUN ONE, and it is the state §17.2
+ * legislates by name: *"what Block A's columns mean while an import is running,
+ * stated because that is where the first-run user spends their first several
+ * minutes"*. The block used to render the moment the facet read landed, which is
+ * before the first walk has written a row, so a user who had just connected a
+ * service was told `Ebooks 0 books · Audiobooks 0 audiobooks · Comics 0 series`
+ * for the several minutes the import ran. Every one of those zeros was a real
+ * value off the wire and every one of them was a false sentence on the screen.
+ *
+ *   `not-counted`  no library-bearing instance has ever completed a full
+ *                  import and none has contributed a work. Nothing has been
+ *                  counted, so no row may render a number.
+ *   `partial`      no completed import, but committed batches have landed
+ *                  (`workCount > 0`). The numbers are real and are not totals —
+ *                  the same call `services.ts` makes for its own `Partial
+ *                  import` cell, where *"a partial import's committed rows are
+ *                  real and are shown"*.
+ *   `counted`      at least one library-bearing instance has completed a full
+ *                  import (`lastFullSyncAt !== null`).
+ *
+ * The clock is `ServiceHealth.lastFullSyncAt` off `GET /api/v1/services/health`,
+ * which Home already fetches for Block B, and it is a specified instant rather
+ * than a plausible one: the run's START, never its finish (http-api.md §3.5).
+ * Nothing here renders it — the question asked of it is only whether it is
+ * `null` — so the "never render a banner timestamp off null" rule is not in
+ * play.
+ *
+ * `isIndexer` is the same predicate `homeMode` takes, rather than a second copy
+ * of §8.5's test: an indexer reports `null` / `0` exactly like an unsynced
+ * catalogue source and only `role` separates them (http-api.md §3.2).
+ */
+export type CountBasis = 'not-counted' | 'partial' | 'counted';
+
+export function countBasis(health: ServicesHealth | undefined): CountBasis {
+	const bearing = (health?.services ?? []).filter((service) => !isIndexer(service));
+	if (bearing.some((service) => service.lastFullSyncAt !== null)) return 'counted';
+	if (bearing.some((service) => service.workCount > 0)) return 'partial';
+	return 'not-counted';
+}
+
+/**
+ * THE ONE SENTENCE ABOVE THE BLOCK (§17.2), AND IT IS NOT §17.2's SENTENCE.
+ *
+ * §17.2 requires a caption above Block A and writes it out: *"`Items` is the
+ * source's declared total from first contact, and it says so once above the
+ * block — 'Totals reported by each service.'"* **That literal string is refused
+ * here, deliberately, and the requirement is not.** `internal/store/facets.go`
+ * is `SELECT COUNT(*)` over LOCAL rows under the caller's access scope; it never
+ * asks a service for a declared total and there is no field on the wire carrying
+ * one. Shipping §17.2's words would put a source's number on screen that UsArr
+ * has not got — DESIGN-DIRECTION §9.6's fabrication ban, expressed as a caption.
+ * So the caption ships and says what this read can actually support, which is
+ * also the thing §17.2 wanted a caption FOR: that a number under an unfinished
+ * import is not a total.
+ *
+ * One sentence each, §9.6, and no em dash in copy short enough not to need one
+ * (§13).
+ */
+export const SUMMARY_CAPTION: Record<CountBasis, string> = {
+	'not-counted':
+		'No import has finished yet, so nothing here has been counted. The first one starts on ' +
+		'its own and runs for minutes rather than seconds on a large library.',
+	partial:
+		'An import is still running, so these are the rows that have landed so far and not ' +
+		'totals.',
+	counted: 'Counted in UsArr’s own catalogue, never a total reported by a service.'
+};
+
+/** The caption for this install, so the template holds no copy of the mapping. */
+export function summaryCaption(health: ServicesHealth | undefined): string {
+	return SUMMARY_CAPTION[countBasis(health)];
+}
+
+/**
+ * WHAT WOULD FILL A ROW NOTHING CATALOGUES, AND THE UNIT NOUN FOR ONE THAT IS
+ * COUNTED.
  *
  * §17.2 gives Block A six rows and two shapes for them: a type with a catalogue
  * source renders a COUNT, and a type without one renders §17.7's per-type
@@ -335,20 +481,18 @@ export function headline(mode: HomeMode | undefined, services: number, count: st
  * legal beside the "never render a section with no content" rule: those rows
  * carry a state, a cause and an action, which is not nothing.
  *
- * ⚠️ THE SPLIT IS READ OFF `internal/libsync`, NOT OFF A DOCUMENT, AND THE TWO
- * DISAGREE ABOUT AUDIOBOOKS. `DESIGN-DIRECTION.md` §8.4 says v0.1 leaves
- * *"movies, TV, music and audiobooks"* sourceless, on the stated premise that
- * *"BookOrbit's media types are Kavita's"*. That premise is false in this tree:
- * Kavita serves no audio and says so (`internal/libsync/kavita.go`, the
- * `LibraryTypeBook` arm: *"Kavita serves no audio, so nothing here can produce
- * one"*), while BookOrbit does — `bookOrbitEditionFormat` maps m4b, mp3, m4a,
- * opus, ogg and flac onto `edition.format = 'audiobook'` and its own header
- * calls that *"the line the Audiobooks screen depends on"*, having been written
- * to fix the bug where every BookOrbit book rendered as an ebook. So a
- * BookOrbit install has audiobooks, `GET /api/v1/library?media_type=audiobooks`
- * lists them, and telling that user Audiobooks has *no catalogue source* would
- * be false on the screen whose entire job is "what do I have?". The truthful
- * split ships and the conflict is reported; §8.4 is not this file's to edit.
+ * ⚠️ WHICH SHAPE A ROW TAKES IS `catalogueReach`'s ANSWER AND NOT THIS TABLE'S.
+ * What lives here is what each row SAYS in either shape, which is fixed by the
+ * build: the service a user would add to fill this type, the milestone it
+ * arrives in, and the noun its count takes. `service` and `milestone` are read
+ * only on the sourceless shape and `unit` only on the counted one.
+ *
+ * `unit: ''` IS THE MARK OF A TYPE NO ADAPTER IN THIS BUILD CAN WRITE, and
+ * `KIND_CATALOGUES` is the other half of that same fact. A noun declared for a
+ * type nothing counts is a noun nobody has had to make true yet — §17.2's own
+ * `artists` for Music is already wrong against this read, which would sum
+ * `artist` AND `album` works into one number — so the three rows no kind
+ * reaches carry none, and a test pins the two halves against each other.
  *
  * WHAT IS ACTUALLY MEASURED, kind by kind. `store.recentWorkKinds` is the
  * counted allowlist — `movie`, `series`, `artist`, `album`, `book`, `comic` —
@@ -359,42 +503,37 @@ export function headline(mode: HomeMode | undefined, services: number, count: st
  *   music        no writer. Navidrome, §16.1 slot #1, after v0.1.
  *   ebooks       `book` works, minus the audiobook half.
  *   audiobooks   `book` works whose primary edition is `format = 'audiobook'`.
- *   comics       `comic` works. ⚠️ THE SERIES, NEVER THE ISSUE — ADR-0068
- *                decision 1 mints one `comic_issue` per file UNDER a `comic`
- *                parent, and `comic_issue` is one of the child kinds
- *                `recentWorkKinds` excludes (ADR-0030: *"a manga library's
- *                chapters would swamp the number and Block A's row would report
- *                chapters where the user reads series"*). So §17.2's *"comics
- *                are `series` in all three places"* is what the code counts.
- *
- * A ROW GAINS ITS UNIT NOUN EXACTLY WHEN IT GAINS A SOURCE, which is why the
- * noun lives on this arm of the union and not in a table of six. §17.2 requires
- * one noun per type across the banner, the block and the sidebar, and a noun
- * declared for a type nothing counts is a noun nobody has had to make true yet
- * — §17.2's own `artists` for Music is already wrong against this read, which
- * sums `artist` AND `album` works into one number.
+ *   comics       `comic` works, the series and never the issue.
  */
-type TypeSource =
-	{ k: 'catalogued'; unit: string } | { k: 'sourceless'; service: string; milestone: string };
+interface TypeFacts {
+	/** The unit noun a count takes, or '' where no adapter writes this type. */
+	unit: string;
+	/** The service a user would add to fill this row. */
+	service: string;
+	/** The milestone that service arrives in. */
+	milestone: string;
+}
 
-const TYPE_SOURCE: Record<MediaType, TypeSource> = {
-	movies: { k: 'sourceless', service: 'Radarr', milestone: 'v0.2' },
-	tv: { k: 'sourceless', service: 'Sonarr', milestone: 'v0.2' },
-	music: { k: 'sourceless', service: 'Navidrome', milestone: 'after v0.1' },
+const TYPE_FACTS: Record<MediaType, TypeFacts> = {
+	movies: { unit: '', service: 'Radarr', milestone: 'v0.2' },
+	tv: { unit: '', service: 'Sonarr', milestone: 'v0.2' },
+	music: { unit: '', service: 'Navidrome', milestone: 'after v0.1' },
 	// The mockup's own noun for this row (`424 books`). §17.2 gives worked
 	// examples for three of the six — `films`, `artists`, `series` — and leaves
-	// the book pair to the screen.
-	ebooks: { k: 'catalogued', unit: 'books' },
+	// the book pair to the screen. Either v0.1 adapter fills it, so the row names
+	// both rather than picking one for a user who has neither.
+	ebooks: { unit: 'books', service: 'BookOrbit or Kavita', milestone: 'v0.1' },
 	// `audiobooks` and not `books`, even though both rows count `book` works.
 	// The two counts ARE comparable, so §17.2's mixed-unit argument does not
 	// force a distinct noun here; what does is that the Ebooks row already took
 	// the general word, and one column reading `424 books` above `118 books`
 	// invites the reading that the second is a subset of the first. It is not:
-	// every book lands in exactly one of the two (ADR-0059).
-	audiobooks: { k: 'catalogued', unit: 'audiobooks' },
+	// every book lands in exactly one of the two (ADR-0059). One service fills
+	// this row, because Kavita serves no audio.
+	audiobooks: { unit: 'audiobooks', service: 'BookOrbit', milestone: 'v0.1' },
 	// §17.2, verbatim: "comics are `series` in all three places, not `comic
 	// series` in one of them". ADR-0068 is why that is also what is counted.
-	comics: { k: 'catalogued', unit: 'series' }
+	comics: { unit: 'series', service: 'BookOrbit or Kavita', milestone: 'v0.1' }
 };
 
 /** §17.7's words for a type nothing can fill. One sentence, §9.6. */
@@ -407,16 +546,54 @@ export const NO_CATALOGUE_SOURCE = 'no catalogue source connected';
  */
 const COUNT = new Intl.NumberFormat('en-GB');
 
+/**
+ * The three words the `Status` column may hold, and every row carries one.
+ *
+ * ⚠️ A `Status` COLUMN THAT IS BLANK ON A HEALTHY ROW READS AS *status
+ * unknown*, NOT AS *status fine*, and that is what shipped: the cell rendered
+ * content only on a sourceless row, so Ebooks, Audiobooks and Comics each had a
+ * header promising a state above an empty box. §17.7 has an `ok` state and the
+ * services read now says which rows are in it, so the column keeps its header
+ * and delivers on it rather than being renamed down to what it managed.
+ *
+ * `Catalogued` is deliberately not `Up to date`. There is no periodic re-sync in
+ * this build — `cmd/usarr/import.go` runs at most one import per instance per
+ * database, on connect, with no timer behind it — so a freshness claim would be
+ * one nothing measures. What the word asserts is exactly what was checked: an
+ * import completed and these rows came out of it.
+ */
+export const SUMMARY_STATE = {
+	/** No connected service can write works of this type. */
+	unconfigured: NO_CATALOGUE_SOURCE,
+	/** A connected service writes this type and no import has finished yet. */
+	importing: 'first import running',
+	/** §17.7's `ok`: an import completed and this number came out of it. */
+	ok: 'catalogued'
+} as const;
+
+export type SummaryState = keyof typeof SUMMARY_STATE;
+
 /** One row of Block A, in `MEDIA_TYPES` order. */
 export interface SummaryRow {
 	mediaType: MediaType;
 	/** The Type cell. `$lib/library`'s label, never a second copy of it. */
 	label: string;
-	/** Whether this build has an adapter that writes works of this type. */
+	/**
+	 * Whether a SERVICE CONNECTED TO THIS INSTALL writes works of this type.
+	 *
+	 * ⚠️ NOT "whether this build has an adapter for it", which is what it meant
+	 * when a Kavita-only install was told `Audiobooks · 0 audiobooks`. See
+	 * `catalogueReach`.
+	 */
 	catalogued: boolean;
+	/** §17.7's state for this row, which every row has. */
+	state: SummaryState;
+	/** The word the Status cell renders. `SUMMARY_STATE[state]`, carried on the
+	 *  row so the template holds no second copy of the mapping. */
+	status: string;
 	/**
 	 * The Items cell, unit noun included — `1,204 films`, `553 series` — or ''
-	 * on a sourceless row, which has no number and must not be given a `0`.
+	 * wherever there is no number this screen may state.
 	 *
 	 * ⚠️ THE NOUN IS IN THE CELL AND NOT IN THE HEADER, which §17.2 makes a
 	 * correctness rule rather than a layout preference: the six units are not
@@ -425,27 +602,37 @@ export interface SummaryRow {
 	 * its unit or it is misinformation"*.
 	 */
 	items: string;
-	/** The service that will catalogue this type, or '' where one already does. */
+	/** The service that would catalogue this type, or '' where one already does. */
 	service: string;
 	/** The milestone it arrives in, or ''. */
 	milestone: string;
 }
 
 /**
- * Block A's six rows, from the six counts.
+ * Block A's six rows, from the six counts and the services read.
+ *
+ * ⚠️ IT TAKES THE HEALTH RESPONSE BECAUSE BOTH OF ITS RULES ARE ABOUT THE
+ * INSTALL AND NEITHER IS ABOUT THE BUILD. Which types have a source is
+ * `catalogueReach`'s answer, and whether any number has been counted at all is
+ * `countBasis`'s; a constant in place of either one told a first-run user and a
+ * Kavita-only user the same false sentence from opposite directions. `undefined`
+ * is the pre-read state and yields no reach and `not-counted`, which draws no
+ * number anywhere — the honest reading of "the health response has not landed".
  *
  * ⚠️ A ZERO IS RENDERED AS A ZERO AND NEVER AS "HIDDEN". `internal/store/
  * facets.go` collapses a restricted scope onto the same `0` an empty type
  * produces, deliberately and in one direction only, because publishing
  * "restricted" as its own value *"would turn every hidden type into a positive
- * statement that content exists"*. So `0 books` on a catalogued row is the
- * whole of what this screen may say, and it is true either way: the caller can
- * see no books of that type.
+ * statement that content exists"*. So `0 books` on a counted row is the whole of
+ * what this screen may say, and it is true either way: the caller can see no
+ * books of that type.
  *
- * ⚠️ AND A SOURCELESS ROW IS NOT GIVEN THAT ZERO. Its count is `0` on the wire
- * too, and rendering `0 films` would read as "you have no films" on an install
- * where nothing has ever looked for one. The row says what is actually the
- * case — that nothing catalogues films yet, and what will.
+ * ⚠️ AND A ROW THAT HAS NOT BEEN COUNTED IS NOT GIVEN THAT ZERO. Its count is
+ * `0` on the wire too, and the two facts are not the same fact — `0 books` under
+ * a finished import is a measurement, and `0 books` while the walk is still
+ * running is a guess that happens to be rendered in digits. The row says what is
+ * actually the case: which service will fill it, or that the import has not
+ * finished.
  *
  * ALL SIX ROWS ARE RETURNED. §17.2's *"a type the user does not have is not
  * shown at all"* is satisfied by the `unconfigured` state rather than by
@@ -453,22 +640,40 @@ export interface SummaryRow {
  * only the types one source covers, *"from which the only available inference
  * is that UsArr does not do the others"*.
  */
-export function librarySummary(counts: MediaTypeCounts): SummaryRow[] {
+export function librarySummary(
+	counts: MediaTypeCounts,
+	health: ServicesHealth | undefined
+): SummaryRow[] {
+	const reach = catalogueReach(health);
+	const basis = countBasis(health);
 	return MEDIA_TYPES.map((mediaType) => {
-		const source = TYPE_SOURCE[mediaType];
+		const facts = TYPE_FACTS[mediaType];
+		const catalogued = reach.has(mediaType);
+		const state: SummaryState = !catalogued
+			? 'unconfigured'
+			: basis === 'counted'
+				? 'ok'
+				: 'importing';
 		const row: SummaryRow = {
 			mediaType,
 			label: mediaTypeLabel(mediaType),
-			catalogued: source.k === 'catalogued',
+			catalogued,
+			state,
+			status: SUMMARY_STATE[state],
 			items: '',
 			service: '',
 			milestone: ''
 		};
-		if (source.k === 'catalogued') {
-			row.items = `${COUNT.format(counts[mediaType])} ${source.unit}`;
-		} else {
-			row.service = source.service;
-			row.milestone = source.milestone;
+		// A number only where one has been counted. `not-counted` is the first-run
+		// window and `partial` is a running import whose committed batches are
+		// real — services.ts makes the same call for its own `Partial import`
+		// cell, where "a partial import's committed rows are real and are shown".
+		if (catalogued && basis !== 'not-counted') {
+			row.items = `${COUNT.format(counts[mediaType])} ${facts.unit}`;
+		}
+		if (!catalogued) {
+			row.service = facts.service;
+			row.milestone = facts.milestone;
 		}
 		return row;
 	});
@@ -481,6 +686,11 @@ export function librarySummary(counts: MediaTypeCounts): SummaryRow[] {
  * hold no number, and a reader who takes `6 media types` as the subject of the
  * table below has been told the wrong thing about it. It is derived from the
  * rows rather than written down, so it cannot disagree with them.
+ *
+ * ⚠️ THE SECOND CLAUSE MOVES WITH THE INSTALL, and that is `catalogueReach`'s
+ * doing rather than a change here: a Kavita-only install reads `6 media types,
+ * 2 catalogued` and a BookOrbit one reads `3`, because the row this counts is
+ * the row that has a source connected and not the row the build could fill.
  */
 export function summaryCount(rows: readonly SummaryRow[]): string {
 	const catalogued = rows.filter((r) => r.catalogued).length;

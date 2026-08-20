@@ -76,3 +76,35 @@ export function sectionsMarkup(markup: string, marker: string): string[] {
 	if (found.length === 0) throw new Error(`the marker ${marker} is not in the markup any more`);
 	return found;
 }
+
+/**
+ * ONE `{#snippet name(…)}` BLOCK ON A STRIPPED TEMPLATE, TO ITS OWN
+ * `{/snippet}`.
+ *
+ * ⚠️ THIS EXISTS BECAUSE A SECTION SLICE IS NOT THE MARKUP THAT RENDERS THE
+ * ROWS, AND A BAN LIST OVER THE WRONG CORPUS IS WORSE THAN NO BAN LIST. Home's
+ * Block A guard sliced `id="home-summary"` to `</section>` and asserted that
+ * `restricted`, `hidden`, `skeleton`, `shimmer` and `placeholder` were absent
+ * from it. Every row of that block is drawn by `{#snippet summaryCellRender}`,
+ * which Svelte requires at the TOP LEVEL of the component and which therefore
+ * sits outside every `<section>` on the page. All five words were injected into
+ * the rendered sub-line of every sourceless row and all 99 tests passed.
+ *
+ * A SNIPPET IS A TOP-LEVEL BLOCK, SO NESTING IS NOT A CASE. Svelte 5 allows a
+ * snippet inside another snippet, but the ones a `+page.svelte` passes as a
+ * `cell` prop cannot be nested — they are siblings of the markup — so the first
+ * `{/snippet}` after the opener is this one's. A slicer that counted depth would
+ * be guessing at a shape the compiler already forbids here.
+ *
+ * A MISSING SNIPPET THROWS, for `sectionsMarkup`'s reason: an empty corpus
+ * passes every `not.toContain` there is, so a renamed snippet would turn a ban
+ * green instead of red.
+ */
+export function snippetMarkup(markup: string, name: string): string {
+	const opener = `{#snippet ${name}(`;
+	const open = markup.indexOf(opener);
+	if (open < 0) throw new Error(`the snippet ${name} is not in the markup any more`);
+	const close = markup.indexOf('{/snippet}', open);
+	if (close < 0) throw new Error(`the snippet ${name} has no closing tag`);
+	return markup.slice(open, close);
+}

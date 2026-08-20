@@ -672,13 +672,19 @@ export interface MediaTypeCounts {
 }
 
 /**
- * The safe default, and the value a malformed body parses to.
+ * The zero value, and the value an install with nothing catalogued really gets.
  *
  * It is six zeros rather than six `undefined`s because six zeros is already a
  * value this wire produces for a real caller — it is what a restricted scope
  * looks like — so a renderer that handles the response at all handles this. An
  * "unknown" state would be a seventh thing to render that the endpoint itself
  * refuses to have.
+ *
+ * ⚠️ IT IS NO LONGER WHAT A MALFORMED BODY PARSES TO, and that sentence stood
+ * here until it was measured: `toMediaTypeCounts` answers `null` for a body it
+ * cannot read, because six zeros is an assertion about the user's library and a
+ * body the client could not read supports no assertion at all. This constant is
+ * still the zero value and callers still render it as six real zeros.
  */
 export const NO_MEDIA_TYPE_COUNTS: MediaTypeCounts = {
 	movies: 0,
@@ -690,20 +696,42 @@ export const NO_MEDIA_TYPE_COUNTS: MediaTypeCounts = {
 };
 
 /**
+ * What a 200 whose body is not the counts envelope is called, so the screen has
+ * something true to put in its own banner. There is no upstream text to quote:
+ * this is UsArr talking to UsArr and getting an answer it does not recognise.
+ */
+export const FACETS_BODY_UNREADABLE =
+	'GET /api/v1/library/facets answered, and the body was not the counts envelope it sends.';
+
+/**
  * The envelope, narrowed. `counts` is NESTED under one key on the wire and is
  * unwrapped here; `internal/httpapi/facets.go` explains the nesting — the
  * availability rollup and the last-import time are *"their own aggregates and
  * their own commit"*, and the object leaves them somewhere to land.
  *
- * A body that is not that shape yields `NO_MEDIA_TYPE_COUNTS` rather than a
- * throw, which is `toRecentPage`'s precedent above and is the right side to
- * fail on for a summary: a screen that cannot count is not a screen that has to
- * stop.
+ * ⚠️ `null` FOR A BODY THAT IS NOT THAT SHAPE, AND THAT IS A DELIBERATE
+ * DEPARTURE FROM THE HOUSE DEFAULT one line of thought above it. `toSessionState`
+ * answers `SIGNED_OUT` for a body it cannot read and `toRecentPage` answers an
+ * empty page, and both are right, because both of those are INERT states: a
+ * signed-out screen asks the user to sign in and an empty page asks for nothing.
+ * Six zeros is not inert. It is an ASSERTION ABOUT THE USER'S LIBRARY — "you
+ * have no books, no audiobooks and no comics" — rendered on the one screen whose
+ * whole job is to answer "what do I have?", and made off a body the client could
+ * not read. A renamed envelope key would have shipped that sentence with no
+ * error anywhere and the caller's own error arm unreachable.
+ *
+ * ⚠️ THE INSIDE OF A PRESENT `counts` STILL DEFAULTS TO ZERO, which is not the
+ * same decision and is unchanged. `internal/httpapi/facets.go` sends all six
+ * with no `omitempty`, so a missing or non-numeric member is a build skew rather
+ * than a shape the client cannot read at all, and `0` is the value the closed
+ * enum exists to make unambiguous. The line this function draws is between "the
+ * server did not answer the question" and "the server answered it with a
+ * number".
  */
-export function toMediaTypeCounts(payload: unknown): MediaTypeCounts {
-	if (!isRecord(payload)) return NO_MEDIA_TYPE_COUNTS;
+export function toMediaTypeCounts(payload: unknown): MediaTypeCounts | null {
+	if (!isRecord(payload)) return null;
 	const counts = payload.counts;
-	if (!isRecord(counts)) return NO_MEDIA_TYPE_COUNTS;
+	if (!isRecord(counts)) return null;
 	return {
 		movies: num(counts.movies) ?? 0,
 		tv: num(counts.tv) ?? 0,
@@ -724,7 +752,11 @@ export function toMediaTypeCounts(payload: unknown): MediaTypeCounts {
  * `?lib=`, no `?media_type=`, no paging — `internal/httpapi/facets.go` lists
  * each refusal and its reason. The access scope comes off the session and a
  * caller cannot widen it, which is why it is not a parameter here either.
+ *
+ * `null` IS AN ANSWER AND IT IS NOT SIX ZEROS. See `toMediaTypeCounts`: a 200
+ * whose body is not the envelope is a failure the caller must render as a
+ * failure, and `FACETS_BODY_UNREADABLE` is the sentence for it.
  */
-export async function fetchLibraryFacets(): Promise<MediaTypeCounts> {
+export async function fetchLibraryFacets(): Promise<MediaTypeCounts | null> {
 	return toMediaTypeCounts(await getJson(LIBRARY_FACETS_URL));
 }
