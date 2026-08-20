@@ -838,23 +838,32 @@ function containerSignature(library: Library): string {
  * The key is the identity triple, never the `library_source` id: two libraries
  * over one container have two source rows and one container.
  *
- * ⚠️ THE FALLBACK IS THE LIBRARY'S OWN SIGNATURE, AND IT IS A DEGRADED ARM
- * RATHER THAN THE DESIGN. A server that sends no breakdown has told this module
- * nothing about where the count happened, so the best available key is the set
- * of containers the row stands over — which is exactly what this function
- * replaced, and is exact whenever those sets are identical or disjoint. It
- * cannot be better than that: the information needed to do better is the
- * information that did not arrive.
+ * ⚠️ THERE IS NO FALLBACK FOR A SERVER THAT SENDS NO BREAKDOWN, AND THE ABSENCE
+ * IS DELIBERATE RATHER THAN AN OVERSIGHT — THE PARAGRAPH IS HERE SO THE NEXT
+ * READER DOES NOT HELPFULLY ADD ONE. This SPA is embedded in the binary that
+ * serves it (`internal/web/spa`, written by `web/scripts/sync-embed.mjs`), so
+ * the client can never be newer than its server: a build whose `skippedNote`
+ * reads `containers` is a build whose handler writes it. The version skew a
+ * fallback would defend against cannot occur in a shipped build.
+ *
+ * ⚠️ AND THE ONLY FALLBACK AVAILABLE WOULD BE THE DEFECT. Keying on the set of
+ * containers the row stands over is precisely what this function replaced: it is
+ * exact only while those sets are identical or disjoint, and the two-instance
+ * shape it got wrong is the one this whole path exists for. A degraded arm that
+ * reinstates the bug is worse than none, because it is the arm nobody looks at.
+ *
+ * A row that somehow carried `left_out` with no readable breakdown therefore
+ * contributes NOTHING to the total rather than being reconstructed from its
+ * sources. That understates, which is this module's standing direction whenever
+ * a record cannot be read — `toSkips` and `toCompleteness` drop rather than
+ * default for the same reason. The row's own mark is unaffected: `skipMarks`
+ * renders that row's count and has never needed the breakdown.
  */
 function skipParts(library: Library): { key: string; items: number }[] {
-	const parts = library.skipped?.containers;
-	if (parts !== undefined && parts.length > 0) {
-		return parts.map((c) => ({
-			key: `${c.serviceInstanceId}\u0000${c.containerKind}\u0000${c.containerRef}`,
-			items: c.items
-		}));
-	}
-	return [{ key: containerSignature(library), items: library.skipped?.items ?? 0 }];
+	return (library.skipped?.containers ?? []).map((c) => ({
+		key: `${c.serviceInstanceId}\u0000${c.containerKind}\u0000${c.containerRef}`,
+		items: c.items
+	}));
 }
 
 /**

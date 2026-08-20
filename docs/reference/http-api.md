@@ -568,7 +568,14 @@ unit of work for part of it — and **neither is evidence for the other**. Like 
 | `items` | **no** | How many items were read and not mapped **in this library**. ⚠️ **Absent under `none`** — there is nothing to count there, and a `0` under that label is a claim the label does not make. ⚠️ **Never sum it across rows** — see the fold rule below. |
 | `reason` | **no** | UsArr's own short sentence about why, present only with `left_out`. ⚠️ **Never upstream text** — reference/security.md §5 — and short, because it renders in a table cell. |
 | `recorded_at` | **no** | RFC 3339 UTC. Under `none` it is the stamp of the observation the state rests on. |
-| `containers` | **no** | The per-container breakdown: one object per upstream container that left something out, present only with `left_out`. Each carries `service_instance_id`, `container_kind`, `container_ref` and its own non-zero `items`. A container that recorded a zero is **not** served, on `items`'s own reasoning, so the entries always sum to `items`. |
+| `containers` | **no** | The per-**container** breakdown: one object per upstream container that left something out, present only with `left_out`. Each carries `service_instance_id`, `container_kind`, `container_ref` — the **same identity triple `sources[]` publishes** — and its own non-zero `items`. A container that recorded a zero is **not** served, on `items`'s own reasoning, so the entries always sum to `items`. |
+
+⚠️ **`containers` breaks the count down by CONTAINER, never by REASON, and it adds no field to this
+object.** The three identity keys are ones `sources[]` already carries and `items` is the same
+integer this section has always described; `items` above still carries the **whole library's**
+total and is still true of that row. Nothing is split, and the adapter's per-reason vocabulary is
+**not** what got broken out — see *"the adapter's per-reason vocabulary does not cross"* below,
+which is unchanged and covers this key too.
 
 **FOLD ON `containers`, NEVER ON THE ROWS, AND NEVER ON THE ROW'S `sources`.** A skip is a fact
 about a **container**; §17.8 renders one row per **library**, and since
@@ -625,11 +632,12 @@ unchanged and is not this field's: an instance whose import did not finish rende
 not finish · this count may be short"* on every one of its libraries. `none` also renders nothing,
 so the cost is a sentence that was not shown rather than a claim that was made.
 
-**The adapter's per-reason vocabulary does not cross.** `sync_report.detail` carries
-`skipped_comics` and `skipped_unknown`; the wire carries the **total** and UsArr's sentence, because
-a second adapter will decline items for reasons that are neither and a field named `comics` would
-have to be lied to. The operator-facing keys — `effect`, `covers`, `does_not_cover` — stay in the
-row.
+**The adapter's per-reason vocabulary does not cross, and `containers` did not change that.**
+`sync_report.detail` carries `skipped_comics` and `skipped_unknown`; the wire carries the **total**
+and UsArr's sentence, because a second adapter will decline items for reasons that are neither and a
+field named `comics` would have to be lied to. That holds inside every `containers` entry as well —
+an entry carries a container's identity and its total, never a per-reason split. The
+operator-facing keys — `effect`, `covers`, `does_not_cover` — stay in the row.
 
 **`items` is not `item_count` minus anything.** §2.6's closing rule applies here in the direction it
 was written for: an adapter that deliberately skips part of a container is exactly why the upstream's

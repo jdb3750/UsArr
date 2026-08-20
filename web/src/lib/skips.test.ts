@@ -57,6 +57,24 @@ function parse(over: Record<string, unknown> = {}): Library {
 	return l;
 }
 
+/**
+ * The `containers` breakdown the server sends beside EVERY `left_out`, built
+ * here from the row's own source so no fixture models a wire that cannot occur.
+ *
+ * ⚠️ A `left_out` VERDICT WITHOUT IT IS NOT A SHAPE THIS SCREEN CAN MEET. The
+ * SPA is embedded in the binary that serves it, so a build whose `skippedNote`
+ * reads `containers` is a build whose handler writes it — there is no fallback
+ * in `skipParts` and no fixture here may pretend there is one.
+ */
+function over(items: number, ref = '12', instance = 1): Record<string, unknown> {
+	return {
+		service_instance_id: instance,
+		container_kind: 'remote_library',
+		container_ref: ref,
+		items
+	};
+}
+
 /** The marks a row carries, as `{word, detail}` pairs. */
 function marks(l: Library) {
 	return libraryStates(l, HEALTH_UNREAD).map((m) => ({ word: m.word, detail: m.detail }));
@@ -67,6 +85,35 @@ describe('the skip verdict, parsed', () => {
 		expect(
 			toSkips({ state: 'left_out', items: 42, reason: 'r', recorded_at: '2026-08-19T10:00:00Z' })
 		).toEqual({ state: 'left_out', items: 42, reason: 'r', recordedAt: '2026-08-19T10:00:00Z' });
+	});
+
+	it('keeps the per-container breakdown, which is what makes a skip dedupable', () => {
+		expect(
+			toSkips({
+				state: 'left_out',
+				items: 3,
+				containers: [over(1, '1', 1), over(2, '9', 2)]
+			})?.containers
+		).toEqual([
+			{ serviceInstanceId: 1, containerKind: 'remote_library', containerRef: '1', items: 1 },
+			{ serviceInstanceId: 2, containerKind: 'remote_library', containerRef: '9', items: 2 }
+		]);
+	});
+
+	// ⚠️ ENTRY BY ENTRY, WHICH IS THE ONE PLACE THIS MODULE'S "DROP THE WHOLE
+	// RECORD" REFLEX WOULD BE WRONG: each entry answers the dedupe question for
+	// itself, so binning the good ones with the bad takes away the answer for the
+	// containers that were fine.
+	it('drops a malformed or zero entry and keeps the rest', () => {
+		expect(
+			toSkips({
+				state: 'left_out',
+				items: 3,
+				containers: [over(1, '1', 1), 'not an object', over(0, '5', 1), { items: 4 }]
+			})?.containers
+		).toEqual([
+			{ serviceInstanceId: 1, containerKind: 'remote_library', containerRef: '1', items: 1 }
+		]);
 	});
 
 	it('drops a count that arrives under `none`, because the label denies it', () => {
@@ -94,7 +141,8 @@ describe('left_out says the number and the why, on the row', () => {
 				state: 'left_out',
 				items: 42,
 				reason: 'a file BookOrbit itself cannot classify has no row',
-				recorded_at: '2026-08-19T10:24:00Z'
+				recorded_at: '2026-08-19T10:24:00Z',
+				containers: [over(42)]
 			}
 		});
 		expect(marks(l)).toContainEqual({
@@ -105,7 +153,9 @@ describe('left_out says the number and the why, on the row', () => {
 	});
 
 	it('says `item was` for one', () => {
-		const l = parse({ skipped: { state: 'left_out', items: 1, reason: 'r' } });
+		const l = parse({
+			skipped: { state: 'left_out', items: 1, reason: 'r', containers: [over(1)] }
+		});
 		expect(marks(l)[0].detail).toBe('1 item was read and not mapped; r');
 	});
 
@@ -115,14 +165,22 @@ describe('left_out says the number and the why, on the row', () => {
 	// broken and there is nothing to go and change — painting it amber would make
 	// the shortfalls harder to find.
 	it('is grey, because nothing is broken and there is nothing to go and fix', () => {
-		const l = parse({ skipped: { state: 'left_out', items: 2, reason: 'r' } });
+		const l = parse({
+			skipped: { state: 'left_out', items: 2, reason: 'r', containers: [over(2)] }
+		});
 		const mark = libraryStates(l, HEALTH_UNREAD).find((m) => m.key === 'items-left-out');
 		expect(mark?.tone).toBe('none');
 	});
 
 	it('carries the age, so the count reads as a measurement rather than a live fact', () => {
 		const l = parse({
-			skipped: { state: 'left_out', items: 2, reason: 'r', recorded_at: '2026-08-19T10:24:00Z' }
+			skipped: {
+				state: 'left_out',
+				items: 2,
+				reason: 'r',
+				recorded_at: '2026-08-19T10:24:00Z',
+				containers: [over(2)]
+			}
 		});
 		const mark = libraryStates(l, HEALTH_UNREAD).find((m) => m.key === 'items-left-out');
 		expect(mark?.at).toBe('2026-08-19T10:24:00Z');
@@ -139,13 +197,17 @@ describe('left_out says the number and the why, on the row', () => {
 	 */
 
 	const fiction = () =>
-		parse({ id: 2, name: 'Fiction', skipped: { state: 'left_out', items: 1, reason: 'r' } });
+		parse({
+			id: 2,
+			name: 'Fiction',
+			skipped: { state: 'left_out', items: 1, reason: 'r', containers: [over(1)] }
+		});
 	const comics = () =>
 		parse({
 			id: 3,
 			name: 'Fiction (Comics)',
 			kind: 'comic',
-			skipped: { state: 'left_out', items: 1, reason: 'r' }
+			skipped: { state: 'left_out', items: 1, reason: 'r', containers: [over(1)] }
 		});
 
 	it('names the sibling that reports the same skip over the same container', () => {
@@ -180,7 +242,7 @@ describe('left_out says the number and the why, on the row', () => {
 			id: 3,
 			name: 'Other',
 			sources: [{ ...(wire().sources as Record<string, unknown>[])[0], container_ref: '13' }],
-			skipped: { state: 'left_out', items: 5, reason: 'r' }
+			skipped: { state: 'left_out', items: 5, reason: 'r', containers: [over(5, '13')] }
 		});
 		const rows = [fiction(), other];
 		const mark = libraryStates(rows[0], HEALTH_UNREAD, rows).find(
@@ -224,7 +286,9 @@ describe('the sentence above the table', () => {
 	// different failure mode, and letting the two blur is the exact error the
 	// completeness work exists to prevent.
 	it('names the total and refuses to let it read as a completeness claim', () => {
-		const note = skippedNote([parse({ skipped: { state: 'left_out', items: 42, reason: 'r' } })]);
+		const note = skippedNote([
+			parse({ skipped: { state: 'left_out', items: 42, reason: 'r', containers: [over(42)] } })
+		]);
 		expect(note).toContain('42 items');
 		expect(note).toContain('a library');
 		expect(note).toContain('not a completeness check');
@@ -237,11 +301,14 @@ describe('the sentence above the table', () => {
 		// A summing test built from the same container would assert that a
 		// double-count happens.
 		const note = skippedNote([
-			parse({ id: 2, skipped: { state: 'left_out', items: 40, reason: 'r' } }),
+			parse({
+				id: 2,
+				skipped: { state: 'left_out', items: 40, reason: 'r', containers: [over(40)] }
+			}),
 			parse({
 				id: 3,
 				sources: [{ ...(wire().sources as Record<string, unknown>[])[0], container_ref: '13' }],
-				skipped: { state: 'left_out', items: 2, reason: 'r' }
+				skipped: { state: 'left_out', items: 2, reason: 'r', containers: [over(2, '13')] }
 			})
 		]);
 		expect(note).toContain('42 items');
@@ -259,12 +326,16 @@ describe('the sentence above the table', () => {
 
 	it('counts a container once when two libraries stand over it', () => {
 		const note = skippedNote([
-			parse({ id: 2, name: 'Fiction', skipped: { state: 'left_out', items: 1, reason: 'r' } }),
+			parse({
+				id: 2,
+				name: 'Fiction',
+				skipped: { state: 'left_out', items: 1, reason: 'r', containers: [over(1)] }
+			}),
 			parse({
 				id: 3,
 				name: 'Fiction (Comics)',
 				kind: 'comic',
-				skipped: { state: 'left_out', items: 1, reason: 'r' }
+				skipped: { state: 'left_out', items: 1, reason: 'r', containers: [over(1)] }
 			})
 		]);
 		expect(note).toContain('1 item');
@@ -303,12 +374,6 @@ describe('the sentence above the table', () => {
 		container_ref: ref,
 		is_metadata_authority: instance === 1
 	});
-	const part = (instance: number, ref: string, items: number) => ({
-		service_instance_id: instance,
-		container_kind: 'remote_library',
-		container_ref: ref,
-		items
-	});
 	const twoInstances = () => [
 		parse({
 			id: 2,
@@ -318,7 +383,7 @@ describe('the sentence above the table', () => {
 				state: 'left_out',
 				items: 3,
 				reason: 'r',
-				containers: [part(1, '1', 1), part(2, '9', 2)]
+				containers: [over(1, '1', 1), over(2, '9', 2)]
 			}
 		}),
 		parse({
@@ -326,14 +391,14 @@ describe('the sentence above the table', () => {
 			name: 'Fiction (Comics)',
 			kind: 'comic',
 			sources: [src(1, '1')],
-			skipped: { state: 'left_out', items: 1, reason: 'r', containers: [part(1, '1', 1)] }
+			skipped: { state: 'left_out', items: 1, reason: 'r', containers: [over(1, '1', 1)] }
 		}),
 		parse({
 			id: 4,
 			name: 'Fiction (2)',
 			kind: 'comic',
 			sources: [src(2, '9')],
-			skipped: { state: 'left_out', items: 2, reason: 'r', containers: [part(2, '9', 2)] }
+			skipped: { state: 'left_out', items: 2, reason: 'r', containers: [over(2, '9', 2)] }
 		})
 	];
 
@@ -359,11 +424,14 @@ describe('the sentence above the table', () => {
 
 	it('says nothing about sharing when every row stands over its own container', () => {
 		const note = skippedNote([
-			parse({ id: 2, skipped: { state: 'left_out', items: 40, reason: 'r' } }),
+			parse({
+				id: 2,
+				skipped: { state: 'left_out', items: 40, reason: 'r', containers: [over(40)] }
+			}),
 			parse({
 				id: 3,
 				sources: [{ ...(wire().sources as Record<string, unknown>[])[0], container_ref: '13' }],
-				skipped: { state: 'left_out', items: 2, reason: 'r' }
+				skipped: { state: 'left_out', items: 2, reason: 'r', containers: [over(2, '13')] }
 			})
 		]);
 		expect(note).not.toContain('same skip');
@@ -377,7 +445,7 @@ describe('the sentence above the table', () => {
 	it('bounds its own claim once it has made one, and not before', () => {
 		expect(skippedNote([parse(), parse()])).toBe('');
 		const note = skippedNote([
-			parse({ skipped: { state: 'left_out', items: 3, reason: 'r' } }),
+			parse({ skipped: { state: 'left_out', items: 3, reason: 'r', containers: [over(3)] } }),
 			parse(),
 			parse()
 		]);
@@ -390,7 +458,7 @@ describe('the sentence above the table', () => {
 	// understate what the screen knows.
 	it('does not count a measured negative as uncounted', () => {
 		const note = skippedNote([
-			parse({ skipped: { state: 'left_out', items: 3, reason: 'r' } }),
+			parse({ skipped: { state: 'left_out', items: 3, reason: 'r', containers: [over(3)] } }),
 			parse({ skipped: { state: 'none' } })
 		]);
 		expect(note).not.toContain('other librar');
