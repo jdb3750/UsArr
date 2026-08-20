@@ -66,7 +66,7 @@ shipped artifact is pure Go with no Wasm runtime in the graph. Verified against
 `github.com/ncruces/go-sqlite3-wasm/v3`, `julianday`, `sort`, `wbt` and `golang.org/x/sys` — **no
 `tetratelabs/wazero` at any version**.
 
-Three consequences, because earlier drafts of several documents got this wrong:
+The consequences, because earlier drafts of several documents got this wrong:
 
 * Any claim that UsArr gets wazero "for free, already a dependency" is **false**. Adopting wazero for
   anything would be a new dependency with its own cost. (This is moot for plugins — a WASM tier is
@@ -75,9 +75,20 @@ Three consequences, because earlier drafts of several documents got this wrong:
   pipeline. Do not assert it; assert "the upstream C source, not a Go reimplementation", which is
   what is actually true and is the property that mattered.
 * Memory behaviour is a **different** profile from a cgo driver, not necessarily a smaller one.
-  Navidrome idling at ~50 MB is evidence about cgo SQLite, and it does not transfer. Measure before
-  quoting an idle-RSS number: a one-day spike (500k-row fixture, WAL, the intended pragmas, arm64)
-  belongs before the schema work, not after.
+  Navidrome idling at ~50 MB is evidence about cgo SQLite, and it does not transfer. **On x86-64 the
+  measurement now exists**: `make bench-rss` over a 500k-row fixture, built through the real
+  `internal/db` open path at the shipped pragmas, reads **idle 10 MB** and **peak 50 MB** for the
+  import — ADR-0001, *Correction, revision 3 — the memory numbers are measured now (x86-64 only)*;
+  `docs/ARCHITECTURE.md` §13 carries the same pair, **idle 10 MB** and **peak 50 MB** for the
+  500k-row import.
+  **arm64 remains unmeasured**, so an idle-RSS number quoted for it is still quoted from nothing.
+  This bullet used to end *"Measure before quoting an idle-RSS number: a one-day spike (500k-row
+  fixture, WAL, the intended pragmas, arm64) belongs before the schema work, not after"*; the schema
+  shipped and the deployment target is x86-64, so the arm64 run is **a prerequisite to claiming
+  arm64 support, not a prerequisite to v0.1** (ruled 2026-08-20). **That moves the gate and does not
+  discharge the obligation** — run `make bench-rss` on the arm64 box and add its row to ADR-0001
+  before any claim that arm64 works. Page size and core count both move these figures, so the
+  x86-64 numbers do not transfer and an arm64 result replaces nothing.
 
 ---
 
@@ -1472,6 +1483,26 @@ corrected by this rule — each was proposed as a sweep candidate in `docs/DECIS
 turned out to be a false positive. **Over-application is the failure mode a rule about false counts
 can least afford.**
 
+**Sites examined and left standing, named because otherwise the next reader fixes them.** A boundary
+argues better from judgements that went the right way than from candidates that failed, so the
+reasoning that spared each one is recorded beside it:
+
+* **The count IS the rule.** `docs/DECISIONS.md`'s *"Three marks are always owed, and a fourth
+  where it is needed:"* is operative rule content, written and maintained in one act, with the
+  extensibility already inside the clause — *"and a fourth where it is needed"* is the extension
+  point. Rewriting it to drop the number would dissolve the unconditional/conditional distinction
+  the rule turns on, and the clause is quoted verbatim in dated `docs/REVIEW-LOG.md` entries that
+  the rewrite would falsify.
+* **An ADR body, under annotate-never-rewrite.** ADR-0068's *"After a live import against a real
+  BookOrbit, all four must hold."* is governed by *an ADR body is a dated record of a decision as
+  taken, so it is annotated, never rewritten*, and the rider hung under its *"The latest
+  `items_skipped` row's `Comics` field reads 0"* check retires that check as evidence while
+  **adding no check** — so the count stays true.
+
+Ruled 2026-08-20, and the ruling is worth carrying in its own words: *"Both are exactly the
+over-application I warned about when I ruled the boundary; that they were argued and left rather
+than swept is the rule working."*
+
 **And the check attaches to the edit: when you open a document to change it, check whether anything
 in it counts its own contents.** That is the shape §4's *Make targets* already gives `make design` —
 *"Run it by hand when the design moves"* — an obligation that follows what the commit touches rather
@@ -1517,6 +1548,57 @@ sits.** *A log you intend to attribute must be written to a path no other lane c
 exactly that — it quotes *never run two committing agents in one checkout* and calls out the shared
 lint cache and its lock by name, so both stay findable however many bullets land around them. A name
 survives an insertion; a position does not.
+
+### A rule enforced by the shape of its own prose says so, next to itself
+
+Some rules are guarded by nothing but the **shape of their own wording** — and that shape is exactly
+what a careful editor reads as prose to improve. Such a rule has a half-life unless it carries, right
+beside itself, the reason it is written the way it is.
+
+**The instance that produced this.** An editor tidying *"this rider annotates the dead citation"*
+into *"the dead citation is annotated"* would silently undo an entire correction: the agentless
+passive is the original defect, the active voice naming which rider does what is the repair, and the
+smoother sentence is the bug restored. Nothing compiles, lints or gates against that edit, and it
+reads as an improvement on the way past. **A rule whose enforcement depends on nobody smoothing the
+prose is a rule with a half-life, unless the prose says why it is shaped that way.**
+
+The family this joins, each named by its own wording so it stays findable however the file moves:
+
+* *No heading, subject line or preamble states a count of its own contents*, whose enforcement is the
+  **absence** of a number a copy-editor would happily supply.
+* *Name a neighbour by its own wording, not by where it sits*, whose enforcement is a quoted phrase
+  standing where *"the bullet above"* would read as tighter prose.
+* *A claim that something is the **only** mechanism names the boundary it is true within, rather than
+  asserting that nothing else exists*, whose enforcement is a qualifier that reads as hedging and is
+  doing the opposite.
+* The **active voice** required of the arm64 ratification's corrections, where the agent — which
+  rider does what — is the load-bearing half and an agentless passive drops it. ⚠️ **Not in the tree
+  at the tip this was written against**, and named as forthcoming rather than given a citation it
+  does not have.
+
+So: when you write a rule whose only guard is its own wording, **say in the rule what the shape is
+doing**; and when you edit one, ask what the shape is for before improving it.
+
+### A ruling states its reach, not the tree's current state
+
+**This is `CLAUDE.md`'s *"Status is read off the tree, not off a document"* applied to a decision
+record rather than to a status table.** A ruling that asserts **which sites are currently stale** is
+self-invalidating: it goes false the moment a lane repairs one, and it goes false **silently**,
+because nothing re-reads a ruling once it is written. State what the ruling **reaches** — what it
+covers, wherever that is — and let the tree answer for its own state.
+
+**The case that produced it.** A ratification's own text named three sites as stale. Checking found
+that only two carried the dead citation and that the third already read the corrected way, so the
+ruling was wrong about the tree on the day it was written — falsified by a lane that had got there
+first, which is the ordinary condition here rather than bad luck. **A ruling that enumerates the
+tree's current state is wrong on arrival more often than it is right**, because the lanes it is
+addressed to are editing while it is being drafted.
+
+The form that survives is the one the ADR-0001 arm64 rider takes: it names the sites the ruling
+reaches, and then says *"Whether each already reads that way is a question for the tree, not for this
+rider."* ⚠️ **Cited as forthcoming, and deliberately without a SHA** — that rider is not in
+`docs/DECISIONS.md` at the tip this was written against, and inventing a citation for it would be
+this same defect one level up.
 
 ### Working alongside other threads
 
@@ -1733,8 +1815,12 @@ paragraph describing a repo that no longer exists.
   cache-entry collision. The other is *contention*, and it reads as a broken gate:
   `golangci-lint` takes a run lock at `filepath.Join(os.TempDir(), "golangci-lint.lock")` — a
   fixed path derived from `TMPDIR`, **not** from `GOLANGCI_LINT_CACHE` (read in v2.12.2,
-  `pkg/commands/run.go`, `acquireFileLock`, over `gofrs/flock`; the same file the `computePkgHash`
-  keying was read in). It retries once a second for five seconds, then gives up with
+  `pkg/commands/run.go`, `acquireFileLock`, over `gofrs/flock` — the **same version** the
+  `computePkgHash` keying was read in, in a **different file**. Both re-read 2026-08-20 in the
+  extracted module source of `github.com/golangci/golangci-lint/v2@v2.12.2`: `acquireFileLock` is
+  `pkg/commands/run.go:486` and `computePkgHash` is `internal/cache/cache.go:160`. Line numbers are
+  the right anchor here for the reason `LS-321` kept them on a merged migration — a released module
+  version is never edited.) It retries once a second for five seconds, then gives up with
 
   ```
   Error: parallel golangci-lint is running
