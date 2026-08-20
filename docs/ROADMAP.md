@@ -1266,36 +1266,42 @@ Items marked 🛑 **STOPPED** are the different case: those are stopped by the d
       *Authority:* §17.8, `reference/http-api.md` §7.3.
       *Was done when:* a Libraries row is a link whose target carries `?lib=<slug>`. **It is.**
 
-- [ ] **The `?lib=` chip — RE-MEASURE WHAT IT STILL OWES, AND REPORT BEFORE BUILDING. This is the
-      CURRENT state of this item, and it is a measurement rather than a build.**
-      `design/DESIGN-DIRECTION.md` §8.1 pins it **above the nav** — *"a library is a **scope**, not a
-      place — a multi-select chip pinned above the nav"* — has it render nothing at 0 or 1 library,
-      and hoists it into the top bar at narrow widths because the drawer must never be the only
-      statement of an active scope.
-      **The read end of the loop is complete, and that part is unchanged:** `readLibraryScope` and
-      `MAX_LIBRARY_SLUGS` bound a scope at 32 before anything is sent; `browseParams` **deletes** the
-      parameter rather than emptying it, because an empty `?lib=` is a `400` and not "no scope"; the
-      server echoes the slugs it resolved; and `web/src/routes/library/[type]/+page.svelte` renders
-      *"Scoped to …"* with an address that clears it.
-      ⚠️ **THIS ITEM'S OWN PREMISE IS FALSIFIED.** It read *"~~the control that WRITES scope …
-      **The write end is empty:** nothing in `web/src/routes` puts a slug into `?lib=`~~"*. Something
-      does: `libraryScopeHref` in `web/src/routes/libraries/+page.svelte` (the item above) authors a
-      scope on every row. **What ships is *arriving* at a scope and *clearing* one** — fired at the
-      baseline above, the only `lib` writes under `web/src/` are `browseParams`'
-      `params.set('lib', …)` in `$lib/librarygrid`, which serialises a scope the screen already
-      holds, and the two `params.delete('lib')` calls in `/library` and `/library/[type]`. **So a
-      grid can drop a scope and cannot change one.**
-      **WHAT IS OWED IS THEREFORE A RE-MEASURE OF §8.1, NOT A CHIP:** subtract *arrive* and *clear*
-      from what §8.1 specifies, and **report the remainder before building any of it.**
-      🔍 Inference, labelled: what looks left is **changing** a scope without returning to Libraries,
-      plus §8.1's **multi-select** across more than one slug, which no link can express. **If that
-      remainder mostly dissolves, the honest outcome is a narrower item or an amendment to §8.1** —
-      not a chip built to a specification written before the entry point existed. Which of those it
-      is, is the measurement's answer and is not pre-empted here.
+- [x] **CLOSED 2026-08-20 ON ITS FIRST EXIT — ~~the `?lib=` chip: RE-MEASURE WHAT IT STILL OWES, AND
+      REPORT BEFORE BUILDING~~.** The box offered two exits and a build took the first, so the
+      re-measure it demanded was never owed and is not owed now.
+      ⚠️ **THIS CLOSURE IS NOT THE §8.1 CHIP'S DISCHARGE. THE CHIP REMAINS UNBUILT.** Read the second
+      paragraph before citing this box for anything.
+      **What satisfies exit one.** `b52b774` (*"feat(web): a scope select that changes `?lib=`
+      without leaving the screen"*) added `web/src/lib/scopeselect.ts` and wired it into **both**
+      browse screens. The control itself is in the routes, not only in `$lib`: `<select
+      id="library-scope">` is markup in `web/src/routes/library/+page.svelte` and in
+      `web/src/routes/library/[type]/+page.svelte`, and each screen's `onScope` calls
+      `scopeSelectSearch`, whose two lines are the whole write — `params.delete('lib')` on an empty
+      result, `params.set('lib', …)` otherwise. Read at the baseline above, those are now the only
+      `lib` writes under `web/src/` besides `browseParams`' round-trip in `$lib/librarygrid`. So a
+      screen can now **change** a scope, not merely arrive at one and drop it, which is exit one as
+      it was written.
+      ⚠️ **WHAT SHIPPED IS A STRICT SUBSET OF §8.1, AND `b52b774`'s OWN COMMIT MESSAGE SAYS SO IN
+      CAPITALS:** *"IT IS NOT DESIGN-DIRECTION §8.1's SCOPE CHIP, AND THE CHIP REMAINS UNBUILT.
+      Nothing here discharges it."* The same paragraph opens `scopeselect.ts`. What ships is
+      **screen-local and single-select**, living in two toolbars. §8.1's chip is **shell-level** —
+      hoisted into the top bar, a popover, **multi-select**, carrying hand-written keyboard
+      behaviours and a live region, and propagating the scope across navigation so the sidebar and
+      every screen agree about it. The sidebar, the `scope-empty` state and the top-bar hoist are all
+      untouched, and §8.1 keeps a wire precondition (`design/DESIGN-DIRECTION.md` §9.7) this control
+      neither needs nor meets.
+      🔍 **The binding is named `scopeSelect` everywhere — module, screens, tests — precisely so that
+      a search for the chip does not find it.** Do not read a `scopeSelect` hit as chip evidence; the
+      naming is a deliberate tripwire and it is doing its job.
+      ➡️ **THE §8.1 RESIDUAL SURVIVES THIS BOX.** Closing here retires the *re-measure*, not the
+      remainder it was meant to size. What the select does not do is **multi-select across more than
+      one slug** and the shell-level placement, and both are §8.1's to own. If that becomes work it
+      needs its own box written against a re-read §8.1 — **this box is closed and must not be
+      reopened as a proxy for it.**
       *Authority:* `design/DESIGN-DIRECTION.md` §8.1, §17.2, `reference/http-api.md` §7.3.
-      *Done when:* the re-measure is written down — **either** a control in `web/src/routes` that
-      sets `?lib=` to a slug the screen did not arrive with, **or** a recorded finding that §8.1's
-      remainder is smaller than the chip it specifies.
+      *Was done when:* **either** a control in `web/src/routes` that sets `?lib=` to a slug the
+      screen did not arrive with, **or** a recorded finding that §8.1's remainder is smaller than the
+      chip it specifies. **The first held; the second was never reached.**
 
 - [x] **The COVERS / POSTER half of §16's grid line — the SERVING half.**
       **Landed 2026-08-19.** `GET /img/{key}` is registered in `internal/httpapi/server.go`
