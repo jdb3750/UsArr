@@ -1488,6 +1488,19 @@ rule for that", when what existed was a ruling in conversation and not a rule in
 unwritten convention acquiring written authority through repetition. Rule 8 was written down for the
 same reason.*
 
+**A positional reference is the same defect in miniature.** It is *no heading, subject line or
+preamble states a count of its own contents* generalised, not a separate rule. *"The two bullets
+above"*, *"the section below"*, *"the first of these"* — each states a fact about the document's
+current shape instead of a fact about its subject, and **the next insertion falsifies it silently**.
+A count goes stale when the body grows; a position goes stale when anything lands between the
+pointer and what it points at, and neither has anything mechanical behind it: nothing compiles,
+nothing lints, and the sentence still reads perfectly while naming the wrong neighbour. The remedy
+is the one this file already practises: **name a neighbour by its own wording, not by where it
+sits.** *A log you intend to attribute must be written to a path no other lane can guess* does
+exactly that — it quotes *never run two committing agents in one checkout* and calls out the shared
+lint cache and its lock by name, so both stay findable however many bullets land around them. A name
+survives an insertion; a position does not.
+
 ### Working alongside other threads
 
 Several threads work this repo in parallel, on branches cut from the same base. The collisions that
