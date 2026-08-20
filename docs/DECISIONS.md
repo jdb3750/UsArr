@@ -7764,6 +7764,8 @@ protects and watching it go red.
 
 ---
 
+ℹ️ **ADR-0055 and ADR-0056 were never allocated: the ids are deliberately unused, not missing entries.**
+
 <a id="adr-0057"></a>
 ## ADR-0057 — The circuit breaker is one package with an injected open sentinel, not a copy per client
 
