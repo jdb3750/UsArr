@@ -233,17 +233,39 @@ concurrently → a 10,000-row write burst.
 3. **`cache_size` is per-connection**, which closes the other half and is the load-bearing result.
    One reader → eight readers added **+16 / +60 / +196 MiB** at `-2000` / `-8000` / `-32000`, i.e.
    0.89–1.19× of what a strictly per-connection cache predicts, rather than staying flat. **The
-   process pays `cache_size` × (read pool + 1).** The shipped `-32000` therefore costs **237 MB peak
-   on 4 cores** — and more on more cores, since the pool is `NumCPU*2`. *(The per-connection verdict
-   is inference from those ratios, not a reading of driver internals.)*
+   process pays `cache_size` × (read pool + 1).** The shipped `-32000` therefore costs **237 ~~MB~~
+   MiB peak on 4 cores** — and more on more cores, since the pool is `NumCPU*2`. *(The
+   per-connection verdict is inference from those ratios, not a reading of driver internals.)*
+   **[Unit corrected 2026-08-20; no figure changed and the finding is untouched.]** The sweep table
+   headed *"Read sweep, all MiB"* is what this figure is read off, and `make bench-rss` prints MiB,
+   so *"237 MB"* was a **relabel, not a rounding** — 237.1 MiB is ~249 MB decimal. The *"+16 / +60 /
+   +196 MiB"* reader delta stated in this same finding is that same run already in the right unit.
+   **237.1 is the shipped row's `peak (VmHWM)` cell**, which is the column the word *"peak"* names.
 4. **Go heap is 0.3 MB at every measurement point.** Anyone reasoning about UsArr's memory from
    `runtime.MemStats` would be off by three orders of magnitude. Use RSS.
 
 **Consequence, and one deliberately unmade decision.** The `< 80 MB` idle budget stands, now on
-evidence. `cache_size = -32000` is **not** confirmed as tuned: it is a ~235 MB peak against a ~35 MB
-alternative, and changing a shipped default is an owner decision with a latency side this harness
-does not measure. Recorded, not silently changed. **`mmap_size` should be dropped from the pragma
-list** as dead configuration when someone touches it next.
+evidence. `cache_size = -32000` is **not** confirmed as tuned:
+~~it is a ~235 MB peak against a ~35 MB alternative~~ —
+**it is a ~237 MiB peak against a ~35 MiB alternative** — and changing a shipped default is an owner
+decision with a latency side this harness does not measure. Recorded, not silently changed.
+**`mmap_size` should be dropped from the pragma list** as dead configuration when someone touches it
+next.
+
+**[Figure and unit corrected 2026-08-20; the decision this paragraph declines to take is untouched,
+and no cell of the sweep table moved.]** This correction rests on a claim that needs no inference
+at all: **the struck *"235 peak"* matches no peak the sweep table carries.** The peak the table
+records for the shipped `-32000` / `128 MiB` row is **237.1**; **235.1 is that row's `8 readers`
+cell.**
+🔍 **That the 235 descends from the `8 readers` column is inference from the exact numeric match,
+and no document records where it was read.**
+The match alone does not even pin the row — the `-32000` / `64 MiB` row carries 235.1 in
+`8 readers` too. The `-2000` alternative's peak is **35.0**, so that half of the struck sentence was
+right in figure and wrong only in unit. **On the unit:** the table headed *"Read sweep, all MiB"*
+is what both figures are read off, and `make bench-rss` prints MiB, so this is a **relabel, not a
+rounding** — 237.1 MiB is ~249 MB decimal. **The `< 80 MB` idle budget this paragraph opens on
+deliberately stays MB**: it is a chosen budget rather than a measurement, so the unit question does
+not arise for it, and relabelling it would assert a precision nobody measured.
 
 ### Amendment, 2026-08-16 — both pragmas settled
 
@@ -269,12 +291,17 @@ inference from the RSS ratios: four pinned pool connections each read back the r
 setting one connection to `-1000` left the other three untouched. Taking the table's peak column at
 face value, on 4 cores: `-2000` → ~35 MiB, `-8000` → ~85 MiB, `-32000` → ~237 MiB.
 
-The reasoning for `-8000`, recorded because the number is otherwise arbitrary: **237 MB would be
-harmless on the owner's own hardware** — an x86-64 ThinkCentre with RAM to spare — **but a default
-has to be defensible on the small self-hosted boxes this project targets**, and this particular cost
-**scales with core count** in a way that is easy to miss, since the read pool is `NumCPU*2`. A
-16-core box would pay roughly four times the 4-core figure for a default nobody chose. `-8000` buys
-most of the cache benefit at about a third of the footprint.
+The reasoning for `-8000`, recorded because the number is otherwise arbitrary: **237 ~~MB~~ MiB
+would be harmless on the owner's own hardware** — an x86-64 ThinkCentre with RAM to spare — **but a
+default has to be defensible on the small self-hosted boxes this project targets**, and this
+particular cost **scales with core count** in a way that is easy to miss, since the read pool is
+`NumCPU*2`. A 16-core box would pay roughly four times the 4-core figure for a default nobody chose.
+`-8000` buys most of the cache benefit at about a third of the footprint.
+**[Unit corrected 2026-08-20, on the same grounds and in the same pass as the rider on the finding
+headed *"`cache_size` is per-connection"*, which states them in full; no figure changed and the
+reasoning is untouched.]** This amendment's own sentence beginning *"Taking the table's peak column
+at face value"* already reads *"`-32000` → ~237 MiB"*, so this section was internally mixed and the
+correction makes it consistent rather than introducing a new form.
 
 **The limit of this decision.** It is made on the **memory axis only**. `make bench-rss` measures
 RSS; it does not measure query latency, and a smaller page cache is not free on that axis. Nothing
