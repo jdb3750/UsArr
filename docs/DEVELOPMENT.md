@@ -1452,15 +1452,32 @@ So:
 
 ### No heading, subject line or preamble states a count of its own contents
 
-The same shape as the collision above — a claim nothing mechanical can check. The count and the
-contents are maintained by two different acts, so they diverge; the count is the half that looks
-authoritative; and nothing compiles, lints or gates against it. **The enumeration in the body is the
-count.** A heading, a preamble or a banner that restates it goes stale the moment the body moves.
+The same shape as *a wire vocabulary and a storage vocabulary never share a term* — a claim nothing
+mechanical can check. The count and the contents are maintained by two different acts, so they
+diverge; the count is the half that looks authoritative; and nothing compiles, lints or gates
+against it. **The enumeration in the body is the count.** A heading, a preamble or a banner that
+restates it goes stale the moment the body moves.
 
 The operational half, which is the half that gets dropped: **amend in place; never append past a
 self-counting preamble.** A reader who has only the first clause still adds a row under a preamble
 that counts, and the count is stale before the append finishes. If the total genuinely has to change,
 change it in the same act and say so.
+
+**What the rule does not reach, and the boundary is owed in the same breath as the rule.** The defect
+is a document counting its own contents — a number maintained by a different act than the thing it
+counts, so the two drift. Counting *another* document's contents, or a fixed historical fact, is not
+this defect. *"ADR-0035 reverses one member of ADR-0032"* is a claim about ADR-0032, falsifiable but
+not self-referential; *"the count of v0.1 sources"* at a stated moment is history. Neither is
+corrected by this rule — each was proposed as a sweep candidate in `docs/DECISIONS.md` and each
+turned out to be a false positive. **Over-application is the failure mode a rule about false counts
+can least afford.**
+
+**And the check attaches to the edit: when you open a document to change it, check whether anything
+in it counts its own contents.** That is the shape §4's *Make targets* already gives `make design` —
+*"Run it by hand when the design moves"* — an obligation that follows what the commit touches rather
+than the clock. There is no sweep behind this rule, and the honest reason is not that one would be
+expensive: **every instance found so far was found by someone already editing nearby**, which is luck
+dressed as method. Binding the check to the edit is what turns the luck into a rule.
 
 The instances that earned it:
 
@@ -1478,10 +1495,10 @@ The instances that earned it:
   in `e258179`'s commit subject, where it cannot be corrected at all.
 * **A placeholder banner that enumerated its own fill-in sites** is the same divergence one level up:
   the banner counted the work and the tree moved under it, so the list was incomplete. That one has
-  its own bullet under *Working alongside other threads* below, because it lands on id allocation.
+  its own bullet under *Working alongside other threads*, because it lands on id allocation.
 
-Adjacent, and not the same rule: **rule 8** above says compute a count from the artefact rather than
-from recollection — that is how to state a count you have to state. This one is about not stating it.
+Adjacent, and not the same rule: **rule 8** says compute a count from the artefact rather than from
+recollection — that is how to state a count you have to state. This one is about not stating it.
 
 *Written down 2026-08-20 after an evening of being enforced on the strength of "we already have a
 rule for that", when what existed was a ruling in conversation and not a rule in the tree — an
@@ -1528,16 +1545,28 @@ paragraph describing a repo that no longer exists.
   rebasing instead of assuming they still held (`6afe583`). A line number is a claim with a shelf
   life; a symbol name is one that does not decay. Cite the symbol; if you give a line too, date it to
   the commit you read it at.
-* **A citation inside a dated record is history, not staleness.** The bullet above governs citations
-  you are making now. It does not license a sweep through `docs/REVIEW-LOG.md` "fixing" the line
-  numbers and SHAs inside an entry that already carries a date and a tree — those describe the tree
+* **A citation inside a dated record is history, not staleness.** *Cite symbols, not line numbers,
+  while `main` is moving* governs citations you are making now. It does not license a sweep through
+  `docs/REVIEW-LOG.md` "fixing" the line numbers and SHAs inside an entry that already carries a date
+  and a tree — those describe the tree
   they were taken on and are supposed to keep describing it, and editing them destroys the evidence
   the entry rests on. Correct such a record the way that file already does it: amend underneath,
   with the new date and the new tree, leaving the original standing (`docs/REVIEW-LOG.md` §6.1
   *Amended dispositions*, whose closing line is *"No existing entry's id, text or severity
   changed"*).
-* **Cross-reference another repo document by heading or anchor, never by line number.** The two
-  bullets above are the code half and the dated-record carve-out; this is the prose half, and it
+* **The quote-what-you-replace rule yields when the quotation would reproduce the fault.** Leaving
+  the original standing is the default — *a citation inside a dated record is history, not
+  staleness* says it of a review-log entry, and `docs/DECISIONS.md`'s *How an ADR is amended when the
+  world moves under it* says it of an ADR — but a struck quote is still text in the document, so
+  preserving a defective sentence preserves the defect alongside the evidence. ADR-0032's closing
+  sentence told the reader to read the ADR through a stated number of amendments; `2ad0767` replaced
+  *"both amendments"* with *"its amendments"* and deliberately carried **no** struck-quote rider,
+  because quoting the old wording directly above the fix would have put the very number the
+  correction exists to remove straight back into the file. The test is what the quotation does in the
+  document it lands in, not whether the original would otherwise be worth keeping.
+* **Cross-reference another repo document by heading or anchor, never by line number.** *Cite
+  symbols, not line numbers, while `main` is moving* is the code half and *a citation inside a dated
+  record is history, not staleness* is the dated-record carve-out; this is the prose half, and it
   decays faster, because several lanes push `docs/` concurrently and a rotted line number **does not
   announce itself** — it keeps resolving, just to the wrong place. Two `docs/REVIEW-LOG.md` entries
   from 2026-08-19 are the evidence, and both are worth reading over this summary of them. `LS-320`
