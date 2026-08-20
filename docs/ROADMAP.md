@@ -1615,6 +1615,47 @@ Items marked 🛑 **STOPPED** are the different case: those are stopped by the d
       the existing field already covers it — **or** the gap is recorded as accepted, in the channel-4
       design, with the reason.
 
+- [ ] **THE PER-TYPE `ok` STATE HAS NO SOURCE IN THE TWO DOCUMENTS SEARCHED — recorded at that
+      width and no wider.** Home's Block A gives every summary row a state, and `ok` is one of the
+      three: `SUMMARY_STATE` in `web/src/lib/home.ts` maps it to the word *"catalogued"*, and
+      `web/src/routes/+page.svelte` renders it. **The state ships. What is missing is the document
+      that specifies it.**
+      **What was read, and the boundary is these two documents:**
+      - **`design/DESIGN-DIRECTION.md` §10, the required-state table — read whole, and it has no
+        `ok` row.** Enumerated rather than counted, in table order: `default` · `hover / focus /
+        active / disabled` · `loading` · `empty` · `filtered-empty` · `scope-empty` · `partial` ·
+        `stale` · `error` · `unconfigured` · `permission-denied` · `re-authentication-required` ·
+        `credential-re-entry`. **Thirteen rows, none of them `ok`.**
+      - **`design/DESIGN-DIRECTION.md` §3.2:294 does define a status role named `ok`** — *"healthy,
+        synced, file present"* — but it is a row in the **four-state status *colour*** table, giving
+        `ok` a light and a dark hex. It is a **chroma token**. Whether that is where the per-type
+        state's name comes from is **named here explicitly and ruled neither in nor out**: a token
+        and a state are different kinds of thing, and this pass has no evidence for either reading.
+      ⚠️ **THIS IS NOT A CLAIM THAT THE STATE WAS INVENTED, AND THE DISTINCTION IS THE POINT.** What
+      is established is that **these two documents do not carry it**, which is a fact about the
+      documents searched. A source may exist somewhere neither was; an absence in a bounded search is
+      not an absence in the tree, and this file's own header carries that rule.
+      ⚠️ **THE TREE POINTS SOMEWHERE ELSE, AND THAT POINTER DID NOT RESOLVE EITHER — flagged, not
+      folded into the claim above.** Three places say the state comes from **ARCHITECTURE §17.7**:
+      `web/src/lib/home.ts` (*"§17.7's `ok`: an import completed and this number came out of it"*),
+      `web/src/routes/+page.svelte` (*"§17.7 has an `ok` state"*) and `docs/REVIEW-LOG.md`'s **F9**,
+      which is where the state was applied and which words it the same way. **Reading §17.7 whole —
+      `docs/ARCHITECTURE.md:4187-4258` — found no `ok` among the states it enumerates:** first run ·
+      no services configured · empty library · import in progress · instance degraded · instance
+      needs re-identification · search returned nothing · `scope-empty` · a command failed. **Nine,
+      none of them `ok`.** That is a third document, read after the two the claim is bounded to, and
+      it is recorded **beside** the claim rather than inside it — it widens what a fix has to
+      consider, not what this item asserts.
+      🔍 **Inference, labelled:** the likeliest reading is a **specification gap** rather than a
+      wrong screen — the state is the right thing to render (a `Status` column blank on a healthy row
+      reads as *status unknown*, which is F9's whole argument and it is a good one), and what is
+      absent is the line in a design document that says so. **Which document should own it is not
+      pre-empted here.**
+      *Authority:* `design/DESIGN-DIRECTION.md` §10 and §3.2, `docs/ARCHITECTURE.md` §17.7,
+      `docs/REVIEW-LOG.md` F9; `CLAUDE.md`'s *verify, don't assert*.
+      *Done when:* a required-state set names `ok` and says what it must show — **or** the three
+      citations above are repointed at whatever does specify it, so the pointer resolves.
+
 - [ ] **The arm64 RSS spike.** §16 calls it a day-one spike. `internal/db/spike/` exists; whether the
       arm64 measurement was taken is not readable from the tree.
       *Authority:* §13, §16 v0.1 entry.
