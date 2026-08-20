@@ -530,14 +530,20 @@ func isSkippableBindError(err error) bool {
 // binds it to a DIFFERENT library than the last one did.
 //
 // ⚠️ IT EXISTS BECAUSE THE ALTERNATIVE IS ITEMS MOVING BETWEEN LIBRARIES WITH NO
-// RECORD. bindOneContainer's step 1 matches on (container, kind); a container
-// retyped upstream — a Kavita library switched from Manga to Book — therefore
-// misses its old library and gets one of the right kind instead. That is the
-// correct outcome (§6.4: the kind decision is UsArr's, made once at ingest, and
-// a library holding items of a kind it does not declare is the worse state), but
-// from the Libraries screen it looks like a library that emptied itself and a
-// second one that appeared. One row per occurrence is what makes it readable
-// afterwards.
+// RECORD ANYWHERE. bindOneContainer's step 1 matches on (container, kind); a
+// container retyped upstream — a Kavita library switched from Manga to Book —
+// therefore misses its old library and gets one of the right kind instead. That
+// is the correct outcome (§6.4: the kind decision is UsArr's, made once at
+// ingest, and a library holding items of a kind it does not declare is the worse
+// state), and nothing else leaves a trace that it happened.
+//
+// ⚠️ THE ROW IS A DATABASE RECORD AND NOTHING MORE. noteKindChange writes it and
+// NOTHING READS IT — no store read, no httpapi handler, no screen — so it is
+// reachable only by querying sync_report directly, by someone debugging after
+// the fact. This doc used to justify the row by a Libraries-screen problem ("a
+// library that emptied itself and a second one that appeared"), which the screen
+// has no way to see. A reader is a known follow-on rather than an oversight, and
+// nothing here says when.
 //
 // ⚠️ IT IS NOT WRITTEN FOR THE ADR-0066 DECISION 5 SIBLING MINT, and that
 // distinction is the whole reason bindReason exists. A `comic` library minted

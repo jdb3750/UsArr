@@ -46,10 +46,14 @@
 // FALSE. The walk is files.go — one GET /api/Series/volumes per series, the
 // shape §7.2 budgets for Sonarr's episodes, measured at ~4 ms against the
 // owner's instance — and it writes media_file plus one primary `edition` per
-// series. work_comic_issue is STILL not written by anything: a chapter would be
-// a work of its own, with its own identity resolution, search documents and
-// membership, and files.go's header says what that absence costs (no
-// contiguity, so the availability blob carries no `missing` key).
+// series. work_comic_issue is STILL not written HERE, and the reason is the one
+// files.go's header gives: a Kavita chapter would be a work of its own, with its
+// own identity resolution, search documents and membership. The table itself is
+// no longer unwritten — bookorbit.go maps each BookOrbit comic to a
+// 'comic_issue' under a 'comic' series (ADR-0068) and store's `comic_issue`
+// branch lands the row — but that is a different adapter over a different unit,
+// and nothing computes contiguity off the rows that do exist, so the
+// availability blob still carries no `missing` key.
 //
 // # Before you trust a field on an upstream DTO
 //
