@@ -1651,11 +1651,22 @@ boundary §7.5 describes), plus at most one small statement to resolve `?lib=` s
 no metadata provider, no image fetch. Requires an authenticated session; without one it is
 `401 unauthorized`.
 
-**It is a different endpoint from §1, not a superset of it.** §17.2 closes Block C at *one* table,
-*one* order and *no* filters — a sixth media type adds rows to it, never a sixth region — so
-`/library/recent?media_type=…` would put a filter on the endpoint whose whole design is that it has
-none. The two share the row shape and the allowlist that builds it, and they page identically
-(§7.4). They do **not** share cursors (§7.5).
+**It is a different endpoint from §1, not a superset of it — and §17.2 is not why.** What §17.2
+closes is the *shape* of Home's Block C: one table spanning every type rather than one strip per
+type, so that *"a sixth type adds rows to an existing list rather than a sixth region to scan"*. Of
+that same table it then requires, in the same sentence, that *"it sorts, it filters, it Ctrl+Fs
+(§4.5)"*, and [ADR-0028](../DECISIONS.md#adr-0028) reads the same way round twice — *"the unified
+table sorts, filters and Ctrl+Fs"*, and Block C's *"scope comes from the `?lib=` chip"*. **No
+document forbids a filter on either endpoint.** The split is over the **shape of the query**, and
+`internal/store/browse.go` owns that argument: this read is three orders, two filters and a cursor
+codec per order, where §1 is one unfiltered statement in one order, and folding them together would
+make the simple statement an argument-dependent special case of the filtered one. The two share the
+row shape and the allowlist that builds it, and they page identically (§7.4). They do **not** share
+cursors (§7.5) — which is that difference showing on the wire. ⚠️ **This paragraph used to read
+*"§17.2 closes Block C at one table, one order and no filters — a sixth media type adds rows to it,
+never a sixth region — so `/library/recent?media_type=…` would put a filter on the endpoint whose
+whole design is that it has none"*, and it inverted the sentence it cited** — the same inversion
+§1.1 already carries struck.
 
 ### 7.1 Query parameters
 

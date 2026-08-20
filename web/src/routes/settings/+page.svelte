@@ -75,9 +75,21 @@
 				/>
 				Single-key shortcuts
 			</label>
+			<!--
+				SPECIFIED AND UNBUILT — the keyboard-shortcut sheet. This help text closed with
+				"and ? always opens the shortcut list", which was a present-tense promise with
+				nothing behind it: web/src has no `?` handler and no sheet, and
+				shellkeys.test.ts asserts `?` is not a handler on purpose. The sheet is
+				specified in docs/design/DESIGN-DIRECTION.md:2863-2864 ("`?` opens a shortcut
+				sheet"), and :2878 carries the rule that `?` stays ungated by this toggle when
+				it lands, because the sheet is where the toggle is discovered. ARCHITECTURE
+				§16 assigns the sheet no milestone, so the sentence comes back with the sheet
+				and not before it — a feature earns its place in a milestone rather than in a
+				help string.
+			-->
 			<p class="field__help">
 				Turns off the single-key shortcuts as a set. Shortcuts that need a modifier are not
-				affected, and <kbd class="mono">?</kbd> always opens the shortcut list.
+				affected.
 			</p>
 		</div>
 	</div>
