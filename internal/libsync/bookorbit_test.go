@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"strings"
 	"testing"
@@ -39,6 +40,20 @@ type fakeBookOrbitReader struct {
 	walkErr  map[int64]error
 	walkedAt []int64
 
+	// walkedSinceAt, cursorsSeen and wedgeAt are the arrivals walk's half.
+	// wedgeAt makes a library answer as the client does when a whole page shares
+	// one instant: the rows it did deliver stand, Wedged is set, and the walk
+	// fails to its caller.
+	walkedSinceAt []int64
+	cursorsSeen   []bookorbit.ArrivalsCursor
+	wedgeAt       map[int64]string
+
+	// duringWalk runs after each book is handed over, so a test can mutate the
+	// fixture WHILE the walk is reading it — which is the only way to exercise
+	// the loop's re-read of the map, and the only way a mid-walk insert or delete
+	// is observable at all.
+	duringWalk func(delivered int)
+
 	// stats is what GET /libraries/{id}/stats answers per library, and statsErr
 	// is the refusal that stands in for the guard-later scenario. A library in
 	// NEITHER map answers a total equal to its own bookCount, so the ordinary
@@ -58,18 +73,72 @@ func (f *fakeBookOrbitReader) Libraries(context.Context) ([]bookorbit.Library, e
 	return f.libs, f.libsErr
 }
 
+// StreamBooks walks this library's fixture.
+//
+// ⚠️ THE LOOP INDEXES f.books[libraryID] ON EVERY ITERATION AND DOES NOT RANGE
+// OVER IT. `for _, b := range f.books[libraryID]` evaluates the map index ONCE
+// and captures the slice header, so a callback that appends to or truncates the
+// fixture mid-walk changes nothing this loop can see — and a test named for a
+// mid-walk insert or delete would then be silently weaker than its name,
+// asserting the fake's immutability rather than the walk's behaviour. Re-reading
+// the map each step is what makes those mutations observable.
 func (f *fakeBookOrbitReader) StreamBooks(
 	_ context.Context, libraryID int64, fn func(bookorbit.Book) error,
 ) (bookorbit.BookPage, error) {
 	f.walkedAt = append(f.walkedAt, libraryID)
 	page := bookorbit.BookPage{Total: int64(len(f.books[libraryID]))}
-	for _, b := range f.books[libraryID] {
-		if err := fn(b); err != nil {
+	for i := 0; i < len(f.books[libraryID]); i++ {
+		if err := fn(f.books[libraryID][i]); err != nil {
 			return page, err
 		}
 		page.Count++
+		if f.duringWalk != nil {
+			f.duringWalk(page.Count)
+		}
+		page.Total = int64(len(f.books[libraryID]))
 	}
 	return page, f.walkErr[libraryID]
+}
+
+// StreamBooksSince stands in for the client's ARRIVALS walk.
+//
+// ⚠️ WHAT IT DOES AND DOES NOT STAND FOR. It applies the FILTER — strictly after
+// the cursor, on the same rendering the wire uses — and nothing else. It does
+// NOT page, does not apply the tie mitigation and does not decide a wedge, and
+// that is deliberate: those are the client's, they are pinned against
+// internal/bookorbit's own HTTP seam where the request BODY can be asserted, and
+// a second implementation of them here would be a test of this file. What these
+// tests are for is the layer above — the seeding, the fold, the observation, the
+// declines-to-advance rules and the artefacts a run leaves behind.
+//
+// It indexes the fixture per step for StreamBooks's reason.
+func (f *fakeBookOrbitReader) StreamBooksSince(
+	_ context.Context, libraryID int64, cursor bookorbit.ArrivalsCursor, fn func(bookorbit.Book) error,
+) (bookorbit.ArrivalsWalk, error) {
+	f.walkedSinceAt = append(f.walkedSinceAt, libraryID)
+	f.cursorsSeen = append(f.cursorsSeen, cursor)
+
+	walk := bookorbit.ArrivalsWalk{Pages: 1}
+	for i := 0; i < len(f.books[libraryID]); i++ {
+		b := f.books[libraryID][i]
+		if cursor.Set && !b.AddedAt.IsZero() &&
+			bookorbit.FormatArrivalsInstant(b.AddedAt) <= cursor.Value {
+			continue
+		}
+		if err := fn(b); err != nil {
+			return walk, err
+		}
+		walk.Count++
+		if f.duringWalk != nil {
+			f.duringWalk(walk.Count)
+		}
+	}
+	if at, ok := f.wedgeAt[libraryID]; ok {
+		walk.Wedged = true
+		walk.WedgeAt = at
+		return walk, fmt.Errorf("bookorbit: library %d wedged on %s", libraryID, at)
+	}
+	return walk, f.walkErr[libraryID]
 }
 
 func (f *fakeBookOrbitReader) LibraryStats(

@@ -172,16 +172,37 @@ const maxBookPages = 5000
 
 // bookQueryRequest is the body BookQueryPipe accepts.
 //
-// It carries EXACTLY the two keys this walk needs. `collapseSeries` is omitted
-// rather than sent false, and that omission is load-bearing: collapsing would
-// return one representative row per series instead of one row per book, which is
-// the opposite of what a catalogue replica reads. `filter` and `q` are omitted
-// because filtering the comics out upstream would make the count of what was
-// skipped unobservable — see internal/libsync/bookorbit.go, where the skip is
-// counted rather than hidden.
+// `collapseSeries` is omitted rather than sent false, and that omission is
+// load-bearing: collapsing would return one representative row per series
+// instead of one row per book, which is the opposite of what a catalogue replica
+// reads. `q` is omitted for the same reason `filter` was: a full walk that
+// filtered the comics out upstream would make the count of what was skipped
+// unobservable — see internal/libsync/bookorbit.go, where the skip is counted
+// rather than hidden.
+//
+// ⚠️ THIS HEADER READ *"It carries EXACTLY the two keys this walk needs"* AND
+// *"`filter` and `q` are omitted"*, AND THE FIRST HALF OF THAT IS NOW WRONG.
+// Channel 3b's arrivals walk sends a `filter` — one AND group holding one
+// `after(addedAt, …)` rule — so the field below exists. The reason the FULL walk
+// omits it is unchanged and is a statement about a KIND filter, which the skip
+// tally still needs to stay observable; it was never a statement about the
+// key itself. See internal/bookorbit/arrivals.go.
+//
+// 🚩 `omitempty` ON Filter IS NOT STYLE, AND ITS BLAST RADIUS IS THE WORKING
+// IMPORT RATHER THAN THE NEW FEATURE. BookOrbit's global ValidationPipe runs
+// with whitelist:true AND forbidNonWhitelisted:true, so an unknown body key is
+// REJECTED rather than ignored (see errors.go). A non-pointer field, or a
+// pointer without omitempty, would make EVERY channel-1 request start sending
+// `"filter": null`, and whether the DTO accepts a null filter is unverified
+// against any BookOrbit. TestFullWalkRequestBodyIsUnchanged pins the full walk's
+// body byte-for-byte so this stays a fact rather than an intention.
 type bookQueryRequest struct {
 	Sort       []bookSortSpec `json:"sort"`
 	Pagination bookPagination `json:"pagination"`
+
+	// Filter is nil on a full walk and set on an arrivals walk. See above for
+	// why the tag must stay `omitempty` and why the field must stay a pointer.
+	Filter *bookFilterGroup `json:"filter,omitempty"`
 }
 
 type bookSortSpec struct {
@@ -196,7 +217,17 @@ type bookPagination struct {
 }
 
 // fullWalkSort is the ordering a channel-1 full import asks for, and it is NOT
-// the ordering a delta walk will ask for.
+// the ordering the delta walk asks for.
+//
+// ⚠️ THIS HEADER'S FIRST SENTENCE SAID *"a delta walk WILL ask for"* AND ITS BODY
+// ARGUES FROM OFFSET PAGING. The delta walk now exists and is a TIMESTAMP KEYSET
+// (internal/bookorbit/arrivals.go), which has no offset for a mid-walk insert or
+// deletion to shift — so the two bullets below, which weigh what a moving table
+// does to a cursor, describe channel 1 and ONLY channel 1. They are correct
+// about it and they must not be carried across: the delta's equivalent argument
+// is the mitigation in arrivals.go, and it turns on tie groups rather than on
+// offsets. The delta declares its own `arrivalsSort` for this reason, though the
+// two values are equal today.
 //
 // 🚩 THE OBVIOUS CHOICE IS `updatedAt desc` AND IT IS THE WRONG ONE HERE.
 // internal/libsync/kavita.go sends its delta ordering on the full import too, so
@@ -222,9 +253,17 @@ type bookPagination struct {
 //
 // ⚠️ `addedAt` IS NOT IMMUTABLE. BookRepository.updateAddedAt exists and is
 // reachable from PATCH /books/:id/added-at, so a person can move a book's place
-// in this ordering. It is a deliberate, rare, one-book edit rather than
-// something a background job does, and it also bumps updatedAt — so it is a
-// worse hazard for the delta channel than for this one.
+// in this ordering.
+//
+// ⚠️ AND THIS PARAGRAPH USED TO CALL THAT *"a deliberate, rare, one-book edit
+// rather than something a background job does"*, WHICH IS AN ASSUMPTION ABOUT
+// HOW THE ROUTE IS USED RATHER THAN ABOUT WHAT IT DOES. The route exists to
+// serve a BULK IMPORTER preserving original add dates, and it takes a BARE DATE
+// KEY stored as toTimeZoneStartOfDay — exact midnight, zero sub-second
+// component — so a caller can put any number of books on one byte-identical
+// instant. Bounded in time, UNBOUNDED IN ROW COUNT. It is still a worse hazard
+// for the delta channel than for this one, and the delta's mitigation and its
+// wedge are sized against the corrected reading.
 var fullWalkSort = []bookSortSpec{{Field: "addedAt", Dir: "asc"}}
 
 // booksPageDTO is BooksPage (packages/types/src/book.ts).

@@ -113,6 +113,19 @@ type BookOrbitReader interface {
 	// controller, same credential.
 	StreamBooks(ctx context.Context, libraryID int64, fn func(bookorbit.Book) error) (bookorbit.BookPage, error)
 
+	// StreamBooksSince is the same route filtered to arrivals strictly after a
+	// cursor — channel 3b's walk. It is on this interface for StreamBooks's
+	// reason exactly: same controller, same credential, and a BookOrbit client
+	// that could do one and not the other does not exist.
+	//
+	// ⚠️ IT IS A SECOND METHOD RATHER THAN AN OPTION ON THE FIRST. The two walks
+	// differ in their stop conditions, in what they may take a durable cursor
+	// from, and in whether a full page is progress or a hazard; a boolean
+	// parameter would put both sets of rules inside one body and let a caller
+	// pick the wrong half.
+	StreamBooksSince(ctx context.Context, libraryID int64, cursor bookorbit.ArrivalsCursor,
+		fn func(bookorbit.Book) error) (bookorbit.ArrivalsWalk, error)
+
 	// LibraryStats is GET /api/v1/libraries/{id}/stats — the unfiltered
 	// present-book count this adapter subtracts the credential's own bookCount
 	// from. It is on this interface even though it reads NO CATALOGUE DATA,
@@ -252,6 +265,16 @@ type BookOrbitSource struct {
 
 	// skips is the per-container tally, keyed by the container's remote id.
 	skips map[string]*SkipTally
+
+	// arrivals is the run's fold over every arrival stamp the walk delivered —
+	// the ONE producer of the value a durable cursor position is minted from.
+	//
+	// It is INSTANCE-WIDE rather than per container, matching the column: the
+	// cursor is one value over all libraries, advanced only when every library
+	// completed. It is written by whichever walk ran — a full import folds it so
+	// the bootstrap can mint the first position, a delta folds it so the run can
+	// advance one — and read back by ArrivalsMax.
+	arrivals arrivalsFold
 
 	// residue is the per-container comic residue, keyed the same way and
 	// populated by the same rule: an entry exists exactly for a container the
@@ -600,12 +623,29 @@ func (s *BookOrbitSource) StreamItems(ctx context.Context, fn func(store.Catalog
 	}
 
 	var read int
+
+	// THE ARRIVALS FOLD RUNS ON THE FULL WALK TOO, and that is channel 3b's
+	// BOOTSTRAP rather than an extra this pass pays for. Without it a full import
+	// leaves no cursor position, and a delta over an arrivals filter has no
+	// filter value for request 1 to carry — so the delta could never run once.
+	// The fold costs one string comparison per book and no request at all: the
+	// full walk already sorts addedAt ASC, so the maximum is the last row, and
+	// this is still a FOLD rather than "keep the last one" because the ordering
+	// is the server's claim and a fold costs nothing to be right about.
+	var fold arrivalsFold
+	defer func() {
+		s.mu.Lock()
+		s.arrivals = fold
+		s.mu.Unlock()
+	}()
+
 	for _, l := range libs {
 		ref := containerRef(l.ID)
 		tally := s.tallyFor(ref)
 		residue := s.residueFor(ref)
 
 		page, err := s.Client.StreamBooks(ctx, l.ID, func(b bookorbit.Book) error {
+			fold.add(b.AddedAt)
 			switch b.MediaKind() {
 			case bookorbit.MediaKindComic:
 				// ⚠️ NO keepCard, AND THAT IS ADR-0068'S OWN BUDGET RATHER THAN AN

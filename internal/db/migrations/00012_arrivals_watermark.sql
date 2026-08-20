@@ -1,0 +1,127 @@
+-- Migration 0012 — service_instance.arrivals_watermark, the channel 3b delta
+-- walk's CURSOR POSITION, stored separately from every freshness column in this
+-- schema because a position is not a time.
+--
+-- SCOPE. Exactly one column, and nothing else:
+--
+--   service_instance.arrivals_watermark
+--
+-- No index, no default, no CHECK, no NOT NULL, no rebuild, no other object. The
+-- index is left out for 00001's rule — an index nothing queries is a claim
+-- nobody has tested — and the only reads are by primary key, one instance at a
+-- time, which the rowid already serves.
+--
+-- WHAT IT HOLDS, IN ONE SENTENCE THE CODE CAN BE HELD TO. The largest
+-- `books.addedAt` BookOrbit itself reported, on a run in which every library was
+-- walked to completion. It is in BOOKORBIT'S clock. It is not a freshness claim,
+-- it is not rendered, and it is not last_delta_sync_at.
+--
+-- ⚠️ WHY NOT last_delta_sync_at, WHICH IS ALREADY IN THIS TABLE AND ALREADY
+-- UNUSED. Because that column already has a second SPECIFIED writer with a
+-- different format contract, and reusing it would make the collision silent.
+-- docs/ARCHITECTURE.md §7.3 specifies channel 3 as "query from
+-- last_delta_sync_at − overlap", and docs/reference/sync.md §3 specifies
+-- `GET /history/since?date=<last_delta_sync_at − overlap>` plus "advance
+-- last_delta_sync_at to the max timestamp actually observed". Channel 3 is the
+-- *Arrs' and lands with the first *Arr adapter in v0.2. So that column has a
+-- specified reader whose contract is ARITHMETIC ON THE STORED VALUE, and a
+-- future channel-3 implementer will reach for store.ParseTime, because that is
+-- what every other timestamp column in this schema uses.
+--
+-- AND THE FAILURE WOULD BE SILENT, WITH A SHIPPED TEMPLATE FOR IT.
+-- internal/httpapi/services.go carries three near-identical blocks of
+-- `if t, err := store.ParseTime(...); err == nil { … }` — the parse error is
+-- SWALLOWED. The first person to surface a delta time on the Services screen
+-- copies that block; against a value in this migration's format the parse fails
+-- on every row and the screen reads `never` — not an error, not a log line. On a
+-- BookOrbit instance last_delta_sync_at as SPECIFIED is genuinely never, because
+-- BookOrbit has no /history/since and no channel 3, so NULL is the true answer
+-- there and the copied block renders it correctly. A separate column makes that
+-- read CORRECT rather than merely non-fatal.
+--
+-- ⚠️ THE FORMAT IS NOT THIS SCHEMA'S USUAL ONE, AND THAT IS THE POINT.
+-- internal/store/arrivals.go owns it: a FIXED-WIDTH millisecond layout,
+-- `2006-01-02T15:04:05.000Z07:00`, applied after .UTC(). It is NEVER routed
+-- through store.FormatTime, whose layout `2006-01-02 15:04:05` has no
+-- fractional-second field and FLOORS. With a whole-second floor and the strict
+-- `>` the walk sends, every row in [W, W+1s) satisfies `added_at > W` on every
+-- poll until an arrival lands in a strictly later second — the PERMANENT
+-- DUPLICATE ADR-0070 refused `>=` in order to avoid, reintroduced through the
+-- storage format where nobody would look for it because the operator is
+-- demonstrably still `>`. The type boundary in Go (store.ArrivalsWatermark, from
+-- which a caller cannot obtain a time.Time) is what enforces this; this
+-- paragraph is why the boundary exists.
+--
+-- NULL IS A REAL STATE AND IT IS NOT AN ERROR. Three ways to be NULL, and
+-- internal/libsync's preconditions read them differently:
+--
+--   * never fully imported                      → the delta escalates
+--   * the last full import declined the mint    → the delta escalates
+--   * the last full import measured zero books  → the delta runs unfiltered
+--
+-- So a DEFAULT would be wrong twice over: it would erase the distinction the
+-- preconditions read, and any non-NULL default is a cursor position nothing
+-- observed. There is deliberately no `datetime('now')` here.
+--
+-- WHY NO CHECK. The value's grammar is Go's time layout, not SQL's. A CHECK that
+-- pattern-matched it would be a second, weaker copy of the layout constant that
+-- could drift from it silently, and an added CHECK is a 12-step rebuild later
+-- while an added column is not. TestArrivalsWatermarkRoundTrip pins the format
+-- where it is produced.
+--
+-- WHAT ADD COLUMN COSTS HERE. 00008 measured this on this tree's driver
+-- (ncruces/go-sqlite3, SQLite 3.53.4): a bare `ADD COLUMN … TEXT` on a STRICT
+-- table is ~0.54 s at one million rows and ~0.4 ms at two. `service_instance`
+-- holds one row per configured service — single digits on a homelab — so the
+-- cost here is the second number. No NOT NULL and no DEFAULT, so no row is
+-- rewritten and no rebuild is triggered.
+--
+-- SQLite facts relied on, all already exercised by 00002, 00003, 00004 and
+-- 00008 in this same schema:
+--
+--   * ADD COLUMN is legal on a STRICT table.
+--   * A nullable ADD COLUMN with no DEFAULT touches no existing row.
+--   * DROP COLUMN is refused on an INDEXED column — which is why 00003's Down
+--     needed an extra statement and this one does not: no index names it.
+--
+-- PRAGMA foreign_keys=OFF is not written, for the reason 00005, 00006, 00007,
+-- 00009, 00010 and 00011 each give: goose runs each migration inside a
+-- transaction, SQLite documents the pragma as a no-op there, and there is no
+-- rebuild for it to protect.
+--
+-- A merged migration is NEVER edited. Write a new one.
+
+-- +goose Up
+-- +goose StatementBegin
+
+-- ─── The arrivals cursor · internal/store/arrivals.go ────────────────────────
+--
+-- Written at most once per delta run, by StampArrivalsWatermark, ONLY when every
+-- library completed and nothing declined the advance; and minted by a successful
+-- full import from its own observed maximum. Read by ReadArrivalsWatermark and
+-- by nothing else. It is NOT in serviceInstanceColumns and never reaches the
+-- wire: no screen renders it, and the freshness instant a screen would render is
+-- sync_report.created_at, which is UsArr's own clock.
+ALTER TABLE service_instance ADD COLUMN arrivals_watermark TEXT;
+
+-- +goose StatementEnd
+
+-- +goose Down
+-- Downgrades are not a supported user path (docs/CONFIGURATION.md §6.3). This
+-- block exists so a migration can be tested locally, and for nothing else.
+--
+-- No index to drop first: 00012 creates none, so 00008's one-statement Down is
+-- the shape here rather than 00003's two-statement one.
+--
+-- ⚠️ WHAT THIS DOWN DOES LOSE, stated because 00011's loses nothing and the
+-- contrast is the point: every stored cursor position. A re-Up leaves the column
+-- NULL on every instance, which the delta's preconditions read as "never fully
+-- imported" or "the mint was declined" and answer by ESCALATING TO A FULL
+-- IMPORT. So a rollback costs one full re-read per instance and never a wrong
+-- answer or a skipped row — the cursor is derivable from the catalogue, which is
+-- exactly why it is safe to store it in one nullable column.
+-- +goose StatementBegin
+
+ALTER TABLE service_instance DROP COLUMN arrivals_watermark;
+
+-- +goose StatementEnd

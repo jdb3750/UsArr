@@ -1360,18 +1360,24 @@ delta time, and the library row (§17.8) carries the same, with the last full-co
 freshness number that is not backed by a delta must never be rendered with the same weight as one
 that is.
 
-⚠️ **Per-source status. Kavita ships in v0.1 and the other three do not** (§16.1,
-[ADR-0041](./DECISIONS.md#adr-0041)) — they arrive one at a time afterwards, in the order the rows are
-written. This framing sentence read *"No source in this table ships in v0.1"* until ADR-0041 moved
-Kavita into v0.1; it is amended here rather than left to contradict §16 on the same screen. **The
+⚠️ **Per-source status. BookOrbit is v0.1's catalogue source and the other four are not** (§16.1,
+[ADR-0052](./DECISIONS.md#adr-0052)) — they arrive one at a time afterwards, in the order the rows
+beneath Kavita's are written. This framing sentence read *"No source in this table ships in v0.1"*
+until [ADR-0041](./DECISIONS.md#adr-0041) moved Kavita into v0.1, and then *"Kavita ships in v0.1 and
+the other three do not"* until ADR-0052 put BookOrbit in that slot; it is amended each time rather
+than left to contradict §16 on the same screen. ⚠️ **"Sunset" is not "deleted"** — Kavita's row, its
+dated record and its adapter all stay, and stay green (§16.1); what stopped is investment. **The
 status cells below are dated records and are not touched** — they say what was probed, when, and
 against what, and `DEVELOPMENT.md` §11 is explicit that a citation inside a dated record is history
 rather than staleness. Dated 2026-08-16, **amended 2026-08-17: Kavita's row is now verified against a
 live instance** and is no longer one of "the two that carry the strategy are both unverified" —
-Komga's is.
+Komga's is. **Amended 2026-08-20: BookOrbit gains a row**, first because it is the source that
+ships, and its status cell carries an honest zero rather than an absence — the table previously
+omitted the one source v0.1 actually uses, which read as if that source had nothing to declare.
 
 | Source | Ordering key | Status |
 |---|---|---|
+| BookOrbit | `books.addedAt`, **server-side filtered** — one `after(addedAt)` rule on `POST /api/v1/libraries/{id}/books`, ordered `addedAt ASC`, with the server's unconditional `books.id ASC` final tier ([ADR-0070](./DECISIONS.md#adr-0070)). ⚠️ **Not `updatedAt`**, which is sort-only here and does not move on tag, genre, author or narrator edits | 🚩 **NEVER PROBED — no live BookOrbit has ever been contacted by this project.** Not contradicted, and not probed and failed: **never probed.** Every fixture and every fake in the tree is **transcribed from source**, read at `bookorbit/bookorbit@73b7877d`, and reading source tells you what the code says it does, which is a different claim from what a running service does. ⚠️ **So the ordering guarantee channel 3b rests on is UNVERIFIED for this source** — namely that `addedAt ASC` plus the appended `books.id` tiebreaker is a total order the server returns as a stable *prefix* across pages. Kavita's row below carries a ✅ because a live instance answered; **this row cannot, and nothing in it is to be read as though it did.** A live-run verification is an **install fact**: it can come only from the owner's own server against a running BookOrbit holding real data, and **no lane in this repo can manufacture it** — a green suite over transcribed fixtures is a statement about UsArr, not about BookOrbit. **If the guarantee fails**, a page stops being a prefix of the ordering, the tie mitigation's soundness argument falls with it, and arrivals can be **skipped** rather than merely re-read; the backstops are the two the walk already names — channel 4's sweep, and the manual full import, which is the only repair for a skip. 🚩 **A second gap is independent of the probe and will not be closed by one:** `addedAt` is not immutable (`PATCH /books/:id/added-at`), so a book moved **backwards** past the watermark is never redelivered by an after-filter |
 | Navidrome | `getScanStatus.lastScan` as a cheap change *signal*, then an `updated_at`-ordered walk of the native API | 🔍 inference from the model; probe at connect |
 | Audiobookshelf | `LibraryItem.updatedAt` | 🔍 probe at connect |
 | Kavita | `LastChapterAdded` ordering on `POST /api/Series/all-v2` | ✅ **VERIFIED 2026-08-17 against a live instance** (Kavita 0.9.0.2, 151 series, page size 10 — the run and its numbers are in [ADR-0035](./DECISIONS.md#adr-0035) §2a). Clause (a) ordering **PASS**; clause (b) resumability **PASS** (no id overlap between pages, page 1 byte-identical across two fetches); clause (c) settled from Kavita's source rather than live — `UpdateLastChapterAdded()` has one production call site, in the new-chapter branch, so the key moves on a **chapter add** and not on edits, deletions, retitles or cover changes. 🚩 **With one qualification that changes the mechanism:** `SeriesFilterField` has **no timestamp member**, so there is no server-side since-filter — resumption is a **sorted page walk with a client-side stop**, not a re-request at the watermark. `SortField.LastModifiedDate` exists but `SeriesDto` returns **no** last-modified property, so that key remains unusable. |
@@ -2745,8 +2751,19 @@ had no such run. 🚩 **What a source read on 2026-08-19 established, and what i
   `lastAddedAt` is `max(books.added_at)`, which cannot observe an edit. **Since `work.kind`'s
   `'comic'` IS the series** — which is why the Kavita adapter walks `POST /api/Series/all-v2` — the
   ordered read BookOrbit does offer, `POST /books/query`, is at the wrong grain for `work_comic`.
-- ✅ **A book-level ordered walk is real** — `POST /books/query`, `sort: updatedAt`, `page`/`size`
-  paging, deterministic `books.id` tiebreaker — so 3b remains expressible for `work_book`.
+- ✅ **A book-level ordered read is real** — `POST /books/query`, `page`/`size` paging, deterministic
+  `books.id` tiebreaker appended unconditionally — **and ⚠️ it is NOT the walk 3b builds.** This
+  bullet read *"`sort: updatedAt` … so 3b remains expressible for `work_book`"*, and
+  [ADR-0070](./DECISIONS.md#adr-0070) makes that wording **wrong twice over**, so both halves are
+  corrected here rather than only the stale one. **The AXIS was wrong**: BookOrbit's channel 3b walks
+  **`addedAt`**, not `updatedAt` — the two are ordered on different fields, so this sentence named
+  the wrong one even before the shape changed. **The MECHANISM was wrong too**: 3b asks the server
+  for arrivals with a **server-side `after(addedAt)` filter** rather than ordering the whole
+  collection and stopping client-side, because `updatedAt` is **sort-only** here (no
+  `StaticRuleField` member, no filter case in the rule→SQL switch) while `addedAt` filters
+  server-side **and is indexed**, where `books.updated_at` carries no index at all. 3b **is**
+  expressible for `work_book` — on the other axis, by the other mechanism, and covering **arrivals
+  only**.
 - 🚩 **Its soundness is limited even there:** tag, genre and author edits do **not** move
   `books.updated_at` (no SQL trigger exists, and the write paths touch only the join tables), so the
   walk misses them. Core metadata edits **are** covered by an explicit touch.
@@ -3117,8 +3134,22 @@ audiobook only when the files share a folder, and everything else treats them as
 *schema* handles it (an audiobook is an `edition` of a `book` work, §6.1) and the **resolution pass
 that would populate it is deferred**, with its cost and its seam, to [`FUTURE.md`](./FUTURE.md) §16.
 What v0.3 ships is the cross-media machinery the pass would eventually plug into. **The visible
-*"not identified"* state is *not* deferred with it** — the column and the badge are a v0.1 rule
-(§6.4) because they cannot be retrofitted. ⚠️ **They are also exercised in v0.1 now, not merely
+*"not identified"* state is *not* deferred with it** — the **column** is a v0.1 rule (§6.4), and the
+retrofit argument is what carries it: §6.4 settles the **stored marker** (*"A work with no resolvable
+identity is kept, marked, and stays searchable — and that is a v0.1 rule, not a later one"*), and a
+marker genuinely cannot be retrofitted, because a row written without one cannot be re-marked
+afterwards — the evidence that it was unidentified is gone by then. ⚠️ **THAT REASON REACHES THE
+COLUMN AND DOES NOT REACH THE BADGE, and the badge is named here rather than quietly dropped along
+with it.** A chip renders whatever the data carries, whenever it is built, so a badge added over a
+v0.1 column at any later milestone displays the state perfectly; the retrofit argument is therefore
+**no verdict on the badge in either direction**, and §6.4 — whose operative word *"marked"* is a
+**data** word, establishing the stored marker and nothing about pixels — is **no citation for a
+rendering obligation**. ⚠️ **This sentence accordingly decides NO MILESTONE for the badge.** Fixing a
+justification is not the same act as settling what that justification used to be offered in support
+of, and a reason that fails to reach its object leaves the question where it found it rather than
+answering it in the negative; where the badge's milestone is settled is not this sentence's business.
+**The column and the badge are both still this passage's subject** — what changed is which of the two
+the retrofit reason actually covers. ⚠️ **They are also exercised in v0.1 now, not merely
 present:** this read *"v0.1's Sonarr-and-Radarr catalogue rarely reaches the state"*, and
 [ADR-0041](./DECISIONS.md#adr-0041) replaced that catalogue with Kavita, whose free tier returns null
 identifier fields — so *"not identified"* is **v0.1's ordinary case** (ADR-0035 §1), not a later

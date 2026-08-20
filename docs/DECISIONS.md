@@ -130,6 +130,7 @@ because no ADR ever decided it. Annotating leaves that failure mode nowhere to h
 | [0067](#adr-0067) | A pasted BookOrbit **magic link is accepted and reduced to its token**; the refusal becomes the fallback | **Accepted** — 2026-08-19; **reverses a ruling taken the same morning and records both**, because the first one was correct reasoning on a premise that turned out to be false — `ab9e0f3` refused a pasted magic-link URL on the belief that BookOrbit's copy button *"yields a URL, while POST /api/v1/auth/magic-links/login wants the bare token"*, read as *an artefact its own API cannot consume*; **reading the consumer falsified it** — `client/src/router/index.ts` declares a public `/magic` route, `MagicLinkLoginView.vue` takes `route.query.token` and strips it from history, and `useAuth.loginWithMagicLink` POSTs `{"token": raw}`, so **URL in / bare token out is an adapter BookOrbit already implements**, and `MagicLinksSettings.vue` offers the operator nothing else (the table renders the label, the account, the expiry and the use count, never the raw value); **measured at `73b7877d2fede2221b0ca360af9bfced7c3797f3`, cited as a commit because the tag `v2.6.0` was NOT verified to point at it**; **found by a live failure on the owner's install**, not by review; **leaves [ADR-0060](#adr-0060) standing and unreworded**; the price is named rather than buried — the accept rule is a **whitelist**, so an upstream token-format change would have UsArr refuse a valid credential |
 | [0068](#adr-0068) | A BookOrbit comic is an **issue**, and issues are **minted under series works**; `seriesId` null synthesizes a one-shot series, extra memberships are **recorded, not resolved** | **Accepted** — 2026-08-19; **this is the "unit of work" [ADR-0066](#adr-0066) decision 5 was waiting for** — *"The kind stays `book` until comics have a unit of work"* — so it activates that decision's two-library split rather than reopening it; **[ADR-0030](#adr-0030)'s model is applied, not amended**: `comic` is the series, `comic_issue` the issue, verified at migration `00005_library_sync.sql:256` (*"'comic' is the SERIES, 'comic_issue' the issue or chapter"*) and `00006_kavita_subtypes.sql`'s header; **the parent binding is MEASURED, not inferred** — `BookCard.seriesId` is not an arbitrary `memberships[0]` and is not null under multi-membership, it is BookOrbit's own maintained **primary** (`series-membership.service.ts`, `displayOrder = 0`, round-tripped by `syncPrimaryMetadata` and `syncPrimaryFromMetadata`, at commit `73b7877d2fede2221b0ca360af9bfced7c3797f3`); **`seriesMemberships[]` beyond the primary is RECORDED and not acted on**, on [ADR-0063](#adr-0063)'s precedent, the fuzzy tier that would resolve it staying v0.3 via `work_relation`; **`is_oneshot` is WRITTEN rather than merely tolerated** — *"a column with a DEFAULT 0 and no writer is a deaf column"*; **both residue defaults emit a `sync_report` row**, so sizing comes from instrumentation rather than from estimates; **no migration, no column, no DDL and no new wire field** — `sync_report.kind` carries no `CHECK` by design and `library.kind` already permits `'comic'`; ⚠️ **the done-check FAILS if series count equals issue count**, because that is the per-row shape [ADR-0066](#adr-0066) already pre-emptively refused |
 | [0069](#adr-0069) | The library-skips payload carries a **per-container breakdown** beside the library total; **apportioning** a library's total across its containers is refused | **Accepted** — 2026-08-20; **does not reverse [ADR-0063](#adr-0063)'s decisions** — that is a write rule and nothing in the writer, the schema or `SkipState` is touched — ⚠️ **but it DOES invalidate one of ADR-0063's recorded consequences**, *"no SQL and no plan changes"*, whose first half is now false and which carries a dated supersession in its own text; **the breakdown is keyed on the `(service_instance_id, container_kind, container_ref)` triple `sources[]` already publishes**, and the authoritative wire contract is [`reference/http-api.md`](./reference/http-api.md) §2.6a, **already amended** to a five-row field table saying the count breaks down by **container, never by reason**; **the shared statement is WIDENED, not forked** — `containerReportSQL` selects the three identity columns for both callers and the completeness caller scans and discards them, chosen on the plan guard rather than on the wasted scan, and **both guards were fired deliberately** (a fork reddens the skips plan assertion while the completeness one stays green); **`containers` is absent under `none`** and a **zero-count entry is dropped** even under `left_out`, on `items`'s own reasoning, so the entries always sum to `items`; ⚠️ **`skipMarks`' `alsoReporting` has the SAME defect on the per-row axis and is recorded OPEN, not fixed**; the measured pair is ground truth **2** / `main` **4** / the fix **2**, with the topology that produces it stated so the numbers are hand-checkable |
+| [0070](#adr-0070) | BookOrbit's **channel 3b carries arrivals only**, server-side filtered on `addedAt`; **edits and deletions are channel 4's** | **Accepted** — 2026-08-20; **scoped to BookOrbit's 3b** — [ADR-0035](#adr-0035) §2a's Kavita result is untouched and no other 3b source is re-answered, and what a later adapter inherits is the **method, not the field**: *build the delta on the field the source can actually serve, and assign what it cannot see to channel 4*; **the `updatedAt` client-side-stop shape is REFUSED**, not merely unused; **channel 4 is the same milestone**, so the reassignment defers nothing; **no migration, no column, no wire field and no code**; ⚠️ **the hand-off to channel 4 is an ASSIGNMENT, not a discharge, and is recorded OPEN** — `remote_hash` hashes nine values and credits are not among them, so the sweep as built is deaf to the same credits-only edit 3b is deaf to; ⚠️ **[`ARCHITECTURE.md`](./ARCHITECTURE.md) §7.1a is amended in the SAME MOTION, as conformance** — two sites, the client-side-stop paragraph's unstated boundary and the Watermark row's second load — and landing either without the other is not permitted; **§16.1's amendment is owed separately**; ⚠️ **every measurement is against the pinned commit `73b7877d`, read from server source this repo does not vendor**, so **nothing here is a claim about the owner's running instance**; ⚠️ **AMENDED 2026-08-20 by the slice that implements it, and the coupling is a DEPENDENCY rather than convenience batching** — Decision 1 names `after` and **excludes `between`** with its reason, the capability claim is **bounded to `73b7877d` and `v2.6.0`** with the owner's version unrecorded, and **Decisions 8-13 are added**: the **representation dependency** (sub-second precision must survive to the boundary; `internal/store/store.go:41`'s second-resolution layout would make `>` redeliver forever), §7.1a's **overlap formula RETIRED** for this source with the surviving **5 minutes recorded as a NEW, UNMEASURED constant safe in the large direction**, the **page-walk guard replaced** with its count-blind compensating-pair residual named and the phrase *"strictly better"* **banned** as an unchecked containment, ***assignment is not resolution*** stated at **every** channel-4 hand-off because **channel 4 is unbuilt**, the **wedge drill** required as a measurement rather than an intention, and the **measured-empty deviation** defended by its safe direction; the keyset verdict **keeps its conclusion and replaces its reason** — one missing filter field, `id`, not a grammar gap — and its **do-not-revisit clause is STRUCK** |
 | [0072](#adr-0072) | The project-manager thread **ratifies** the arm64 RSS spike's re-scope: the `make bench-rss` run gates **claiming arm64 support**, not v0.1 | **Accepted** — 2026-08-20; **ratifies a re-scope that [ADR-0001](#adr-0001) states in an agentless passive** — *"the requirement is re-scoped"*, no agent, no limit clause, no application line — and whose only record was a review-log disposition that names no ruler either, under *"Round 2 — the first code drop"*, *"6. A documented prerequisite was re-scoped, not dropped"* (⚠️ **the round qualifier is load-bearing**: that file opens a second *"6."* under Round 6); **the venue follows from the argument and not from who made it** — a review-log entry records a **disposition** and an ADR records a **decision**, so recording the ratification as a disposition would reproduce the defect one level up, a second entry asserting a thing is settled and containing nothing that settles it; ⚠️ **it quotes the ruling NARROWLY on purpose** — the limit clause drifted by two words in one relay on the day of the ruling (*"nothing **about** it"* for *"nothing **in** it"*), so the entry carries the arguments and quotes only what it verified; **the decision**: the arm64 `make bench-rss` run is *"a prerequisite to claiming arm64 support, not a prerequisite to v0.1"*, and ⚠️ **the limit clause is not optional** — *"the arm64 run remains owed before any claim of arm64 support. This moves the gate; it does not discharge the obligation, and nothing in it says arm64 works or that the x86-64 figures transfer"*, page size and core count both moving these numbers, so an arm64 result is a **second row** in ADR-0001 and never a replacement; 🚫 **the live alternative it closes** is *"the re-scope was never ratified, so the original gate stands"*, read at roughly **70/30** on 2026-08-20 and **right about the record, wrong about what to do with it** — v0.1 deploys to x86-64, the original clause gated the schema and *"the gate had already been passed unmet"* with eleven migrations since landed, and the project has operated on the re-scoped reading since 2026-08-16; **rejecting it costs no rigour** because *"the measurement stays owed against the claim it actually supports"*; **the reach is bounded by the ruling itself** — *"it covers sites carrying the pre-re-scope framing of the arm64 spike, wherever they are, and nothing else. A lane editing a sentence that is not about that has left the chain"*; ⚠️ **it states its reach and NOT which sites conform**, per `DEVELOPMENT.md` §11 *"A ruling states its reach, not the tree's current state"*, the rule this very ruling produced — **two statements the ruling as issued made about the tree failed verification** and the ADR carries neither, a corrected count being the same kind of claim; **supersedes nothing** — ADR-0001's text stands unreworded, its `Status:` line gains no mark, and this ADR supplies the author that sentence never had; **ships no code, no migration, no column, no configuration key and no wire field** |
 
 ---
@@ -10586,6 +10587,765 @@ in a shipped build.
 `make check` reads `docs/` for content; gitleaks is the only arm that touches this diff at all, and
 it attests that the prose contains no credential — not that the prose is true.
 
+
+---
+
+<a id="adr-0070"></a>
+## ADR-0070 — BookOrbit's **channel 3b carries arrivals only**, server-side filtered on `addedAt`; **edits and deletions are channel 4's**
+
+**Status:** Accepted — 2026-08-20 ·
+**This is a CHANNEL-SCOPE decision, not an implementation decision** — it fixes what BookOrbit's
+channel 3b is answerable for and what it is not; it builds nothing, changes no migration, no column
+and no wire field ·
+**It is scoped to BookOrbit.** [ADR-0035](#adr-0035) §2a's Kavita result is untouched and
+unreworded, and nothing here re-answers 3b for Navidrome, Audiobookshelf or Komga ·
+⚠️ **Every measurement below is against the PINNED COMMIT**, `bookorbit/bookorbit` at
+`73b7877d2fede2221b0ca360af9bfced7c3797f3` — the commit
+[`api/specs/SOURCES.md`](../api/specs/SOURCES.md) **pins** for the vendored `packages/types`
+([ADR-0064](#adr-0064)), and the commit [ADR-0067](#adr-0067) states its own measurements were
+**read at**; git tree
+`4cb990a36b8325845abb79eb4b7a4445e6df679b` for `packages/types` — **read from a clone of the server
+source, which this repo does NOT vendor.** No arm of `make check` re-checks any of it, and **nothing
+here is a statement about the owner's running instance** ·
+⚠️ **[`ARCHITECTURE.md`](./ARCHITECTURE.md) §7.1a is amended IN THE SAME MOTION**, and the amendment
+is **conformance, not a scope change**: §7.1a's *"Channel 3b never asks the source for 'everything
+since X'"* is grounded entirely on non-expressibility **measured on Kavita**, so it is a **"never"
+whose boundary was never stated**. The amendment states the boundary and cites this ADR. **The two
+land together**, because `main` must not even briefly carry this ADR beside an uncorrected "never"
+that the next commit violates · **§16.1's sentence is named in *Consequences***, and ⚠️ **its
+amendment — which read as owed separately — LANDED with the implementing slice**, widened, because
+the sentence was wrong on its axis as well as stale in its claim.
+
+⚠️ **AMENDED 2026-08-20, BY THE SLICE THAT IMPLEMENTS IT — AND THE COUPLING IS A DEPENDENCY, NOT
+CONVENIENCE BATCHING.** Building channel 3b is what *created* the conditions several amendments below
+address: a watermark that has to be stored somewhere, an overlap formula whose terms turned out to
+have no values, a page-walk guard swapped for another, a tie source that had to be measured before
+the walk could be written. The amendment therefore lands **with** the implementation rather than
+after it. The general rule, recorded here in its own words because it outlives this instance:
+***a change that creates the condition another fix addresses must land with it.*** And the reason
+travels beside the coupling on purpose — a coupling whose reason does not travel reads to the next
+person as two unrelated changes sharing a commit, and the obvious tidy-up is to split them, which is
+the one edit that reintroduces the condition. **No later lane is to re-argue this batching as scope
+creep.**
+
+⚠️ **AND THE CAPABILITY CLAIM IS BOUNDED TO WHAT WAS MEASURED, EVERYWHERE IT APPEARS BELOW.** The
+`addedAt` filter is present **at the pinned commit `73b7877d`** and **at tag `v2.6.0`**. It is never
+*"BookOrbit supports this"*: **two points do not establish every version between them**, still less
+any version outside them, and **the owner's running version is unrecorded**. The bounded sentence is
+the one that survives someone running something else; the unbounded one quietly becomes a claim about
+a build nobody measured.
+
+### Context
+
+#### 1 · §7.1a does not require channel 3b to detect edits, and its own verified exemplar does not
+
+**The ruling recorded here was taken by the project's PM, on 2026-08-20.** It was first taken
+without §7.1a having been read in full, and the PM declined to override a subsection it had not read.
+So the subsection was read end to end, the reading is set out below rather than asserted, and the
+ruling was confirmed on it. **That sequence is why this section exists**, and it is recorded because a
+ruling reasoned from a summary of a document is the failure this project has already had more than
+once.
+
+§7.1a's channel definition is an **ordering** requirement and not a coverage requirement — *"walk the
+source's item list ordered by its own last-modified field, newest first, and stop at the first page
+entirely older than the watermark minus an overlap"* — and the **Ordering guarantee** property says
+only *"The source must return items ordered by a monotonic last-modified field it maintains itself.
+Probed at connect time, not assumed."* Nothing in the five properties obliges 3b to observe any
+particular class of change.
+
+The decisive reading is §7.1a's own status table. Kavita's row is
+`✅ **VERIFIED 2026-08-17 against a live instance**`, and clause (c) of that verification records what
+the verified key covers: *"`UpdateLastChapterAdded()` has one production call site, in the new-chapter
+branch, so the key moves on a **chapter add** and not on edits, deletions, retitles or cover
+changes."* **§7.1a's only passing exemplar is an arrivals key.** A spec that required edit detection
+inside 3b could not have marked it verified, and that run is what put Kavita into v0.1.
+
+§7.1 assigns the classes in as many words: channel 4 *covers* `Silent drift, out-of-band edits,
+deletions`, while 3b's own *Covers* cell names sources rather than change classes. §7.1a then hands
+one class away outright — *"A page walk **cannot observe a deletion**, structurally. Channel 4 remains
+the only deletion path for these sources, which is exactly why the sweep is doing more work here than
+it does for the \*Arrs."*
+
+#### 2 · An `updatedAt`-ordered walk delivers a delta that silently misses edits
+
+This is the **deaf-guard family with a progress bar on it**: a channel that reports a delta time, is
+rendered on the Services row and the library row as a freshness number, and is deaf to whole classes
+of the change it appears to be watching. §7.1a's own rule against this — *"A freshness number that is
+not backed by a delta must never be rendered with the same weight as one that is"* — is written for a
+source with **no** delta. It has nothing to say about a delta that answers confidently and wrongly,
+which is the worse shape, because the honest fallback at least says so on screen.
+
+What the measurement establishes about `books.updatedAt` at the pinned commit, and the searches
+behind each finding, are in the drafting lane's measurement note §Q2. ⚠️ **That note is a working
+document and is NOT in this repository** — it is not tracked, no path resolves to it, and no arm of
+the gate reads it. **So every finding it carries is restated inline here rather than left behind a
+pointer a reader cannot follow**, and the note is named for provenance only.
+
+`books.updatedAt` is maintained by Drizzle's `$onUpdateFn` (`db/schema/books.ts:21-24`) — an
+**application-level** hook, not a database trigger; the note's search for one
+(`grep -rli "create trigger" server/ --include=*.sql`, and
+`find server -name '*.sql' | xargs grep -li 'create trigger'`) returned nothing.
+
+Among the write paths it read, these do not move it:
+
+- **Tags** — `replaceTagsInExecutor` (`metadata.service.ts:512-540`) deletes and inserts on
+  `book_tags` / `tags` and never touches `books`.
+- **Genres** — `replaceGenresInExecutor` (`:479-511`), the same shape.
+- **Narrators** — `NarratorService.replaceForBook` → `narrator.repository.ts`, which contains no
+  reference to `books` at all.
+- **Authors** — and this one is worse than "does nothing else", which is what the repo's earlier
+  record said. `replaceAuthorsInExecutor` calls `refreshPrimaryAuthorSortNamesForBooks`, and that
+  helper **does write the `books` row**: `UPDATE books b SET primary_author_sort_name = (…)` at
+  `db/book-author-sort-key.ts:33-37`. It issues it as **raw SQL through `executor.execute`**, which
+  bypasses `$onUpdateFn`. **The row is mutated and its `updated_at` is left stale.**
+- **The scalar-touch guard** is what makes these reachable in ordinary use rather than theoretical.
+  The only explicit touch sits behind `if (scalarFieldCount > 0)` (`book.service.ts:1743`) and the
+  relation calls follow it — memberships `:1752`, authors `:1769`, narrators `:1779`, genres `:1785`,
+  tags `:1790`. **A tags-only, genres-only, authors-only or narrators-only edit moves nothing.**
+
+⚠️ **Authors and narrators are both fields UsArr writes** (`bookorbitcredits.go`), so two of the four
+are not hypothetical columns — they are data on the screen that would go stale under a channel
+reporting itself fresh.
+
+⚠️ **And the gap is a per-call-site omission rather than a shape limit**, which is why it cannot be
+argued away as "upstream does not track relations": `replaceCommunityRatings`
+(`book.repository.ts:1996`) is the same delete-and-insert and **does** bump the parent `updatedAt`.
+
+#### 3 · The one thing an `updatedAt` walk buys, stated rather than suppressed
+
+**Series membership changes DO move it** — `syncPrimaryMetadata`
+(`common/services/series-membership.service.ts:166`) bumps `books.updatedAt` on a membership add,
+remove or reorder, and the measurement flags this as **not** in the repo's previously recorded gap
+list. A **library move** moves it too (`moveBookToLibrary`, `scanner.repository.ts:289`, books touch
+at `:310-317`), as do cover extraction and upload, scanner status transitions, primary-file changes
+and the raw-SQL series merge / rename / delete / split path.
+
+So the choice is not between a working delta and a broken one. It is between **a narrow channel that
+is complete for the arrivals it can see** and **a wider channel that is silently partial across
+several**, and §2 is why
+the second is refused.
+
+#### 4 · `updatedAt` is not expressible as a server-side filter; `addedAt` is, and is indexed
+
+Measured at the pinned commit (the same measurement note, §Q3 — again, restated inline):
+
+- **No server-side `updatedAt` filter exists.** `StaticRuleField` (`packages/types/src/query.ts:28-57`)
+  carries `addedAt`, `startedAt`, `finishedAt`, `publishedDate` / `publishedYear` and **no
+  `updatedAt`**; the rule→SQL switch has `case 'addedAt'`
+  (`book-query-builder.service.ts:188`) and no `updatedAt` case. **`updatedAt` supports sort only.**
+- **`addedAt` supports `after` / `before` / `between` / `withinLast` server-side**
+  (`book-query-builder.service.ts:643-654`).
+- **`addedAt` is indexed and `updated_at` is not.** `books` carries `(library_id, added_at desc)` and
+  a `(library_id, added_at desc, id)` partial on `status <> 'processing'`, among others
+  (`db/schema/books.ts:28-40`). **There is no index on `books.updated_at`**, so an `updatedAt`-ordered
+  deep walk is an unindexed sort plus an offset scan.
+- **Every ordering is total**: `BookSortBuilder.build` appends `books.id ASC` as an unconditional
+  final tier (`book-sort-builder.service.ts:52`).
+
+#### 5 · The paging is pure offset, so a walk over a mutating collection is not free
+
+`findCards` pages with `.limit(limit).offset(offset)` (`book.repository.ts:576-577`), and **there is no
+keyset, cursor or `after` parameter anywhere in `BookQuery`** (`packages/types/src/query.ts:380-386`
+— filter, sort, pagination{page,size}, collapseSeries, q). `total` is `count(*) over()` recomputed per
+page (`:571`), so it moves under a running walk.
+
+This is §7.1a's **Page-walk stability** property meeting a concrete API: *"An ordering key that mutates
+while the walk runs reorders the result set under the cursor, so an item can be skipped."* Under pure
+offset paging that property has teeth, and **the tree already worked out which ordering survives it**
+— `fullWalkSort`'s comment at `internal/bookorbit/catalogue.go:198-228` reasons that under
+`updatedAt DESC` a book updated mid-walk moves to index 0 and shifts every later row, and any deletion
+ahead of the cursor skips a row, whereas under `addedAt ASC` a book added mid-walk *"lands at the END,
+behind the cursor, and disturbs nothing at all."* That comment is labelled *"NOT the ordering a delta
+walk will ask for"*; this ADR is the decision that makes it the ordering a delta walk asks for after
+all, on the same reasoning it already contains.
+
+#### 6 · Deletion is unrecoverable by any delta shape, so it was never 3b's to carry
+
+`books` rows are **hard-deleted** and carry **no `deleted_at`** — `deletedAt` exists on the
+`reader.ts` tables and never on `books`. The delete sites the measurement names are all hard deletes
+(user and bulk delete, book-move, file-rename, and the scanner's duplicate collapse), and a library
+delete cascades. **There is no change feed over the catalogue**: SSE exists only for in-flight jobs,
+all permissioned and none durable, and `scan_jobs` records counts that **no route reads**
+(`scanner.controller.ts` exposes only the scan and refresh-covers routes, both behind
+`@RequirePermission(ManageLibraries)`).
+
+⚠️ **The only durable record of a user deletion is the audit log**, and it is out of reach:
+`GET /api/v1/audit-log` carries `@RequirePermission(Permission.ViewAuditLog)`
+(`audit.controller.ts:19`), which UsArr's empty-permission shared account does not hold. **Reading it
+would be a §14 credential-scope change**, and this ADR does not propose one.
+
+⚠️ **One deletion-shaped event is NOT a deletion and must not be treated as one.** A vanished *file*
+deletes the `book_files` row, clears the primary and calls `markBooksAsMissing`
+(`file-event-processor.service.ts:42-57`) — the book stays in the result set with `status='missing'`
+and a bumped `updatedAt`. **Disk loss is observable; user deletion is not.**
+
+### Decision
+
+**1 · BookOrbit's channel 3b covers ARRIVALS, and only arrivals — and the filter form is `after`.**
+Its axis is `books.addedAt` and it asks the server for them with a **server-side filter** rather than
+by ordering the whole collection and stopping client-side.
+
+⚠️ **THE FORM IS `after`, AND `between` IS EXCLUDED.** This clause read *"the `after` / `between`
+forms §4 establishes exist"*, which named two and chose neither. `between` is **inclusive at both
+ends**, so `between(W, …)` is a `>=` at the watermark — and that is precisely the permanent-duplicate
+defect *Consequences* refuses `>=` in order to avoid, since it re-delivers the boundary rows on every
+poll for as long as the watermark sits on that value.
+
+**The exclusion is written out rather than left as a flag on the option, and that is the part worth
+keeping.** Merely *"flagged as inclusive"* reads as an option carrying a caveat, and an option with a
+caveat invites a workaround — someone subtracts a microsecond, or dedupes client-side, and the trap
+is back with a workaround on top of it. A bare `after` with no explanation is the opposite failure:
+it leaves the next person to re-derive the trap from scratch, and they may not. ***An exclusion
+should name what it excludes and why.*** Bounded per the amendment note above: both forms are present
+at `73b7877d` and at `v2.6.0`, and the owner's running version is unrecorded.
+
+**2 · Edits are CHANNEL 4's, not 3b's.** No metadata edit, no relation edit and no cover change is
+3b's to deliver, and 3b's freshness number is never to be read as covering one. The sweep is where an
+edit is found, on `remote_hash` comparison as §7.4 already specifies. ⚠️ **This clause ASSIGNS the
+work; it does not attest that channel 4 as built today can see all of it.** `remote_hash` hashes a
+named subset that does **not** include credits, and *Consequences* carries the measured residual
+rather than letting this sentence read as a discharge. ⚠️ **AND CHANNEL 4 IS UNBUILT, so this
+clause assigns the work to NOTHING** — ***assignment is not resolution*** (Decision 11). Today an
+edit is not found late; it is not found.
+
+**3 · Deletions are CHANNEL 4's**, which is what §7.1a already says for every source on this channel.
+§6's hard deletes with no tombstone, no change feed and a permission-gated audit log are why no delta
+shape could take them. ⚠️ **And channel 4 being unbuilt, deletions are assigned to nothing rather
+than to something slower** (Decision 11); the manual full import is what currently reconciles one.
+
+**4 · This costs nothing in milestone terms, and that is part of the decision rather than a
+convenience.** Channel 4 is **v0.1**, the same milestone as 3b (§7.1's `In` column). Nothing is
+deferred to a later release by this ruling; the work moves between two channels that ship together.
+
+**5 · The `updatedAt` axis is REFUSED for this channel** — not merely unused. A later reader who
+notices that `updatedAt` sorts and that sorting is all a client-side stop needs should read
+*Alternatives rejected* §1 before proposing it, because that is the shape this ADR exists to close.
+
+**6 · What 3b's watermark holds does not change, and the rule that governs it now carries a second
+load.** §7.1a's rule stands as written and is not touched — the watermark holds **the maximum upstream
+value actually observed**, in the upstream's own clock and format, never `now()` and never UsArr's
+clock. Only the field it is a maximum *of* is decided here. ⚠️ **What is new is that this rule is also
+what keeps the millisecond boundary an over-read rather than a skip** (*Consequences*), so relaxing it
+on its original clock-skew grounds would break a second guarantee. **§7.1a's Watermark row is
+annotated to say so, in this same motion.**
+
+**7 · [`ARCHITECTURE.md`](./ARCHITECTURE.md) §7.1a is amended together with this ADR, as ONE motion,
+and the amendment is conformance.** Two sites: the client-side-stop paragraph gains the **boundary of
+its "never"**, and the **Watermark** property row gains the **second load** decision 6 names. Neither
+removes anything from §7.1a, neither changes its scope, and §7.1a's dated Kavita record is untouched.
+**Landing the ADR without the amendment is not permitted**, because `main` would then carry a decision
+beside a spec sentence the next commit violates.
+
+⚠️ **DECISIONS 8–13 WERE ADDED BY THE 2026-08-20 AMENDMENT.** Decisions 1–7 above are the original
+channel-scope ruling; what follows is what building the channel forced the ADR to say in its own
+text. Nothing in 1–7 is renumbered and nothing is withdrawn.
+
+**8 · THE COMPARISON DEPENDS ON A REPRESENTATION DETAIL, AND THAT DEPENDENCY IS NAMED HERE RATHER
+THAN LEFT IN THE CODE.** The arrivals filter is a strict `>` against a stored watermark, and it is
+correct **only while sub-second precision survives all the way to the boundary** — off the wire,
+through whatever UsArr stores the value as, and back onto the next request. The general rule this
+instantiates: ***a decision that depends on a representation detail must name that dependency in its
+own text.*** **Why that is binding rather than tidy:** otherwise the next helper — written in good
+faith by someone who never opened this ADR — re-breaks it, **and every test still passes**, because
+tests written against that helper agree with it.
+
+**The hazard is concrete and it is already in this tree**, at `internal/store/store.go:41`:
+
+```go
+const timeLayout = "2006-01-02 15:04:05"
+```
+
+That layout has **no fractional-second field**, so a watermark formatted through it is **floored to
+the second**. Against a strict `>`, the boundary rows are then redelivered on **every poll, forever**
+— which is exactly the permanent-duplicate defect this ADR refuses `>=` in order to avoid, arriving
+by a different door. ⚠️ **Storing an arrivals watermark through that layout is therefore FORBIDDEN by
+this decision**, not merely discouraged. The implementing slice stores the value in a layout of its
+own that **keeps milliseconds**, is **fixed width** so one instant has exactly one spelling, and is
+normalised to UTC — and it records the measurement beside the constant, because the defect this
+guards against is invisible at the call site: the operator is still demonstrably `>`, and only the
+layout says whether that `>` terminates.
+
+**9 · §7.1a's OVERLAP-WINDOW FORMULA IS RETIRED FOR THIS SOURCE. BOTH OF ITS TERMS GO.** The formula
+is `max(5 min, 2 × |clock_skew_secs| + poll interval)`.
+
+- **The skew term is INAPPLICABLE BY CONSTRUCTION, not merely small.** Both sides of the comparison
+  are BookOrbit's own values — the watermark is an observed upstream `addedAt`, and the filter is
+  evaluated by BookOrbit against its own column — so **UsArr's clock never enters the comparison**,
+  and there is no skew term for `clock_skew_secs` to hold.
+- **The `+ poll interval` term is UNDEFINED, because there is no timer.** Channel 3b is invoked on
+  demand. A term with no value is not a small term.
+
+**A 5-minute lookbehind is retained, and ⚠️ IT MUST NOT TRAVEL AS THOUGH IT SURVIVED THE FORMULA.**
+It is a **NEW constant for a newly-named hazard** — upstream **commit-visibility lag**, and the
+`processing`→visible transition, where a book becomes visible to the walk only after the watermark
+has already passed its `addedAt`. **Its numerical equality with the old formula's floor is a
+coincidence, not a derivation**: nothing about the retired terms produced it.
+
+**It is UNMEASURED, and that is stated rather than implied.** What would measure it: observing,
+against a running BookOrbit under a real scan, the maximum interval between a row's `addedAt` and the
+moment that row becomes visible to the books route — an **install fact** this repo cannot manufacture
+(*What this does NOT decide* §2).
+
+**The direction of error is safe, and naming it is what licenses shipping without the measurement.**
+**Too large** costs bounded, idempotent redelivery, absorbed by the same `ON CONFLICT` the boundary
+re-read already leans on. **Too small loses rows.** ***So erring large is correct***, and a later
+tuning pass that shrinks the number for tidiness would be trading a bounded cost for an unbounded
+one.
+
+**10 · THE PAGE-WALK STABILITY RULE IS REPLACED FOR THIS SOURCE, AND ITS RESIDUAL IS NAMED.** §7.1a's
+rule records the first page's top item and restarts if it is no longer first. For this source it is
+replaced by: **do not advance the watermark if BookOrbit's own `total` decreased across the walk.**
+The replacement was ruled by the decision's owner and is not reopened here.
+
+⚠️ **THE RESIDUAL, WHICH IS THE PART THAT MUST NOT GO UNRECORDED.** A `total` is a **count**, and
+count comparisons are **blind to compensating changes**: one delete and one insert inside a single
+walk net to zero, the `total` is unchanged, and the guard sees nothing at all.
+
+⚠️ **AND THE PHRASE "STRICTLY BETTER" IS BANNED FROM THIS ADR AND FROM THE DESIGN THAT IMPLEMENTS
+IT.** The replacement was offered in support with that phrase, and the phrase asserts a
+**containment** — that one mechanism's failure set contains the other's. ***Check the containment
+before writing it, or write "differently wrong."*** Checked here, it does not hold: the
+first-item-restart rule and the `total`-decrease guard **fail on disjoint inputs**, and **neither
+failure set contains the other**. **This strikes the phrase, not the acceptance** — the acceptance
+was ruled separately and stands. It matters because **the superseded guard had itself been given up
+on exactly that unchecked phrase**, which is how an unchecked containment compounds.
+
+**11 · EVERY RESIDUAL THIS ADR ASSIGNS TO CHANNEL 4 IS ASSIGNED TO NOTHING, AND SAYS SO AT EACH POINT
+OF ASSIGNMENT.** ***Assignment is not resolution.*** **Channel 4 is unbuilt** — no sweep runs,
+nothing tombstones, nothing compares `remote_hash`; `internal/libsync`'s package doc enumerates it as
+not here. So every *"the sweep catches it"* in this document is, today, *"nothing catches it"*.
+
+**It is said at each site rather than once in a footnote**, deliberately: a reader arrives at one
+residual, not at the list, and a single global caveat is invisible from where they are standing.
+
+**Decision 10's compensating-pair hole lands exactly there.** Its only catcher is the **manual,
+unprompted full import** — which is a **second and independent reason the full import must stay
+reachable**, and must never be made to look unnecessary by the delta shipping. (The first reason is
+that the full import is the only repair for a skip, a deletion, a wedge or a backdated row.)
+
+**12 · THE TIE MITIGATION'S RESIDUAL IS ACCEPTED ONLY AGAINST A *VERIFIED* "LOUD", AND VERIFICATION
+IS A DRILL RATHER THAN AN INTENTION.** The mitigation advances the cursor to the largest arrival on
+the page **strictly below** that page's last value, never to the last value itself. Its residual is
+the **wedge**: when more rows share one instant than a page can hold, no such lower value exists and
+the cursor cannot advance. The wedge is **accepted** — nothing is skipped and nothing is advanced —
+**on the ground that it fails loudly**.
+
+⚠️ **THAT GROUND IS A MEASUREMENT, SO THIS ADR AND THE DESIGN REQUIRE THE DRILL THAT MAKES IT ONE.**
+From the outside, **an alarm never triggered is indistinguishable from no alarm at all**. The drill:
+construct **more than 200 rows sharing one instant**, run the walk into the wedge, and confirm the
+noise is **actually produced and actually visible** — the walk **stops rather than loops**, the
+watermark is **byte-for-byte unchanged**, a `delta_walk` row carries
+`advance_declined_reason = "tie_wedge"` with **the instant in its `detail`**, and **the error reaches
+the caller**. ⚠️ **Named artefacts, never an asserted outcome**: "loud is demonstrated" has to stay
+checkable next month, and a claim whose evidence lives in a chat log is not.
+
+**A quiet stall is the failure mode this project keeps cataloguing.** A visible wedge whose repair is
+the full import is **honest degradation**, and the entire difference between those two outcomes is
+whether the noise was ever observed once. ⚠️ **The drain for the wedged case stays DEFERRED** — the
+drill establishes the loudness, it does not build the fix, and the frequency question still rests on
+an answer nobody here has. (The full import's reachability is already required by Decision 11, for a
+different reason; this adds the drill, not a second copy of that requirement.)
+
+**13 · THE MEASURED-EMPTY DEVIATION, AND THE DIRECTION THAT LICENSES IT.** Where a full import has
+completed but minted no watermark, the design escalates to a full import. The implementing slice
+**deviates in exactly one state**: when an **independent, unfiltered measurement agrees** that the
+catalogue holds nothing, the walk runs **unfiltered** instead of escalating.
+
+⚠️ **THE DEVIATION IS DEFENDED BY ITS DIRECTION — AND AN UNDEFENDED DEVIATION IS JUST A DIFFERENCE
+FROM THE DESIGN.** Stated in the same shape as Decision 9's five minutes: **escalating is visible**,
+being a bounded, idempotent read that shows on screen and re-reads every item, whereas **walking
+unfiltered is an unbounded read** against an instance that may hold anything. ***So erring toward
+escalation is right.*** Every ambiguous state escalates; the unfiltered walk is reached **only behind
+a positive measurement**, never behind an absence of evidence.
+
+**Why stored state cannot tell "was empty" from "was unreadable", and why this is not a fresh
+caveat.** It is **the same measured BookOrbit property already on this project's record, appearing at
+another site**: `LibraryAccessGuard` throws a byte-identical `ForbiddenException('No library
+access')` for *"the library exists and this account has no access row"* and for *"there is no such
+library"* — **forbidden is indistinguishable from absent** ([ADR-0061](#adr-0061), which records it
+for the completeness verdict's scope). A credential change therefore produces a zero-book observation
+over a catalogue holding thousands, and the stored pair — `last_full_sync_at` set, watermark NULL —
+is byte-identical in both cases. ⚠️ **Treating this as a new caveat would lose the connection**: it is
+**one** upstream property with **two** dependents, and the second inherits the first's limit — the
+measurement covers containers the credential can **see**, so it closes the shortfall axis and not the
+membership axis.
+
+### Why
+
+**A delta that misses edits is worse than no delta, because it renders as one.** §2 — tags, genres,
+authors and narrators are all invisible to `updatedAt`, two of them are fields UsArr writes, and the
+author path mutates the `books` row through raw SQL that leaves `updated_at` stale. A channel built on
+that axis would publish a `page-walk delta` freshness time on the Services row and the library row
+while being deaf to ordinary metadata edits. §7.1a's protection against a misleading freshness number
+covers the *absent*-delta case only; nothing on the screen distinguishes a confident wrong answer.
+
+**Arrivals on `addedAt` are cheap and indexed, and complete for the arrivals the walk can see.**
+§4 — the filter is expressible server-side, so
+the walk asks for the new rows instead of reading the collection and discarding most of it; the
+supporting index exists, where `books.updated_at` has none; and the ordering is total. §5 — `addedAt ASC`
+is also the one ordering under which a concurrent upstream scan disturbs nothing, which the tree
+had already reasoned out for the full walk.
+
+**Deletions were never on the table for any delta.** §6, and §7.1a's Deletions property, which reaches
+the same conclusion structurally rather than from BookOrbit's specifics.
+
+**It is honest about its own axis, which is the property that lets the screen tell the truth.** A
+channel that says *"arrivals, current as of 09:12"* is a claim UsArr can stand behind. One that says
+*"delta, current as of 09:12"* while missing a tag edit is not.
+
+**⚠️ AND THE PORTABLE PART IS THE METHOD, NOT THE FIELD NAME.** `addedAt` is BookOrbit's answer and
+nothing else's. **The method that produced it generalises and is what a later adapter inherits:**
+
+> **Build the delta on the field the source can actually serve — measured, not assumed — and assign
+> what that field cannot see to channel 4.**
+
+Both halves carry weight. *Measured, not assumed* is §2 and §4: the axis that looks right by its name
+(`updatedAt`) is the one the write paths do not maintain and the query grammar cannot filter on, and
+neither fact is visible from the field's name or its type. *Assign what it cannot see* is the half
+that keeps the channel honest: a delta is allowed to be narrow, and is not allowed to be narrow
+quietly. **A later adapter that reaches this ADR for BookOrbit's answer has taken the wrong thing from
+it** — Navidrome, Audiobookshelf and Komga each get their own measurement, and each may land on a
+different field, a different breadth, or on §7.1a's reconciliation-only fallback.
+
+### Alternatives rejected
+
+**1 · The client-side-stop shape — walk `updatedAt`-ordered, newest first, and stop client-side at
+the watermark.** REJECTED, and it is recorded because it is the shape §7.1a describes for Kavita, the
+shape `POST /books/query` visibly supports, and therefore the shape the next reader will reach for.
+
+Three things are wrong with it here, and only the third is about cost:
+
+- **It is silently partial.** §2 — the axis does not move on tag, genre, author or narrator edits, and
+  the scalar-touch guard means a relation-only edit is the ordinary case rather than a corner. The walk
+  would return, report success, and have seen none of it.
+- **It cannot be repaired by walking harder.** The gap is in the upstream write paths, not in the read.
+  No page size, overlap window or poll interval recovers a row whose `updated_at` was never written —
+  and the author path proves the point at its sharpest, since the row **is** written and the timestamp
+  is not.
+- **It is the expensive shape as well as the wrong one.** §4 — `books.updated_at` carries no index, so
+  the ordered deep walk is an unindexed sort plus an offset scan, and §5's `updatedAt DESC` ordering is
+  the one under which a concurrent edit shifts the offset cursor.
+
+⚠️ **What it would genuinely buy is stated rather than suppressed** — §3's series-membership,
+library-move, cover and scanner-status changes do move `updatedAt`, and an arrivals channel does not
+see them. **They go to channel 4 with the rest of the edits** — ⚠️ **which is unbuilt, so they go
+nowhere yet** (Decision 11). Buying a partial edit channel at the
+price of a freshness number that lies about the other part is the trade this ADR refuses.
+
+**2 · Run both — an `addedAt` arrivals filter and an `updatedAt` walk beside it.** REJECTED. It
+inherits every one of §2's gaps and adds a second walk to pay for them, and the honest label for the
+combined channel is still "arrivals, plus some edits, and we cannot say which" — which is the same
+misleading freshness number with more machinery under it. `CLAUDE.md`'s *cut before you add* applies:
+this would add a subsystem and remove nothing.
+
+**3 · Reach for the audit log to close the deletion gap.** REJECTED here. §6 — it is behind
+`Permission.ViewAuditLog`, which UsArr's shared account does not hold, so it is a §14 credential-scope
+change and not a sync-channel decision. It is **not refused on the merits**, it is out of this ADR's
+scope, and anyone proposing it is proposing a security decision that needs its own entry.
+
+**4 · Leave 3b unbuilt for BookOrbit and let the sweep carry everything.** REJECTED. That is
+§7.1a's documented fallback, and §7.1a already says what it costs: a source refreshed only by the
+6–24 h sweep, where *"add an album to Navidrome and it is invisible in UsArr for up to six hours, with
+nothing on screen saying the number is stale. That is not the replica thesis, it embarrasses it."*
+Arrivals are the common case and the cheap one; there is no reason to pay six hours for them.
+
+### ⚠️ What this does NOT decide
+
+**1 · It does not design channel 4.** The sweep's shape, cadence, page geometry, its `remote_hash`
+comparison and its two mandatory guards are §7.4's, unchanged. This ADR **assigns work to** channel 4;
+it does not say how channel 4 does it, and nothing here should be read as having specified the sweep
+that now carries BookOrbit's edits.
+
+**2 · It decides nothing about the owner's live instance.** Every measurement cited is read from
+`bookorbit/bookorbit` at the pinned commit, from a clone of the server source. **No probe against a
+running BookOrbit has been performed**, the live probe §16.1 says is still owed is **still owed**, and
+a running instance may be at a different commit than the pin. The measurement file is marked **work in
+progress** and says so about its own stage 1.
+
+**3 · It does not re-answer 3b for any other source.** Kavita's `LastChapterAdded` verification stands
+as [ADR-0035](#adr-0035) §2a left it; Navidrome's and Audiobookshelf's rows remain probes at connect;
+Komga's remains unverified with reconciliation-only as its stated fallback.
+
+**4 · It does not settle the comics half.** §16.1 records that **no series-level ordered read exists**
+in BookOrbit, that `GET /series` rejects an `updatedAt` sort with a 400 rather than ignoring it, and
+that `lastAddedAt` is `max(books.added_at)`. Whether an arrivals channel at book grain can serve
+`work_comic`, whose work IS the series, is a separate question this ADR does not answer.
+
+**5 · It does not fix the direction or the page geometry of the walk.** The decision is the **axis and
+the server-side filter**. §5 records that the shipped full walk uses `addedAt ASC` with the
+`books.id ASC` tiebreaker and why, which is evidence for the implementing slice rather than a ruling
+in it. ⚠️ **The boundary analysis in *Consequences* does not depend on the direction** — membership is
+decided by the filter and not by the sort — **so it holds whichever way the implementing slice
+orders the walk**, and it is not an argument for one direction over the other.
+
+**6 · It attests nothing about the gate.** This ADR changes one Markdown file. No arm of `make check`
+reads `docs/` for content, and none of it re-checks a claim about upstream source this repo does not
+vendor.
+
+### Consequences
+
+**§7.1a IS AMENDED IN THE SAME MOTION, AND THE AMENDMENT IS CONFORMANCE.** §7.1a flags
+*"**"Stop at" is the whole mechanism, and it is a CLIENT-SIDE stop.** Channel 3b never asks the
+source for "everything since X" — that is channel 3, which these sources do not have."*
+
+🚩 **BookOrbit is the first source on this channel for which that sentence's own reason does not
+hold.** The "never" is not a prohibition and was never argued as one — §7.1a grounds it entirely on
+**non-expressibility, measured on Kavita**, whose `SeriesFilterField` *"carries **no timestamp member
+at all**, so a since-filter is not merely unused, it is *not expressible*."* BookOrbit's `addedAt`
+**is** expressible as a since-filter (§4). **So the defect is §7.1a's, not this ruling's: a "never"
+whose boundary was never stated.** The amendment states the boundary — the mechanism is a client-side
+stop *for a source that cannot express a since-filter*, and a filtered read for one that can — and
+cites this ADR for the measured instance. **It takes nothing away from §7.1a and adds no scope**;
+§7.1a's Kavita measurement stands unreworded and its dated record is untouched.
+
+**The two land as ONE motion**, and that is a sequencing requirement rather than a preference:
+`main` must not carry this ADR, even briefly, beside an uncorrected "never" that the very next commit
+violates.
+
+⚠️ **§16.1's sentence was a SEPARATE amendment and it has now LANDED, with this implementation.** It
+read *"✅ **A book-level ordered walk is real** — `POST /books/query`, `sort: updatedAt`, `page`/`size`
+paging, deterministic `books.id` tiebreaker — so 3b remains expressible for `work_book`"*, with the
+soundness limit recorded beneath it.
+
+⚠️ **AND THIS PARAGRAPH UNDERSTATED THE DEFECT, WHICH IS WHY THE CORRECTION IS WIDER THAN IT
+PREDICTED.** It said the sentence was *"true as measured"* with only the walk having changed. It was
+wrong on **two** counts, not one. The **claim** is stale — 3b no longer remains expressible for
+`work_book` **by that walk**. And the **axis was wrong independently of the claim**: that sentence
+names `sort: updatedAt`, while this ADR's walk is on **`addedAt`**. They are ordered on different
+fields, so the sentence named the wrong axis even before the shape changed, and it would have needed
+correcting had 3b for `work_book` survived untouched. §16.1 now records both, not just the first.
+
+⚠️ **§7.1a's PER-SOURCE STATUS TABLE GAINS A BOOKORBIT ROW IN THE SAME MOTION, AND ITS STATUS CELL
+CARRIES AN HONEST ZERO.** The table names every source UsArr syncs and the verification state of each
+one's ordering key, and it **omitted the one source v0.1 actually uses** — an absence that read as if
+that source had nothing to declare. What the new row records is this: **no live BookOrbit has ever
+been contacted by this project.** Not contradicted, and not probed and failed — **never probed.**
+Every fixture and every fake in this tree is **transcribed from source**, read at
+`bookorbit/bookorbit@73b7877d`, and reading source tells you what the code says it does, which is a
+different claim from what a running service does. **The consequence is the part that belongs on the
+row and here alike: the ordering guarantee channel 3b rests on is UNVERIFIED for this source.**
+Kavita's row earns a ✅ because a live instance answered; BookOrbit's cannot carry one and is not
+written in a shape that reads as though it did. **A live-run verification is an install fact** — it
+comes only from the owner's own server against a running BookOrbit holding real data, and **no lane
+can manufacture it**; a green suite over transcribed fixtures is a statement about UsArr, not about
+BookOrbit. **These two must not land apart in a way that leaves either asserting the other's
+absence.**
+
+**The `remote_updated_at` column keeps its meaning and gains no reader from this, and the
+distinction between the column and the field is where a reader goes wrong.** The BookOrbit adapter
+fills `RemoteUpdatedAt` from `b.UpdatedAt` (`internal/libsync/bookorbit.go:873` for prose, `:964` for
+comics), and the link upsert writes it (`internal/store/catalogue.go:1532-1546`). **The COLUMN has no
+reader**: no `SELECT` anywhere in Go names `remote_updated_at`, so nothing reads back what was
+stored. **The FIELD does have one, and it is not incidental** — `CatalogueItem.RemoteUpdatedAt` is one
+of the nine values `remoteHash()` hashes (`internal/store/catalogue.go:2154-2160`), which is channel
+4's drift comparator. This ADR does not make either of them a delta cursor, and a later reader should
+not assume the column's presence implies the axis.
+
+**§7.1a's overlap-window formula is RETIRED for this source, and this paragraph is what it
+replaced.** It read *"still has no input, and that is unchanged and still open … so the implementing
+slice inherits this, undischarged"*. The implementing slice did **not** inherit it undischarged: it
+**retired** it, on **Decision 9** — the skew term is inapplicable by construction and the
+poll-interval term is undefined. What survives is a **5-minute lookbehind that is a new constant for
+a newly-named hazard**, unmeasured, and safe in the large direction.
+
+⚠️ **THE TWO COLUMNS THE OLD FORMULA NAMED ARE BOTH STILL UNWIRED, AND THEIR REASONS ARE NO LONGER
+THE SAME REASON.** `service_instance.clock_skew_secs` exists (`00001_initial.sql:153`) and is **not
+needed by channel 3b against this source at all** — **nothing is pending on it**; it is retained
+because a source whose watermark is computed against **UsArr's own** clock would need it, and that is
+a real seam and a different source. `service_instance.last_delta_sync_at` exists (`:161`), has no
+reader and no writer in Go, and **its seam is unchanged**. The reason a lookbehind is not optional on
+an arrivals axis is also unchanged — §7.1a's Kavita observation, that timestamps cluster on the scan
+job's clock — but it is now one named hazard among others rather than the formula's justification.
+
+**⚠️ THE CHOSEN AXIS HAS ITS OWN RESIDUALS, AND THEY GO TO CHANNEL 4 RATHER THAN BEING WAVED OFF.**
+⚠️ **This ADR does NOT claim the channel is "exact".** An earlier draft did, and it was struck as
+advocacy rather than measurement. **The claim is the measured one and it is narrower: the channel is
+complete for the arrivals the walk can see, on an axis the source can serve.** What the walk cannot
+see is named here rather than left to be discovered:
+
+- **`addedAt` is not immutable.** `BookRepository.updateAddedAt` (`book.repository.ts:1974`, write at
+  `:1975`) is reachable from `PATCH /books/:id/added-at`. `internal/bookorbit/catalogue.go` already
+  records this and calls it *"a worse hazard for the delta channel than for this one"* — a book moved
+  **backwards** past the watermark is not redelivered by an after-filter. Rare, deliberate, one book at
+  a time, and the sweep is what catches it — ⚠️ **and channel 4 is unbuilt, so today that is
+  nothing** (Decision 11). The reachable catcher is the manual full import.
+- **`status='processing'` books are invisible to the walk and to `total`** (`visibleWhere`,
+  `book.repository.ts:530-532`, anded onto `findCards`'s `.where` at `:574` and onto its `total` at
+  `:579` — the reading `internal/bookorbit/stats.go`'s header carries). A book that arrives while
+  processing and becomes visible after the watermark has passed its `addedAt` is an **arrival the
+  arrivals channel misses**. The overlap window absorbs a bounded interval of this and not an unbounded
+  one; the sweep is the backstop — ⚠️ **and channel 4 is unbuilt, so that backstop does not exist
+  yet** (Decision 11). The full import is the one that does.
+- **A library move is invisible on this axis.** `moveBookToLibrary` changes `libraryId` and bumps
+  `updatedAt`, not `addedAt`, so a per-library arrivals walk of the destination does not see it — and
+  the source library sees only an absence, indistinguishable from a deletion. This is a case the
+  refused alternative **would** have caught in the destination, and it is named here for that reason.
+**⚠️ AND A FOURTH ONE IS NOT A LOSS AT ALL — IT IS A BOUNDED RE-READ, WHICH IS THE OPPOSITE FAILURE,
+AND THE DIRECTION IS THE WHOLE ANSWER.** The wire carries **milliseconds** over a **microsecond**
+column, which reads like a skip hazard until someone says which way the loss goes. **It goes down.
+The watermark always sits at or behind the true column value, so the boundary millisecond is re-read
+by at most the rows sharing it, and nothing is skipped.**
+
+The value was traced through the path rather than reasoned about, because which way a fraction lands
+is a fact and not an argument:
+
+| Step | What was read | Result |
+|---|---|---|
+| Column | `books.addedAt` is `timestamp(withTimezone)` with no precision modifier (`db/schema/books.ts:20`) | Postgres **microsecond** resolution |
+| Ordering | `SORT_FIELD_MAP.addedAt → books.addedAt` (`book-sort-builder.service.ts:34`); `build()` appends `` sql`${books.id} ASC` `` unconditionally (`:52`) | **total order**, id tiebreaker |
+| Comparison | `after` → `gt(books.addedAt, …)` (`book-query-builder.service.ts:646`) | **strict `>`** |
+| Out of Postgres | OID **1184** → `postgres-date` (`pg-types@2.2.0/lib/textParsers.js:176`, pinned `~1.0.4` → **1.0.7**), which computes `ms = 1000 * parseFloat(".123456")` = `123.456` and passes it to `Date.UTC`, where ECMA-262 `MakeTime` applies `ToIntegerOrInfinity` | **truncates toward zero** |
+| Onto the wire | `addedAt: row.addedAt.toISOString()` (`assemble-book-cards.ts:216`) | 3 fractional digits |
+| Back in | `parseDate` is `new Date(value)` (`book-query-builder.service.ts:774-783`); a JS `Date` cannot hold a microsecond | integer ms |
+| Bound to SQL | pg's `dateToStringUTC` formats `getUTCMilliseconds().padStart(3,'0')` (`pg@8/lib/utils.js:119-138`) | **microseconds = 000** |
+
+**Run rather than reasoned about**, against `postgres-date` 1.0.7 itself: `.123456` → `.123`,
+`.123500` → `.123`, `.123999` → `.123`, `.999999` → `.999`. **It floors in every case and never
+rounds up.**
+
+So for any observed row R the watermark is `floor(V_R) ≤ V_R`, and a strict `>` against a floored
+watermark cannot exclude a row at or after the watermark's own source value. Worked on the case that
+prompted the question — **A** at `T.123456` and **B** added later inside the same millisecond at
+`T.123999`: both wire as `T.123`, the watermark is `T.123000`, and the next walk's
+`added_at > T.123000` matches **both**. A is re-delivered as a duplicate; **B is delivered. B is not
+skipped.** The skip would require the watermark to land *ahead* of a row's true value, which requires
+rounding **up**, which does not occur anywhere on this path.
+
+**⚠️ AND THE SOURCE OF EQUAL `addedAt` VALUES WAS MEASURED, BECAUSE THE MECHANISM IS WHAT SIZES THE
+RISK.** This is **not** a restatement of Decision 8. That is **UsArr's own storage layout** flooring a
+watermark to the second; this is **BookOrbit emitting genuinely equal values upstream**. Two
+independent facts that happen to produce the same symptom.
+
+**The mechanism differed from every guess, and the difference is the whole point.** The guess was a
+**bulk-import tie** — many rows sharing one transaction's clock — which would have been **one-time,
+at setup, and self-limiting**. Measured, that is not what happens: upstream's scanner inserts one
+book per autocommit statement, and 1000 of them produced 1000 distinct timestamps. The measured
+source is the **shipped `PATCH /books/:id/added-at`**, which takes a bare **date key** and stores
+`toTimeZoneStartOfDay` — **exact midnight**, with a zero sub-second component — so any number of
+books given the same date key receive a **byte-identical** value. Ties are therefore produced
+**continuously, at user discretion, and in arbitrarily large groups**: a different risk from a
+one-off at setup in frequency, in persistence and in size.
+
+***Getting the hazard right and its source wrong still mis-sizes the risk***, because frequency and
+persistence are properties of the **source**, not of the symptom. It is the measured source rather
+than the hazard that makes the tie mitigation and its wedge (Decision 12) mandatory rather than
+defensive.
+
+**⚠️ THE IDEMPOTENT UPSERT IS NOW A LOAD-BEARING DEPENDENCY OF THIS CHANNEL, NOT AN INCIDENTAL
+PROPERTY OF THE WRITE PATH.** Over-delivery is benign **only** because re-applying an item is a
+no-op. The write is
+`INSERT INTO service_item_link (…) … ON CONFLICT (service_instance_id, remote_kind, remote_id) DO
+UPDATE SET …` (`internal/store/catalogue.go:1531-1546`), and that `ON CONFLICT` clause is what absorbs
+the boundary re-read and the overlap window alike. ⚠️ **A future change to that write path — making
+the apply non-idempotent, moving it to a plain `INSERT`, or hanging a side effect off it that fires
+per apply rather than per change — would make this residual bite**, and it would bite quietly, as
+duplicated work or a duplicated side effect rather than as an error. **The dependency is written down
+here so that change is made deliberately.**
+
+**⚠️ AND §7.1a's WATERMARK RULE NOW CARRIES A SECOND LOAD, WHICH IS WHY IT IS ALSO RECORDED AT §7.1a
+ITSELF RATHER THAN ONLY HERE.** The floor guarantee above holds **only** because the watermark is the
+maximum value *actually observed on the wire*. §7.1a already requires exactly that — the watermark
+holds *"the maximum upstream `lastModified` value actually observed"*, **never `now()`, and never
+UsArr's clock** — and it requires it for the channel-3 cursor reason: a cursor read from the
+upstream's clock must not be advanced past events that were never returned.
+
+**It has now silently acquired a second dependent.** That same rule is what keeps the watermark at or
+behind the true column value, and therefore what keeps the millisecond boundary an over-read instead
+of a skip. ⚠️ **Someone relaxing the rule on its original grounds, in perfectly good faith — an
+instance with no clock skew, a source whose ordering key is UsArr-side anyway — would break a
+guarantee nobody had written down.** So the warning belongs **at the constraint, where that editor
+will be standing**, and not only in a decision record they have no reason to open. **The §7.1a
+amendment therefore annotates the Watermark row as well as the client-side-stop paragraph**, and this
+paragraph is the reasoning that annotation points back to.
+
+**Both suggested repairs were considered and neither is adopted.** They are recorded because an
+unavailable option that goes unrecorded reads as an option nobody thought of, which is how it gets
+proposed a second time:
+
+- **Inclusive comparison plus dedupe** — use `>=` at the watermark and drop the duplicates client-side.
+  **Rejected**, and ⚠️ **the containment is CHECKED here rather than asserted** — this bullet read
+  *"it is strictly worse"*, and Decision 10 bans that phrase from this ADR precisely because it
+  asserts a containment nobody verified. **Checked:** `>=` re-delivers the boundary rows on *every*
+  poll, for as long as the watermark sits on that value, buying nothing — because `>` against a
+  floored watermark already re-delivers exactly the rows that need re-delivering. So `>`'s failure
+  set **is** contained in `>=`'s, and the rejection stands: it converts a one-off bounded duplicate
+  into a permanent one, creating a defect rather than fixing one. ⚠️ **The containment holds only
+  while Decision 8's precision requirement does.** Against a *second*-floored watermark, `>`
+  re-delivers permanently too, and the two stop being ordered — they become **differently wrong**.
+- **Keyset resumption — carry the last-seen id beside the timestamp.** This is the textbook repair for
+  a ties-at-the-boundary walk, and **on the books-query route it is NOT EXPRESSIBLE.** ⚠️ **THE
+  CONCLUSION STANDS; THE REASON UNDER IT HAS BEEN REPLACED, BECAUSE THE ORIGINAL REASON WAS WRONG.**
+  This bullet rested the verdict on the grammar — *"the rule grammar has **no compound
+  `(addedAt, id) >` form**"* — and **the grammar is not the gap.** Boolean `A OR (B AND C)` is
+  present and nests to depth 5; `addedAt >` is present; `addedAt =` is expressible as
+  `between(T, T)`; and the server appends a total order `books.id ASC` unconditionally
+  (`book-sort-builder.service.ts:52`). **Exactly ONE filter field is missing:** `id` is absent from
+  `FIELD_OPERATORS` and is **hard-rejected by the validator with a 400**. That single absence is what
+  makes the compound predicate unsendable. (`BookQuery`, `packages/types/src/query.ts:380-386`, also
+  carries no cursor and no `after` parameter, and paging is pure `LIMIT`/`OFFSET`,
+  `book.repository.ts:576-577`.)
+
+  **Why the reason is load-bearing rather than decoration:** ***a one-field gap that an upstream
+  release could close is materially different from a permanent absence***, and nothing but the reason
+  tells the two apart. The verdict is therefore **bounded to the books-query route**, not to
+  BookOrbit at large.
+
+  ⚠️ **AND THE "NOBODY SHOULD LATER PROPOSE IT" CLAUSE IS STRUCK.** It read *"so it is unavailable
+  rather than merely unchosen, and nobody should later propose it as though it were on the table"*.
+  The first half stands, **scoped to this route at the pinned commit**. The second half does not, and
+  it is falsifiable in one grep: **an id keyset already exists upstream**, at
+  `opds-book.service.ts:284`. That keyset is on a **different surface with different ordering**, so
+  it **rescues nothing here** — but it falsifies the sentence, and the sentence was the most final
+  one in the document resting on the thinnest evidence in it. ***A do-not-revisit clause must be at
+  least as well-established as the thing it forecloses.***
+
+**The measured answer is that no repair is owed here.** Keep the strict `>`, keep §7.1a's
+observed-maximum watermark rule, and rely on the idempotent upsert — with both of the dependencies
+named above written down, at §7.1a and here, rather than left as properties that happen to hold.
+
+**What the measurement searched, and what it does not claim.** It enumerated the `update(books)` call
+sites it found in the server tree at the pinned commit and read each write path; it searched for a
+database trigger two ways and found none; it re-verified the series-side measurements verbatim. **It
+does not claim to have found every path**, it is marked work in progress, and its findings are read
+from a clone rather than from anything this repo vendors or any gate re-checks. ⚠️ **It also found one
+repo-internal claim to be wrong, and that claim was ALREADY REPAIRED BEFORE THIS ADR LANDED.**
+`internal/bookorbit/stats.go`'s header said the paged read builds no status predicate — true of the
+query **builder** and false of the **read**, because `BookRepository.visibleWhere` ands
+`books.status <> 'processing'` on in the repository. Commit
+`e3785aadf26b95fd558babb1f163a42f231726a0` fixed it, and the header now carries the correction in as
+many words: *"a distinction that is easy to lose because it is TRUE OF THE QUERY BUILDER AND FALSE OF
+THE READ."* **It is named here as repaired rather than as open, and it is named at all only because
+the finding is the drafting lane's** — recording it as open would have been a claim about the tree
+that was false on the day it was written, which is the failure
+[`DEVELOPMENT.md`](./DEVELOPMENT.md) §11 *"A ruling states its reach, not the tree's current state"*
+exists to name. It is also the reason the enumerations above are stated as what was searched rather
+than as what exists.
+
+**⚠️ AND THE HAND-OFF TO CHANNEL 4 IS AN ASSIGNMENT, NOT A DISCHARGE — MEASURED, AND OPEN.** This is
+the residual with the sharpest teeth, because it is the one shaped like the defect this ADR refuses.
+`remoteHash()` hashes exactly nine values — `Title`, `SortTitle`, `OriginalTitle`, `Kind`,
+`ContainerID`, `RemotePath`, `RemoteSubtype`, `RemoteUpdatedAt`, `HasFile`
+(`internal/store/catalogue.go:2154-2160`) — and **authors, narrators, tags and genres are not among
+them**. §7.4's sweep compares `remote_hash` and refetches only the rows that drifted. So for a
+BookOrbit **credits-only edit**, the one hashed field that could have moved is `RemoteUpdatedAt`, and
+§2 is the measurement that it **does not move** on exactly those write paths. 🚩 **The sweep is
+therefore deaf to the same class 3b is deaf to**, and saying "channel 4 has it" without saying this
+would reproduce, one channel over, the confident-wrong-answer shape *Alternatives rejected* §1 turns
+down. **It is recorded as OPEN and is not fixed here**: this ADR assigns the class to channel 4 and
+does not design channel 4 (*What this does NOT decide* §1), and the repair — whether `remote_hash`
+grows the credit fields, or the credit pass re-applies unconditionally on refetch, or something
+else — is channel 4's slice to take, on its own evidence. ⚠️ **AND THE ASSIGNMENT IS TO NOTHING, WHICH
+IS SAID HERE AND NOT ONLY IN DECISION 11.** ***Assignment is not resolution***, and **channel 4 is
+unbuilt**: no sweep runs, so a credits-only edit is not caught late, it is not caught. The only thing
+that repairs one today is the **manual, unprompted full import**, which is the second reason it must
+stay reachable. ⚠️ **Nothing above should be read as having
+closed it**, and a later reader who finds credits going stale has found this paragraph rather than a
+surprise.
+
+**A later reader gets the boundary in one sentence.** *Arrivals are 3b's. Everything else is the
+sweep's.* Anything that arrives at UsArr about an existing BookOrbit book — an edit, a move, a
+deletion — arrives through channel 4, and if that is too slow the answer is to argue about channel 4's
+cadence, not to widen 3b's axis.
 
 ---
 
