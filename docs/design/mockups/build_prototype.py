@@ -6,7 +6,7 @@ a change to any of them owes prototype.html a regenerate. This script inlines th
 shared CSS and JS, concatenates the five <main> blocks, and rewrites every link to
 the five files into a #hash route so the single file clicks through the same way.
 """
-import re, pathlib
+import hashlib, re, pathlib
 
 SRC = pathlib.Path(__file__).resolve().parent
 PAGES = [('home', 'index.html'), ('services', 'services.html'),
@@ -15,6 +15,21 @@ PAGES = [('home', 'index.html'), ('services', 'services.html'),
 ROUTE = {'index.html': '#home', 'services.html': '#services',
          'libraries.html': '#libraries', 'search.html': '#search',
          'requests.html': '#requests'}
+
+# Every build input is read through here so that the manifest written into
+# prototype.html is a BYPRODUCT OF THE READS THEMSELVES rather than a parallel
+# list kept in step by hand. A hand-maintained list is a list that drifts, and a
+# drifted manifest is a stamp vouching for bytes nothing actually looked at.
+# Bytes, not text, because the digest has to survive being recomputed by a
+# different language's reader (check.mjs re-hashes these same files) and no
+# newline or encoding translation may sit between the two.
+INPUTS = {}
+
+
+def read(name):
+    data = (SRC / name).read_bytes()
+    INPUTS[name] = hashlib.sha256(data).hexdigest()
+    return data.decode()
 
 
 def block(text, name):
@@ -53,9 +68,9 @@ def rewrite_links(html):
 # fonts.css carries the two @font-face rules and nothing else, so usarr.css
 # stays a stylesheet a person can read. Both are inlined here, fonts first,
 # because prototype.html has to be a single file with no external request.
-css = (SRC / 'fonts.css').read_text() + '\n' + (SRC / 'usarr.css').read_text()
-js = (SRC / 'usarr.js').read_text()
-index = (SRC / 'index.html').read_text()
+css = read('fonts.css') + '\n' + read('usarr.css')
+js = read('usarr.js')
+index = read('index.html')
 
 sprite = block(index, 'SPRITE')
 topbar = rewrite_links(block(index, 'TOPBAR'))
@@ -68,8 +83,21 @@ if 'class="mocknote"' not in topbar:
     raise SystemExit('the permanent mockup notice is missing from the top bar')
 sidebar = rewrite_links(block(index, 'SIDEBAR')).replace(' aria-current="page"', '')
 
-body = '\n'.join(rewrite_links(block((SRC / f).read_text(), 'PAGE:' + r).strip())
+body = '\n'.join(rewrite_links(block(read(f), 'PAGE:' + r).strip())
                  for r, f in PAGES)
+
+# The script's own bytes are an input too. The doctype, the <head>, the <title>
+# and the banner below are template text that lives HERE, so an edit to any of
+# them changes prototype.html without touching one of the eight files read
+# above. A stamp that omitted this file would vouch for a prototype.html the
+# current script no longer produces. The cost is that even a comment-only edit
+# here owes a regenerate; that is one command, and it is the price of the stamp
+# meaning what it says.
+read('build_prototype.py')
+
+# Sorted so the block is stable across runs and a diff shows only what moved.
+manifest = '\n'.join(f'       {name}  sha256:{digest}'
+                     for name, digest in sorted(INPUTS.items()))
 
 # The <title> is user-visible copy -- it is the browser tab, the bookmark and
 # the history entry -- so §13's rules bind it like any other string, and
@@ -100,7 +128,21 @@ out = f'''<!doctype html>
 <!-- Generated from index.html, services.html, libraries.html, search.html and
      requests.html, with fonts.css, usarr.css and usarr.js inlined. Do not edit
      this file by hand: edit whichever of those files the change belongs in, and
-     regenerate with build_prototype.py. -->
+     regenerate with:
+
+         python3 docs/design/mockups/build_prototype.py
+
+     BUILD STAMP. The digests below are of the exact input bytes this file was
+     generated from. docs/design/check.mjs re-hashes each of these files on disk
+     and compares, so an edited source that was not followed by a regenerate
+     turns `make design` red instead of passing unnoticed. The stamp lives in
+     here, under this banner, rather than in a manifest file of its own: a
+     manifest beside the sources reads as a file that wants hand-updating, and a
+     pin someone bumps without regenerating is worth nothing. Do not edit these
+     lines -- regenerate, which is the only thing that makes them true.
+
+{manifest}
+     END BUILD STAMP -->
 {sprite}
 <div class="app" data-sidebar="open">
 {topbar}
