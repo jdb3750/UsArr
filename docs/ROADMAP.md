@@ -1059,12 +1059,25 @@ Items marked 🛑 **STOPPED** are the different case: those are stopped by the d
       ⚠️ **AND THE *"interim table"* FRAMING IS RETIRED WITH IT.** This item used to call `/library`
       *"~~a SLICE of this line item and NEVER a tick~~"*, whose missing type filter and sort control
       were *"~~simply not wired yet~~"*. **`/library` is not an interim anything**: it is ADR-0028's
-      Block C at full length, and §17.2 closes it at **one table, one order and no filters** on
-      purpose, so wiring a filter onto it would contradict the section rather than finish it. The
-      screen's own header says so, and names the trap — what it holds is a keyset **prefix** of the
-      catalogue, so a client-side control would present itself as operating on the library while
-      operating on whatever has been loaded. **The filters and the sort control belong to the
-      per-type grid, and that is where they shipped.**
+      Block C at full length.
+      ⚠️ **THE REASON THIS BOX GAVE FOR THAT WAS A PHANTOM CITATION AND IS STRUCK.** It read
+      *"~~§17.2 closes it at **one table, one order and no filters** on purpose, so wiring a filter
+      onto it would contradict the section rather than finish it~~"*, and §17.2 says the opposite.
+      §17.2 closes the **shape** — one table rather than one strip per type, so *"a sixth type adds
+      rows to an existing list rather than a sixth region to scan"* — and of that table requires, in
+      the same sentence, that *"it sorts, it filters, it Ctrl+Fs (§4.5)"*, while
+      [ADR-0028](./DECISIONS.md#adr-0028) puts Block C's *"scope … from the `?lib=` chip"*.
+      **No document forbids a filter on this screen**, so nothing here can be ticked or blocked on
+      one being forbidden.
+      ⚠️ **THE STRUCK SENTENCE'S SUPPORTING TRAP HAS EXPIRED TOO — FLAGGED, NOT RE-ARGUED.** It said
+      the screen holds *"~~a keyset **prefix** of the catalogue, so a client-side control would
+      present itself as operating on the library while operating on whatever has been loaded~~"*,
+      and *"~~the filters and the sort control belong to the per-type grid, and that is where they
+      shipped~~"*. `web/src/routes/library/+page.svelte`'s own header now records that the screen
+      moved **off** `GET /api/v1/library/recent` **onto** `GET /api/v1/library` for exactly that
+      reason, so the sort control and the `?lib=` scope select are applied **server-side over the
+      whole table** and are on this screen today. What it still omits is `media_type` — that is what
+      makes it the all-types view. **Read the route, not this box.**
       *Authority:* §16's v0.1 entry, §17.2, §17, §13's budget table, §4.5,
       `reference/http-api.md` §7.
       *Was done when:* a `/library/{type}` route exists under `web/src/routes/` and renders over
