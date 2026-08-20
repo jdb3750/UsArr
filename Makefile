@@ -941,12 +941,24 @@ build-tagged: ## Compile packages hidden behind build tags (`bench`: internal/db
 #
 # So it is a target a person runs, like `make bench`. With (2) discharged, (1)
 # and (3) are the whole of the case, and (1) carries it on its own.
+#
+# ONE CARVE-OUT, and it is reasoned rather than an exception. Section 1e of
+# check.mjs — the provenance stamp compare — was never subject to any of the
+# three: it drives no browser, so (1) does not reach it; and while it lives in
+# docs/design/ it is what tells you the file the REST of this gate measures is
+# the file the sources produce, which is a different claim from (3)'s "token
+# drift in a mockup cannot break the binary". It now lives in its own file,
+# docs/design/provenance.mjs, and runs in both places: here through check.mjs,
+# and first in `check-offline` through the `provenance` target below.
 
 # Overridable. The default is the browser cache this repo's agent container
 # preinstalls; a workstation's is usually ~/.cache/ms-playwright.
 PW_BROWSERS_PATH ?= /opt/pw-browsers
 DESIGN_CHECK     ?= docs/design/check.mjs
 NODE             ?= node
+PROVENANCE_CHECK ?= docs/design/provenance.mjs
+BUILD_PROTOTYPE  ?= docs/design/mockups/build_prototype.py
+PYTHON           ?= python3
 
 .PHONY: design
 design: ## Run the design check (DESIGN-DIRECTION §13). Needs Chromium. NOT part of `check`.
@@ -971,6 +983,70 @@ design: ## Run the design check (DESIGN-DIRECTION §13). Needs Chromium. NOT par
 	@# killing the recipe before its own error message could print. Guard the
 	@# behaviour you need or do not guard at all.
 	PLAYWRIGHT_BROWSERS_PATH=$(PW_BROWSERS_PATH) $(NODE) $(DESIGN_CHECK)
+
+# ─── Provenance: the one piece of the design check that IS in `check` ────────
+# docs/design/mockups/prototype.html is GENERATED from nine inputs, and it is
+# the file every rendered check in check.mjs opens. docs/design/provenance.mjs
+# re-hashes those nine from disk and compares them against the digests
+# build_prototype.py stamped into prototype.html when it wrote the file. That is
+# the whole of it: a stale artifact turns red instead of being silently measured
+# in place of the sources somebody actually edited.
+#
+# WHY THIS ONE IS ALLOWED INTO `check` WHEN `design` IS NOT. Rule 3 above keeps
+# `design` out because it needs a ~150 MB Playwright Chromium. This target
+# inherits none of that — it touches no browser, no page and no network, and it
+# is a separate file precisely so it can be entered without one. Its two
+# prerequisites are node and this repo's own tree, and node is ALREADY a hard
+# prerequisite of `make check`: fmt-check, lint-web, test-web and test-go all
+# declare `web-deps`, which runs pnpm, which runs on node. Nothing new is being
+# asked of any machine that can run the gate today.
+#
+# AND IT IS FIRST IN `check-offline`, AHEAD OF fmt-check. Measured on this
+# container: ~0.3 s wall for the whole node process against `make check`'s
+# ~4 minutes. Putting it first means a tree whose mockups are out of step fails
+# in under a second rather than after `pnpm install --frozen-lockfile` and a
+# full gofumpt sweep. A cheap check that can fail belongs before the expensive
+# ones that cannot fix it.
+#
+# It exits 1 on a finding; this recipe failing makes `make` exit 2. Two
+# different numbers for two different things — do not quote one for the other.
+.PHONY: provenance
+provenance: ## Assert prototype.html is in step with its stamped sources. GATING, first in `check`.
+	@test -f $(PROVENANCE_CHECK) || { \
+		echo "no $(PROVENANCE_CHECK) — this check cannot run, and its absence is not a pass."; \
+		exit 1; }
+	@command -v $(NODE) >/dev/null 2>&1 || { \
+		echo "node not found — $(PROVENANCE_CHECK) needs Node 22+ (stdlib only, no packages)."; \
+		exit 1; }
+	$(NODE) $(PROVENANCE_CHECK)
+
+# ─── The remedy, as one command ──────────────────────────────────────────────
+# `make provenance` fails and tells you to run this. It exists so the remedy is
+# a target rather than a path somebody has to retype, and so python3 — which the
+# generator needs and nothing else in this file does — is DECLARED AND GUARDED
+# IN ONE PLACE. Before this target, python3 was an undeclared prerequisite of
+# the gate's only escape route: the check could tell you to run a script whose
+# interpreter the Makefile had never once mentioned, and a machine without it
+# got a bare "command not found" from a shell instead of a sentence from here.
+#
+# It is NOT a prerequisite of anything. Regenerating as part of the gate would
+# make the gate mutate the tree it is measuring, and a gate that repairs its own
+# finding reports a pass over a tree the committer never saw.
+.PHONY: prototype
+prototype: ## Regenerate docs/design/mockups/prototype.html from its nine stamped sources.
+	@test -f $(BUILD_PROTOTYPE) || { \
+		echo "no $(BUILD_PROTOTYPE) — nothing here can generate prototype.html."; \
+		exit 1; }
+	@command -v $(PYTHON) >/dev/null 2>&1 || { \
+		echo "python3 not found — $(BUILD_PROTOTYPE) is the only thing in this repo that"; \
+		echo "needs it, and it needs nothing beyond the standard library."; \
+		echo "point at yours with: make prototype PYTHON=/path/to/python3"; \
+		exit 1; }
+	$(PYTHON) $(BUILD_PROTOTYPE)
+	@echo ""
+	@echo "commit the regenerated file WITH the source edit that made it necessary."
+	@echo "if the edit was not yours, keep it OUT of your commit: stage by name, never"
+	@echo "\`git add -u\`, \`git add -A\` or \`git add .\`."
 
 # ─── Supply chain ────────────────────────────────────────────────────────────
 
@@ -1111,5 +1187,5 @@ check: check-offline vuln ## THE PRE-COMMIT GATE. No Docker. Two network calls (
 	@echo "check: OK"
 
 .PHONY: check-offline
-check-offline: fmt-check lint build-tagged modverify secrets test ## Everything in `check` except the vuln scan.
+check-offline: provenance fmt-check lint build-tagged modverify secrets test ## Everything in `check` except the vuln scan.
 	@echo "check-offline: OK"

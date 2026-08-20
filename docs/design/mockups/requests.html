@@ -425,11 +425,28 @@
        empty list read as a defect. It is scoped to music because that is where
        it is TRUE: the same search for a film on the same nine indexers returns
        a full page. Nothing here says music is a lesser media type in UsArr:
-       v0.1 ships no write-capable service for ANY type and no catalogue source
-       for four of the six, so music sits exactly where films, TV and
-       audiobooks sit, and one step behind ebooks and comics -- which have a
-       catalogue source that reads them and still nothing that imports one. What is specific to music is the indexer ecosystem, and that is all
-       this state claims. See ARCHITECTURE.md 8.5 and 17.5. -->
+       v0.1 ships no write-capable service for ANY type, and on the read side
+       music goes through the same derivation as every other type -- whether it
+       has a catalogue source is a property of the install, never of the
+       milestone. On an install with no music source, music sits exactly where
+       that install's other sourceless types sit, and one step behind the ones
+       it does catalogue -- which have a source that reads them and still
+       nothing that imports one. What is specific to music is the indexer
+       ecosystem, and that is all this state claims.
+       See ARCHITECTURE.md 8.5 and 17.5.
+
+       STRUCK 2026-08-20: this read "no catalogue source for four of the six,
+       so music sits exactly where films, TV and audiobooks sit, and one step
+       behind ebooks and comics". The count is deliberately not corrected to a
+       different count -- naming which types have a source is a category error
+       rather than a stale fact, and home.ts's catalogueReach derives the split
+       from the connected service kinds, so a Kavita install answers "2
+       catalogued" where a BookOrbit one answers "3". It was false as written
+       besides: Block A counts audiobooks as catalogued on a BookOrbit. The
+       argument never rested on the list -- it needs music treated like every
+       other type, which the derivation guarantees, not a tally of which types
+       fall where. This claim cited 8.5 and 17.5 rather than 16.1, which is how
+       it outlived the ADR-0052 sweep of the sites citing 16.1. -->
   <div class="section" data-when="thinmusic" hidden>
     <div class="empty">
       <h2 class="empty__title">No releases matched, and the reason is the indexers rather than the query</h2>
