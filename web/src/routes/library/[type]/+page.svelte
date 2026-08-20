@@ -36,10 +36,21 @@
 	 * a fallback for a case the route already refused.
 	 *
 	 * ⚠️ AND NEITHER OF THEM IS HOME'S BLOCK C, which reads `/library/recent` and
-	 * keeps doing so: §17.2 as amended by ADR-0028 closes that block at one
-	 * table, one order and no filters, and http-api.md §7 is explicit that the
-	 * browse read *"is a different endpoint from §1, not a superset of it"*. The
-	 * two share a row shape and a paging rule and share no cursor.
+	 * keeps doing so — because that is the endpoint it is wired to. ⚠️ THE REASON
+	 * GIVEN HERE USED TO BE THAT *"§17.2 as amended by ADR-0028 closes that block
+	 * at one table, one order and no filters"*, AND NEITHER DOCUMENT CONTAINS IT:
+	 * of Block C's one table §17.2 says *"it sorts, it filters, it Ctrl+Fs
+	 * (§4.5)"*, and ADR-0028 says *"the unified table sorts, filters and
+	 * Ctrl+Fs"*. What those two close is the SHAPE — one table spanning every
+	 * type, a sixth type adding rows rather than a sixth region — which is a rule
+	 * about Home's layout and picks no endpoint. So Block C is missing a sort and
+	 * a scope rather than forbidden them, and this screen is not what stands in
+	 * the way. Re-grounded 2026-08-20 on how Block C is wired, not on a document,
+	 * so it moves the day Block C is rewired. What does keep the two reads apart is the contract: http-api.md §7
+	 * says the browse read *"is a different endpoint from §1, not a superset of
+	 * it"*, and the two share a row shape and a paging rule and share no cursor
+	 * (§7.5). ⚠️ Take §7 for that split and NOT for the reason it gives after it,
+	 * which is the same phantom this note is about.
 	 *
 	 * A LOCAL SQLITE READ, so principle 1 holds all the way through: one
 	 * statement per page plus at most one small statement to resolve `?lib=`

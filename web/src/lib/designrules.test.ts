@@ -67,10 +67,12 @@
  *   · §13 bans the four hues, and §13 alone bans a hue by value; rule 2 below
  *     is now that ban, and check.mjs still has no equivalent. The centring
  *     clause is no longer in this list — design RULED on it (2026-08-17) rather
- *     than leaving it open, and the ruling went §13's way, so this file's
- *     exemption is `dialog|modal` and check.mjs is changing its side to match.
- *     That is a deliberate, ruled divergence from check.mjs's current regex
- *     rather than a mirror, and it is written up at the rule itself.
+ *     than leaving it open, the ruling went §13's way, and CHECK.MJS HAS SINCE
+ *     NARROWED ITS OWN SIDE to `dialog|modal` — its note at that rule dates the
+ *     narrowing. There is no divergence here any more, and the agreement is now
+ *     ASSERTED rather than described: both halves of the centring rule are
+ *     lifted out of check.mjs's text at test time and compared against this
+ *     file's, so either side moving fails here. Written up at the rule itself.
  *   · §13 says "Radius tokens: at most three values, maximum 6px." Only the
  *     ceiling has an implementation, in either file. Design ruled on 2026-08-17
  *     that the limit counts NON-ZERO radii and `--radius-0` is the null case,
@@ -266,6 +268,10 @@ const ARCHITECTURE_MD = join(REPO, 'docs/ARCHITECTURE.md');
    it rather than guessed. This file never writes it — tokens.css is the design
    thread's, and `tokenparity.test.ts` owns app.css's agreement with it. */
 const TOKENS_CSS = join(REPO, 'docs/design/tokens.css');
+/* READ-ONLY here too, and read for a reason of the same family: the centring
+   rule's values are LIFTED from this file at test time rather than transcribed
+   out of it. check.mjs is the design thread's; nothing here ever writes it. */
+const CHECK_MJS = join(REPO, 'docs/design/check.mjs');
 
 /* -----------------------------------------------------------------------------
  * THE CORPUS
@@ -2354,29 +2360,89 @@ describe('DESIGN-DIRECTION §13 — the static rules, over web/src', () => {
 		expect(bad, '§13 type: banned family in a font stack').toEqual([]);
 	});
 
-	/* check.mjs's CENTER pattern verbatim. The `where` group is the mechanism,
-	   not decoration: the exemption is about WHERE the declaration sits, so the
+	/* check.mjs's CENTER pattern. The `where` group is the mechanism, not
+	   decoration: the exemption is about WHERE the declaration sits, so the
 	   pattern captures the selector (CSS) or the element and its attributes (an
 	   inline style) and hands THAT to the exemption.
 
 	   ASSEMBLED FROM `CENTRED` RATHER THAN TYPED AROUND IT, so the anchor handed
 	   to `scan` is the pattern's own mandatory tail by construction and cannot
-	   drift from it under editing. `.source` is unchanged — the drill below pins
-	   it character for character against check.mjs's line. */
+	   drift from it under editing. That construction is THIS file's and not
+	   check.mjs's, which is exactly why the agreement between the two is asserted
+	   below against a value lifted from check.mjs at test time. */
 	const CENTRED = /text-align\s*:\s*center/;
 	const CENTER = new RegExp(
 		`(?<where>[^{}]{0,200}\\{[^{}]{0,400}?|<[a-z][^<>]{0,300}?)${CENTRED.source}`,
 		'i'
 	);
-	/* ⚠️ `dialog|modal`, NOT check.mjs's `dialog|modal|toast` — a deliberate,
-	   ruled divergence rather than a copying slip, and the only one in this
-	   file. §13 names dialog components and nothing else; design ruled on
-	   2026-08-17 that §13 governs here and is changing check.mjs's side to
-	   match. The reasoning is worth keeping because it generalises: an unused
-	   exemption costs nothing to remove, and silently grants everything the
-	   day someone builds the component it names. `toast` matched nothing in
-	   either tree — it was a carve-out waiting for its first customer. */
+	/* `dialog|modal`. THIS COMMENT USED TO CLAIM A LIVE DIVERGENCE — check.mjs's
+	   `dialog|modal|toast` against this file's `dialog|modal`, carrying design's
+	   2026-08-17 ruling that §13 governs here and that check.mjs "is changing its
+	   side to match". IT DID: check.mjs narrowed its own exemption to
+	   `dialog|modal` and dates the narrowing in a note at its own rule. The two
+	   sides have agreed ever since, and the comment went on describing a
+	   divergence that no longer existed — which is why the value is now checked
+	   against check.mjs's text rather than against a note about it.
+
+	   The reasoning is kept, because it generalises and because it is why a
+	   re-widening has to fail rather than pass: an unused exemption costs nothing
+	   to remove, and silently grants everything the day someone builds the
+	   component it names. `toast` matched nothing in either tree — a carve-out
+	   waiting for its first customer. ⚠️ If the two are ever meant to differ
+	   again, that belongs in the assertion below as an explicit inequality with
+	   the ruling that authorised it — not here. A note beside a pin is what let
+	   the last one rot. */
 	const CENTER_EXEMPT: Exemption = { group: 'where', match: /dialog|modal/i };
+
+	/* --- check.mjs's own values, LIFTED FROM ITS TEXT AT TEST TIME -----------
+	 *
+	 * A guard that encodes a value instead of deriving it decays silently the
+	 * moment its source can move independently, and both halves of this rule had:
+	 * the pattern was a transcription nothing re-checked, and the exemption
+	 * carried a comment describing a divergence check.mjs had already closed.
+	 * Reading check.mjs is what makes a change over there fail over here.
+	 *
+	 * WHAT THIS IS NOT, AND THE DISTINCTION IS THE WHOLE POINT: the lifted values
+	 * are never USED as the rule. `CENTER` and `CENTER_EXEMPT` above are still
+	 * built here, out of this file's own `CENTRED` fragment, and the lifted pair
+	 * is only ever COMPARED against them. A test that ran check.mjs's regex would
+	 * assert nothing about agreement — it would agree by construction, and a
+	 * mirror is not a guard. Two independently written values, compared, is the
+	 * only arrangement that can fail, and it is also the one that leaves room for
+	 * a deliberate divergence: one would be written below as an explicit
+	 * inequality, argued at the assertion, and would fail on the day check.mjs
+	 * closed it. That last property is exactly what the old comment lacked.
+	 * ---------------------------------------------------------------------- */
+	type Lifted = {
+		/** How many matches the extractor found. Asserted BEFORE anything is compared. */
+		readonly found: number;
+		readonly source: string;
+		readonly flags: string;
+	};
+	/* A JS regex literal, conservatively: any escape, any character class, and no
+	   bare `/` outside one. True of both patterns lifted here — and the
+	   found-first assertions are what catch the day it stops being. */
+	const RE_LITERAL = String.raw`\/((?:[^/\\\n[]|\\.|\[(?:[^\]\\]|\\.)*\])+)\/([a-z]*)`;
+	const lift = (text: string, over: RegExp): Lifted => {
+		const all = [...text.matchAll(over)];
+		return { found: all.length, source: all[0]?.[1] ?? '', flags: all[0]?.[2] ?? '' };
+	};
+	const CHECK_MJS_SRC = readFileSync(CHECK_MJS, 'utf8');
+	/* check.mjs's `const CENTER = /…/i;`. */
+	const CHECK_CENTRE = lift(
+		CHECK_MJS_SRC,
+		new RegExp(String.raw`^const CENTER = ${RE_LITERAL};$`, 'gm')
+	);
+	/* Its `rule(…, CENTER, …)` call, and the exemption lifted from INSIDE that
+	   call rather than from the file — so another rule gaining an exemption is not
+	   a failure here. `[^;]` is a negated class, not a dot: it spans newlines. */
+	const CHECK_CENTRE_CALLS = [...CHECK_MJS_SRC.matchAll(/\brule\([^;]*?\bCENTER\b[^;]*?\);/g)];
+	const CHECK_CENTRE_CALL = CHECK_CENTRE_CALLS[0]?.[0] ?? '';
+	const CHECK_CENTRE_EXEMPT = lift(
+		CHECK_CENTRE_CALL,
+		new RegExp(String.raw`\bmatch:\s*${RE_LITERAL}`, 'g')
+	);
+	const CHECK_CENTRE_GROUP = /\bgroup:\s*'([a-z]+)'/.exec(CHECK_CENTRE_CALL)?.[1] ?? '';
 	/* Reported as `file  selector` rather than `file:line`, because the selector
 	   is what a reader has to go and look at. There is no allowlist here and no
 	   exception to key one on: `.th__arrow` was the tree's only hit and its
@@ -2428,13 +2494,67 @@ describe('DESIGN-DIRECTION §13 — the static rules, over web/src', () => {
 		   that is not part of the rule must throw, not quietly filter the corpus
 		   down to nothing and report a clean tree. */
 		expect(() => scan(CENTER, { anchor: /nothing-of-the-sort/ })).toThrow(/mis-wired anchor/);
+	});
 
-		/* And `verbatim` kept honest. The comment above claims this is check.mjs's
-		   line; assembling it from `CENTRED` is only safe while that stays true. */
-		expect(CENTER.source, "CENTER has drifted from check.mjs's pattern").toBe(
-			'(?<where>[^{}]{0,200}\\{[^{}]{0,400}?|<[a-z][^<>]{0,300}?)text-align\\s*:\\s*center'
+	it('§13 type: the centring rule still agrees with check.mjs, both halves', () => {
+		/* FOUND FIRST, AND THE ORDER IS LOAD-BEARING. An extractor that matched
+		   nothing hands back two empty strings, and '' equals '' — the failure mode
+		   of this whole arrangement is a green run over a subject that was never
+		   located, which is the same defect one level up from the one it replaces.
+		   Nothing is compared until the lift is proved to have found something. */
+		expect(
+			CHECK_CENTRE.found,
+			'`const CENTER = /…/;` was not found exactly once in docs/design/check.mjs — ' +
+				'the declaration has moved or been renamed and this guard is reading nothing'
+		).toBe(1);
+		expect(
+			CHECK_CENTRE_CALLS.length,
+			'the `rule(…, CENTER, …)` call was not found exactly once in docs/design/check.mjs'
+		).toBe(1);
+		expect(
+			CHECK_CENTRE_EXEMPT.found,
+			'no `match:` regex inside the CENTER rule call in check.mjs — the exemption has moved'
+		).toBe(1);
+		/* And that what came back is a whole pattern rather than a truncated one: a
+		   lift that stopped at the first `/` or `]` lands well under these floors.
+		   Floors, not measurements — they are here to be crossed, not matched. */
+		expect(
+			CHECK_CENTRE.source.length,
+			'lifted CENTER pattern is implausibly short'
+		).toBeGreaterThan(60);
+		expect(CHECK_CENTRE.source, 'lifted CENTER pattern has no `where` group').toContain(
+			'(?<where>'
 		);
-		expect(CENTER.flags).toBe('i');
+		expect(
+			CHECK_CENTRE_EXEMPT.source.length,
+			'lifted centring exemption is implausibly short'
+		).toBeGreaterThan(4);
+		expect(
+			CHECK_CENTRE_GROUP,
+			'no `group:` name inside the CENTER rule call in check.mjs — the exemption has moved'
+		).toBe('where');
+
+		/* THE AGREEMENT, both halves. Two independently written values: check.mjs's,
+		   lifted from its text a moment ago, and this file's, assembled above from
+		   `CENTRED`. Either side moving fails this — which is the property the
+		   transcribed literal that used to sit here never had. */
+		expect(CENTER.source, "CENTER has drifted from check.mjs's pattern").toBe(CHECK_CENTRE.source);
+		expect(CENTER.flags, "CENTER's flags have drifted from check.mjs's").toBe(CHECK_CENTRE.flags);
+		expect(
+			CENTER_EXEMPT.match.source,
+			'the centring exemption has drifted from the one in check.mjs. ⚠️ If the divergence is ' +
+				'DELIBERATE, do not answer it with a comment — write it here as an explicit ' +
+				'inequality naming the ruling that authorised it, so that check.mjs closing ' +
+				'the gap fails too. A note beside a pin is exactly how the last one rotted.'
+		).toBe(CHECK_CENTRE_EXEMPT.source);
+		expect(
+			CENTER_EXEMPT.match.flags,
+			"the centring exemption's flags have drifted from check.mjs's"
+		).toBe(CHECK_CENTRE_EXEMPT.flags);
+		expect(
+			CENTER_EXEMPT.group,
+			'the centring exemption names a different capture group than check.mjs does'
+		).toBe(CHECK_CENTRE_GROUP);
 	});
 
 	it('reads a copy corpus big enough to be the corpus', () => {
