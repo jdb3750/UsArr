@@ -321,19 +321,30 @@ func TestRecentWorksFailsClosedOnAnEmptyScope(t *testing.T) {
 	}
 }
 
-// The read is library-AGNOSTIC today, and that is §17.2's SHAPE rather than a
-// capability this read is missing: Block C is one table, one order and no
-// filters, so it carries no chip.
+// The read is library-AGNOSTIC today because nothing in it reads a library
+// filter. That is the whole of the reason: no document declines the chip here.
 //
-// ⚠️ THIS COMMENT USED TO GIVE A DIFFERENT REASON — that `?lib=` is "a
-// multi-select over library_member, whose key leads with sort_title rather than
-// added_at, so it is a different plan and a different commit" — and
-// internal/httpapi/library.go strikes both halves of it: the commit landed
+// ⚠️ THE REASON HERE HAS NOW BEEN FALSIFIED TWICE, and the second one was worse
+// than the first because it looked checked. It read "that is §17.2's SHAPE
+// rather than a capability this read is missing: Block C is one table, one order
+// and no filters, so it carries no chip" — which cites §17.2 for the inverse of
+// what §17.2 says. §17.2 closes the SHAPE (one table rather than one strip per
+// type, so "a sixth type adds rows to an existing list rather than a sixth
+// region to scan") and of that table requires, in the same sentence, that "it
+// sorts, it filters, it Ctrl+Fs (§4.5)"; ADR-0028 puts Block C's scope on the
+// `?lib=` chip outright. Removing the citation leaves NO reason at all, and that
+// is the honest state to record rather than a replacement argument.
+//
+// ⚠️ AND THE REASON BEFORE THAT — that `?lib=` is "a multi-select over
+// library_member, whose key leads with sort_title rather than added_at, so it is
+// a different plan and a different commit" — is struck by
+// internal/httpapi/library.go on both halves: the commit landed
 // (handleBrowseWorks serves `?lib=` through store.LibraryIDsBySlug and
 // store.WorksFilter.LibraryIDs), and ADR-0051 made the scope a WORK-DRIVEN
 // EXISTS over library_member rather than a join, which is order-independent and
 // so was never blocked by this read's added_at order. The ASSERTION below is
-// unchanged and was always correct; only the sentence explaining it was dead.
+// unchanged and was always correct through both strikes; only the sentences
+// explaining it were dead.
 //
 // This pins the current behaviour so the day it changes, it changes
 // deliberately.
