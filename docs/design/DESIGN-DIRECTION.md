@@ -1415,9 +1415,33 @@ where the words can be true and can name their reason.** That is the decision of
 the shipped shell and recorded as **ADR-0053**; it is not an unfinished state to be tidied back to
 the old spec. `browseEmptyState` (`web/src/lib/librarygrid.ts`) is where the honesty went: it words
 the empty grid from the services read, separating *"no library-bearing service is connected"* from
-*"this type has no rows yet"* from *"the library scope excludes everything"* (§10's `scope-empty`).
+*"this type has no rows yet"* from *"the libraries this view is scoped to hold nothing"*.
 A user who clicks an empty type is told which of the three is true, which is strictly more than a
 hidden row tells them.
+
+🚩 **STRUCK 2026-08-20 — the third separation was named as a state this function does not render.**
+The clause above read: *"~~from **"the library scope excludes everything"** (§10's `scope-empty`)~~"*.
+**The first two separations are exact and are untouched** — *"No library-bearing service is
+connected"* is `recentEmptyState`'s own title (`web/src/lib/libraryscreen.ts`) and *"No {type}
+catalogued yet"* is `browseEmptyState`'s. **The third is a different proposition from §10's.** What
+the code separates third is *"the libraries this view is scoped to hold nothing"*: the branch is
+`query.libraries.length > 0`, which titles *"Nothing in this scope"* on the all-types view and
+*"No {type} in this scope"* on a typed one, over the text *"UsArr has catalogued nothing in the
+libraries this view is scoped to"* — an assertion that **the named libraries are empty**. §10's
+`scope-empty` asserts that **the scope names zero libraries**: *"Your library scope is set to 0 of 8
+libraries, so nothing is shown."* A scope that holds nothing and a scope that holds no libraries are
+not the same fact, and only the first is worded here.
+
+⚠️ **The zero case is not merely unhandled, it is unrepresentable at this layer — which is how the
+sentence came to claim it.** `readLibraryScope` drops empty segments, so an absent `?lib=` and an
+empty one both arrive as `[]`, and `browseParams` deletes the parameter rather than emptying it; `[]`
+therefore means *no scope*, never *a scope of none*. So `libraries.length === 0` falls to *"No {type}
+catalogued yet"* on a typed view and to `recentEmptyState` on the all-types one, and neither of those
+is `scope-empty`. This is §9.7's `ScopeChip` note reached from the other end — *"an absent `lib` means
+everything and an empty one is a `400`, so §8.1's third grammar and §10's `scope-empty` cannot be
+expressed at all"*. **The gap is real, it belongs to `scope-empty` rather than to ADR-0053, and it is
+tracked** at [`ROADMAP.md`](../ROADMAP.md) §2 under *"The `?lib=` chip"*. This rider corrects a
+document and closes nothing.
 
 ⚠️ **The condition under which per-type hiding returns is a single named one, and it is a read, not a
 rewrite: a facet read.** The day one statement answers *which of the six types have rows, under the
