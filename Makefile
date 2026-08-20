@@ -47,6 +47,23 @@ SHELL       := /bin/bash
 .SHELLFLAGS := -eu -o pipefail -c
 .DEFAULT_GOAL := help
 
+# WHY THE GATE IS SERIAL, AND WHY THAT NEEDS A DIRECTIVE RATHER THAN A HABIT.
+# `check-offline` names seven prerequisites on one line. GNU make walks that list
+# left to right ONLY while it has one job slot; under `-j` it starts as many as
+# the slots allow, and the arms are not independent of each other. `web-build`
+# writes web/build, web/.svelte-kit and internal/web/spa while `secrets` runs
+# `gitleaks dir .` over that same tree from the repo root, and `fmt-check`,
+# `lint-web` and `test-web` all read web/ while it is being rewritten. A gate
+# that measures a tree another arm is still writing reports on a state no
+# committer ever had.
+#
+# It also protects the ordering the comments on `provenance` below depend on:
+# that the cheap stamp compare runs ahead of the expensive arms so a stale
+# mockup fails early. Prerequisite order expresses that intent; only a serial
+# build enforces it. Measured at -j2 on this container, without this line,
+# `web-deps` started 68 ms before `provenance` had exited.
+.NOTPARALLEL:
+
 # ─── Variables ───────────────────────────────────────────────────────────────
 
 BINARY      ?= usarr
