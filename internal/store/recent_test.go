@@ -42,8 +42,9 @@ func seedRecentCorpus(t *testing.T, s *Store) {
 		   VALUES (2, 'kavita', 'library', 'Kavita Books', 'http://kavita2.example', X'00')`,
 
 		// Two user-defined libraries over the two instances. Nothing in this
-		// read joins them yet — the `?lib=` chip is a later commit — and
-		// TestRecentWorksIsLibraryAgnosticToday pins that as a stated gap
+		// read joins them — the `?lib=` chip is built, but on the BROWSE read
+		// (internal/httpapi/library.go's handleBrowseWorks), not here — and
+		// TestRecentWorksIsLibraryAgnosticToday pins that as §17.2's shape
 		// rather than leaving it to be discovered.
 		`INSERT INTO library (id, user_id, name, slug, kind) VALUES (1, 0, 'Manga', 'manga', 'comic')`,
 		`INSERT INTO library (id, user_id, name, slug, kind) VALUES (2, 0, 'Books', 'books', 'book')`,
@@ -320,11 +321,22 @@ func TestRecentWorksFailsClosedOnAnEmptyScope(t *testing.T) {
 	}
 }
 
-// The read is library-AGNOSTIC today, and that is a stated gap rather than an
-// oversight: §17.2's `?lib=` chip is a multi-select over library_member, whose
-// key leads with sort_title rather than added_at, so it is a different plan and
-// a different commit. This pins the current behaviour so the day it changes,
-// it changes deliberately.
+// The read is library-AGNOSTIC today, and that is §17.2's SHAPE rather than a
+// capability this read is missing: Block C is one table, one order and no
+// filters, so it carries no chip.
+//
+// ⚠️ THIS COMMENT USED TO GIVE A DIFFERENT REASON — that `?lib=` is "a
+// multi-select over library_member, whose key leads with sort_title rather than
+// added_at, so it is a different plan and a different commit" — and
+// internal/httpapi/library.go strikes both halves of it: the commit landed
+// (handleBrowseWorks serves `?lib=` through store.LibraryIDsBySlug and
+// store.WorksFilter.LibraryIDs), and ADR-0051 made the scope a WORK-DRIVEN
+// EXISTS over library_member rather than a join, which is order-independent and
+// so was never blocked by this read's added_at order. The ASSERTION below is
+// unchanged and was always correct; only the sentence explaining it was dead.
+//
+// This pins the current behaviour so the day it changes, it changes
+// deliberately.
 func TestRecentWorksIsLibraryAgnosticToday(t *testing.T) {
 	s := newTestStore(t)
 	seedRecentCorpus(t, s)
