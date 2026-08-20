@@ -1514,8 +1514,9 @@ deliberately rather than by drift (FUTURE.md §10).
    under this driver, whose SQLite is built with `MAX_MMAP_SIZE=0`, so it has been **dropped from
    the pragma list** rather than left in place looking tunable. `cache_size` is **per-connection**,
    so with a `NumCPU*2` read pool it multiplies by pool size + 1 rather than costing what it says;
-   the default is now **`-8000`** (~85 MB peak on 4 cores) rather than `-32000` (~237 MB), because a
-   default has to hold up on a small self-hosted box and this cost grows with core count.
+   the default is now **`-8000`** (~85 MiB peak on 4 cores) rather than `-32000` (~237 MiB; these
+   are MiB, not MB — §13), because a default has to hold up on a small self-hosted box and this
+   cost grows with core count.
    Unmeasured on arm64 (§13).
 5. **`ANALYZE` after bulk import.**
 
@@ -2205,7 +2206,7 @@ cgo citation nor the WASM-runtime reasoning describes what UsArr will run.
 **That measurement now exists, on x86-64.** `make bench-rss` (`internal/db/spike`, behind the `bench`
 tag) builds a 500k-row fixture through the real `internal/db` open path, then measures process RSS
 from `/proc/self/status` in one child process per pragma cell. On the reference x86-64 run recorded
-in **ADR-0001**: **idle 10 MB**, **peak 50 MB** for the 500k-row import, and **peak ~237 MB** for a
+in **ADR-0001**: **idle 10 MiB**, **peak 50 MiB** for the 500k-row import, and **peak 237.1 MiB** for a
 saturating read workload at the then-shipped `cache_size = -32000` — because the page cache is
 **per-connection**, so `cache_size` multiplies by the pool. `mmap_size` is a **no-op** under this
 driver. The two ⚠️ markers in the budget table above are therefore lifted for x86-64, and §7.7's
@@ -2213,10 +2214,28 @@ pending note with them.
 
 **Both defaults moved on the strength of that run** (ADR-0001, amendment). `mmap_size` was dropped
 from the pragma list — it configured nothing — and `cache_size` was cut from `-32000` to **`-8000`**,
-which measures **~85 MB peak** on the same 4-core reference run. The read-workload figure this
-section budgets against is therefore ~85 MB, not ~237 MB. Note what the harness does **not** measure:
-query latency. `-8000` is chosen on the memory axis alone, and a latency benchmark that contradicts
-it would be grounds to revisit.
+which measures **~85 MiB peak** on the same 4-core reference run. The read-workload figure this
+section budgets against is therefore ~85 MiB, not ~237 MiB. Note what the harness does **not**
+measure: query latency. `-8000` is chosen on the memory axis alone, and a latency benchmark that
+contradicts it would be grounds to revisit.
+
+⚠️ **Every measured figure in the two paragraphs above is MiB, and read *"MB"* until 2026-08-20 —
+a relabel, not a rounding.** ADR-0001's sweep table is headed *"Read sweep, all MiB"* and
+`make bench-rss` prints MiB, so 237.1 MiB is ~249 MB decimal. **No number changed here**; three
+sites carried the wrong unit — these two paragraphs and §7.7's pragma bullet 4 — and all three
+moved in one pass, because a second pass over the same sentence is how the next one gets missed.
+**That is the pass, not the class:** the budget table above still appends its measured figures in
+MB, and the targets beside them are chosen budgets that are MB by intent, so the two are not one
+correction and neither is made here. **237.1 is the shipped row's `peak (VmHWM)` cell**, and that
+the figure descends from that column is **stated** — ADR-0001's amendment says it took the peak
+column at face value. ⚠️ **Prose elsewhere in the repo reads *"235 MB peak"*, which is a different
+cell:** the same row's `8 readers` is 235.1. That 235 descends from *that* cell is **inference**
+from an exact numeric match, and no document records where it was read. The two descents are not
+equally evidenced and are not written here as if they were. **ADR-0001's table is the only
+surviving record of the run** — `git ls-files` carries no bench output at all, because the harness
+echoes its table to stdout and writes it to `.dev/rss-spike.md`, which `.gitignore` excludes — so
+prose corrects itself against that table, and the table corrects against nothing.
+Read it, cite it, leave it.
 
 **Not measured on arm64, and that is now the honest status.** The spike was written as a prerequisite
 to the schema work; the schema shipped, and the deployment target is x86-64, so the prerequisite is
