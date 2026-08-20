@@ -37,17 +37,25 @@ import (
 // books the credential's content filter hid: a subtraction rather than an
 // inference.
 //
-// ⚠️ NO STATUS RULE IS SENT AND NONE IS NEEDED, WHICH IS NOT TRUE OF THE PAGED
-// WALK. `status = 'present'` is applied SERVER-SIDE on both of the selects above
-// and cannot be turned off from a client. The PAGED read is the one with no
-// default status predicate — book-query-builder.service.ts:55-90 builds no
-// status term at all unless the caller supplies an `isPresent` status rule
-// (statusRuleToSql:789) — so a shortfall computed against StreamBooks's `total`
-// would need that rule supplied, and without it would be subtracting a
-// filtered-and-unstatused count from an unfiltered-and-statused one. That is
-// exactly why this pairs stats against the LIBRARY LISTING's bookCount rather
-// than against the walk: both sides of this pair carry `status = 'present'` by
-// construction, so there is no predicate for a caller to forget.
+// ⚠️ NO STATUS RULE IS SENT AND NONE IS NEEDED, AND THE PAGED WALK CARRIES A
+// DIFFERENT ONE. `status = 'present'` is applied SERVER-SIDE on both of the
+// selects above and cannot be turned off from a client. The paged read's
+// predicate is not absent, it is weaker — a distinction that is easy to lose
+// because it is TRUE OF THE QUERY BUILDER AND FALSE OF THE READ. The builder
+// adds no status term (book-query-builder.service.ts:55-90) unless the caller
+// supplies an `isPresent` status rule (statusRuleToSql:789), but the repository
+// wraps whatever it built: BookRepository.visibleWhere
+// (book.repository.ts:530-532) ands `books.status <> 'processing'` onto
+// findCards's `.where` (:574) AND onto its `total` (:579, via countWhere).
+// `books_status_chk` admits exactly ('present','missing','processing'), so the
+// walk returns PRESENT AND MISSING rows and excludes processing. A shortfall
+// computed against StreamBooks's `total` therefore still needs the `isPresent`
+// rule supplied — without it, it subtracts a present-only count from a
+// present-plus-missing one. That is exactly why this pairs stats against the
+// LIBRARY LISTING's bookCount rather than against the walk, and the correction
+// above does not touch that: both sides of THIS pair carry `status = 'present'`
+// by construction, so the subtraction this file exists for stands and there is
+// no predicate for a caller to forget.
 //
 // # The upstream dependency, named rather than assumed
 //
