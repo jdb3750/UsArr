@@ -2757,8 +2757,19 @@ had no such run. 🚩 **What a source read on 2026-08-19 established, and what i
   `lastAddedAt` is `max(books.added_at)`, which cannot observe an edit. **Since `work.kind`'s
   `'comic'` IS the series** — which is why the Kavita adapter walks `POST /api/Series/all-v2` — the
   ordered read BookOrbit does offer, `POST /books/query`, is at the wrong grain for `work_comic`.
-- ✅ **A book-level ordered walk is real** — `POST /books/query`, `sort: updatedAt`, `page`/`size`
-  paging, deterministic `books.id` tiebreaker — so 3b remains expressible for `work_book`.
+- ✅ **A book-level ordered read is real** — `POST /books/query`, `page`/`size` paging, deterministic
+  `books.id` tiebreaker appended unconditionally — **and ⚠️ it is NOT the walk 3b builds.** This
+  bullet read *"`sort: updatedAt` … so 3b remains expressible for `work_book`"*, and
+  [ADR-0070](./DECISIONS.md#adr-0070) makes that wording **wrong twice over**, so both halves are
+  corrected here rather than only the stale one. **The AXIS was wrong**: BookOrbit's channel 3b walks
+  **`addedAt`**, not `updatedAt` — the two are ordered on different fields, so this sentence named
+  the wrong one even before the shape changed. **The MECHANISM was wrong too**: 3b asks the server
+  for arrivals with a **server-side `after(addedAt)` filter** rather than ordering the whole
+  collection and stopping client-side, because `updatedAt` is **sort-only** here (no
+  `StaticRuleField` member, no filter case in the rule→SQL switch) while `addedAt` filters
+  server-side **and is indexed**, where `books.updated_at` carries no index at all. 3b **is**
+  expressible for `work_book` — on the other axis, by the other mechanism, and covering **arrivals
+  only**.
 - 🚩 **Its soundness is limited even there:** tag, genre and author edits do **not** move
   `books.updated_at` (no SQL trigger exists, and the write paths touch only the join tables), so the
   walk misses them. Core metadata edits **are** covered by an explicit touch.
