@@ -51,20 +51,21 @@ var pragmas = []string{
 	// connection plus the writer — with a NumCPU*2 read pool it is a multiplier
 	// on RSS, not a fixed cost, and it costs MORE on a machine with more cores.
 	// Measured peak RSS (VmHWM) on 4 cores: -2000 ~35 MiB, -8000 ~85 MiB,
-	// -32000 ~237 MiB. MiB, not MB: ADR-0001's sweep table is headed "all MiB"
-	// and the harness prints MiB, so the -32000 figure is ~249 MB decimal — the
-	// unit is a relabel, not a rounding. The 237 is that table's PEAK (VmHWM)
-	// column, which the amendment states it took at face value. ⚠️ Prose
-	// elsewhere saying "235 MB peak" is reading a different cell: the shipped
-	// row's peak is 237.1 and its 8-readers cell is 235.1. That 235 descends
-	// from the 8-readers cell is INFERENCE from that exact match — no document
-	// records where it was read — where 237's descent from the peak column is
-	// stated.
-	// -8000 is the default because it buys most of the cache at a third of the
-	// footprint of -32000, and the small self-hosted boxes this project targets
-	// are what a default has to be defensible on. This is a MEMORY-side
-	// decision only: the harness measures RSS, not query latency. Revisit it if
-	// a latency benchmark ever contradicts it.
+	// -32000 ~237 MiB. -8000 is the default because it buys most of the cache
+	// at a third of the footprint of -32000, and the small self-hosted boxes
+	// this project targets are what a default has to be defensible on. This is
+	// a MEMORY-side decision only: the harness measures RSS, not query latency.
+	// Revisit it if a latency benchmark ever contradicts it.
+	//
+	// MiB, NOT MB, AND FROM WHICH COLUMN. ADR-0001's sweep table is headed
+	// "all MiB" and the harness prints MiB, so the -32000 figure is ~249 MB
+	// decimal — the unit is a relabel, not a rounding. The 237 is that table's
+	// PEAK (VmHWM) column, which the amendment states it took at face value.
+	// ⚠️ Prose elsewhere saying "235 MB peak" is reading a different cell: the
+	// shipped row's peak is 237.1 and its 8-readers cell is 235.1. That 235
+	// descends from the 8-readers cell is INFERENCE from that exact match — no
+	// document records where it was read — where 237's descent from the peak
+	// column is stated.
 	//
 	// Unmeasured on arm64. Page size and core count both move these numbers.
 	"cache_size(-8000)", // ~7.8 MiB per connection; see above
