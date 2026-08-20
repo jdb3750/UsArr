@@ -809,29 +809,6 @@ export function completenessNote(libraries: readonly Library[]): string {
 }
 
 /**
- * WHICH UPSTREAM CONTAINERS ONE LIBRARY STANDS OVER, as one comparable string.
- *
- * ⚠️ IT EXISTS BECAUSE A SKIP BELONGS TO A CONTAINER AND NOT TO A LIBRARY, and
- * since ADR-0066 decision 5 those are no longer the same thing: a container
- * holding prose and comics becomes a `book` library AND a `comic` library over
- * one `library_source` container ref, and both of them read the container's
- * `sync_report` rows. Two libraries with the same signature therefore report the
- * SAME EVENT, not two events.
- *
- * The sources are sorted, so the signature does not depend on the order the
- * server happened to serve them in. A library with no sources gets a key of its
- * own — `sources: []` is §17.8's orphaned state and folding every orphan
- * together would claim they share a container nobody named.
- */
-function containerSignature(library: Library): string {
-	if (library.sources.length === 0) return `library:${library.id}`;
-	return library.sources
-		.map((s) => `${s.serviceInstanceId}\u0000${s.containerKind}\u0000${s.containerRef}`)
-		.sort()
-		.join('\u0001');
-}
-
-/**
  * ONE LIBRARY'S SKIPS, BROKEN DOWN BY THE CONTAINER EACH ONE HAPPENED IN, so
  * that two libraries reporting one container's skip fold onto one key.
  *
@@ -1423,10 +1400,36 @@ function skipMarks(
 	// §17.8 has no container-level slot to state it in once, so it appears on
 	// both rows, and an identical number in two places with nothing joining them
 	// is exactly how a reader double-counts. This clause is what joins them.
-	const mine = containerSignature(library);
-	const alsoReporting = siblings.filter(
-		(o) => o.id !== library.id && o.skipped?.state === 'left_out' && containerSignature(o) === mine
+	//
+	// ⚠️ AND IT JOINS THEM ON THE CONTAINER, NOT ON THE LIBRARY'S SET OF THEM.
+	// It used to compare the two rows' whole container signatures, which is equal
+	// only when the sets are IDENTICAL — so the one shape the sharing is hardest
+	// to see in was the one shape the clause stayed silent for. Two instances
+	// with a mixed container each bind three libraries (book over A and B, comic
+	// over A, comic over B) whose sets are all different while the skips
+	// underneath overlap, and every one of those rows said nothing. Same key as
+	// `skipParts`, same key as the server's breakdown, same key as `skippedNote`.
+	const mine = new Set(skipParts(library).map((p) => p.key));
+	const sharing = siblings.filter(
+		(o) =>
+			o.id !== library.id &&
+			o.skipped?.state === 'left_out' &&
+			skipParts(o).some((p) => mine.has(p.key))
 	);
+
+	// ⚠️ TWO ARMS, BECAUSE "THE SAME SKIP" IS A CLAIM AND IT IS NOT ALWAYS TRUE.
+	// A sibling that reports EVERY container this row does covers this row's
+	// whole count, and the reader may not add either number to the other. A
+	// sibling that reports only some of them covers only PART of it, and telling
+	// the reader that number is the same one would be a second wrong number in
+	// place of the first. The test is on THIS row's containers, so a sibling
+	// standing over more than this row does is still `whole` — everything this
+	// row counted, it counted too.
+	const whole = sharing.filter((o) => {
+		const theirs = new Set(skipParts(o).map((p) => p.key));
+		return [...mine].every((k) => theirs.has(k));
+	});
+	const part = sharing.filter((o) => !whole.includes(o));
 
 	const items = s.items ?? 0;
 	const mark: LibraryStateMark = {
@@ -1438,10 +1441,15 @@ function skipMarks(
 		detail:
 			`${COUNT.format(items)} ${items === 1 ? 'item was' : 'items were'} read and not mapped` +
 			(s.reason !== undefined ? `; ${s.reason}` : '') +
-			(alsoReporting.length === 1
-				? `; the same skip is reported by ${alsoReporting[0].name} over the same upstream container, so it is one skip shown on both rows`
-				: alsoReporting.length > 1
-					? `; the same skip is reported by ${COUNT.format(alsoReporting.length)} other libraries over the same upstream container, so it is one skip shown on each row`
+			(whole.length === 1
+				? `; the same skip is reported by ${whole[0].name} over the same upstream container, so it is one skip shown on both rows`
+				: whole.length > 1
+					? `; the same skip is reported by ${COUNT.format(whole.length)} other libraries over the same upstream container, so it is one skip shown on each row`
+					: '') +
+			(part.length === 1
+				? `; part of this count is also reported by ${part[0].name}, which stands over an upstream container this library also reports, so those items are one skip shown on both rows`
+				: part.length > 1
+					? `; part of this count is also reported by ${COUNT.format(part.length)} other libraries, each standing over an upstream container this library also reports, so those items are one skip shown on each row`
 					: '')
 	};
 	if (s.recordedAt !== undefined) mark.at = s.recordedAt;
