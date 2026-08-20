@@ -242,7 +242,180 @@ func TestABookOrbitContainerKeepsItsKindAcrossImports(t *testing.T) {
 	}
 }
 
-// ── the three helpers these four tests share ────────────────────────────────
+// TestAMixedBookOrbitContainerNAMESTHESAMEEITHERWAYROUND is half one of the
+// naming rule, and the ONLY thing it asserts is that the two walk orders agree.
+//
+// # What it is refusing
+//
+// A mixed container's two libraries cannot both be called `Fiction`, so one of
+// them carries the kind qualifier. Which one used to depend on WHICH KIND THE
+// WALK REACHED FIRST: the eager bind mints `Fiction` at BookOrbit's fallback
+// `book`, and the first comic RETYPES that row in place (store.bindProvisional),
+// so a comics-first walk left `Fiction` standing over the comic library and the
+// prose that arrived after it got `Fiction (Books)` — while the identical
+// library walked prose-first came out `Fiction` + `Fiction (Comics)`.
+//
+// ⚠️ THE SAME UPSTREAM LIBRARY, TWO DIFFERENT NAMES, DECIDED BY TRAVERSAL ORDER.
+// That is an implementation fact no reader of the Libraries screen can
+// interpret — the exact defect that got the ordinal `Fiction (2)` refused
+// (store.kindQualifier): it says a split happened and not one word about which
+// half he is looking at.
+//
+// # The rule, and why it is prose that keeps the plain name
+//
+// `book` is the kind the CONTAINER declares — BookOrbit's `Containers()` stamps
+// it before a single book is read — so it is the one answer available that no
+// walk order can move. The comic library is the one that was discovered, and the
+// discovery is what the qualifier announces.
+//
+// ⚠️ IT IS NOT A DEFERRED BIND. Nothing waits for the walk to finish: the row is
+// still created up front for every container (see
+// TestAWhollySkippedBookOrbitContainerIsSTILLBOUND, which is what a deferred
+// bind fails). The name is settled when the SECOND kind arrives, from a fact the
+// run already holds — whether this run minted the row (store.runMint).
+func TestAMixedBookOrbitContainerNAMESTHESAMEEITHERWAYROUND(t *testing.T) {
+	comic := boBook(105, "Saga, Vol. 1", map[string]any{
+		"files":       []map[string]any{boFile(1051, "cbz", "primary")},
+		"seriesId":    5,
+		"seriesName":  "Saga",
+		"seriesIndex": 1,
+	})
+	prose := boBook(101, "The Hobbit", map[string]any{"pageCount": 310})
+
+	for _, tc := range []struct {
+		order string
+		books []map[string]any
+	}{
+		{"comics first", []map[string]any{comic, prose}},
+		{"prose first", []map[string]any{prose, comic}},
+	} {
+		t.Run(tc.order, func(t *testing.T) {
+			bo := newFakeBookOrbit(t, boMagicLink)
+			bo.libraries = []map[string]any{boLibrary(1, "Fiction", 2)}
+			bo.books = map[int][]map[string]any{1: tc.books}
+			env, instanceID := boImport(t, bo)
+
+			want := map[string]string{"Fiction": "book", "Fiction (Comics)": "comic"}
+			assertMixedFiction(t, env, want, tc.order)
+
+			// AND IT STAYS PUT. The naming rule may not turn a re-import into a
+			// rename: the second import binds against libraries it did not mint,
+			// which is the other half of the rule, and a swap here would move the
+			// owner's permalinks on a run that found nothing new.
+			boReimport(t, env, instanceID)
+			assertMixedFiction(t, env, want, tc.order+", re-imported")
+		})
+	}
+}
+
+// TestASecondKindInALaterImportDoesNotRenameWhatIsAlreadyThere is half two, and
+// it is the constraint a refactor loses quietly, because losing it makes the
+// screen MORE consistent rather than obviously broken.
+//
+// A comics-only container is one `comic` library named for the container. When
+// prose turns up in a LATER import, the pair that results is `Fiction` (comic) +
+// `Fiction (Books)` — the plain name on the comic library and the qualifier on
+// the prose, which is the OPPOSITE of what the same two kinds produce inside one
+// walk.
+//
+// ⚠️ THAT INCONSISTENCY IS THE DECISION, NOT A GAP IN IT. Making the two cases
+// agree means renaming `Fiction` — a row the owner has had on his Libraries
+// screen since the last import, and whose slug is in every permalink to it
+// (store.slugify: "durable by design"). A library that renames itself under him
+// reads as a bug; two containers that split differently because they were
+// discovered differently is merely untidy. Stable beats tidy, so the newcomer
+// takes the qualifier EVEN WHEN THE NEWCOMER IS THE PROSE.
+func TestASecondKindInALaterImportDoesNotRenameWhatIsAlreadyThere(t *testing.T) {
+	bo := newFakeBookOrbit(t, boMagicLink)
+	bo.libraries = []map[string]any{boLibrary(1, "Fiction", 1)}
+	bo.books = map[int][]map[string]any{
+		1: {
+			boBook(105, "Saga, Vol. 1", map[string]any{
+				"files":       []map[string]any{boFile(1051, "cbz", "primary")},
+				"seriesId":    5,
+				"seriesName":  "Saga",
+				"seriesIndex": 1,
+			}),
+		},
+	}
+	env, instanceID := boImport(t, bo)
+	rows := boLibraryRows(t, env)
+	if len(rows) != 1 || rows[0].Name != "Fiction" || rows[0].Kind != "comic" {
+		t.Fatalf("after the comics-only import: %+v, want one Fiction/comic", rows)
+	}
+	// The row the owner has been looking at, by the two things a rename would
+	// move: its id is what every library_member points at, its slug is what
+	// every permalink to it contains.
+	wasID, wasSlug := boLibraryIdentity(t, env, "Fiction")
+
+	// A prose book appears in the same upstream library and the owner syncs.
+	bo.books[1] = append(bo.books[1], boBook(101, "The Hobbit", map[string]any{"pageCount": 310}))
+	boReimport(t, env, instanceID)
+
+	assertMixedFiction(t, env, map[string]string{
+		"Fiction": "comic", "Fiction (Books)": "book",
+	}, "a second kind arriving later")
+
+	nowID, nowSlug := boLibraryIdentity(t, env, "Fiction")
+	if nowID != wasID {
+		t.Errorf("the library called `Fiction` is now id %d, was %d — the name did not move, "+
+			"it was TAKEN, which is a rename wearing a different shape: the row the owner "+
+			"knew as Fiction is somewhere else now", nowID, wasID)
+	}
+	if nowSlug != wasSlug {
+		t.Errorf("`Fiction`'s slug = %q, was %q — library.slug is durable by design and every "+
+			"permalink the owner holds contains it", nowSlug, wasSlug)
+	}
+	if nowKind := boLibraryKind(t, env, wasID); nowKind != "comic" {
+		t.Errorf("library %d's kind = %q, want \"comic\" — the prose gets its OWN library, it "+
+			"does not repurpose the one holding the comics", wasID, nowKind)
+	}
+}
+
+// assertMixedFiction asserts the whole Libraries screen at once — name to kind,
+// nothing more and nothing less — because both halves of the naming rule are
+// claims about the SET of rows, and a per-row assertion passes happily beside a
+// third library nobody expected.
+func assertMixedFiction(t *testing.T, env *testEnv, want map[string]string, when string) {
+	t.Helper()
+	got := map[string]string{}
+	for _, r := range boLibraryRows(t, env) {
+		got[r.Name] = r.Kind
+	}
+	if len(got) != len(want) {
+		t.Fatalf("%s: the Libraries screen shows %v, want %v", when, got, want)
+	}
+	for name, kind := range want {
+		if got[name] != kind {
+			t.Errorf("%s: the Libraries screen shows %v, want %v — a mixed container's two "+
+				"libraries are named by KIND, never by the order the walk found them in",
+				when, got, want)
+		}
+	}
+}
+
+func boLibraryIdentity(t *testing.T, env *testEnv, name string) (int64, string) {
+	t.Helper()
+	var id int64
+	var slug string
+	if err := env.app.store.DB().Read().QueryRowContext(t.Context(),
+		`SELECT id, slug FROM library WHERE name = ?`, name).Scan(&id, &slug); err != nil {
+		t.Fatalf("read the library named %q: %v", name, err)
+	}
+	return id, slug
+}
+
+func boLibraryKind(t *testing.T, env *testEnv, id int64) string {
+	t.Helper()
+	var kind string
+	if err := env.app.store.DB().Read().QueryRowContext(t.Context(),
+		`SELECT kind FROM library WHERE id = ?`, id).Scan(&kind); err != nil {
+		t.Fatalf("read library %d's kind: %v", id, err)
+	}
+	return kind
+}
+
+// ── the helpers these tests share ───────────────────────────────────────────
 
 // boLibraryRow is the slice of GET /api/v1/libraries these tests read. The kind
 // is on the wire because it is half of what this change moves; asserting it out

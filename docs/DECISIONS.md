@@ -9578,6 +9578,33 @@ unit of work; decision 5 is what changes it, on evidence rather than on a guess.
   unit of work"* (`:9548`). [ADR-0068](#adr-0068) discharges that condition in those exact words —
   *"and **this ADR is that unit of work**"* (`:9954`) — so the interval in which contents could not
   inform a kind is over.
+- 🔻 **2026-08-20 — WHICH of decision 5's two libraries keeps the container's plain name, ruled.**
+  A mixed container becomes `Fiction` and `Fiction (Comics)`; nothing above said which half gets
+  which, and the implementation answered *whichever kind the walk reached first* — the eager bind
+  mints `Fiction` at the fallback kind and the first comic retypes that row, so a comics-first walk
+  produced `Fiction` (comic) + `Fiction (Books)` and the identical library walked prose-first
+  produced `Fiction` (book) + `Fiction (Comics)`. **A name that depends on traversal order is the
+  defect that got the ordinal `Fiction (2)` refused** (`store.kindQualifier`): it is an
+  implementation fact no reader can interpret. ⚠️ **No decision of this ADR changed** — this settles
+  a question decision 5 left open. Two halves, and the second is the load-bearing one:
+  **(1) BOTH KINDS IN ONE WALK — the kind the CONTAINER DECLARES takes the plain name** and the kind
+  the walk DISCOVERED takes the qualifier, so both orders land on `Fiction` (book) +
+  `Fiction (Comics)`. The declared kind is the one answer no walk order can move.
+  **(2) A SECOND KIND ARRIVING IN A LATER IMPORT — the library already standing keeps its name,
+  whatever its kind, and the newcomer takes the qualifier even when the newcomer is the prose**, so
+  `Fiction` (comic) + `Fiction (Books)` is the CORRECT outcome there. ⚠️ **UsArr never renames a
+  library that already exists**: renaming a row the owner has been reading for weeks, and re-slugging
+  every permalink to it (`store.slugify`: *"durable by design"*), costs more than the mild
+  inconsistency between the two halves does. A library that renames itself under him reads as a bug;
+  inconsistent-but-stable is merely untidy.
+  ⚠️ **AND IT DEFERS NOTHING — decision 1 is untouched.** Half 1 needs the naming decided where both
+  kinds are known, and waiting for the walk to finish is exactly the implementation
+  `cmd/usarr.TestAWhollySkippedBookOrbitContainerIsSTILLBOUND` exists to fail. The eager bind still
+  creates the row up front; what is carried forward is the FACT that this run minted it
+  (`store.runMint`, off `CatalogueBinding.Created`), which is the whole of the line between the two
+  halves and is already in hand when the second kind arrives. Pinned by
+  `cmd/usarr.TestAMixedBookOrbitContainerNAMESTHESAMEEITHERWAYROUND` and
+  `cmd/usarr.TestASecondKindInALaterImportDoesNotRenameWhatIsAlreadyThere`.
 
 ---
 

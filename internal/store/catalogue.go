@@ -462,7 +462,7 @@ func (s *Store) BindContainers(
 			if _, err := tx.ExecContext(ctx, "SAVEPOINT "+sp); err != nil {
 				return fmt.Errorf("savepoint %s: %w", sp, err)
 			}
-			b, bindErr := bindOneContainer(ctx, tx, instanceID, userID, c, bindFromContainerList)
+			b, bindErr := bindOneContainer(ctx, tx, instanceID, userID, c, bindFromContainerList, runMint{})
 			if bindErr == nil {
 				if _, err := tx.ExecContext(ctx, "RELEASE SAVEPOINT "+sp); err != nil {
 					return fmt.Errorf("release savepoint %s: %w", sp, err)
@@ -569,6 +569,53 @@ const (
 	bindSiblingKind
 )
 
+// runMint is the library THIS IMPORT RUN's eager bind pass CREATED over the
+// container now being bound, or the zero value when it created none.
+//
+// ⚠️ IT IS THE WHOLE OF THE LINE BETWEEN "SPLIT NOW" AND "SPLIT LATER", and that
+// line decides which of a mixed container's two libraries keeps the plain
+// container name. A BookOrbit container holding prose AND comics becomes two
+// libraries (ADR-0066 decision 5), and only one of them can be called `Fiction`:
+//
+//   - BOTH KINDS SEEN IN THE SAME WALK — the prose library takes `Fiction` and
+//     the comic one takes `Fiction (Comics)`, whichever kind the walk reached
+//     first. A name that came out `Fiction` (comic) walking comics-first and
+//     `Fiction` (book) walking prose-first would encode TRAVERSAL ORDER, which is
+//     an implementation fact no reader can interpret — the same defect that got
+//     the ordinal `Fiction (2)` refused (see kindQualifier).
+//   - A SECOND KIND ARRIVING IN A LATER IMPORT — the library that is already
+//     there keeps its name, WHATEVER ITS KIND, and the newcomer takes the
+//     qualifier. So a comics-first container imported before its first prose book
+//     lands at `Fiction` (comic) + `Fiction (Books)`, and that is the correct
+//     answer rather than a residue of this one.
+//
+// ⚠️ THE ASYMMETRY IS DELIBERATE AND IT IS NOT A NAMING PREFERENCE. UsArr NEVER
+// RENAMES A LIBRARY THAT ALREADY EXISTED: renaming a row the owner may have been
+// reading for weeks — and re-slugging every permalink to it — costs more than the
+// mild inconsistency of the second case does. Inconsistent-but-stable is untidy;
+// a library that renames itself under him reads as a bug. What this type licenses
+// is renaming a row THIS RUN minted minutes ago and nobody has seen.
+//
+// ⚠️ AND IT DEFERS NOTHING. `kind` is the only field the eager bind can still
+// have wrong at this point, exactly as before; the row itself is created up front
+// for every walked container (ADR-0066 decision 1,
+// cmd/usarr.TestAWhollySkippedBookOrbitContainerIsSTILLBOUND). Deciding the name
+// by waiting for the walk to finish would delete that row, so the run-minted
+// FACT is carried forward instead of the DECISION being held back.
+//
+// It is zero for every non-provisional adapter in practice rather than by a
+// guard: a library minted by this run's eager pass can only have been retyped
+// under it by bindProvisional, which runs for no other adapter, and without a
+// retype step 1 would have matched it and returned long before the naming code.
+type runMint struct {
+	libraryID int64
+
+	// kind is the kind the eager pass BOUND at — for a provisional container the
+	// adapter's fallback, which is the container's own declared answer and the
+	// one this type hands the plain name back to.
+	kind string
+}
+
 // kindQualifier is the parenthetical a SIBLING library carries so its name says
 // what it holds rather than when it was made.
 //
@@ -614,7 +661,7 @@ func kindQualifier(kind string) string {
 
 func bindOneContainer(
 	ctx context.Context, tx *sql.Tx, instanceID, userID int64, c CatalogueContainer,
-	why bindReason,
+	why bindReason, mint runMint,
 ) (CatalogueBinding, error) {
 	// Step 1: is this exact container already bound AT THIS KIND? If so nothing
 	// about the library changes — a rename upstream must not re-propose or
@@ -758,13 +805,26 @@ func bindOneContainer(
 	// pre-existing ordinal loop runs from `base` exactly as it did before this
 	// change. What that case SHOULD do is an open design question and is recorded
 	// as one rather than settled by whichever branch happened to reach it.
+	//
+	// ⚠️ AND THE QUALIFIER CAN GO THE OTHER WAY, on the ONE library it is safe to
+	// rename: the row THIS RUN's eager pass minted and a comic then retyped under
+	// it (runMint). Without that, `Fiction` would name the comic library when the
+	// walk reached a comic first and the book library when it reached prose first
+	// — the name would encode traversal order. See runMint for why renaming that
+	// row is not the renaming this file otherwise refuses.
 	base := name
 	slug := slugify(name)
 	if held, ok := existing.joinable[libraryNameKey(name)]; ok && held.kind != c.Kind {
-		if q := kindQualifier(c.Kind); q != "" {
-			cand := fmt.Sprintf("%s (%s)", base, q)
-			if candSlug := slugify(cand); !existing.names[libraryNameKey(cand)] && !existing.slugs[candSlug] {
-				name, slug = cand, candSlug
+		reclaimed, err := reclaimMintedName(ctx, tx, held, mint, c.Kind, existing)
+		if err != nil {
+			return CatalogueBinding{}, err
+		}
+		if !reclaimed {
+			if q := kindQualifier(c.Kind); q != "" {
+				cand := fmt.Sprintf("%s (%s)", base, q)
+				if candSlug := slugify(cand); !existing.names[libraryNameKey(cand)] && !existing.slugs[candSlug] {
+					name, slug = cand, candSlug
+				}
 			}
 		}
 	}
@@ -793,6 +853,82 @@ func bindOneContainer(
 		LibraryID: id, Kind: c.Kind, Created: true, UserID: userID, ContainerName: c.Name,
 		Provisional: c.KindProvisional,
 	}, nil
+}
+
+// reclaimMintedName hands the container's PLAIN name back to the kind the
+// container itself declared, by qualifying the name of the library this run
+// minted and a later item retyped. It reports whether it did.
+//
+// It fires on exactly one shape — a mixed provisional container walked
+// comics-first, inside the run that first saw it — and false is the ordinary
+// answer everywhere else, at which point the caller qualifies the NEW library
+// exactly as it always did. Every `return false` below is a case where the plain
+// name stays where it is:
+//
+//   - NOTHING WAS MINTED THIS RUN, or the library holding the plain name is not
+//     the one that was. Then it pre-existed this import and ADR-0066's rule that
+//     UsArr does not rename a library the owner has already seen governs; the
+//     newcomer takes the qualifier even when the newcomer is the prose.
+//   - THE KIND ASKING IS NOT THE KIND THE EAGER PASS BOUND AT. The plain name was
+//     reserved for the container's own declared kind, and a THIRD kind arriving
+//     has no claim on it over the second.
+//   - `managed_by` IS NOT 'auto'. §6.5 rule 4 makes a library the user's to name;
+//     a row that has been adopted by hand between the mint and here is not this
+//     code's to rewrite. Unreachable through the import path and checked in SQL
+//     rather than assumed, because it is one predicate on a read already made.
+//   - THE QUALIFIED NAME IS TAKEN. `Fiction (Comics)` can be an upstream
+//     container's own name (ux_library_name, ux_library_slug, migration 00005).
+//     Nothing is invented for that: the swap simply does not happen and the
+//     pre-existing arm runs, which is the same answer bindOneContainer's step 3
+//     already records for the mirror case.
+//
+// THE SLUG MOVES WITH THE NAME, which slugify's "durable by design — a rename
+// must not change the permalink" otherwise forbids. It is allowed here for the
+// same reason the rename is: this row was created minutes ago by the very import
+// still running, so there is no permalink to anyone's bookmark to break, and
+// leaving `fiction` on the comic library would then collide with the prose
+// library that is about to take that name (ux_library_slug is UNIQUE per user).
+func reclaimMintedName(
+	ctx context.Context, tx *sql.Tx, held libraryRow, mint runMint, kind string,
+	existing userLibrarySet,
+) (bool, error) {
+	if mint.libraryID == 0 || held.id != mint.libraryID || kind != mint.kind {
+		return false, nil
+	}
+	q := kindQualifier(held.kind)
+	if q == "" {
+		return false, nil
+	}
+	var oldName, oldSlug string
+	err := tx.QueryRowContext(ctx,
+		`SELECT name, slug FROM library WHERE id = ? AND managed_by = 'auto'`,
+		held.id).Scan(&oldName, &oldSlug)
+	switch {
+	case errors.Is(err, sql.ErrNoRows):
+		return false, nil
+	case err != nil:
+		return false, fmt.Errorf("read library %d before qualifying its name: %w", held.id, err)
+	}
+	cand := fmt.Sprintf("%s (%s)", oldName, q)
+	candSlug := slugify(cand)
+	if existing.names[libraryNameKey(cand)] || existing.slugs[candSlug] {
+		return false, nil
+	}
+	if _, err := tx.ExecContext(ctx,
+		`UPDATE library SET name = ?, slug = ? WHERE id = ?`, cand, candSlug, held.id); err != nil {
+		return false, fmt.Errorf("qualify library %d as %q: %w", held.id, cand, err)
+	}
+	// The caller's `existing` is the state of THIS user's libraries and the swap
+	// just changed it. Both the freed name and the freed slug matter: the plain
+	// name is about to be inserted and the ordinal loop right below reads both
+	// maps, so a stale entry here would name the prose library `Fiction (2)`.
+	delete(existing.names, libraryNameKey(oldName))
+	delete(existing.slugs, oldSlug)
+	delete(existing.joinable, libraryNameKey(oldName))
+	existing.names[libraryNameKey(cand)] = true
+	existing.slugs[candSlug] = true
+	existing.joinable[libraryNameKey(cand)] = held
+	return true, nil
 }
 
 // bindProvisional is the whole of what CatalogueContainer.KindProvisional buys,
@@ -1626,6 +1762,18 @@ func resolveBinding(
 				"(store.BindContainers stamps CatalogueBinding.UserID; a hand-built binding must too)",
 			containerRef, kind, b.Kind)
 	}
+	// WHAT THIS RUN MINTED, carried in so the naming step can tell a library it
+	// created minutes ago from one the owner has been reading for weeks — see
+	// runMint. `Created` is stamped by BindContainers ONCE PER IMPORT and the same
+	// binding map is handed to every batch of that import, so it stays true for
+	// the whole run and false on every re-import, which is exactly the line the
+	// rule needs. A run that dies mid-walk therefore leaves a library that
+	// PRE-EXISTS the next run, and the next run treats it as one; that is the
+	// second half of the rule doing its job, not an edge it misses.
+	var mint runMint
+	if b.Created {
+		mint = runMint{libraryID: b.LibraryID, kind: b.Kind}
+	}
 	rb, err := bindOneContainer(ctx, tx, instanceID, b.UserID, CatalogueContainer{
 		// THE CONTAINER REF IS THE ISSUE'S OWN, verbatim — "the `comic` library
 		// minted over the `library_source` container ref the issue's book was
@@ -1643,7 +1791,7 @@ func resolveBinding(
 		// report must not fire here — it would fire on every mixed library, on
 		// the first comic reached, and say a change happened where the design
 		// says two kinds coexist.
-	}, bindSiblingKind)
+	}, bindSiblingKind, mint)
 	if err != nil {
 		return CatalogueBinding{}, err
 	}
