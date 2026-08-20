@@ -1067,8 +1067,8 @@ An agent working in this repo should assume:
 
 ### Writing a guard that can be trusted
 
-Every rule below is here because this repo shipped its opposite and stayed green. They are the
-mechanics behind `CLAUDE.md`'s "verify, don't assert" — that rule says what to do, these say how a
+Each of the numbered rules is here because this repo shipped its opposite and stayed green. They
+are the mechanics behind `CLAUDE.md`'s "verify, don't assert" — that rule says what to do, these say how a
 check earns the right to be believed.
 
 **1. Probe the condition, not a proxy for it.** `make design` once carried a fourth guard meant to
@@ -1079,7 +1079,7 @@ unrelated refactor had silently disarmed a guard nobody was watching. A proxy an
 agree right up until the day they matter. Ask what the guard is really for, then test *that*.
 
 **2. Report what you measured, not just the verdict.** A green with no evidence attached is a
-rumour. Two of them here:
+rumour. The instances:
 
 * `make check` resolved `golangci-lint` from `PATH` and, for the life of the project, ran an
   **unpinned and much older version** while reporting green. Nothing was wrong with the output — it
@@ -1191,11 +1191,11 @@ selector is the reserved `^TestSpecDrift` prefix, and the target counts the top-
 `--- PASS:`/`--- FAIL:` lines that prefix actually produced and fails below `SPEC_DRIFT_FLOOR`.
 A `--- SKIP:` deliberately does not count — a skipped check looked at nothing too.
 
-⚠️ **The epilogue quoted above is historical — do not expect to grep it out of the `Makefile`.**
-`d10ca98` replaced that one blanket line with four verdict readings, so an unreachable github.com now
-prints *"THIS IS NOT NEWS ABOUT UPSTREAM"* rather than being reported as drift. The old wording is
-kept here because it is what the guard actually printed while the floor was missing, and the point of
-the example is that the reassurance was the misleading part.
+⚠️ **The *"a failure here is NEWS"* epilogue is historical — do not expect to grep it out of the
+`Makefile`.** `d10ca98` replaced that one blanket line with four verdict readings, so an unreachable
+github.com now prints *"THIS IS NOT NEWS ABOUT UPSTREAM"* rather than being reported as drift. The
+old wording is kept here because it is what the guard actually printed while the floor was missing,
+and the point of the example is that the reassurance was the misleading part.
 
 **5. Name the surface, not just the value.** Rule 2 names the *instrument*; this names what the
 instrument was pointed at, and it is the half that has been broken three times here — each time by
@@ -1281,7 +1281,7 @@ two.** That is not bad luck. A fix is written under the assumption that the fail
 understood, and that is precisely the moment people stop checking for it. Treat a guard you just
 repaired as the least trustworthy thing in the file, not the most.
 
-**Two rules when gathering lint evidence, and one hazard behind both: there are two `golangci-lint`
+**The rules for gathering lint evidence all come off one hazard: there are two `golangci-lint`
 binaries on this box.** `/usr/local/bin/golangci-lint` is 2.5.0 and is what a bare name on `PATH`
 resolves to; the gate's own `$(GOBIN_DIR)/golangci-lint` is the pinned 2.12.2 — `/root/go/bin/` here
 — and is what the `Makefile` invokes, by absolute path, in every recipe. The wrong binary bites
@@ -1318,10 +1318,10 @@ prose is true, current, or even well formed. Quote it at that size. The measured
 fired in both directions, is in `docs/REVIEW-LOG.md` under *"What a `make check` green on a
 docs-only commit does and does not attest"*.
 
-**Two counts that read as facts about the repository and are facts about the observer.** Each
-under-reported without saying so, and neither could tell you whether what it did not count was
-absent or merely invisible from where it was standing. The first has since been fixed; the lesson
-underneath it has not been retired, which is why it is still written down.
+**Counts that read as facts about the repository and are facts about the observer.** Each
+under-reported without saying so, and none could tell you whether what it did not count was
+absent or merely invisible from where it was standing. The `lint-go` banner count has since been
+fixed; the lesson underneath it has not been retired, which is why it is still written down.
 
 * **✅ Resolved — `lint-go`'s banner counted different packages than the linter opened.** Fixed in
   `eb92062`, *"chore: lint-go's banner counted 13 packages while the linter opened 14"*, which reached
@@ -1590,7 +1590,8 @@ paragraph describing a repo that no longer exists.
     that commit touches `docs/DEVELOPMENT.md` and nothing else. The rewrite is `0ca1be6`, *"docs:
     security.md's present tense claimed guards nothing reaches"*, 193 insertions and 89 deletions in
     `docs/reference/security.md`. Cite `0ca1be6` when repeating this, and leave the entry's own text
-    standing — it is a dated record, and the bullet above governs how it gets corrected.
+    standing — it is a dated record, and *a citation inside a dated record is history, not staleness*
+    governs how it gets corrected.
 * **ADR and migration numbers are allocated by the coordinator at dispatch, never discovered by
   reading the highest number in a merged file.** Write a placeholder — `ADR-XXXX`, `000NN_` — and ask
   for the id. **The reason is not bookkeeping, and without it this reads as bureaucracy:** an id read
@@ -1607,8 +1608,9 @@ paragraph describing a repo that no longer exists.
   `ADR-0052` and now has to renumber a merged-and-cited id out of its own history. The cost lands on
   whoever merges second, and it is not paid by the thread that caused it.
   * ⚠️ **The placeholder banner says the id is pending and nothing else — it never enumerates the
-    sites that will need the number.** This is the bullet above applied one level down: the brief
-    that allocates the id is the only site list, the dispatcher allocates and the worker never
+    sites that will need the number.** This is *ADR and migration numbers are allocated by the
+    coordinator at dispatch* applied one level down: the brief that allocates the id is the only
+    site list, the dispatcher allocates and the worker never
     derives, and a banner carrying its own list is a second, competing mechanism inviting exactly
     that derivation. ADR-0061 shipped with such a list and the list was **incomplete** — it omitted
     `docs/ARCHITECTURE.md` §17.8, so a worker filling the id by following the banner rather than the
@@ -1654,12 +1656,12 @@ paragraph describing a repo that no longer exists.
     🔍 **A second instance, and it is the harder half of the class: the invalidating id may never
     have been readable at all.** A lane was about to take *"the next free `SD-` id"* from the highest
     one present in `docs/REVIEW-LOG.md`. `SD-04` already existed at that moment — as a commit in an
-    unlanded worktree, and so in no tree any reader could open. Unlike the migration case above,
+    unlanded worktree, and so in no tree any reader could open. Unlike the migration `00008` case,
     where the slot was taken *afterwards*, this is not a stale read and it is not a race with a
     window: there was **no moment at which a more careful or more recent read would have seen it**.
     So the two halves close the class from both ends — **re-reading cannot fix an id that was never
     readable, and it cannot fix one taken after you read** — and the ordinary remedy of re-reading
-    immediately before you push, the *a sequential id read out of a file is a race* bullet below, is
+    immediately before you push, the *a sequential id read out of a file is a race* bullet, is
     the right discipline for drift and no defence at all against invisibility. It also reaches
     further than ADR and migration numbers: `SD-` is a `docs/REVIEW-LOG.md` entry prefix, so a
     per-thread prefix removes the cross-thread collision without making the number after it
@@ -1689,10 +1691,11 @@ paragraph describing a repo that no longer exists.
   scope caveat on a different entry — that its own commit message never mentions, because the
   sweep took whatever the tree was holding.
 * **Never run two committing agents in one checkout — give each a detached worktree on a branch
-  suffixed with its own id, or serialise them.** The bullet above governs how *one* agent should
-  operate; nothing governed whether *two* should be launched at once, and that is a decision the
-  launching session makes before either agent can protect itself. On 2026-08-17 one session ran two of
-  its own committing subagents concurrently in the same working tree on the same branch, and the
+  suffixed with its own id, or serialise them.** *Key the worktree decision to the operation, not to
+  the size of your change* governs how *one* agent should operate; nothing governed whether *two*
+  should be launched at once, and that is a decision the launching session makes before either agent
+  can protect itself. On 2026-08-17 one session ran two of its own committing subagents concurrently
+  in the same working tree on the same branch, and the
   measured consequence is still in `main`: **`d64b8fc` and `547a604` are the same commit twice** —
   identical subject, identical author timestamp (`18:23:39`), the same parent `afe17fb`, a
   **byte-identical `docs/DECISIONS.md` diff**, and a `docs/REVIEW-LOG.md` diff differing in **nothing
@@ -1718,27 +1721,29 @@ paragraph describing a repo that no longer exists.
   end the worktree with `git worktree remove` rather than deleting the directory, so nothing is left
   registered or half-referenced. **The symptom is `lint-go` reporting issues at paths that do not
   exist**, on a tree where those same files lint clean. ⚠️ **The remedy creates its own snag: that
-  cache directory is untracked, so the removal above then refuses** —
+  cache directory is untracked, so `git worktree remove` then refuses** —
   `fatal: '<worktree>' contains modified or untracked files, use --force to delete it` (fired here on
   2026-08-19, on two leftover worktrees of this session, one of them held back by the cache directory
   alone). **Delete the cache directory first, then remove normally; do not reach for `--force`**,
   which would take genuinely uncommitted work with it just as silently — losing that is the thing
   these rules exist to prevent, and the untracked cache is not a reason to accept the risk.
 
-  ⚠️ **One shared binary, two failure modes — and isolating the cache fixes only the first.** The
-  contamination above is a cache-entry collision. The other is *contention*, and it reads as a broken
-  gate: `golangci-lint` takes a run lock at `filepath.Join(os.TempDir(), "golangci-lint.lock")` — a
+  ⚠️ **One shared binary, two failure modes — and isolating the cache fixes only the collision.**
+  *A worktree you lint and then delete leaves its findings in the cache your next run reads* is a
+  cache-entry collision. The other is *contention*, and it reads as a broken gate:
+  `golangci-lint` takes a run lock at `filepath.Join(os.TempDir(), "golangci-lint.lock")` — a
   fixed path derived from `TMPDIR`, **not** from `GOLANGCI_LINT_CACHE` (read in v2.12.2,
   `pkg/commands/run.go`, `acquireFileLock`, over `gofrs/flock`; the same file the `computePkgHash`
-  keying above was read in). It retries once a second for five seconds, then gives up with
+  keying was read in). It retries once a second for five seconds, then gives up with
 
   ```
   Error: parallel golangci-lint is running
   ```
 
   and exit 3. Three agents hit that in one night here, each with its own cache directory, because the
-  remedy above does not and cannot avoid it — the contention is over the lock, not the cache. **Fired
-  deliberately, both halves**: with an unrelated `flock -x` holding `$TMPDIR/golangci-lint.lock` and
+  `GOLANGCI_LINT_CACHE` remedy does not and cannot avoid it — the contention is over the lock, not
+  the cache. **Fired deliberately, both halves**: with an unrelated `flock -x` holding
+  `$TMPDIR/golangci-lint.lock` and
   `GOLANGCI_LINT_CACHE` pointed at an empty private directory, the pinned `/root/go/bin/golangci-lint`
   printed exactly that line and exited 3; the identical command after the lock released printed
   `0 issues.` and exited 0. **This is the one gate red where re-running is the right response**, and
@@ -1747,10 +1752,10 @@ paragraph describing a repo that no longer exists.
   retry, and only go hunting for a defect if it survives. The config-level answer is
   `run.allow-serial-runners: true`, which makes the wait unbounded instead of failing at five seconds;
   `.golangci.yml` does not set it, so retrying is the operating procedure today.
-* **A log you intend to attribute must be written to a path no other lane can guess.** The
-  bullets above — *never run two committing agents in one checkout*, and the shared lint cache and
-  its lock — are lanes colliding over a checkout and over a binary; this is lanes colliding over a
-  *file path*, and it damages the evidence rather than the run. Relayed, not measured here: a
+* **A log you intend to attribute must be written to a path no other lane can guess.** *Never
+  run two committing agents in one checkout*, and the shared lint cache and its lock, are lanes
+  colliding over a checkout and over a binary; this is lanes colliding over a *file path*, and it
+  damages the evidence rather than the run. Relayed, not measured here: a
   worker's `make check` log at a scratchpad path another lane could guess was truncated and
   interleaved by that lane's concurrent gate run, and what came back was not an obviously broken
   file but a **plausible** one — so there was nothing to repair, and the whole gate had to be re-run
@@ -1790,8 +1795,9 @@ paragraph describing a repo that no longer exists.
   renumbering it after it has landed is a cascade through every cross-reference in the file, and
   §6.1's invariant means the entry's id, text and severity may not move with it.
 * **A `docs/REVIEW-LOG.md` entry id carries the prefix of the thread that wrote it, and the generic
-  `M5-` prefix is retired for new entries.** This is the amendment to the bullet above, and it is
-  narrow: `M5.N` subsection numbers, `docs/DECISIONS.md` ADR numbers and migration numbers are still
+  `M5-` prefix is retired for new entries.** This is the amendment to *a sequential id read out of a
+  file is a race, not a lookup*, and it is narrow: `M5.N` subsection numbers, `docs/DECISIONS.md`
+  ADR numbers and migration numbers are still
   shared counters and still want the re-read-before-you-push discipline. Entry ids no longer do.
   **The reason is the measured one**: `M5-` is a shared counter with no lock — three threads collided
   on it in one evening, one pass colliding twice (`M5-33`→`M5-35`→`M5-36` in a single pass) — while
@@ -1806,7 +1812,7 @@ paragraph describing a repo that no longer exists.
   shared counter's true value includes what nobody has pushed yet.** A monotonic id cannot be
   allocated safely by reading; it can only be won by racing. A per-thread prefix needs no global read
   to be *correct* — only a cheap one to be *unused* — which is why the prefixes have never collided
-  where the counter has three times. The second thread renumbered to `ADRC-`. Three rules make it
+  where the counter has three times. The second thread renumbered to `ADRC-`. The rules that make it
   hold:
   * **The prefix is multi-letter.** A one-letter namespace is too small to be a fact about anybody,
     and it has already failed: **`C-01` names two different findings in this file** — round 1's
@@ -1838,7 +1844,7 @@ paragraph describing a repo that no longer exists.
   prefix for **new** entries only; every `M5-NN` already in the file keeps its id, its text and its
   severity, which is `docs/REVIEW-LOG.md` §6.1's own invariant (*"No existing entry's id, text or
   severity changed"*) and the same rule as *a citation inside a dated record is history, not
-  staleness* two bullets above. A sweep renumbering them into per-thread prefixes would destroy the
+  staleness*. A sweep renumbering them into per-thread prefixes would destroy the
   cross-references and the evidence at once.
 * **Give a throwaway branch a name nobody else will pick.** Reusing something generic like
   `main-merge` can move a ref another worktree is standing on, and git's protection against that is
@@ -1855,20 +1861,22 @@ paragraph describing a repo that no longer exists.
   it on `main`. Branches here are also pushed straight to `main` as often as they are merged, so
   plenty of commits are both — which is exactly why the one you cite has to be the one you looked
   at (`git log --first-parent` and `git log -1 --format=%p` settle it in two commands).
-* **A SHA read off a log is positional, and position is not authorship.** The bullet above says
-  which commit to cite; this says why the log will not hand it to you, in two shapes. **A merge
-  wears the change it landed**: `git show --stat` renders a merge against its *first* parent, so the
+* **A SHA read off a log is positional, and position is not authorship.** *Cite the author commit
+  for when a thing was done and the merge commit for when it reached `main`* says which commit to
+  cite; this says why the log will not hand it to you, in two shapes. **A merge wears the change it
+  landed**: `git show --stat` renders a merge against its *first* parent, so the
   merge `7bd45e9` prints `Makefile | 26 ++…`, *1 file changed, 24 insertions(+), 2 deletions(-)* —
   byte for byte the stat of `eb92062`, the commit that did the work. The `Merge:` header line is the
   only tell and `git log --oneline` does not carry it. **A neighbour wears it too, with no merge in
   the citation at all**: `0ca1be6` (05:03:47) reached `main` under merge `b2221df` (05:04:05), and
   `bf66828` landed 31 seconds after that at 05:04:36, so a `git log --oneline` taken in that minute
   showed `bf66828` on top with the rewrite two rows down behind a merge — and the SHA that arrived
-  *after* the change was read as the SHA that *was* it. The 🔍 note above carries that case and its
-  correction; do not re-derive it. Either citation is true in the reachability sense and false in
-  the this-commit-contains-it sense. **The discriminator is the path, and it is the actionable
-  half.** `git log --no-merges -- <path>` names the commit that contains the change and nothing
-  else; plain `git log -- <path>` is usually enough, because history simplification drops a merge
+  *after* the change was read as the SHA that *was* it. The 🔍 note *`LS-321` names the wrong commit
+  for the rewrite that rotted it* carries that case and its correction; do not re-derive it. Either
+  citation is true in the reachability sense and false in the this-commit-contains-it sense.
+  **The discriminator is the path, and it is the actionable half.** `git log --no-merges -- <path>`
+  names the commit that contains the change and nothing else; plain `git log -- <path>` is usually
+  enough, because history simplification drops a merge
   that is TREESAME to a parent for that path — it does prune `7bd45e9` from `git log -- Makefile` —
   but it is **not** airtight: `cb0e37f` differs from *both* its parents in
   `docs/reference/security.md` (`+10` against one, `+2/-1` against the other), so simplification
@@ -1892,7 +1900,7 @@ paths you are about to touch, not by what your thread is called.
 | `api/specs/` — the vendored upstream specs and `SOURCES.md` | lands the client that consumes the spec, today `internal/servarr`. A spec arrives with the code that reads it and the contract test behind it, never ahead of either, so what `SOURCES.md` says about which specs are present is a fact about the backend |
 | implementation-status wording in `CLAUDE.md`, `README.md` and `ARCHITECTURE.md` §16 | landed the code being described |
 | `ARCHITECTURE.md` §17 and `docs/design/` | owns the screens and the visual system |
-| `docs/CONFIGURATION.md` | lands `internal/` and `cmd/`. The onboarding bullet above already binds the §2 table, `.env.example` and `internal/config` into one commit, and that binding decides this row: the file moves with the code that reads the keys |
+| `docs/CONFIGURATION.md` | lands `internal/` and `cmd/`. The onboarding bullet *`docs/CONFIGURATION.md` is the contract for anything config-shaped* already binds the §2 table, `.env.example` and `internal/config` into one commit, and that binding decides this row: the file moves with the code that reads the keys |
 | `docs/DEVELOPMENT.md` — this file | lands `internal/`, `cmd/` and the build. Almost every fact here is a `Makefile` target or a path the build produces, so the change that makes a target true is the change that corrects the sentence describing it |
 | `docs/PROJECT-INSTRUCTIONS.md` | maintains the project-settings text |
 | `docs/REVIEW-LOG.md` | ran the adversarial review that produced the finding |
@@ -1909,17 +1917,18 @@ saying you may. **Ruled by the project manager on 2026-08-19**, and written down
 as a convention for one reason: **a rule in this file can be quoted into a dispatch brief, while a
 convention that lives only in a memory note reaches an agent only if it happens to be recalled.**
 
-* **Announce before you touch a file outside your area — not before you push it.** The *Working
-  alongside other threads* bullet above says *announce before pushing*; that is the same rule arriving
+* **Announce before you touch a file outside your area — not before you push it.** *Working
+  alongside other threads* carries an *announce before pushing* bullet; that is the same rule arriving
   too late, because by then the edit exists and the other lane's only choices are to accept it or to
   redo its own work. Announce when you decide to open the file.
 * **One writer per file while it is held.** Two lanes editing one file from branches cut off the same
   base is the collision that merges cleanly and ships nonsense, and no arm of `make check` can see it.
   Hold it, write it, land it, and **say when you have released it** — an unreleased hold that has
   actually finished blocks work just as effectively as a real one.
-* **A missing row is not an absence of an owner.** The map above is keyed by area, and areas are
-  coarse: it names no package individually and it never will. **Finding no row for the package you are
-  about to edit means the map does not resolve your case — it does not mean the package is unowned.**
+* **A missing row is not an absence of an owner.** The *who leads which area* map is keyed by area,
+  and areas are coarse: it names no package individually and it never will. **Finding no row for the
+  package you are about to edit means the map does not resolve your case — it does not mean the
+  package is unowned.**
   That is the case to ask about, not the case to proceed on.
 
 ⚠️ **This deliberately stops short of a package-to-lane roster, and the omission is the decision, not a
@@ -1928,8 +1937,9 @@ newest code, which is where lanes actually collide, is the code the table has no
 as unowned exactly where ownership matters most. The precedent is ADR-0039 dropping
 `write_queue.state`'s `CHECK` **entirely rather than widening it** — an enumeration of a growing
 vocabulary is a maintenance burden that silently goes wrong, and the fix is to stop enumerating, not to
-enumerate harder. The three rules above hold for a package no table mentions, which is the whole point
-of writing them as rules.
+enumerate harder. *Announce before you touch a file outside your area*, *one writer per file while it
+is held* and *a missing row is not an absence of an owner* hold for a package no table mentions,
+which is the whole point of writing them as rules.
 
 ℹ️ **The ruling names two id collisions as its occasion — `ADR-0054` and `SD-08`.** For `SD-08` the
 tree carries a first-hand record: `docs/REVIEW-LOG.md`'s **`SD-10`** entry is the losing lane
