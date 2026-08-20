@@ -1556,6 +1556,53 @@ Items marked 🛑 **STOPPED** are the different case: those are stopped by the d
       it has since been allocated, and **an observation about attention has a shelf life measured in
       hours on this tree** — which is the reason it was written as an observation and not as an item.
 
+- [ ] **`remoteHash()` DOES NOT COVER CREDITS, so a credits-only upstream edit is invisible to drift
+      detection.** **Read in the file at the baseline above**, not inferred:
+      `internal/store/catalogue.go:2154-2160`. `remoteHash` hashes **nine** values and here they are,
+      in order — `Title`, `SortTitle`, `OriginalTitle`, `Kind`, `ContainerID`, `RemotePath`,
+      `RemoteSubtype`, `formatOrEmpty(RemoteUpdatedAt)`, `boolString(HasFile)`. **No credit, no
+      creator, no person.** That is not an omission in the hash so much as one in its input:
+      `CatalogueItem` carries no credits field at all, and credits are a **separate write path** —
+      `Store.ApplyCredits` / `applyOneCreditSet` in `internal/store/credits.go`, over `work_credit`
+      and its `person` works — so there is nothing about a credit for this function to reach.
+      **The consequence, stated at the width it actually holds.** `remote_hash` is what a drift
+      comparison compares. An upstream edit that changes **only** credits — a translator corrected, a
+      penciller added — therefore produces a **byte-identical** hash, and a detector built on that
+      comparison reads the row as unchanged. The same edit moves no ordering key, so an ordered walk
+      has no reason to revisit the book either. **Both channels that would notice are affected, and
+      for the same reason.**
+      ⚠️ **THIS IS LATENT, NOT A LIVE DEFECT, AND THE DIFFERENCE MATTERS FOR HOW IT IS SEQUENCED.**
+      `internal/libsync/doc.go` says channel 4 is not built and that `remote_hash` and
+      `remote_identity_hash` are *"WRITTEN here so the sweep has something to compare, and read by
+      nothing yet"*; channel 3b is likewise named there as not-here and a separate commit. Nothing
+      mis-syncs **today** because nothing reads the hash today. What is at stake is that the sweep
+      would ship with this blind spot already in it, which is the cheap moment to decide about it and
+      the expensive one to discover later.
+      ⚠️ **ONE LEG OF THIS IS RELAYED AND I COULD NOT CONFIRM IT IN THE REPO — DO NOT PROMOTE IT.**
+      The only hashed value that *could* move on a credits-only edit is `RemoteUpdatedAt`, which for
+      v0.1's source is BookOrbit's `books.updatedAt` (`internal/libsync/bookorbit.go:873` and `:964`).
+      It was relayed to this pass that `updatedAt` was **measured** as not moving on exactly those
+      paths. **A search of `internal/` and `docs/` at the baseline found no such measurement** — the
+      only `updatedAt` behaviour written down anywhere is `internal/bookorbit/catalogue.go`'s note
+      that a `PATCH /books/:id/added-at` *"also bumps updatedAt"*, which is a different path. So
+      treat "credits do not bump `updatedAt`" as **unverified**: it is a fact about BookOrbit's
+      server, it decides whether this gap is total or partial, and it is owed a primary-source check
+      against BookOrbit's own write path before anything is built on it.
+      ⚠️ **THE CITATION THIS FINDING ARRIVED WITH DOES NOT RESOLVE.** It was relayed as an OPEN
+      residual carried by **ADR-0070**. `grep -c ADR-0070 docs/DECISIONS.md` returns **0** at the
+      baseline, and the ADR headings run `…0068`, `0069`, then `0072` — 0070 and 0071 exist nowhere
+      in the file. Positive control, same grep, same file: `ADR-0069` returns 5 and `ADR-0072`
+      returns 5, so the instrument works and the absence is real. **This item therefore stands on the
+      code read, which is first-hand, and not on that ADR.** If 0070 lands later carrying this
+      residual, join the two rather than restating the gap a second way.
+      *Authority:* the tree — `internal/store/catalogue.go`, `internal/store/credits.go`,
+      `internal/libsync/doc.go`; `reference/schema.md` §5 for the synced subset;
+      `CLAUDE.md`'s *verify, don't assert*.
+      *Done when:* either a credits-only upstream edit is detectable — credits inside the hashed
+      subset, or a second hash beside `remote_hash`, or a written finding that `updatedAt` moves and
+      the existing field already covers it — **or** the gap is recorded as accepted, in the channel-4
+      design, with the reason.
+
 - [ ] **The arm64 RSS spike.** §16 calls it a day-one spike. `internal/db/spike/` exists; whether the
       arm64 measurement was taken is not readable from the tree.
       *Authority:* §13, §16 v0.1 entry.
