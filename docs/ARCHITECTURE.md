@@ -7,7 +7,8 @@ document.
 **Last revised:** 2026-08-16 (revision 2, after a three-way adversarial review —
 [`REVIEW-LOG.md`](./REVIEW-LOG.md) records what was applied and what was rebutted).
 **Evidence:** [`RESEARCH.md`](./RESEARCH.md). **Decisions:** [`DECISIONS.md`](./DECISIONS.md).
-**Deferred ideas and the seams that keep them cheap:** [`FUTURE.md`](./FUTURE.md).
+**Mostly deferred ideas and the seams that keep them cheap — unless the heading says *Declined*:**
+[`FUTURE.md`](./FUTURE.md).
 
 This is the document a contributor reads start to finish: principles, shapes, invariants, reasons.
 Reference detail — full DDL, endpoint tables, normalisation matrices, provider inventories — lives
@@ -2351,8 +2352,9 @@ stop, replace the file, start**, with the key as a separate, explicitly-named st
 when, **this section wins.** Versions are scope markers, not dates. **A milestone label is scope, not
 status:** it says which milestone owns a thing, never that the thing exists. Only part of v0.1 is
 built, and this section does not enumerate which part — that answer lives in the tree, where it
-cannot go stale; v0.2 and later are wholly unimplemented. Deferred ideas are not listed here at all; they are in [`FUTURE.md`](./FUTURE.md)
-with their seams.
+cannot go stale; v0.2 and later are wholly unimplemented. Ideas that are out of scope are not listed
+here at all; they are in [`FUTURE.md`](./FUTURE.md) with their seams — where a *Declined* heading
+means closed rather than deferred, and carries no seam.
 
 **The ordering rationale, since it changed:** *the earliest milestone that is not already available
 elsewhere is the one that must ship soonest.* The previous order put the gateway second and both
