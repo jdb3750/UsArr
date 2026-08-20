@@ -1,4 +1,4 @@
-# UsArr — Deferred features and the seams that keep them cheap
+# UsArr — Mostly deferred features, and the seams that keep them cheap
 
 **Status:** none of this is in a roadmap milestone. **Nothing here is a rejection unless its heading says so.** An entry whose heading reads *Declined* was decided against and is recorded here anyway, because the reasoning is worth as much as a deferral's and losing it invites the proposal back.
 

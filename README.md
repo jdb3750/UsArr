@@ -59,8 +59,8 @@ is not built yet, and which parts are changes faster than the table does — for
 > **This table is maintained by hand against [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) §16 —
 > nothing in the repo generates it, so it lags §16 and has. If they disagree, §16 wins.** Ideas that
 > are deliberately deferred are not listed here at all — they live in
-> [`docs/FUTURE.md`](docs/FUTURE.md) with the reason, the cost, and the seam that keeps each one
-> cheap to add later.
+> [`docs/FUTURE.md`](docs/FUTURE.md) with the reason, the cost, and — unless the heading says
+> *Declined* — the seam that keeps each one cheap to add later.
 
 ### v0.1 — it reads your library, it is fast, and you can act on it
 
@@ -111,7 +111,8 @@ video byte-proxying · **release calendars across every subscription** · **per-
 statistics** · slskd as a music sink · Suwayomi · OPDS 2.0 · Chaptarr · MangaBaka · **the
 ebook↔audiobook identity pass** · per-library OPDS feeds. Each is in **[`docs/FUTURE.md`](docs/FUTURE.md)** with why it was deferred, what it
 would cost, and the specific seam in the v0.1 design that keeps it cheap to add — because the base
-is being built with intentional space for them.
+is being built with intentional space for them. A heading there reading *Declined* means the
+opposite: closed rather than deferred, and not on this list.
 
 ### Explicit non-goals — not "later", **no**
 
@@ -230,7 +231,7 @@ layout.
 | **[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)** | The authoritative design: principles, components, the gateway, the data model, sync, search and requests, cross-media, tags, providers, security, deployment, **the roadmap (§16 is authoritative for scope)** and **the screens**. |
 | **[docs/reference/](docs/reference/)** | The load-bearing detail the architecture links to: full DDL, sync mechanics, search query construction, the gateway endpoint map, cross-media, tags, providers, \*Arr API facts, and the security model. **[`http-api.md`](docs/reference/http-api.md) is UsArr's own northbound wire contract** — what a client may rely on, per endpoint. |
 | **[docs/design/](docs/design/)** | The visual system: `DESIGN-DIRECTION.md`, `tokens.css` (the canonical values) and the v0.1 screen mockups. `ARCHITECTURE.md` §17 stays authoritative over all three. |
-| **[docs/FUTURE.md](docs/FUTURE.md)** | Deferred features — what each is, why it waited, what it would cost, and **the seam in the current design that keeps it cheap**. |
+| **[docs/FUTURE.md](docs/FUTURE.md)** | Mostly deferred features — what each is, why it waited, what it would cost, and **the seam in the current design that keeps it cheap**; a heading reading *Declined* means closed, not deferred. |
 | **[docs/DECISIONS.md](docs/DECISIONS.md)** | The ADRs. Context, decision, consequences, and **what was rejected and why** — including reversals, which record what falsified the original rather than quietly rewriting it. |
 | **[docs/REVIEW-LOG.md](docs/REVIEW-LOG.md)** | Every finding from the adversarial review: applied, or rebutted with reasoning and evidence. |
 | **[docs/RESEARCH.md](docs/RESEARCH.md)** | The evidence base. Five research tracks with sources, and every ✅ verified / ⚠️ unverified distinction preserved. **Read this before trusting any factual claim.** |
@@ -283,7 +284,8 @@ confirm or refute something marked ⚠️.
 2. If you want to reopen a decision, **[docs/DECISIONS.md](docs/DECISIONS.md)** probably already
    records the argument for your position and why it did not win — engage with that rather than
    restating it. If you think something was deferred wrongly, **[docs/FUTURE.md](docs/FUTURE.md)**
-   names the trigger that would reopen it.
+   records the reasoning and, where there is one, the trigger that would reopen it — an entry headed
+   *Declined* was closed rather than deferred and names no trigger at all.
 3. Factual claims need a source. The documents distinguish **verified** from **unverified**
    deliberately, and that distinction is worth protecting.
 4. New service integrations should be a **YAML manifest** unless they genuinely need protocol work.
