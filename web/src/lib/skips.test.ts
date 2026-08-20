@@ -255,6 +255,91 @@ describe('left_out says the number and the why, on the row', () => {
 		const mark = libraryStates(fiction(), HEALTH_UNREAD).find((m) => m.key === 'items-left-out');
 		expect(mark?.detail).toBe('1 item was read and not mapped; r');
 	});
+
+	/* ── the PARTIAL overlap, which is the shape the clause above was written ──
+	 * for and the shape it did not cover.
+	 *
+	 * ⚠️ THE SIGNATURES DIFFER WHILE THE SKIP IS SHARED, and that is the whole
+	 * case. Two containers, P and Q; Fiction stands over both and Comics over P
+	 * alone. P's skip is folded into BOTH rows, so the reader sees it twice —
+	 * exactly the double-count the clause exists to join — while no comparison
+	 * of the rows' container SETS ever finds them equal. Keying the clause on
+	 * the library's set therefore leaves BOTH rows silent about the one thing
+	 * that would have stopped the addition.
+	 */
+	const partial = () => {
+		const p = {
+			id: 101,
+			service_instance_id: 1,
+			service_name: 'BookOrbit A',
+			service_kind: 'bookorbit',
+			container_kind: 'remote_library',
+			container_ref: '1',
+			is_metadata_authority: true
+		};
+		const q = {
+			...p,
+			id: 209,
+			service_instance_id: 2,
+			service_name: 'BookOrbit B',
+			container_ref: '9'
+		};
+		return [
+			parse({
+				id: 2,
+				name: 'Fiction',
+				sources: [p, q],
+				skipped: {
+					state: 'left_out',
+					items: 3,
+					reason: 'r',
+					containers: [over(1, '1', 1), over(2, '9', 2)]
+				}
+			}),
+			parse({
+				id: 3,
+				name: 'Fiction (Comics)',
+				kind: 'comic',
+				sources: [p],
+				skipped: { state: 'left_out', items: 1, reason: 'r', containers: [over(1, '1', 1)] }
+			})
+		];
+	};
+
+	it('names the sharing on both rows when the rows overlap only in part', () => {
+		const rows = partial();
+		for (const r of rows) {
+			const mark = libraryStates(r, HEALTH_UNREAD, rows).find((m) => m.key === 'items-left-out');
+			expect(mark?.detail).toContain('upstream container');
+		}
+	});
+
+	it('names the OTHER row, so the reader can see which two numbers overlap', () => {
+		const rows = partial();
+		const a = libraryStates(rows[0], HEALTH_UNREAD, rows).find((m) => m.key === 'items-left-out');
+		const b = libraryStates(rows[1], HEALTH_UNREAD, rows).find((m) => m.key === 'items-left-out');
+		expect(a?.detail).toContain('Fiction (Comics)');
+		expect(b?.detail).toContain('Fiction');
+	});
+
+	// ⚠️ AND THE TWO ROWS DO NOT SAY THE SAME THING, BECAUSE THE TWO FACTS ARE
+	// NOT THE SAME FACT. Only 1 of Fiction's 3 is shared, so a clause telling its
+	// reader the counts are one and the same would swap one wrong number for
+	// another; all of Comics' 1 is shared, so for that row they ARE one number.
+	it('says how much of each row is shared, rather than one sentence for both', () => {
+		const rows = partial();
+		const a = libraryStates(rows[0], HEALTH_UNREAD, rows).find((m) => m.key === 'items-left-out');
+		const b = libraryStates(rows[1], HEALTH_UNREAD, rows).find((m) => m.key === 'items-left-out');
+		expect(a?.detail).toBe(
+			'3 items were read and not mapped; r; part of this count is also reported by ' +
+				'Fiction (Comics), which stands over an upstream container this library also ' +
+				'reports, so those items are one skip shown on both rows'
+		);
+		expect(b?.detail).toBe(
+			'1 item was read and not mapped; r; the same skip is reported by Fiction over the ' +
+				'same upstream container, so it is one skip shown on both rows'
+		);
+	});
 });
 
 describe('the two silences are one rendering and two values', () => {
