@@ -293,15 +293,6 @@ interface Source {
 	readonly src: string;
 }
 
-function walk(dir: string, out: string[] = []): string[] {
-	for (const entry of readdirSync(dir).sort()) {
-		const p = join(dir, entry);
-		if (statSync(p).isDirectory()) walk(p, out);
-		else out.push(p);
-	}
-	return out;
-}
-
 function kindOf(p: string): Kind | null {
 	if (p.endsWith('.svelte')) return 'svelte';
 	if (p.endsWith('.html')) return 'html';
@@ -331,26 +322,157 @@ function strip(text: string, kind: Kind): string {
 	return out;
 }
 
-const FILES: readonly Source[] = walk(SRC)
-	.filter((p) => kindOf(p) !== null && !p.endsWith('.test.ts') && !p.includes('__fixtures__'))
-	.map((p) => {
-		const kind = kindOf(p) as Kind;
-		return { file: relative(REPO, p), kind, src: strip(readFileSync(p, 'utf8'), kind) };
-	});
-
 /**
  * The least credible size of the scanned corpus, in characters.
  *
  * DERIVED, NOT ROUNDED, which is check.mjs's own test for a floor: one with
  * enough slack to survive the regression it exists to catch is not a floor.
- * Today the stripped corpus is 643,899 characters over 29 files. The two largest
- * are `app.css` (95,077) and `routes/requests/+page.svelte` (94,290), and losing
- * either is exactly the failure this floor is for — a glob that stops matching,
- * a file that moves. 560,000 sits below today's figure by 83,899, which is less
- * than either of them, so losing one fails; and 83,899 characters is far more
- * source than ordinary editing removes.
+ * ⚠️ RE-DERIVED 2026-08-20, because it had stopped being one. It was 560,000,
+ * derived when the stripped corpus was 643,899 characters over 29 files — a gap
+ * of 83,899, smaller than either of the two largest files, so losing one failed.
+ * The corpus has since reached 1,179,473 characters over 42 files, which left
+ * that gap at 616,416: the two largest files could BOTH have vanished and the
+ * floor would still have passed. A floor that cannot fail is not a floor, and
+ * this one silently stopped being one purely by the tree growing past it.
+ *
+ * Re-derived on the same rule. The two largest are `app.css` (105,273) and
+ * `routes/+page.svelte` (104,457). 1,080,000 sits below today's figure by
+ * 99,473 — less than either, so losing one fails — and 99,473 characters is far
+ * more source than ordinary editing removes.
  */
-const CORPUS_FLOOR = 560_000;
+const CORPUS_FLOOR = 1_080_000;
+
+/**
+ * The least credible NUMBER of files, which is the char floor's blind spot:
+ * twenty small components can disappear without moving the character count much.
+ *
+ * Derived against losing a DIRECTORY, the shape a broken walk actually takes.
+ * On 2026-08-20 the walk reads 42 files — 25 under `lib/`, 15 under `routes/`,
+ * 2 at the root. Losing `routes/` leaves 27 and losing `lib/` leaves 17, so 30
+ * fails on either, and the remaining 12 files of slack is more than ordinary
+ * churn moves.
+ */
+const FILE_FLOOR = 30;
+
+/**
+ * ONE PREDICATE, TWO CALLERS, and that is the point: the corpus read consults it
+ * before vouching for what it has, and the test below fires it. A floor asserted
+ * only in a test is a floor that a filtered run (`vitest -t …`) skips, which is
+ * the run someone reaches for when they are chasing one rule.
+ *
+ * Returns the complaint, or `null` when the corpus is credible.
+ */
+function corpusShortfall(files: readonly Source[]): string | null {
+	if (files.length < FILE_FLOOR) {
+		return (
+			`${files.length} source file(s) read under web/src, below the floor of ${FILE_FLOOR} — ` +
+			`the walk is looking at the wrong tree, or a directory has gone missing from it`
+		);
+	}
+	const chars = files.reduce((n, f) => n + f.src.length, 0);
+	if (chars < CORPUS_FLOOR) {
+		return (
+			`scanned ${chars} characters over ${files.length} files, below the floor of ` +
+			`${CORPUS_FLOOR}. A check that matches nothing is not a check that passed: ` +
+			`something moved, was renamed, or stopped being parsed.`
+		);
+	}
+	return null;
+}
+
+/**
+ * THE THREE FILESYSTEM CALLS THE CORPUS READ MAKES, BEHIND AN INTERFACE, so the
+ * read's behaviour under a tree that is changing beneath it can be DRILLED
+ * rather than asserted. Nothing in the gate substitutes this; only the drills do.
+ */
+interface CorpusIO {
+	readonly list: (dir: string) => string[];
+	readonly isDir: (p: string) => boolean;
+	readonly read: (p: string) => string;
+}
+
+const nodeIO: CorpusIO = {
+	list: (dir) => readdirSync(dir).sort(),
+	isDir: (p) => statSync(p).isDirectory(),
+	read: (p) => readFileSync(p, 'utf8')
+};
+
+/** One whole-tree walk-and-read. All of it, or it throws — there is no partial return. */
+function collect(io: CorpusIO): Source[] {
+	const paths: string[] = [];
+	const walk = (dir: string): void => {
+		for (const entry of io.list(dir)) {
+			const p = join(dir, entry);
+			if (io.isDir(p)) walk(p);
+			else paths.push(p);
+		}
+	};
+	walk(SRC);
+	return paths
+		.filter((p) => kindOf(p) !== null && !p.endsWith('.test.ts') && !p.includes('__fixtures__'))
+		.map((p) => {
+			const kind = kindOf(p) as Kind;
+			return { file: relative(REPO, p), kind, src: strip(io.read(p), kind) };
+		});
+}
+
+/**
+ * THE READ IS TAKEN ONCE, AND IT IS NEVER NARROWED. This is the second way this
+ * check failed under a shared checkout: `web/src` is walked live, so a merge
+ * landing in another lane can unlink or half-write a file between the `readdir`
+ * that lists it and the `read` that opens it. The symptom was this check failing
+ * outright, on a run whose own diff was three Go files.
+ *
+ * ⚠️ THERE IS NO RETRY, AND THAT IS THE RULING, NOT AN OVERSIGHT. Design ruled on
+ * 2026-08-20 that reading a tree while another process rewrites it is a real
+ * concurrency defect in the same family as two agents sharing one checkout — not
+ * flakiness — and that "a retry would make the symptom vanish and leave a test
+ * that silently reads inconsistent trees". A loop that eventually gets a clean
+ * pass has not read a coherent tree; it has read several incoherent ones and
+ * kept the one that did not complain.
+ *
+ * ⚠️ AND NO PER-FILE `catch`, for the same reason arriving by the other door.
+ * Skipping the file that threw makes the check pass by reading LESS, and
+ * green-because-nothing-was-wrong and green-because-nothing-was-read are then
+ * the same colour. So `collect` produces the whole tree or throws, and this
+ * function turns either an incomplete walk or a corpus below its floors into one
+ * loud failure that says what happened and whose diff it is not about.
+ *
+ * A STABLE SOURCE WAS CONSIDERED AND REFUSED. Reading from a fixed git ref would
+ * be perfectly coherent, and would stop testing the thing the rule is for: this
+ * runs in a PRE-COMMIT gate, so the `text-align: center` it exists to catch is
+ * by definition not committed yet. A check that never flinches but reads the
+ * wrong tree is worse than one that reports the real condition of this one.
+ */
+function readCorpus(io: CorpusIO = nodeIO): readonly Source[] {
+	let files: Source[];
+	try {
+		files = collect(io);
+	} catch (e) {
+		throw new Error(
+			`web/src could not be read whole, so every §13 rule below would have been scanning ` +
+				`a corpus this file cannot vouch for.\n` +
+				`A file moved between the readdir that listed it and the read that opened it. ` +
+				`That is another process rewriting this checkout while the suite ran — a merge ` +
+				`landing in a shared tree — and it is not the diff being gated. It is reported ` +
+				`rather than retried: a read that has to be attempted twice has not seen one ` +
+				`coherent tree, and a loop around it would only hide that.\n` +
+				(e instanceof Error ? e.message : String(e)),
+			{ cause: e }
+		);
+	}
+	const short = corpusShortfall(files);
+	if (short !== null) {
+		throw new Error(
+			`web/src was read without error and came back too small to be web/src, which is the ` +
+				`failure that would otherwise have gone GREEN — every rule reports a clean sheet ` +
+				`over a corpus that is not there.\n${short}`
+		);
+	}
+	return files;
+}
+
+const FILES: readonly Source[] = readCorpus();
 
 function lineOf(text: string, index: number): number {
 	return text.slice(0, index).split('\n').length;
@@ -363,10 +485,55 @@ interface Hit {
 	readonly groups: Record<string, string | undefined>;
 }
 
+/**
+ * A MANDATORY-LITERAL PREFILTER, and the reason `scan` takes options at all.
+ *
+ * `anchor` is a source FRAGMENT of the rule it accompanies, never a rule of its
+ * own. `scan` compiles it with the RULE'S flags, so it can never be stricter
+ * than the rule is about the same characters, and it refuses an anchor whose
+ * source is not literally part of the rule's. When the fragment is a mandatory
+ * tail — every alternative has to reach it to match — a file that does not
+ * contain the fragment cannot contain a hit, so skipping that file changes no
+ * result. The substring refusal is the mechanical half of that argument; the
+ * other half is that the pattern must be BUILT from the fragment, which is why
+ * `CENTER` below is assembled from `CENTRED` rather than retyped around it.
+ *
+ * IT EXISTS BECAUSE ONE RULE WAS QUADRATIC AND SILENT ABOUT IT. `CENTER`'s
+ * `[^{}]{0,200}\{[^{}]{0,400}?` prefix is retried at every offset of the
+ * corpus: measured on 2026-08-20 it cost 855 ms over 1,176,416 characters and
+ * returned nothing — 97% of this file's entire run, rising with the corpus, and
+ * one loaded machine away from tripping vitest's 5 s per-test DEFAULT and
+ * turning red on whoever happened to be gating. The anchor puts it at 1 ms by
+ * never starting the expensive scan on a file that cannot match.
+ *
+ * Fixing the cost rather than the bound is the point. Nothing here asserts an
+ * elapsed time and nothing should: `CLAUDE.md` rules that "wall-clock
+ * benchmarks belong in `make bench`, never in a merge gate", so vitest's
+ * timeout stays what it is meant to be — a guard against a hang — and this
+ * check stays far enough under it that the guard never has an opinion about it.
+ */
+interface ScanOpts {
+	/** A source fragment of `re`, compiled with `re`'s own flags. */
+	readonly anchor?: RegExp;
+	/** The corpus to read. Defaults to the whole of `FILES`. */
+	readonly over?: readonly Source[];
+}
+
 /** check.mjs's `scan()`: every stripped source, one regex, named groups kept. */
-function scan(re: RegExp): Hit[] {
+function scan(re: RegExp, opts: ScanOpts = {}): Hit[] {
+	let sources: readonly Source[] = opts.over ?? FILES;
+	if (opts.anchor) {
+		if (!re.source.includes(opts.anchor.source)) {
+			throw new Error(
+				`mis-wired anchor: /${opts.anchor.source}/ is not part of the rule's own pattern, ` +
+					`so prefiltering on it could skip a file that holds a real hit.`
+			);
+		}
+		const pre = new RegExp(opts.anchor.source, re.flags.replace('g', ''));
+		sources = sources.filter((f) => pre.test(f.src));
+	}
 	const hits: Hit[] = [];
-	for (const f of FILES) {
+	for (const f of sources) {
 		const r = new RegExp(re.source, re.flags.includes('g') ? re.flags : re.flags + 'g');
 		let m: RegExpExecArray | null;
 		while ((m = r.exec(f.src)) !== null) {
@@ -406,14 +573,18 @@ interface Exemption {
 	readonly match: RegExp;
 }
 
-function applyRule(re: RegExp, exempt?: Exemption): { hits: Hit[]; exempted: number } {
+function applyRule(
+	re: RegExp,
+	exempt?: Exemption,
+	opts?: ScanOpts
+): { hits: Hit[]; exempted: number } {
 	if (exempt && !re.source.includes(`(?<${exempt.group}>`)) {
 		throw new Error(
 			`mis-wired rule: the exemption tests the named group "${exempt.group}", but the ` +
 				`pattern has no (?<${exempt.group}>…) group, so it could never fire.`
 		);
 	}
-	const all = scan(re);
+	const all = scan(re, opts);
 	const hits: Hit[] = [];
 	let exempted = 0;
 	for (const h of all) {
@@ -1588,17 +1759,90 @@ const COLOUR_SKIPS: Record<string, string> = {
 
 describe('DESIGN-DIRECTION §13 — the static rules, over web/src', () => {
 	it('scans a corpus large enough to be the corpus', () => {
-		const chars = FILES.reduce((n, f) => n + f.src.length, 0);
+		expect(corpusShortfall(FILES)).toBeNull();
+	});
+
+	it('the corpus floors fire on a starved corpus, and on a lost directory', () => {
+		/* THE FLOORS DRILLED, not assumed. Both of them had gone quiet at some point
+		   — the character floor by the tree growing past it — and a floor nobody has
+		   watched fail is a number, not a guard. Fired on the real predicate the
+		   read and the test above both consult. */
+		expect(corpusShortfall(FILES.slice(0, FILE_FLOOR - 1))).toMatch(/below the floor of 30/);
+
+		/* THE CHARACTER FLOOR ON THE PROPERTY ITS DERIVATION CLAIMS — losing the
+		   single largest file must fail — fired against the real corpus with that
+		   one file removed, so the number above is checked rather than believed.
+		   This is the assertion that was silently false before the re-derivation. */
+		const largest = [...FILES].sort((a, b) => b.src.length - a.src.length)[0];
+		const lost = FILES.filter((f) => f.file !== largest.file);
 		expect(
-			FILES.length,
-			'no source files matched under web/src — the walk is looking at the wrong tree'
-		).toBeGreaterThanOrEqual(20);
-		expect(
-			chars,
-			`scanned ${chars} characters over ${FILES.length} files, below the floor of ` +
-				`${CORPUS_FLOOR}. A check that matches nothing is not a check that passed: ` +
-				`something moved, was renamed, or stopped being parsed.`
-		).toBeGreaterThanOrEqual(CORPUS_FLOOR);
+			lost.length,
+			'removing the largest file must not trip the FILE floor'
+		).toBeGreaterThanOrEqual(FILE_FLOOR);
+		expect(corpusShortfall(lost), `losing ${largest.file} did not trip the floor`).toMatch(
+			/below the floor of 1080000/
+		);
+
+		/* And the negative half — the real corpus must NOT trip either floor, or the
+		   two assertions above pass for the wrong reason. */
+		expect(corpusShortfall(FILES)).toBeNull();
+	});
+
+	it('fails on a file that moved under the walk, once, and does not read on without it', () => {
+		/* THE SECOND FAILURE MODE, DRILLED AS FAR AS IT HONESTLY CAN BE. A concurrent
+		   merge cannot be summoned on demand, so what is simulated is not the tree
+		   but the FILESYSTEM's answer — one ENOENT between the readdir and the read,
+		   which is exactly what the walk sees either way. What is NOT claimed is
+		   coverage of a real concurrent rewrite; that is unreproducible here.
+
+		   Three properties, and the third is the ruling. The read must turn red; it
+		   must say the failure is not the gated diff, so it is not misattributed to
+		   whoever was unlucky enough to be gating; and it must NOT try again —
+		   `attempts` is 1, pinned, because a loop that eventually gets a clean pass
+		   has read several incoherent trees rather than one coherent one. */
+		const flakyOnce = (): { io: CorpusIO; walks: () => number } => {
+			let walks = 0;
+			return {
+				walks: () => walks,
+				io: {
+					list: (dir) => {
+						if (dir === SRC) walks++;
+						return nodeIO.list(dir);
+					},
+					isDir: nodeIO.isDir,
+					read: (p) => {
+						if (walks === 1 && p.endsWith('app.css')) {
+							throw new Error(`ENOENT: no such file or directory, open '${p}'`);
+						}
+						return nodeIO.read(p);
+					}
+				}
+			};
+		};
+
+		/* The ENOENT is thrown on the FIRST walk only, so a read that tried again
+		   would succeed and return a corpus — which is precisely the green this
+		   must not produce. It turning red is the no-retry property. */
+		const first = flakyOnce();
+		expect(() => readCorpus(first.io)).toThrow(/could not be read whole/);
+		expect(first.walks(), 'the read walked twice — a retry is the fix design ruled out').toBe(1);
+
+		const second = flakyOnce();
+		expect(() => readCorpus(second.io)).toThrow(/it is not the diff being gated/);
+	});
+
+	it('fails on a corpus that came back too small, which is the case that would be green', () => {
+		/* THE DEAF-GUARD CASE, and the reason the floors are consulted by the READ
+		   and not only by the test above. A tree that lists almost nothing raises no
+		   error at all: every read succeeds, the corpus is simply tiny, and every
+		   rule reports a clean sheet. Nothing is red anywhere. */
+		const emptied: CorpusIO = {
+			list: (dir) => (dir === SRC ? ['app.css'] : []),
+			isDir: () => false,
+			read: nodeIO.read
+		};
+		expect(() => readCorpus(emptied)).toThrow(/below the floor of 30/);
+		expect(() => readCorpus(emptied)).toThrow(/would otherwise have gone GREEN/);
 	});
 
 	it('strips comments, so a rule cannot fire on the prose that documents it', () => {
@@ -2110,35 +2354,87 @@ describe('DESIGN-DIRECTION §13 — the static rules, over web/src', () => {
 		expect(bad, '§13 type: banned family in a font stack').toEqual([]);
 	});
 
+	/* check.mjs's CENTER pattern verbatim. The `where` group is the mechanism,
+	   not decoration: the exemption is about WHERE the declaration sits, so the
+	   pattern captures the selector (CSS) or the element and its attributes (an
+	   inline style) and hands THAT to the exemption.
+
+	   ASSEMBLED FROM `CENTRED` RATHER THAN TYPED AROUND IT, so the anchor handed
+	   to `scan` is the pattern's own mandatory tail by construction and cannot
+	   drift from it under editing. `.source` is unchanged — the drill below pins
+	   it character for character against check.mjs's line. */
+	const CENTRED = /text-align\s*:\s*center/;
+	const CENTER = new RegExp(
+		`(?<where>[^{}]{0,200}\\{[^{}]{0,400}?|<[a-z][^<>]{0,300}?)${CENTRED.source}`,
+		'i'
+	);
+	/* ⚠️ `dialog|modal`, NOT check.mjs's `dialog|modal|toast` — a deliberate,
+	   ruled divergence rather than a copying slip, and the only one in this
+	   file. §13 names dialog components and nothing else; design ruled on
+	   2026-08-17 that §13 governs here and is changing check.mjs's side to
+	   match. The reasoning is worth keeping because it generalises: an unused
+	   exemption costs nothing to remove, and silently grants everything the
+	   day someone builds the component it names. `toast` matched nothing in
+	   either tree — it was a carve-out waiting for its first customer. */
+	const CENTER_EXEMPT: Exemption = { group: 'where', match: /dialog|modal/i };
+	/* Reported as `file  selector` rather than `file:line`, because the selector
+	   is what a reader has to go and look at. There is no allowlist here and no
+	   exception to key one on: `.th__arrow` was the tree's only hit and its
+	   declaration was deleted rather than excused. */
+	const centreKey = (h: Hit): string => {
+		const where = h.groups.where ?? '';
+		const brace = where.lastIndexOf('{');
+		return `${h.file}  ${collapse(brace === -1 ? where : where.slice(0, brace))}`;
+	};
+
 	it('§13 type: no text-align:center outside a dialog', () => {
-		/* check.mjs's CENTER pattern verbatim. The `where` group is the mechanism,
-		   not decoration: the exemption is about WHERE the declaration sits, so the
-		   pattern captures the selector (CSS) or the element and its attributes (an
-		   inline style) and hands THAT to the exemption. */
-		const CENTER =
-			/(?<where>[^{}]{0,200}\{[^{}]{0,400}?|<[a-z][^<>]{0,300}?)text-align\s*:\s*center/i;
-		/* ⚠️ `dialog|modal`, NOT check.mjs's `dialog|modal|toast` — a deliberate,
-		   ruled divergence rather than a copying slip, and the only one in this
-		   file. §13 names dialog components and nothing else; design ruled on
-		   2026-08-17 that §13 governs here and is changing check.mjs's side to
-		   match. The reasoning is worth keeping because it generalises: an unused
-		   exemption costs nothing to remove, and silently grants everything the
-		   day someone builds the component it names. `toast` matched nothing in
-		   either tree — it was a carve-out waiting for its first customer. */
-		const { hits } = applyRule(CENTER, { group: 'where', match: /dialog|modal/i });
-		/* Reported as `file  selector` rather than `file:line`, because the selector
-		   is what a reader has to go and look at. There is no allowlist here and no
-		   exception to key one on: `.th__arrow` was the tree's only hit and its
-		   declaration was deleted rather than excused. */
-		const key = (h: Hit): string => {
-			const where = h.groups.where ?? '';
-			const brace = where.lastIndexOf('{');
-			return `${h.file}  ${collapse(brace === -1 ? where : where.slice(0, brace))}`;
-		};
+		const { hits } = applyRule(CENTER, CENTER_EXEMPT, { anchor: CENTRED });
 		expect(
-			hits.map(key),
+			hits.map(centreKey),
 			'§13 type: text-align:center outside a dialog.\n' + hits.map(fmt).join('\n')
 		).toEqual([]);
+	});
+
+	it('§13 type: fires on a planted text-align:center, and the anchor keeps it', () => {
+		/* THE DRILL, MADE PERMANENT, and it guards two properties that a green run
+		   cannot tell apart on its own. A rule with no hits and a rule that never
+		   ran report the same nothing, so the anchor prefilter above — which decides
+		   which files the rule runs on at all — is invisible unless something is
+		   planted for it to keep. Fired through `applyRule`, the real path, not a
+		   re-implementation of it. */
+		const planted: readonly Source[] = [
+			{ file: 'web/src/planted.css', kind: 'css', src: '.row__cell {\n\ttext-align: center;\n}\n' },
+			{
+				file: 'web/src/planted-dialog.css',
+				kind: 'css',
+				src: '.dialog__foot {\n\ttext-align: center;\n}\n'
+			},
+			{
+				file: 'web/src/planted-clean.css',
+				kind: 'css',
+				src: '.row__cell {\n\ttext-align: start;\n}\n'
+			}
+		];
+		const { hits, exempted } = applyRule(CENTER, CENTER_EXEMPT, {
+			anchor: CENTRED,
+			over: planted
+		});
+		expect(hits.map(centreKey), 'the planted declaration did not fire the rule').toEqual([
+			'web/src/planted.css  .row__cell'
+		]);
+		expect(exempted, 'the dialog exemption did not fire on `.dialog__foot`').toBe(1);
+
+		/* The anchor's own mis-wiring guard, fired rather than assumed — an anchor
+		   that is not part of the rule must throw, not quietly filter the corpus
+		   down to nothing and report a clean tree. */
+		expect(() => scan(CENTER, { anchor: /nothing-of-the-sort/ })).toThrow(/mis-wired anchor/);
+
+		/* And `verbatim` kept honest. The comment above claims this is check.mjs's
+		   line; assembling it from `CENTRED` is only safe while that stays true. */
+		expect(CENTER.source, "CENTER has drifted from check.mjs's pattern").toBe(
+			'(?<where>[^{}]{0,200}\\{[^{}]{0,400}?|<[a-z][^<>]{0,300}?)text-align\\s*:\\s*center'
+		);
+		expect(CENTER.flags).toBe('i');
 	});
 
 	it('reads a copy corpus big enough to be the corpus', () => {
