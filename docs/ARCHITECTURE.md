@@ -2164,8 +2164,8 @@ a third larger. Every p50/p99 below is against this library.
 | `POST` write ack (**measured during a concurrent full import**) | < 10 ms | < 40 ms |
 | `GET /stream/{id}` resolve + authorize (to first byte) | < 5 ms | < 20 ms |
 | Process start to listener accepting | < 300 ms | < 1 s |
-| Idle RSS | target < 80 MB — **storage layer measured at 10 MB** (x86-64, below) | < 120 MB |
-| Peak RSS during a 10k-item import | — | < 300 MB — **500k-row import measured at 50 MB** (x86-64) |
+| Idle RSS | target < 80 MB — **storage layer measured at 10 MiB** (x86-64, below) | < 120 MB |
+| Peak RSS during a 10k-item import | — | < 300 MB — **500k-row import measured at 50 MiB** (x86-64) |
 
 ⚠️ **The first row's parameter was corrected 2026-08-19.** It read
 `GET /api/v1/library?kind=movie`, which is wrong twice over: the parameter this endpoint takes is
@@ -2224,12 +2224,14 @@ a relabel, not a rounding.** ADR-0001's sweep table is headed *"Read sweep, all 
 `make bench-rss` prints MiB, so 237.1 MiB is ~249 MB decimal. **No number changed here**; three
 sites carried the wrong unit — these two paragraphs and §7.7's pragma bullet 4 — and all three
 moved in one pass, because a second pass over the same sentence is how the next one gets missed.
-**That is the pass, not the class:** the budget table above still appends its measured figures in
-MB, and the targets beside them are chosen budgets that are MB by intent, so the two are not one
-correction and neither is made here. **237.1 is the shipped row's `peak (VmHWM)` cell**, and that
-the figure descends from that column is **stated** — ADR-0001's amendment says it took the peak
-column at face value. ⚠️ **Prose elsewhere in the repo reads *"235 MB peak"*, which is a different
-cell:** the same row's `8 readers` is 235.1. That 235 descends from *that* cell is **inference**
+**The budget table above followed on 2026-08-20**, in the commit that corrected this sentence: its
+two appended measurements now read `10 MiB` and `50 MiB`. **The targets beside them stay MB on
+purpose** — `< 80 MB`, `< 300 MB` and `< 120 MB` are chosen budgets, not measurements, so the unit
+question does not arise for them, and relabelling them would assert a precision nobody measured.
+**237.1 is the shipped row's `peak (VmHWM)` cell**, and that the figure descends from that column
+is **stated** — ADR-0001's amendment says it took the peak column at face value.
+⚠️ **Prose elsewhere in the repo reads *"235 MB peak"*, which is a different cell:** the same
+row's `8 readers` is 235.1. That 235 descends from *that* cell is **inference**
 from an exact numeric match, and no document records where it was read. The two descents are not
 equally evidenced and are not written here as if they were. **ADR-0001's table is the only
 surviving record of the run** — `git ls-files` carries no bench output at all, because the harness
