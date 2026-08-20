@@ -4,13 +4,14 @@ import (
 	"go/ast"
 	"go/parser"
 	"go/token"
-	"io/fs"
 	"os"
 	"path/filepath"
 	"regexp"
 	"strconv"
 	"strings"
 	"testing"
+
+	"github.com/jdb3750/UsArr/internal/repofiles"
 )
 
 // mutatingAuditSQL matches an UPDATE or DELETE aimed at audit_log in a SQL
@@ -47,6 +48,15 @@ var mutatingAuditSQL = regexp.MustCompile(`(?is)\b(update\s+audit_log|delete\s+f
 // tests that verify the guarantee. security.md §6 has been amended to state this
 // scope, because "anywhere in the codebase" was not literally what was meant.
 //
+// WHICH FILES "PRODUCTION CODE" MEANS is internal/repofiles' question, not
+// this file's. This guard used to answer it itself, with a filepath.WalkDir
+// from the module root and a prune list that did not name `.claude` — so it
+// scanned every agent lane's nested checkout of this repo as though those
+// files were this tree's. It stayed green anyway, because those checkouts
+// happened to hold no violation in a non-test .go file; that is a coincidence,
+// not a property, and its sibling internal/db/planlint_test.go — same walk,
+// same prune list, _test.go scope — went red with 875 foreign faults.
+//
 // Waiving: there is no waiver for production code. If a legitimate need to
 // mutate audit_log ever appears, it is a change to the append-only guarantee
 // itself and belongs in an ADR plus a migration that drops the triggers — not in
@@ -54,31 +64,24 @@ var mutatingAuditSQL = regexp.MustCompile(`(?is)\b(update\s+audit_log|delete\s+f
 func TestNoCodeMutatesTheAuditLog(t *testing.T) {
 	root := repoRoot(t)
 
+	paths, err := repofiles.NonTestGoFiles(t.Context(), root)
+	if err != nil {
+		t.Fatalf("enumerating this repository's non-test .go files: %v", err)
+	}
+
 	var offences []string
+	inspected := 0
 	fset := token.NewFileSet()
 
-	err := filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
-		if err != nil {
-			return err
-		}
-		if d.IsDir() {
-			switch d.Name() {
-			case ".git", "node_modules", "dist", "build", ".svelte-kit", ".dev":
-				return fs.SkipDir
-			}
-			return nil
-		}
-		if !strings.HasSuffix(path, ".go") || strings.HasSuffix(path, "_test.go") {
-			return nil
-		}
-
+	for _, path := range paths {
 		file, perr := parser.ParseFile(fset, path, nil, 0)
 		if perr != nil {
 			// An unparseable Go file is someone else's failure; do not mask it,
 			// but do not fail this test for it either.
 			t.Logf("skipping unparseable %s: %v", path, perr)
-			return nil
+			continue
 		}
+		inspected++
 
 		ast.Inspect(file, func(n ast.Node) bool {
 			lit, ok := n.(*ast.BasicLit)
@@ -97,11 +100,15 @@ func TestNoCodeMutatesTheAuditLog(t *testing.T) {
 			}
 			return true
 		})
-		return nil
-	})
-	if err != nil {
-		t.Fatalf("walking the tree: %v", err)
 	}
+	// A floor, per DEVELOPMENT.md §11's rule 4: "found nothing" and "looked at
+	// nothing" must never produce the same exit code. This guard's whole output
+	// is an absence, so without this it would have passed just as convincingly
+	// over an empty listing as over the real tree.
+	if inspected == 0 {
+		t.Fatal("the enumeration found no non-test .go files at all, so this guard is checking nothing")
+	}
+	t.Logf("inspected %d non-test .go files this repository owns, %d offences", inspected, len(offences))
 
 	for _, o := range offences {
 		t.Errorf("a SQL statement mutates audit_log:\n  %s\n"+

@@ -4,12 +4,13 @@ import (
 	"go/ast"
 	"go/parser"
 	"go/token"
-	"io/fs"
 	"path/filepath"
 	"regexp"
 	"strconv"
 	"strings"
 	"testing"
+
+	"github.com/jdb3750/UsArr/internal/repofiles"
 )
 
 // writeQueueWriteSQL matches an INSERT, REPLACE or UPDATE aimed at write_queue
@@ -77,6 +78,15 @@ var writeQueueWriteSQL = regexp.MustCompile(
 // be: this file's own regex-fixture subtest contains the exact strings it
 // forbids, and writequeue_test.go INSERTs a deliberately misspelt state to prove
 // the column has no CHECK.
+//
+// WHICH FILES "PRODUCTION CODE" MEANS is internal/repofiles' question, not
+// this file's. This guard used to answer it itself, with a filepath.WalkDir
+// from the module root and a prune list that did not name `.claude` — so it
+// scanned every agent lane's nested checkout of this repo as though those
+// files were this tree's. It stayed green anyway, because those checkouts
+// happened to hold no violation in a non-test .go file; that is a coincidence,
+// not a property, and its sibling internal/db/planlint_test.go — same walk,
+// same prune list, _test.go scope — went red with 875 foreign faults.
 func TestWriteQueueWritesValidateTheStateVocabulary(t *testing.T) {
 	// Fire the matcher before trusting it. A matcher that has never been shown
 	// to match is indistinguishable from no matcher at all.
@@ -125,42 +135,39 @@ func TestWriteQueueWritesValidateTheStateVocabulary(t *testing.T) {
 
 	root := repoRoot(t)
 
+	paths, err := repofiles.NonTestGoFiles(t.Context(), root)
+	if err != nil {
+		t.Fatalf("enumerating this repository's non-test .go files: %v", err)
+	}
+
 	var writes []string
 	validatorReferenced := false
+	inspected := 0
 	fset := token.NewFileSet()
 
-	err := filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
-		if err != nil {
-			return err
-		}
-		if d.IsDir() {
-			switch d.Name() {
-			case ".git", "node_modules", "dist", "build", ".svelte-kit", ".dev":
-				return fs.SkipDir
-			}
-			return nil
-		}
-		if !strings.HasSuffix(path, ".go") || strings.HasSuffix(path, "_test.go") {
-			return nil
-		}
+	for _, path := range paths {
 		// writequeue.go is the declaration, not a reference to it.
 		if filepath.Base(path) == "writequeue.go" && filepath.Base(filepath.Dir(path)) == "store" {
-			return nil
+			continue
 		}
 
 		file, perr := parser.ParseFile(fset, path, nil, 0)
 		if perr != nil {
 			t.Logf("skipping unparseable %s: %v", path, perr)
-			return nil
+			continue
 		}
+		inspected++
 
 		rel, _ := filepath.Rel(root, path)
 		scanWriteQueueWrites(fset, rel, file, &writes, &validatorReferenced)
-		return nil
-	})
-	if err != nil {
-		t.Fatalf("walking the tree: %v", err)
 	}
+	// A floor, per DEVELOPMENT.md §11's rule 4. Both branches below read as a
+	// verdict about the tree; over an empty listing they would be a verdict
+	// about nothing, and the two would be indistinguishable in the output.
+	if inspected == 0 {
+		t.Fatal("the enumeration found no non-test .go files at all, so this guard is checking nothing")
+	}
+	t.Logf("inspected %d non-test .go files this repository owns, %d write_sites", inspected, len(writes))
 
 	if len(writes) == 0 {
 		t.Error("no production code writes write_queue at all, which was NOT true when this " +
