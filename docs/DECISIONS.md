@@ -3074,7 +3074,12 @@ way, superseding its single `ArtistID`/`AlbumArtistID` fields with a `Participan
 ## ADR-0032 — Read-only catalogue sources move early; command sinks defer
 
 **Status:** Accepted · **Amends [`ARCHITECTURE.md`](./ARCHITECTURE.md) §16**, which is authoritative
-for scope. The README's generated status tables follow §16. · 🚩 **One member is reversed by
+for scope. The README's status tables are maintained by hand against §16 — nothing in the repo
+generates them, so they lag §16 and have. ⚠️ **STRUCK 2026-08-20:** this read *"The README's
+generated status tables follow §16"*. `ee45ca1` measured the absence — no `README` make target, no
+`scripts/`, and no file in the tree referencing `README.md` programmatically — and corrected
+`CLAUDE.md` to the wording used here, which is README's own note against its status tables. This
+corrects a statement of fact and amends nothing. · 🚩 **One member is reversed by
 [ADR-0035](#adr-0035): Kavita is the comics-and-books source and Komga follows it**, because the
 owner runs Kavita. · 🚩 **The milestone is re-sequenced by [ADR-0036](#adr-0036): no catalogue source
 ships in v0.1.** All four still arrive, one at a time after v0.1. **This is re-sequencing, not
