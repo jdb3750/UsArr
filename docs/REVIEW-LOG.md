@@ -24419,3 +24419,129 @@ which per F11 that target never opens.
 `grep -n 'readFileSync\|readdirSync' docs/design/check.mjs` and reading its `FILES` list at `:455-460` — `docs/design/tokens.css`, the three mockup assets and every `mockups/*.html` but the prototype, plus `docs/ARCHITECTURE.md` for the §17 copy corpus, and **nothing under `web/src`**, which is F11; ⚠️ `grep -rn 'web/src' docs/design/check.mjs` is NOT the check to run — it returns one hit, a comment at `:753` saying what would change *"when this check is later pointed at `web/src/**`"*, which is the opposite of a read;
 `grep -n 'comics/manga' docs/ARCHITECTURE.md` for the two instances, `:2455` routed and `:2721` struck (the strike wraps mid-phrase, so grep the shorter string);
 and the Chromium figures re-taken by serving `web/build` with a stub `/api/v1/{auth/session,services/health,library/facets,library/recent}` and reading `getBoundingClientRect()` off the live rows, which is how every number above was produced.
+
+---
+
+## LS-390 — `ARCHITECTURE.md`'s ✅ is ruled epistemic-only and the definition now states its edge; the sites the definition does not reach are enumerated here for re-wording. OPEN — this entry records what is to be done, and dispositions nothing yet
+
+**`LS-390`, allocated by the coordinator, and re-checked at this lane's tip rather than taken on
+report.** Run before a line of this entry was written, after `git fetch origin`, at `origin/main` =
+`969a884f9c2c68ad15f029484da4029341bb79e1`: `git grep -c 'LS-390' 969a884f -- docs/REVIEW-LOG.md`
+returns **no hits**. The ids present in this file in the 380s and 390s at that tip are **`LS-380`,
+`LS-381`, `LS-382`, `LS-383`, `LS-384`, `LS-385`, `LS-386`** — the list, not its maximum. `LS-387`,
+`LS-388` and `LS-389` are **absent from the tip**, which agrees with the allocator's report that
+they are held and unlanded; there is no disagreement to report. **`LS-390` was free and is taken; no
+id was bumped and no gap was left.** Nothing here allocates an ADR, a migration number or an id in
+any other series.
+
+ℹ️ **This entry does not cite its own commit sha, deliberately** — the entry lives in the commit it
+would be citing.
+
+🔍 **The glyph legend this entry is downstream of is a reconstruction, not a recovery.** The commit
+that opens this entry rebuilds `ARCHITECTURE.md`'s legend from how the document already uses each
+glyph, because the commit that first defined those entries was lost before it was pushed and its
+diff was never read. That provenance is marked at the legend itself and is repeated here so this
+entry is not read as resting on recovered text.
+
+### Why this entry exists
+
+The same commit that opens it adds four entries to `ARCHITECTURE.md`'s glyph legend — ✅, 🚩, ℹ️ and
+📌 — and defines **✅ as verification only**, with its edge stated there: checked against the artefact
+that would falsify the claim, never another document agreeing. **That definition is authoritative and
+is not restated here**; read it at the legend. This entry only applies it.
+
+The ruling refused two alternatives on the way: recording a second sense, which would ratify a run of
+accidents as a rule; and minting a second glyph, which would institutionalise the thing the rule
+forbids.
+
+Sites in `ARCHITECTURE.md` use ✅ where that definition does not reach. Landing it over them creates a
+known inconsistency, so the legend carries a rider naming the classes and pointing here. **This entry
+is the thing that pointer refers to, and it is created in the same commit as the pointer**, so
+nothing in the tree ever refers to a tracking record that does not exist.
+
+**The rider is retired by the motion, not by this entry.** Until the sites below are re-worded, the
+rider is the honest state and stays.
+
+### What the motion is to do
+
+Re-word each site below so it no longer carries ✅, keeping what the sentence asserts and changing
+only the marker and whatever wording the marker was doing work for. Then delete the legend's rider in
+the same commit that finishes the last of them.
+
+Three standing rules bind the re-wording. **Decided** sites are scope rulings, which are §16's
+business and an ADR's, so the replacement says *decided* in words and implies no check was run.
+**Status** sites are claims about what is built, which `ARCHITECTURE.md` does not own — the standing
+rule is unchanged: do not write a fresher status, write the pointer. **Corroboration** sites assert
+that the design agrees with itself, which the edge excludes by name; the replacement states the
+agreement as the design judgement it is, and claims no verification.
+
+**The enumeration below is the list; neither this heading nor this preamble restates it as a count.**
+A count in a heading is maintained by a different act than the body it counts, and this file has
+already been burned once by exactly that.
+
+### Decided — a scope ruling wearing a verification glyph
+
+| Site | Verbatim at `969a884f` |
+|---|---|
+| `docs/ARCHITECTURE.md:997` | `✅ **What this does to the correction UI's v0.3 cap is DECIDED, by [ADR-0043](./DECISIONS.md#adr-0043) (owner, 2026-08-17).**` — the sentence says DECIDED in its own text |
+| `docs/ARCHITECTURE.md:1009` | `✅ **That slot is now assigned: [ADR-0045](./DECISIONS.md#adr-0045) (owner-delegated, 2026-08-17) puts the minimal match-correction UI in v0.2**` — a milestone assignment |
+
+### Status — a claim about what is built
+
+| Site | Verbatim at `969a884f` |
+|---|---|
+| `docs/ARCHITECTURE.md:2811` | `and ✅ **all three now exist in the tree**: `internal/db/migrations/00006_kavita_subtypes.sql` creates `work_book` (`:129`), `work_comic` (`:153`) and `work_comic_issue` (`:180`) … in commit `d0a02aa`.` |
+| `docs/ARCHITECTURE.md:2882` | `> and ✅ **that migration has landed**: `00006_kavita_subtypes.sql` creates all three (`d0a02aa`).` |
+| `docs/ARCHITECTURE.md:4144` | `✅ **shipped: `acquisition_state` landed on `provenance` in migration 0003 at `f895ddc`**` |
+
+### Corroboration — ✅ on one part of this design agreeing with another
+
+**This site was classified against the stated edge rather than left open.** It had been held as
+ambiguous while the definition had no edge; once the edge was stated the site resolved on reading,
+and the reading is recorded here so the classification can be attacked.
+
+| Site | Verbatim at `969a884f` |
+|---|---|
+| `docs/ARCHITECTURE.md:4077` | `✅ **Two parts of this design reached that vocabulary independently, which is decent evidence it is the right one:** the provenance design already chose *sent* over *succeeded* for exactly this reason, and Recent grabs' `done` state was already worded as *"handed the release to the download client and the client accepted it"*.` |
+
+**What its corroboration runs to, measured.** Both halves are statements in the design corpus, not
+checks against code or observed behaviour — the sentence names its own subject, *"Two parts of **this
+design**"*. The second half was tested against the tree rather than assumed:
+`git grep -n 'handed the release to the download client' 969a884f` returns **exactly one hit, this
+very sentence at `docs/ARCHITECTURE.md:4080`**, and the same search restricted to `web/src`,
+`internal` and `cmd` returns nothing. The wording it cites as corroboration is not implemented
+anywhere; it exists only in the citation. So the site rests on the document asserting the same thing,
+and offers the number of places asserting it as the evidence — which is what the edge excludes.
+**It wants prose, not ✅.**
+
+⚠️ **The sentence that follows it is a real check and must survive the re-wording.** *"The mockups
+were checked against this rule rather than assumed to pass it — the post-grab chip and its
+announcement read `grabbed · sent to qBittorrent`"* is a check against artefacts that could have
+falsified it, and it conforms. The ✅ does not lead it. **Re-word the corroboration clause; do not
+touch the mockup check.**
+
+### Out of scope — the glyph is not this document's to re-word
+
+| Site | Verbatim at `969a884f` | Why |
+|---|---|---|
+| `docs/ARCHITECTURE.md:4425` | `The file now records LS-04 as **settled** — its comment opens `✅ LS-04 IS SETTLED, AND NOTHING DISAGREES ANY MORE. THE ENUM HAS SIX MEMBERS AND Image = 3 IS ONE OF THEM` —` | The ✅ sits **inside backticks, quoting a Go comment** in `internal/libsync/kavita.go`. A quotation is a fact about what someone else wrote, so **re-wording it would falsify a quotation**. No action — and specifically, do not "fix" it |
+
+### Already conforming — listed so the motion can skip them, not re-checked here
+
+`docs/ARCHITECTURE.md` `:504`, `:573`, `:661`, `:664`, `:1364`, `:1380`, `:1828`, `:2506`, `:2735`,
+`:2941`, `:3161`, `:4124`. Each cites a spec read, a source read, a live run, or a count taken from
+shipped indexer definitions, which is what the definition asks for.
+
+Two carry a rider worth knowing before anyone re-reads them. `:4124` opens *"Closed, 2026-08-16"* and
+carries a decision — *"detection is not to be built"* — **riding on** a source check (*"checked by the
+deployment thread against Prowlarr's and Deluge's source"*) that is genuinely the glyph's
+justification, so it conforms as it stands. `:2735` rests on the source read announced three lines
+above it at `:2726`, *"What a source read on 2026-08-19 established, and what it does not:"*.
+
+### Closure condition
+
+This entry closes when no site above carries ✅ except the quoted one at `:4425`, and when the
+legend's rider has been deleted. **Closing this entry without deleting the rider would leave
+`ARCHITECTURE.md` pointing at a closed record**, which is the same defect this entry was opened to
+avoid. Nothing here is pending an answer from anyone: every site is classified, and the motion can be
+executed in any order.

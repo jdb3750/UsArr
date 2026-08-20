@@ -1656,14 +1656,16 @@ next finding, not a roster of stale sites; the tree answers for its own state.
 
 **A symbol is a disclosure only to a reader who is already decoding symbols.** That lead does carry
 a marker, and it is one this project defines: `ARCHITECTURE.md`'s preamble, in the paragraph
-beginning *"Facts about upstream APIs were read from a shipped OpenAPI spec or from source"*, states
-**⚠️ = unverified. 🔍 = inference from verified facts, not itself verified.** `docs/DECISIONS.md`
-defines nothing of the kind — at `efaa4c9` it carries a status vocabulary and an amendment procedure
-and no legend anywhere, while eleven distinct glyphs stand at the head of a bullet or a bolded lead
-in it. So the reader who most needs the key is inside the document that does not hold one, and the
-reader who does know the convention still has to stop skimming to apply it. Markers are worth
-keeping and how they are used is settled where they are defined; what this rule asks of one is only
-that the words a skimmer actually reads say what the marker says.
+beginning *"Facts about upstream APIs were read from a shipped OpenAPI spec or from source"*, is
+where the glyphs are defined, and the one on that lead reads **🔍 = inference from verified facts,
+not itself verified.** That paragraph defines others too and is where they are settled, so read the
+set there rather than from the single entry quoted here. `docs/DECISIONS.md` defines nothing of the
+kind — at `efaa4c9` it carries a status vocabulary and an amendment procedure and no legend
+anywhere, while eleven distinct glyphs stand at the head of a bullet or a bolded lead in it. So the
+reader who most needs the key is inside the document that does not hold one, and the reader who does
+know the convention still has to stop skimming to apply it. Markers are worth keeping and how they
+are used is settled where they are defined; what this rule asks of one is only that the words a
+skimmer actually reads say what the marker says.
 
 ### A large "unpushed commits" count is a claim about the remote pointer, not about the branch
 
