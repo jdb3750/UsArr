@@ -863,9 +863,15 @@ connect and is gated on `last_full_sync_at` forever after — so an instance tha
 could never import again. That makes every later fix to what an import *writes* undeliverable to
 rows already imported. This is the re-run, not a backfill: a backfill repairs one field once.
 
-**It is a full re-import, not a delta.** `internal/libsync` implements channel 1 and nothing else
-(read its package doc), and a delta walk would be the wrong tool anyway: ADR-0035 §2a's watermark
-moves on an upstream *change*, so a delta could never revisit a row that UsArr itself wrote wrongly.
+**It is a full re-import, not a delta.** A delta walk would be the wrong tool for this job: ADR-0035
+§2a's watermark moves on an upstream *change*, so a delta could never revisit a row that UsArr itself
+wrote wrongly — and an *arrivals* walk, which is the shape channel 3b actually takes here (§4a),
+revisits even less. ⚠️ **This paragraph used to open *"`internal/libsync` implements channel 1 and
+nothing else (read its package doc)"*, and that clause is false — falsified 2026-08-21 by the delta
+route documented in §4a below**, which gave `internal/libsync`'s `DeltaSync` a wire surface; that
+package doc now says so itself. **The rest of the paragraph is unchanged, and it is still the reason
+this endpoint stays a full re-import**: §4a is a sibling of this section, never a replacement for it,
+and the full import is the only read that can repair a row UsArr wrote wrongly, a skip, or a deletion.
 
 Gated exactly like the five other writes on this screen: `Content-Type: application/json`, the
 double-submit CSRF token, an authenticated session, and the **five-minute sudo window** (§17.3.3).
@@ -944,6 +950,108 @@ is, and says so in its own code.
 **The two 409s are separate codes on purpose.** Their fixes are opposite — wait, versus press this
 somewhere else — and a client that switched on the status alone would have to guess which sentence
 to show.
+
+---
+
+## 4a · `POST /api/v1/services/{id}/sync/delta` — run channel 3b's arrivals walk
+
+Channel 3b, on demand: ask the source for what has **arrived** since a stored cursor, and apply only
+that. It is **per instance**, for §4's reason — the control lives on a service's own row.
+
+**Why it is a separate route and not a mode flag on §4.** The two reads answer different questions
+and refuse for different reasons. A full import re-reads the whole library and is the only thing that
+can repair a row UsArr itself wrote wrongly, a skip or a deletion; a delta revisits nothing it is not
+told about. And a source can have a catalogue UsArr imports and **no change feed at all** — Kavita is
+the live one — so this route has a refusal §4 does not, and folding them together would put that
+refusal into a status code that already means four other things.
+
+**It is `arrivals`-shaped, not `updatedAt`-shaped.** BookOrbit's 3b filters on `books.addedAt`
+server-side ([ADR-0070](../DECISIONS.md#adr-0070)); it is not §7.1a's ordered page walk with a
+client-side stop, which remains the mechanism for sources that cannot express a since-filter. What
+that axis cannot see — tag, genre and author edits — is assigned to channel 4, which is not built.
+
+Gated exactly like the six other writes on this screen: `Content-Type: application/json`, the
+double-submit CSRF token, an authenticated session, and the **five-minute sudo window** (§17.3.3). A
+delta writes the same catalogue rows through the same pipeline as a full import, so a gate that was
+right for one cannot be optional for the other.
+
+### 4a.1 Request
+
+No body fields. Send `{}` — `Content-Type: application/json` with a JSON body is what
+`csrfProtected` requires.
+
+There is deliberately **no cursor parameter**. The watermark is UsArr's own durable state, minted by a
+successful full import and advanced by each walk; a caller-supplied one would let a client re-read the
+catalogue from any point, or skip past arrivals it never saw.
+
+### 4a.2 Response — `202 Accepted`
+
+```jsonc
+{
+  "status": "started",
+  "instance_id": 3,
+  "kind": "bookorbit",
+  "name": "BookOrbit"
+}
+```
+
+**The same four fields as §4.2, with the same allowlist argument**, and the same status word. A caller
+that pressed one of two adjacent buttons should not have to parse two shapes.
+
+🚩 **There is no window field, no watermark, no item count and no escalation flag.** Nothing has been
+read when the 202 is written, and whether the walk escalates (§4a.3) is decided after this body is on
+the wire. A field for any of them would be a guess, and a client that branched on it would be
+branching on nothing.
+
+### 4a.3 `202` does not mean "synced", and it does not mean "a delta ran"
+
+It means **accepted and started**, exactly as §4.3 says for the full sync, and everything in §4.3
+about *"started, then failed"* applies here unchanged.
+
+⚠️ **One thing more can happen here than in §4, and this response cannot show it: the walk may
+ESCALATE to a full import.** An instance that has never completed a full sync, or one with a container
+bound since the last walk, has no state an arrivals filter is meaningful against — an arrivals read of
+a library UsArr has never imported would return none of its back catalogue — so the honest answer is
+to read the library. The escalation is handled inside the run and is **not an error**: it is why this
+endpoint's tail is a full import's tail, and why it cannot be synchronous.
+
+**What a delta actually did is a durable record, not a response.** `internal/libsync` writes one
+`sync_report` row of kind `delta_walk` per run, carrying the walk's outcome class, its window and its
+watermark movement. That row — not this endpoint — is where "what happened" is read.
+
+⚠️ **That record's vocabulary is not this endpoint's.** The stored class for "this source has no delta
+channel" is `no_delta_channel`; the wire code for the same condition is `not_a_delta_source`. They are
+deliberately different strings, per `DEVELOPMENT.md` §11 — *a wire vocabulary and a storage vocabulary
+never share a term* — and making them agree is explicitly the wrong repair.
+
+### 4a.4 A non-2xx never means "a walk you asked for is running"
+
+**Every refusal below is decided before anything upstream is touched**, including the one that is a
+fact about the *source* rather than about the row: the capability check runs synchronously, before any
+goroutine is launched, precisely so a Kavita is refused here instead of accepting a walk that would
+refuse itself where nobody can read it.
+
+| Status | `error` | Meaning | `action` |
+| --- | --- | --- | --- |
+| `202` | — | Started. | — |
+| `409` | `not_a_delta_source` | The instance has a catalogue UsArr can import and **no change feed** to read it incrementally. The service is fine and a full sync of it works. | `Run a full sync instead` |
+| `409` | `import_in_progress` | A full import **or** a delta is already running for this instance; a second was **not** started. The two claim one guard, because they write the same rows through the same pipeline. | `Wait for the running import to finish` |
+| `409` | `not_a_catalogue_source` | The instance has no library at all — an indexer, not a catalogue source ([ADR-0041](../DECISIONS.md#adr-0041)). | `Run a delta sync on a catalogue service` |
+| `409` | `service_disabled` | The service exists and is switched off. | `Enable the service` |
+| `404` | `not_found` | No such instance **for this user** — the read is access-scoped. | — |
+| `403` | `sudo_required` | The sudo window closed. Prompt, then retry the pending press (§17.3.3). | `Confirm your password` |
+| `403` | `csrf` | Stale page token. | (its own) |
+| `501` | `not_configured` | This build has no catalogue importer wired in. | — |
+| `500` | `internal` | The walk could not be started — most often a stored credential that will not open. The upstream reason is in `message`, redacted. | `Test connection` |
+
+**`not_a_delta_source` and `not_a_catalogue_source` are separate codes on purpose**, and the split is
+sharper than §4.4's. `not_a_catalogue_source` says *press this somewhere else*; `not_a_delta_source`
+says *press the other button on this very row*. A client that collapsed them would send a user away
+from the service that is about to work.
+
+⚠️ **`not_a_delta_source` never appears on §4's route**, and §4's table is complete as written. The
+two mappers share four outcomes; the delta's own code is added by a wrapper around §4's mapper rather
+than inside it, so neither route can emit the other's vocabulary.
 
 ---
 
