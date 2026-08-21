@@ -1500,8 +1500,11 @@ func applyOneItem(
 	// upsert rebinds NEW content onto the OLD work — poster, tags, requests,
 	// provenance and the northbound id all now naming the wrong thing.
 	//
-	// The comparison is against `remote_identity_hash`, recorded at first sight
-	// and never overwritten (see step 7), which is what makes it O(1). On a
+	// The comparison is against `remote_identity_hash`, which is what makes it
+	// O(1). That value is recorded at first sight and moves EXACTLY ONCE
+	// thereafter — empty → present, for an item matched after UsArr first saw it
+	// — and never again once an identity is there. Step 7 carries the rule and
+	// why it is narrowed to that single transition. On a
 	// mismatch sync.md §4's pseudocode is followed literally: hard-delete the
 	// tombstone, let the item resolve as a fresh one, report it. THE TOMBSTONE
 	// CANNOT BE KEPT ALONGSIDE A NEW ROW — ux_sil is a plain UNIQUE index, not a
@@ -1753,17 +1756,41 @@ func applyOneItem(
 		  has_file = excluded.has_file,
 		  remote_updated_at = excluded.remote_updated_at,
 		  remote_hash = excluded.remote_hash,
+		  remote_identity_hash = CASE
+		    WHEN service_item_link.remote_identity_hash = ? THEN excluded.remote_identity_hash
+		    ELSE service_item_link.remote_identity_hash END,
 		  synced_at = excluded.synced_at,
 		  deleted_at = NULL`,
 		instanceID, workID, it.RemoteID, it.RemoteKind, nullString(it.RemotePath),
 		nullString(it.ContainerID), nullString(it.RemoteSubtype), it.HasFile,
-		nullTime(it.RemoteUpdatedAt), it.remoteHash(), it.identityHash(), nowStr); err != nil {
+		nullTime(it.RemoteUpdatedAt), it.remoteHash(), it.identityHash(), nowStr,
+		emptyIdentityHash); err != nil {
 		return workID, res, fmt.Errorf("upsert link: %w", err)
 	}
-	// remote_identity_hash is written AT FIRST SIGHT and never overwritten
-	// (sync.md §4 guard 1): it is the O(1) comparison that tells an id reused
-	// upstream from the same item coming back. The ON CONFLICT list above
-	// deliberately omits it.
+	// ── remote_identity_hash MOVES EXACTLY ONCE: empty → present, and never
+	// again. It is guard 1's O(1) comparison, the thing that tells an id reused
+	// upstream from the same item coming back, so what it must be frozen against
+	// is an ESTABLISHED identity changing under it — an upstream that repointed
+	// an id, or anyone who has got at that upstream.
+	//
+	// ⚠️ THE RULE USED TO BE "written at first sight and never overwritten", and
+	// the CASE above is that rule NARROWED rather than relaxed. A hash comparison
+	// cannot tell identity ARRIVING from identity CHANGING — both are just
+	// inequality — so the unnarrowed rule froze the empty-list hash of an item
+	// first seen before anybody matched it. The operator matches it, the item is
+	// later tombstoned, it comes back with the identifiers it has carried ever
+	// since, and guard 1 reads `identity_changed`: the link is HARD-DELETED and an
+	// `id_reused` row filed for a reuse that never happened, on the ordinary case
+	// rather than on the attack. Narrowing strictly REDUCES the firings of the
+	// destructive branch and gives up nothing a present identity had.
+	//
+	// ⚠️ AND A WRONG FIRST IDENTITY IS FROZEN TOO. That is the honest cost, it is
+	// not repaired here, and the repair is v0.2's "fix this match" — an owner
+	// correcting a binding — rather than an upstream being believed a second time.
+	//
+	// NULL IS NOT EMPTY and is left alone: `NULL = ?` is NULL, so the CASE falls
+	// to ELSE. guardOneIdentityUnknown is the state that reads it, and it is
+	// unreachable — no shipped writer inserts NULL here.
 
 	// ── 8 AND 9 ARE THE TOP-LEVEL HALF, AND A CHILD KIND SKIPS BOTH.
 	//
@@ -2381,6 +2408,18 @@ func (it CatalogueItem) identityHash() string {
 	sort.Strings(parts) // upstream field order must not change the hash
 	return hashFields(parts...)
 }
+
+// emptyIdentityHash is what identityHash returns for an item that carried no
+// external ids at all — the one stored value applyOneItem's upsert is allowed to
+// overwrite. See step 7.
+//
+// It is DERIVED by calling the same function rather than written out as the
+// sha256 literal everyone recognises, because a hand-copied constant stops being
+// the empty-list hash the day hashFields' encoding changes and says nothing when
+// it does — which is the objection guardOne states against comparing hashes to
+// answer "did this item carry ids", and it does not apply to a value the
+// encoding itself produces.
+var emptyIdentityHash = hashFields()
 
 // hashFields is the one hash both remote_hash and remote_identity_hash use.
 //

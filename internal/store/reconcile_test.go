@@ -1455,55 +1455,236 @@ func TestTheSweepLeavesContainerKindsItDoesNotOwn(t *testing.T) {
 	}
 }
 
-// TestTheStoredIdentityHashIsWrittenAtFirstSightAndNeverOverwritten is the rule
-// guard 1's comparison rests on, and until now it was stated in capitals in
-// three places and asserted nowhere: adding remote_identity_hash to step 7's
-// ON CONFLICT list was invisible to the whole suite.
+// pinLink sets §5.3's northbound pin on one link. It is the OWNED BIT the
+// resurrection tests below assert on, chosen deliberately: applyOneItem's step-7
+// upsert does not name `is_northbound_canonical` in its ON CONFLICT list and no
+// Go in the tree writes the column at all, so it survives a link that is REVIVED
+// in place and is lost with a link that is HARD-DELETED and re-created. That is
+// the difference between guard 1's two outcomes stated as something the owner
+// can lose, rather than as the name of a branch.
+func pinLink(t *testing.T, s *Store, inst int64, remoteKind, remoteID string) {
+	t.Helper()
+	res, err := s.db.Writer().ExecContext(t.Context(), `
+		UPDATE service_item_link SET is_northbound_canonical = 1
+		 WHERE service_instance_id = ? AND remote_kind = ? AND remote_id = ?`,
+		inst, remoteKind, remoteID)
+	if err != nil {
+		t.Fatalf("pin link %s/%s: %v", remoteKind, remoteID, err)
+	}
+	if n, err := res.RowsAffected(); err != nil || n != 1 {
+		t.Fatalf("pin link %s/%s touched %d rows (err %v); the test has nothing to lose",
+			remoteKind, remoteID, n, err)
+	}
+}
+
+func linkIsPinned(t *testing.T, s *Store, inst int64, remoteKind, remoteID string) bool {
+	t.Helper()
+	var pinned int
+	if err := s.db.Read().QueryRowContext(t.Context(), `
+		SELECT is_northbound_canonical FROM service_item_link
+		 WHERE service_instance_id = ? AND remote_kind = ? AND remote_id = ?`,
+		inst, remoteKind, remoteID).Scan(&pinned); err != nil {
+		t.Fatalf("read pin on %s/%s: %v", remoteKind, remoteID, err)
+	}
+	return pinned == 1
+}
+
+// TestTheStoredIdentityHashMovesOnceFromEmptyAndNeverAgain is the rule guard 1's
+// comparison rests on, at the column.
 //
-// ⚠️ IT IS ASSERTED IN BOTH DIRECTIONS, because the column is only meaningful
-// relative to the one beside it. `remote_hash` — the synced subset — IS
-// refreshed on every upsert, and a test that only pinned the identity hash would
-// stay green if a later edit froze both.
-func TestTheStoredIdentityHashIsWrittenAtFirstSightAndNeverOverwritten(t *testing.T) {
+// ⚠️ THE RULE IS NARROWED AND THIS TEST IS THE NARROWING. It used to read
+// "written at first sight and NEVER overwritten", and the fixture it asserted
+// that on — link 41, first seen carrying no identifiers at all — is the exact
+// case the narrowing exists for. A hash comparison cannot tell an identity
+// ARRIVING from an identity CHANGING, so the unnarrowed rule froze the empty-list
+// hash of every item first seen before anybody matched it, and read the ordinary
+// match as a reused id ever after. Empty → present is allowed; present → anything
+// is not.
+//
+// ⚠️ IT IS ASSERTED IN THREE DIRECTIONS, because the column is only meaningful
+// relative to the one beside it and to the transition it refuses. `remote_hash` —
+// the synced subset — IS refreshed on every upsert, and a test that only pinned
+// the identity hash would stay green if a later edit froze both.
+func TestTheStoredIdentityHashMovesOnceFromEmptyAndNeverAgain(t *testing.T) {
 	s := newTestStore(t)
 	inst, binds := sweepFixture(t, s)
 
-	read := func() (identity, hash string) {
+	read := func(remoteID string) (identity, hash string) {
 		t.Helper()
 		if err := s.db.Read().QueryRowContext(t.Context(), `
 			SELECT remote_identity_hash, remote_hash FROM service_item_link
-			 WHERE service_instance_id = ? AND remote_kind = 'series' AND remote_id = '41'`,
-			inst).Scan(&identity, &hash); err != nil {
-			t.Fatalf("read link 41: %v", err)
+			 WHERE service_instance_id = ? AND remote_kind = 'series' AND remote_id = ?`,
+			inst, remoteID).Scan(&identity, &hash); err != nil {
+			t.Fatalf("read link %s: %v", remoteID, err)
 		}
 		return identity, hash
 	}
-	firstIdentity, firstHash := read()
+	apply := func(it CatalogueItem) {
+		t.Helper()
+		if _, err := s.ApplyCatalogueBatch(t.Context(), inst, binds,
+			[]CatalogueItem{it}, sweepLater); err != nil {
+			t.Fatalf("ApplyCatalogueBatch: %v", err)
+		}
+	}
 
-	// The operator matches the book upstream: it now carries an identifier it did
-	// not carry at first sight, and its title changes too so the synced subset
-	// really is different.
+	// ── EMPTY → PRESENT, THE ONE TRANSITION ALLOWED. Link 41 was first seen with
+	// no identifiers; the operator matches the book upstream, and its title
+	// changes too so the synced subset really is different.
+	emptyIdentity, firstHash := read("41")
+	if emptyIdentity != emptyIdentityHash {
+		t.Fatalf("link 41's stored identity is %q, want the empty-list hash %q; the fixture "+
+			"no longer starts unidentified and this test is about a transition it cannot make",
+			emptyIdentity, emptyIdentityHash)
+	}
 	matched := item("41", "1", "comic", "Frieren: Beyond Journey's End",
 		ExternalIdentifier{Source: "hardcover_book", Value: "1234", Confidence: 1.0})
-	if _, err := s.ApplyCatalogueBatch(t.Context(), inst, binds,
-		[]CatalogueItem{matched}, sweepLater); err != nil {
-		t.Fatalf("ApplyCatalogueBatch: %v", err)
-	}
-	secondIdentity, secondHash := read()
-
-	if secondIdentity != firstIdentity {
-		t.Errorf("remote_identity_hash moved from %q to %q on a re-import. Guard 1 compares "+
-			"against it to tell a reused id from the same item coming back; a column that "+
-			"tracks the latest sighting always compares equal and certifies nothing",
-			firstIdentity, secondIdentity)
-	}
-	if secondIdentity == matched.identityHash() {
-		t.Errorf("remote_identity_hash is the INCOMING item's hash; it is meant to be the " +
-			"hash recorded at first sight")
+	apply(matched)
+	gotIdentity, secondHash := read("41")
+	if gotIdentity != matched.identityHash() {
+		t.Errorf("remote_identity_hash stayed %q after the item was matched, want %q. An item "+
+			"identified after UsArr first saw it is frozen on the hash of NOTHING, and guard 1 "+
+			"reads its next resurrection as a reused id", gotIdentity, matched.identityHash())
 	}
 	if secondHash == firstHash {
 		t.Errorf("remote_hash did not move (%q) although the item's synced subset changed; "+
-			"the two columns have opposite refresh rules and this one is the drift detector",
+			"the two columns have different refresh rules and this one is the drift detector",
 			secondHash)
+	}
+
+	// ── PRESENT → ANYTHING, REFUSED. Link 77 carried an identifier at first
+	// sight. The upstream now reports a different one for the same id, which is
+	// the event the freeze exists for: an established identity must not follow it.
+	establishedIdentity, firstHash77 := read("77")
+	repointed := item("77", "2", "book", "The Hobbit: An Unexpected Retitling",
+		ExternalIdentifier{Source: "hardcover_book", Value: "999", Confidence: 1.0})
+	apply(repointed)
+	gotIdentity77, secondHash77 := read("77")
+	if gotIdentity77 != establishedIdentity {
+		t.Errorf("remote_identity_hash moved from %q to %q on an item that was ALREADY "+
+			"identified. Guard 1 compares against it to tell a reused id from the same item "+
+			"coming back; a column that tracks the latest sighting always compares equal and "+
+			"certifies nothing", establishedIdentity, gotIdentity77)
+	}
+	if gotIdentity77 == repointed.identityHash() {
+		t.Errorf("remote_identity_hash is the INCOMING item's hash; for an item that already " +
+			"had an identity it is meant to be the hash recorded at first sight")
+	}
+	if secondHash77 == firstHash77 {
+		t.Errorf("remote_hash did not move (%q) although the item's synced subset changed",
+			secondHash77)
+	}
+}
+
+// TestAnIdentityMatchedAfterFirstSightSurvivesItsOwnResurrection is the
+// narrowing's whole point, asserted by EFFECT: the item is revived in place and
+// keeps everything the owner put on it.
+//
+// The item is first seen unidentified — which is what a book with no primary file
+// reads as, and the ordinary state of anything the operator has not matched yet.
+// It is matched. It goes away upstream and is tombstoned. It comes back carrying
+// the identifiers it has carried ever since.
+//
+// Under the unnarrowed rule the stored identity was still the hash of NOTHING, so
+// guard 1 read `identity_changed`, HARD-DELETED the link and filed an `id_reused`
+// row for a reuse that never happened — on the ordinary case rather than on the
+// attack. The pin is what that costs, and it is asserted rather than the branch
+// name.
+func TestAnIdentityMatchedAfterFirstSightSurvivesItsOwnResurrection(t *testing.T) {
+	s := newTestStore(t)
+	inst, binds := sweepFixture(t, s)
+	work := readLink(t, s, inst, "series", "41").workID
+
+	matched := item("41", "1", "comic", "Frieren",
+		ExternalIdentifier{Source: "hardcover_book", Value: "1234", Confidence: 1.0})
+	if _, err := s.ApplyCatalogueBatch(t.Context(), inst, binds,
+		[]CatalogueItem{matched}, sweepLater); err != nil {
+		t.Fatalf("the matching import: %v", err)
+	}
+
+	// 41 stops being reported. The sweep tombstones the link and the work with it.
+	if _, err := s.SweepDeletions(t.Context(), inst,
+		[]LinkRef{{RemoteKind: "series", RemoteID: "42"}, {RemoteKind: "series", RemoteID: "77"}},
+		bothContainers(), sweepLater); err != nil {
+		t.Fatalf("SweepDeletions: %v", err)
+	}
+	if !readLink(t, s, inst, "series", "41").linkDeleted.Valid {
+		t.Fatal("the sweep did not tombstone link 41, so nothing below is on the resurrection path")
+	}
+	pinLink(t, s, inst, "series", "41")
+
+	// It comes back, unchanged, carrying the identifiers it was matched on.
+	res, err := s.ApplyCatalogueBatch(t.Context(), inst, binds,
+		[]CatalogueItem{matched}, sweepLater)
+	if err != nil {
+		t.Fatalf("the resurrecting import: %v", err)
+	}
+
+	if !linkIsPinned(t, s, inst, "series", "41") {
+		t.Error("the owner's northbound pin is gone: the link was hard-deleted and re-created " +
+			"rather than revived, because the identity recorded at first sight was never allowed " +
+			"to become the identity the item was matched on")
+	}
+	after := readLink(t, s, inst, "series", "41")
+	if after.workID != work {
+		t.Errorf("the item came back as work %d, want %d: it was re-minted, and every tag, "+
+			"request and northbound id naming %d now names nothing", after.workID, work, work)
+	}
+	if after.linkDeleted.Valid || after.workDeleted.Valid {
+		t.Errorf("the item came back and is still tombstoned: link %v, work %v",
+			after.linkDeleted, after.workDeleted)
+	}
+	if res.IDsReused != 0 {
+		t.Errorf("IDsReused = %d: an id nobody reused was reported as reused (%+v)",
+			res.IDsReused, res)
+	}
+}
+
+// TestAnEstablishedIdentityRepointedUpstreamStillFiresGuardOne is the other half
+// of the drill, and it is what the narrowing does NOT give up.
+//
+// Link 77 was identified at first sight. The upstream repoints that identifier
+// while the link is live — an id reassigned, or an upstream somebody has got at —
+// and the item is then tombstoned and comes back wearing the new identity. The
+// stored hash must still be the one recorded at first sight, so what comes back
+// does not match it and the destructive branch fires exactly as before.
+//
+// An unconditional overwrite in step 7's ON CONFLICT list would have made the two
+// compare equal, and this is the assertion that says so: the pin SURVIVES a
+// revival, so a surviving pin here means the guard did not fire.
+func TestAnEstablishedIdentityRepointedUpstreamStillFiresGuardOne(t *testing.T) {
+	s := newTestStore(t)
+	inst, binds := sweepFixture(t, s)
+
+	repointed := item("77", "2", "book", "The Hobbit",
+		ExternalIdentifier{Source: "hardcover_book", Value: "999", Confidence: 1.0})
+	if _, err := s.ApplyCatalogueBatch(t.Context(), inst, binds,
+		[]CatalogueItem{repointed}, sweepLater); err != nil {
+		t.Fatalf("the repointing import: %v", err)
+	}
+
+	if _, err := s.SweepDeletions(t.Context(), inst,
+		[]LinkRef{{RemoteKind: "series", RemoteID: "41"}, {RemoteKind: "series", RemoteID: "42"}},
+		bothContainers(), sweepLater); err != nil {
+		t.Fatalf("SweepDeletions: %v", err)
+	}
+	if !readLink(t, s, inst, "series", "77").linkDeleted.Valid {
+		t.Fatal("the sweep did not tombstone link 77, so nothing below is on the resurrection path")
+	}
+	pinLink(t, s, inst, "series", "77")
+
+	res, err := s.ApplyCatalogueBatch(t.Context(), inst, binds,
+		[]CatalogueItem{repointed}, sweepLater)
+	if err != nil {
+		t.Fatalf("the resurrecting import: %v", err)
+	}
+
+	if linkIsPinned(t, s, inst, "series", "77") {
+		t.Error("the link was revived in place with its pin intact, so the stored identity had " +
+			"followed the upstream's repoint and guard 1 compared the new identity against " +
+			"itself. An established identity must not move")
+	}
+	if res.IDsReused != 1 {
+		t.Errorf("IDsReused = %d, want 1: the identity recorded at first sight is not the one "+
+			"that came back and the guard did not fire (%+v)", res.IDsReused, res)
 	}
 }
