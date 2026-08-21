@@ -43,9 +43,16 @@
  * asserted over the file that can actually violate it: what the CARD draws is
  * read off the component, and what BLOCK C does — swapping one panel for the
  * other, off Home's own preference — is read off Home, which is the only file
- * that still spells it. Leaving the card rules pointed at Home would have been
- * the weakening, not the split: `BLOCK_C` no longer contains `<img` at all, so
- * every one of them would have gone green over a corpus that cannot fail them.
+ * that still spells it.
+ *
+ * ⚠️ AND THE REASON IS THAT THEY WOULD HAVE FAILED, NOT THAT THEY WOULD HAVE
+ * PASSED VACUOUSLY. This paragraph used to claim the repointed assertions "would
+ * have gone green over a corpus that cannot fail them", and that is measurably
+ * false: restoring the pre-move version of this file over the moved tree fails
+ * loudly in four places — `BLOCK_C` has no `<img`, no `<PosterGrid` arm to find,
+ * no `.postercard__art` and no tile to reserve. They follow their subject into
+ * `PosterGrid.svelte?raw` because the subject moved, which is the ordinary
+ * reason, and a guard that goes red when its subject leaves is the guard working.
  */
 
 import { describe, expect, it } from 'vitest';
@@ -60,10 +67,14 @@ import {
 import { HOME_VIEWS, HOME_VIEW_DEFAULT, HOME_VIEW_KEY, parseHomeView } from './home';
 import { MEDIA_TYPES } from './library';
 import {
+	chooseLibraryView,
 	libraryViewKey,
 	LIBRARY_VIEWS,
 	LIBRARY_VIEW_DEFAULT,
-	parseLibraryView
+	parseLibraryView,
+	readLibraryView,
+	type LibraryViewChoice,
+	type LibraryViewStorage
 } from './librarygrid';
 import { sectionsMarkup, userFacingMarkup } from './copyguard';
 // Home AS TEXT. The `{#if}` that swaps the two panels is markup, and markup is
@@ -71,15 +82,142 @@ import { sectionsMarkup, userFacingMarkup } from './copyguard';
 import HOME_SOURCE from '../routes/+page.svelte?raw';
 // The card AS TEXT, for the same reason and off the file that now draws it.
 import GRID_SOURCE from './PosterGrid.svelte?raw';
+// ⚠️ AND THE TWO CATALOGUE SCREENS, WHICH GREW THE SAME TOGGLE AND HAD NONE OF
+// THIS ASSERTED OVER THEM. Home's toggle block was the only one, so replacing
+// both of these toggles with keyboard-unreachable `<div role="button">`s and
+// dropping `role="group"` and `aria-label` left all 1,025 tests green.
+import LIBRARY_SOURCE from '../routes/library/+page.svelte?raw';
+import LIBRARY_TYPE_SOURCE from '../routes/library/[type]/+page.svelte?raw';
 
 const HOME = 'routes/+page.svelte';
 const GRID = 'lib/PosterGrid.svelte';
+const LIBRARY = 'routes/library/+page.svelte';
+const LIBRARY_TYPE = 'routes/library/[type]/+page.svelte';
 
 /** The component's markup, with its script, style and comments stripped. */
 const GRID_MARKUP = userFacingMarkup(GRID_SOURCE);
 
 /** Block C, sliced to its own `</section>`. Throws when the id moves. */
 const BLOCK_C = sectionsMarkup(userFacingMarkup(HOME_SOURCE), 'id="home-recent"').join('\n');
+
+/** The two catalogue screens, stripped of script, style and comments. */
+const LIBRARY_MARKUP = userFacingMarkup(LIBRARY_SOURCE);
+const LIBRARY_TYPE_MARKUP = userFacingMarkup(LIBRARY_TYPE_SOURCE);
+
+/**
+ * EVERY SCREEN THAT DRAWS THE VIEW TOGGLE, WITH THE CORPUS AND THE HOLDER EACH
+ * ONE SPELLS.
+ *
+ * ⚠️ A LIST RATHER THAN THREE COPIES OF ONE BLOCK, because the defect this
+ * replaces was not a weak assertion — it was a MISSING one. The toggle rules
+ * were asserted over Home alone, so the two catalogue screens grew the same
+ * control with none of it held: swapping both of their `<button type="button">`s
+ * for `<div role="button" tabindex="-1">` and dropping `role="group"` and
+ * `aria-label="View mode"` left the whole suite green. A fourth screen that
+ * grows this toggle is added here, and gets every rule at once.
+ *
+ * THE HOLDER DIFFERS AND THE RULE DOES NOT. Home reads `homeView` because it has
+ * one key for the all-types view; the catalogue screens read `view`, a
+ * `createLibraryView` keyed per media type. What is asserted is that the pressed
+ * state is bound to the screen's OWN holder, not that they share a name.
+ */
+const SCREENS = [
+	{
+		name: HOME,
+		markup: BLOCK_C,
+		holder: 'homeView',
+		views: HOME_VIEWS,
+		// Home writes one button per view by hand, so every view is named here.
+		pressed: HOME_VIEWS.map((view) => `homeView.current === '${view}'`),
+		over: undefined
+	},
+	{
+		name: LIBRARY,
+		markup: LIBRARY_MARKUP,
+		holder: 'view',
+		views: LIBRARY_VIEWS,
+		pressed: ['view.current === choice'],
+		over: 'LIBRARY_VIEWS'
+	},
+	{
+		name: LIBRARY_TYPE,
+		markup: LIBRARY_TYPE_MARKUP,
+		holder: 'view',
+		views: LIBRARY_VIEWS,
+		pressed: ['view.current === choice'],
+		over: 'LIBRARY_VIEWS'
+	}
+] as const;
+
+/**
+ * EVERY `aria-pressed={…}` EXPRESSION IN `markup`, IN SOURCE ORDER.
+ *
+ * Read as text rather than matched against a literal per view, because the three
+ * screens spell the same rule two ways and both are correct: Home writes one
+ * button per view, and the catalogue screens iterate `LIBRARY_VIEWS`, so one
+ * binding there covers every view and a third view would grow a button without
+ * an edit to the template. What has to hold on all three is that the expression
+ * is the screen's OWN holder — a button bound to Home's `homeView` on a
+ * catalogue screen would make choosing posters on one change the other.
+ */
+function pressedBindings(markup: string): string[] {
+	return [...markup.matchAll(/aria-pressed=\{([^}]*)\}/g)].map((m) => m[1]!.trim());
+}
+
+/**
+ * THE TAG NAME OF EVERY ELEMENT IN `markup` THAT CARRIES `attr`.
+ *
+ * ⚠️ THIS REPLACES `expect(corpus).toContain('<button')`, WHICH WAS NOT A CHECK
+ * ON THE TOGGLE AT ALL. Block C also draws the error banner's restart button, so
+ * that assertion passed with the toggle's buttons deleted outright — it only
+ * ever proved that the section contained *some* button. `aria-pressed` is the
+ * toggle's own attribute, so asking what tag carries it asks about the toggle
+ * and nothing else: a `<div role="button">` answers `div` and fails, and it
+ * fails for the reason that matters, which is Tab, Space and Enter.
+ */
+/** The `<PosterGrid …/>` tag a screen draws, or `undefined` if it draws none. */
+function posterGridTag(markup: string): string | undefined {
+	const at = markup.indexOf('<PosterGrid');
+	if (at < 0) return undefined;
+	const end = markup.indexOf('>', at);
+	return end < 0 ? undefined : markup.slice(at, end + 1);
+}
+
+function tagsCarrying(markup: string, attr: string): string[] {
+	const tags: string[] = [];
+	for (let from = 0; ;) {
+		const at = markup.indexOf(attr, from);
+		if (at < 0) return tags;
+		const open = markup.lastIndexOf('<', at);
+		tags.push(open < 0 ? '' : (/^<\s*([A-Za-z][-\w]*)/.exec(markup.slice(open))?.[1] ?? ''));
+		from = at + attr.length;
+	}
+}
+
+/**
+ * A CORPUS THAT STARTS AT `marker`, OR A FAILURE — NEVER A ONE-CHARACTER STRING.
+ *
+ * ⚠️ THIS EXISTS BECAUSE THE BARE IDIOM IS A TRAP AND THIS FILE FELL INTO IT.
+ * `text.slice(text.indexOf(marker))` on a MISS is `slice(-1)`: the last
+ * character of the file. Every `not.toContain` over that passes, and so does
+ * `expect(corpus.length).toBeGreaterThan(0)` — a one-character string is not
+ * empty. The anti-animation guard below was therefore satisfied by renaming
+ * `.postergrid`, which nothing else pins any more, and a grid carrying
+ * `animation: shimmer 2s infinite` went green through the whole gate.
+ *
+ * So the index is asserted BEFORE it is used, and the message names the file and
+ * the marker, because the thing that goes wrong here is a rename rather than a
+ * regression in what the CSS says.
+ */
+function corpusFrom(text: string, marker: string): string {
+	const at = text.indexOf(marker);
+	expect(
+		at,
+		`${GRID} no longer spells ${marker}, so every rule asserted over it would read the last ` +
+			'character of the file and pass over anything'
+	).toBeGreaterThanOrEqual(0);
+	return text.slice(at);
+}
 
 function item(over: Partial<RecentItem> = {}): RecentItem {
 	return {
@@ -167,7 +305,7 @@ describe('posterArtSrc — the tile a broken image falls back to', () => {
 
 	it('draws the art while nothing has failed', () => {
 		const tile = posterTile(ITEMS[0]!);
-		expect(posterArtSrc(tile, new Set())).toBe(tile.src);
+		expect(posterArtSrc(tile, {})).toBe(tile.src);
 	});
 
 	/*
@@ -178,23 +316,23 @@ describe('posterArtSrc — the tile a broken image falls back to', () => {
 	it('falls back to the empty tile once the image has failed', () => {
 		const tile = posterTile(ITEMS[0]!);
 		expect(
-			posterArtSrc(tile, new Set([tile.id])),
+			posterArtSrc(tile, { [tile.id]: true }),
 			'a cover that 404d is still being handed to the <img>, so the browser draws its ' +
 				'own broken-image glyph rather than the tile the absent-key case draws'
 		).toBeUndefined();
 	});
 
 	/*
-	 * One failure is one card. A set keyed by anything coarser would blank the
+	 * One failure is one card. A record keyed by anything coarser would blank the
 	 * whole grid the first time any single cover was missing.
 	 *
 	 * The second work takes the FIXTURE'S key rather than a fresh literal: what
-	 * distinguishes the two cards here is the work id, which is what the set holds,
-	 * and a second sixteen-hex string in a test file is a secret scanner's finding
-	 * waiting to happen.
+	 * distinguishes the two cards here is the work id, which is what the record is
+	 * keyed on, and a second sixteen-hex string in a test file is a secret
+	 * scanner's finding waiting to happen.
 	 */
 	it('blanks only the work that failed', () => {
-		const failed = new Set([ITEMS[0]!.id]);
+		const failed: Record<number, true> = { [ITEMS[0]!.id]: true };
 		const other = posterTile(item({ id: 99, posterKey: ITEMS[0]!.posterKey! }));
 		expect(posterArtSrc(other, failed)).toBe(other.src);
 	});
@@ -203,8 +341,8 @@ describe('posterArtSrc — the tile a broken image falls back to', () => {
 	 * not name it must not turn `undefined` into anything else. */
 	it('leaves a work with no artwork absent either way', () => {
 		const tile = posterTile(ITEMS[1]!);
-		expect(posterArtSrc(tile, new Set())).toBeUndefined();
-		expect(posterArtSrc(tile, new Set([tile.id]))).toBeUndefined();
+		expect(posterArtSrc(tile, {})).toBeUndefined();
+		expect(posterArtSrc(tile, { [tile.id]: true })).toBeUndefined();
 	});
 });
 
@@ -259,6 +397,148 @@ describe("the catalogue screens' view preference", () => {
 	});
 });
 
+/*
+ * ⚠️ THE KEY IS READ AT CLICK TIME, AND THIS IS THE BLOCK THAT MAKES THAT A RULE
+ * RATHER THAN A COMMENT.
+ *
+ * SvelteKit reuses `routes/library/[type]/+page.svelte` across
+ * `/library/movies` → `/library/ebooks` rather than remounting it, so a key
+ * resolved once at construction follows the reader into the next media type and
+ * is then written back under the one they left. `$lib/libraryview.svelte.ts`
+ * marked that MUST in its own header and nothing held it: the file carries runes,
+ * so this node-environment suite cannot import it, and replacing the getter with
+ * a closure over a captured value left the whole gate green. The decision moved
+ * into `$lib/librarygrid` — a plain module — so it could be run here for real.
+ *
+ * A FAKE STORAGE RATHER THAN A localStorage SHIM, because which key is read and
+ * which key is WRITTEN is the entire subject, and a map answers that directly.
+ */
+describe('readLibraryView / chooseLibraryView', () => {
+	const MOVIES = libraryViewKey('movies');
+	const EBOOKS = libraryViewKey('ebooks');
+
+	function storage(seed: Record<string, string> = {}): LibraryViewStorage & {
+		written: Map<string, string>;
+	} {
+		const written = new Map(Object.entries(seed));
+		return {
+			written,
+			read: (key) => written.get(key) ?? null,
+			write: (key, value) => void written.set(key, value)
+		};
+	}
+
+	function choice(): LibraryViewChoice {
+		return { key: undefined, view: undefined };
+	}
+
+	it('has two distinct keys to be wrong about', () => {
+		// The floor under every assertion below: one key for both media types
+		// would make "the choice did not follow the reader" vacuously true.
+		expect(MOVIES, 'two media types share one stored view').not.toBe(EBOOKS);
+	});
+
+	it('opens as a table when storage has never been written', () => {
+		expect(readLibraryView(() => MOVIES, choice(), storage())).toBe(LIBRARY_VIEW_DEFAULT);
+	});
+
+	it('reads back what storage holds for this key', () => {
+		const store = storage({ [MOVIES]: 'posters' });
+		expect(readLibraryView(() => MOVIES, choice(), store)).toBe('posters');
+	});
+
+	it('falls back rather than throwing on a value it did not write', () => {
+		const store = storage({ [MOVIES]: 'overview' });
+		expect(readLibraryView(() => MOVIES, choice(), store)).toBe(LIBRARY_VIEW_DEFAULT);
+	});
+
+	it('serves the choice made in this page view, under the key it was made for', () => {
+		const chosen = choice();
+		const store = storage();
+		chooseLibraryView('posters', () => MOVIES, chosen, store);
+		expect(readLibraryView(() => MOVIES, chosen, store)).toBe('posters');
+		expect(store.written.get(MOVIES), 'the choice was never persisted').toBe('posters');
+	});
+
+	/*
+	 * ⚠️ THE DEFECT, IN ITS OBSERVABLE FORM. The reader chooses posters on
+	 * `/library/movies`, then navigates to `/library/ebooks`, which SvelteKit
+	 * serves from the same component instance. Ebooks was never chosen and ebooks
+	 * has nothing stored, so it must open as a table.
+	 */
+	it('does not follow the reader into a media type they never chose it for', () => {
+		let key = MOVIES;
+		const at = () => key;
+		const chosen = choice();
+		const store = storage();
+
+		chooseLibraryView('posters', at, chosen, store);
+		key = EBOOKS;
+
+		expect(
+			readLibraryView(at, chosen, store),
+			'a choice made under one media type is being served under another, so the key was ' +
+				'captured rather than read at access time'
+		).toBe(LIBRARY_VIEW_DEFAULT);
+	});
+
+	/* And the write half of the same defect: nothing may land under a key the
+	 * reader has not chosen anything for. */
+	it('writes under the key that is current at the moment of the click', () => {
+		let key = MOVIES;
+		const at = () => key;
+		const chosen = choice();
+		const store = storage();
+
+		chooseLibraryView('posters', at, chosen, store);
+		key = EBOOKS;
+		chooseLibraryView('table', at, chosen, store);
+
+		expect(store.written.get(MOVIES), 'the movies choice was overwritten from another screen').toBe(
+			'posters'
+		);
+		expect(store.written.get(EBOOKS), 'the ebooks choice landed under the wrong key').toBe('table');
+	});
+
+	/* Coming back is the other half: the choice made under movies is still
+	 * movies\u2019, and storage answers for it once the in-memory pairing has moved on. */
+	it('still answers for a media type the reader returns to', () => {
+		let key = MOVIES;
+		const at = () => key;
+		const chosen = choice();
+		const store = storage();
+
+		chooseLibraryView('posters', at, chosen, store);
+		key = EBOOKS;
+		chooseLibraryView('table', at, chosen, store);
+		key = MOVIES;
+
+		expect(readLibraryView(at, chosen, store)).toBe('posters');
+	});
+});
+
+/*
+ * AND THE CALL SITES, WHICH ARE THE OTHER PLACE THE GETTER CAN BE DEFEATED.
+ * `createLibraryView(() => capturedKey)` satisfies the `key: () => string`
+ * signature perfectly and reintroduces the whole defect, so what is asserted is
+ * that the arrow RECOMPUTES the key rather than closing over one.
+ */
+describe('the catalogue screens pass a key that is recomputed, not captured', () => {
+	for (const [name, source, arg] of [
+		[LIBRARY, LIBRARY_SOURCE, 'libraryViewKey(undefined)'],
+		[LIBRARY_TYPE, LIBRARY_TYPE_SOURCE, 'libraryViewKey(query?.mediaType)']
+	] as const) {
+		it(name, () => {
+			expect(
+				source,
+				`${name} passes createLibraryView something other than a getter that recomputes the ` +
+					'key. A captured string type-checks and then writes the reader\u2019s choice under ' +
+					'the media type they just left'
+			).toContain(`createLibraryView(() => ${arg})`);
+		});
+	}
+});
+
 describe('the Home view preference', () => {
 	/*
 	 * Two modes ship and only two: DESIGN-DIRECTION §9.1 names table and
@@ -310,31 +590,129 @@ describe("Block C's posters panel", () => {
 			'the table and the grid are no longer alternatives of one {#if}'
 		).toContain('{:else');
 	});
+});
 
-	/*
-	 * The toggle is app.css's `.segment`, which shipped with its
-	 * `[aria-pressed='true']` state already styled and no consumer. Native
-	 * buttons in a named group: `aria-pressed` is what a toggle's state means,
-	 * and the group needs a name because "table / posters" says nothing on its
-	 * own.
-	 */
-	it('offers a native, named, pressed-state toggle', () => {
-		expect(BLOCK_C, `${HOME} dropped the .segment button group`).toContain('class="segment"');
-		expect(BLOCK_C, 'the button group lost its role').toContain('role="group"');
-		expect(BLOCK_C, 'the button group lost its accessible name').toContain(
-			'aria-label="View mode"'
-		);
-		for (const view of HOME_VIEWS) {
-			expect(
-				BLOCK_C,
-				`the toggle has no button that reports whether ${view} is the current view`
-			).toContain(`aria-pressed={homeView.current === '${view}'}`);
+/*
+ * THE VIEW TOGGLE, ON EVERY SCREEN THAT DRAWS ONE.
+ *
+ * The control is app.css's `.segment`, which shipped with its
+ * `[aria-pressed='true']` state already styled and no consumer. Native buttons
+ * in a named group: `aria-pressed` is what a toggle's state means, and the group
+ * needs a name because "table / posters" says nothing on its own.
+ */
+describe('the view toggle', () => {
+	it('has three screens to be wrong about', () => {
+		// The floor under the loop: a SCREENS list that lost an entry would run
+		// every rule below over the screens that remain and report nothing.
+		expect(SCREENS.length, 'a screen that draws the toggle is no longer checked').toBe(3);
+		for (const screen of SCREENS) {
+			expect(screen.markup.length, `${screen.name} sliced to nothing`).toBeGreaterThan(0);
 		}
-		expect(
-			BLOCK_C,
-			'the toggle is no longer made of real buttons, so it has lost Tab, Space and Enter'
-		).toContain('<button');
 	});
+
+	for (const { name, markup, holder, views, pressed, over } of SCREENS) {
+		describe(name, () => {
+			it('draws a named group of real buttons', () => {
+				expect(markup, `${name} dropped the .segment button group`).toContain('class="segment"');
+				expect(markup, `${name}'s button group lost its role`).toContain('role="group"');
+				expect(markup, `${name}'s button group lost its accessible name`).toContain(
+					'aria-label="View mode"'
+				);
+			});
+
+			it('binds every pressed state to this screen\u2019s own holder', () => {
+				const bound = pressedBindings(markup);
+				expect(
+					bound,
+					`${name}'s toggle no longer reports its pressed state the way this screen spells ` +
+						`it. Whatever replaced it must still read ${holder}, because a catalogue screen ` +
+						"bound to Home's holder makes choosing posters on one change the other"
+				).toEqual([...pressed]);
+				for (const expr of bound) {
+					expect(expr, `${name}'s toggle reads a holder that is not its own`).toContain(
+						`${holder}.current ===`
+					);
+				}
+			});
+
+			/*
+			 * ONE BUTTON PER VIEW, however the screen spells it. An unrolled toggle
+			 * has to name every view; a looped one has to loop over the canonical
+			 * list rather than a hand-written array that can fall behind it.
+			 */
+			it('offers a control for every view this screen ships', () => {
+				if (over === undefined) {
+					expect(
+						pressed.length,
+						`${name} writes its buttons out by hand and no longer writes one per view`
+					).toBe(views.length);
+					return;
+				}
+				expect(
+					markup,
+					`${name}'s toggle no longer iterates ${over}, so its buttons and the view list ` +
+						'can fall out of step'
+				).toContain(`{#each ${over} as `);
+			});
+
+			/*
+			 * ⚠️ ASKED OF THE TAG THAT CARRIES `aria-pressed`, NOT OF THE CORPUS.
+			 * `toContain('<button')` over a whole screen is satisfied by any other
+			 * button on it — Block C's error banner has one — so it passed with the
+			 * toggle's buttons deleted. This cannot.
+			 */
+			it('makes the toggle out of real buttons, so it keeps Tab, Space and Enter', () => {
+				const tags = tagsCarrying(markup, 'aria-pressed=');
+				expect(tags.length, `${name} draws no aria-pressed control at all`).toBeGreaterThan(0);
+				expect(
+					[...new Set(tags)],
+					`${name}'s toggle is no longer made of real buttons, so it has lost Tab, Space and ` +
+						'Enter'
+				).toEqual(['button']);
+			});
+		});
+	}
+});
+
+describe('the catalogue screens\u2019 posters arm', () => {
+	for (const { name, markup, holder } of SCREENS.filter((s) => s.name !== HOME)) {
+		describe(name, () => {
+			/*
+			 * The same component Home draws, rather than a second copy of the card.
+			 * A screen that re-inlined the grid would have its own geometry, its own
+			 * `?w=` and its own broken-image behaviour to keep in step.
+			 */
+			it('draws the shared grid rather than a card of its own', () => {
+				expect(
+					markup,
+					`${name} no longer draws <PosterGrid>. The grid, the card and the empty tile are ` +
+						`${GRID}'s, and a screen that inlines its own copy drifts from it`
+				).toContain('<PosterGrid');
+			});
+
+			/*
+			 * §17.2's rule as ADR-0028 amended it, and Block C's rule applies to
+			 * these screens for the same reason: the table and the grid are the two
+			 * arms of ONE `{#if}`, so exactly one is in the DOM. Both drawn at once
+			 * is the screen as two regions; neither is a toolbar over nothing.
+			 */
+			it('swaps the table for the grid rather than drawing both', () => {
+				expect(
+					markup,
+					`${name} no longer gates its table on the view preference, so either both panels ` +
+						'are drawn at once or neither is'
+				).toContain(`{#if ${holder}.current === 'table'}`);
+				const table = markup.indexOf('<List');
+				const grid = markup.indexOf('<PosterGrid');
+				expect(table, `${name} draws no table arm`).toBeGreaterThanOrEqual(0);
+				expect(grid, `${name} draws no posters arm`).toBeGreaterThanOrEqual(0);
+				expect(
+					markup.slice(table, grid),
+					'the table and the grid are no longer alternatives of one {#if}'
+				).toContain('{:else');
+			});
+		});
+	}
 });
 
 describe('the poster card', () => {
@@ -402,15 +780,15 @@ describe('the poster card', () => {
 	it('reserves the tile and never animates it', () => {
 		const style = /<style>([\s\S]*)<\/style>/.exec(GRID_SOURCE)?.[1] ?? '';
 		expect(style.length, `${GRID} has no <style> block to read`).toBeGreaterThan(0);
-		const art = style.slice(style.indexOf('.postercard__art'));
-		expect(art.length, `${GRID} no longer styles .postercard__art`).toBeGreaterThan(0);
+		const art = corpusFrom(style, '.postercard__art');
 		expect(art, 'the tile reserves no box, so a decoded image shifts the grid').toContain(
 			'aspect-ratio'
 		);
 		expect(art, 'the tile stopped falling back to a colour fill').toContain('var(--dc,');
+		const grid = corpusFrom(style, '.postergrid');
 		for (const banned of ['animation', 'transition', '@keyframes']) {
 			expect(
-				style.slice(style.indexOf('.postergrid')),
+				grid,
 				`${GRID}'s poster grid carries ${banned}. §17.1 bans animation on any list, grid ` +
 					'or navigation transition, and a placeholder that pulses is a shimmer'
 			).not.toContain(banned);
@@ -459,4 +837,80 @@ describe('the poster card', () => {
 				'expectation is the thing to update rather than delete'
 		).not.toContain('<a ');
 	});
+});
+
+/*
+ * §9.2's AVAILABILITY RULE, AND THE PROP THAT KEEPS IT OFF HOME.
+ *
+ * DESIGN-DIRECTION §9.2: *"Availability renders per §6.3's rollup rule: `have ==
+ * total && total > 0` → ✓; `have == 0` → ✗; otherwise the fraction"*. Both
+ * catalogue screens draw a Have column in their TABLE arm, so a posters view
+ * without it drops a column the same screen showed a moment ago.
+ *
+ * ⚠️ AND IT IS OFF BY DEFAULT, WHICH IS THE HALF A TEST HAS TO HOLD. Home's
+ * Block C is ARCHITECTURE §17.2's and ADR-0028's shape, not this component's, so
+ * its rendered output must not move because a card gained a capability. The
+ * default and the two call sites are asserted separately, because a default that
+ * flipped would change Home without changing Home.
+ */
+describe('availability on the poster card', () => {
+	it('renders the rollup through the cell the table arm already uses', () => {
+		expect(
+			GRID_MARKUP,
+			`${GRID} draws no <HaveCell>, so §9.2's availability rule is unrendered on the card`
+		).toContain('<HaveCell');
+		expect(
+			GRID_SOURCE,
+			`${GRID} reimplements the have/total rollup instead of taking $lib/library.haveCell's. ` +
+				'schema.md is explicit that markup must not reconstruct that comparison'
+		).not.toContain('haveCount');
+	});
+
+	it('draws it only when the caller asks, and defaults to not asking', () => {
+		expect(
+			GRID_SOURCE,
+			`${GRID} no longer defaults availability off, so Home's Block C would start drawing a ` +
+				'rollup §17.2 never asked it for'
+		).toContain('availability = false');
+
+		const gate = GRID_MARKUP.indexOf('{#if availability}');
+		const cell = GRID_MARKUP.indexOf('<HaveCell');
+		expect(gate, `${GRID} no longer gates the rollup on the prop`).toBeGreaterThanOrEqual(0);
+		expect(
+			cell,
+			`${GRID}'s <HaveCell> is drawn outside {#if availability}, so every caller gets it`
+		).toBeGreaterThan(gate);
+		expect(
+			GRID_MARKUP.slice(gate, cell),
+			'something else opened a block between the gate and the cell'
+		).not.toContain('{/if}');
+	});
+
+	it("leaves Home's Block C exactly as §17.2 and ADR-0028 specify it", () => {
+		const tag = posterGridTag(BLOCK_C);
+		expect(tag, `${HOME} draws no <PosterGrid>`).toBeDefined();
+		expect(
+			tag,
+			`${HOME} turned the rollup on for Block C. That is a §17.2 decision about what that ` +
+				'section renders, not a side effect of a change to the card'
+		).not.toContain('availability');
+	});
+
+	for (const [name, source] of [
+		[LIBRARY, LIBRARY_MARKUP],
+		[LIBRARY_TYPE, LIBRARY_TYPE_MARKUP]
+	] as const) {
+		it(`turns it on for ${name}, which draws a Have column in its table arm`, () => {
+			expect(
+				source,
+				`${name}'s table arm draws <HaveCell> and its posters arm must not silently drop it`
+			).toContain('<HaveCell');
+			const tag = posterGridTag(source);
+			expect(tag, `${name} draws no <PosterGrid>`).toBeDefined();
+			expect(
+				tag,
+				`${name} toggles to a posters view that drops the Have column the table arm shows`
+			).toContain('availability');
+		});
+	}
 });
