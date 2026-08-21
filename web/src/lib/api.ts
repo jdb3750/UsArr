@@ -978,14 +978,16 @@ export interface ServiceHealth {
 	 * docs/reference/http-api.md §3.5 is the contract and names each instant it
 	 * is not.
 	 *
-	 * ⚠️ THE ONLY THING IN `web/` THAT RENDERS THIS FIELD IS THE SERVICES
-	 * SCREEN'S `Synced` CELL — `syncCell` in ./services. §17.7 SPECIFIES a second
-	 * reader, the non-modal degraded-backend banner — "Kavita is unreachable —
-	 * showing cached data from 14:02" — and the tree implements none of it:
-	 * `$lib/List.svelte` carries a `staleNote` slot that no route passes, and
-	 * that sentence exists nowhere in `web/` but in notes such as this one. So
-	 * the rules below are the contract this field carries for whoever builds
-	 * that banner, not a description of a rendering that exists.
+	 * ⚠️ IT HAS TWO READERS IN `web/`, AND THIS NOTE USED TO SAY IT HAD ONE. It
+	 * read that the Services screen's `Synced` cell — `syncCell` in ./services —
+	 * was the only one, and that of §17.7's non-modal degraded-backend banner
+	 * *"the tree implements none of it"*. The second reader now exists:
+	 * `$lib/degraded`'s `degradedNotices()`, rendered by `$lib/DegradedBanner`
+	 * above the table on the catalogue screens. What has NOT changed is the
+	 * observation that made the old note worth writing — `$lib/List.svelte`'s
+	 * `staleNote` is still a slot no route passes, and the banner deliberately
+	 * does not go through it; `$lib/degraded`'s header gives the two reasons.
+	 * The rules below are that reader's contract as much as they ever were.
 	 *
 	 * ⚠️ IT IS PER INSTANCE. §17.7 fixes the banner's timestamp as "that
 	 * instance's own last successful sync, never the global delta time", and

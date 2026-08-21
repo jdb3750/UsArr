@@ -379,8 +379,33 @@ function strip(text: string, kind: Kind): string {
  * can no longer fail. It was 881. It is 16,718. When a change to `web/src` adds
  * more than that, this floor stops being a floor and must be re-derived — and
  * the drill below is what will say so.
+ *
+ * ⚠️ IT SAID SO. RE-DERIVED 2026-08-21, BY THE DRILL FAILING RATHER THAN BY
+ * ANYONE REMEMBERING — which is the outcome the paragraph above was written to
+ * produce, and the first time this floor has been re-derived that way. The
+ * 16,718 was spent: two commits took it to 6,291 without anyone noticing,
+ * because a margin only announces itself once it is gone, and the §17.7
+ * degraded-backend banner then added 17,236 characters and pushed
+ * `corpus − largest` above the floor. Figures on the tree that carried this
+ * paragraph:
+ *
+ *     corpus                                    1,230,955  over 45 files
+ *     largest   `routes/+page.svelte`             120,010
+ *     second    `app.css`                         105,274
+ *     floor                                     1,150,000
+ *     gap     corpus − floor                        80,955
+ *     MARGIN  largest − gap                         39,055
+ *
+ * 80,955 is under both file sizes, so the claimed property holds again: losing
+ * either of the two largest fails the floor.
+ *
+ * ⚠️ AND THE MARGIN ABOVE IS THE LOOSER OF TWO, which no previous derivation
+ * said. `largest − gap` is when the floor stops failing on the LARGEST file;
+ * the property this rule actually claims is EITHER of the two largest, and that
+ * one breaks first — at `second − gap`, which is 24,319. Take 24,319 as the
+ * number a change to `web/src` is spending, not 39,066.
  */
-const CORPUS_FLOOR = 1_100_000;
+const CORPUS_FLOOR = 1_150_000;
 
 /**
  * The least credible NUMBER of files, which is the char floor's blind spot:
@@ -1820,7 +1845,7 @@ describe('DESIGN-DIRECTION §13 — the static rules, over web/src', () => {
 			'removing the largest file must not trip the FILE floor'
 		).toBeGreaterThanOrEqual(FILE_FLOOR);
 		expect(corpusShortfall(lost), `losing ${largest.file} did not trip the floor`).toMatch(
-			/below the floor of 1100000/
+			/below the floor of 1150000/
 		);
 
 		/* And the negative half — the real corpus must NOT trip either floor, or the

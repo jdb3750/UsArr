@@ -69,8 +69,22 @@
 	 * ⚠️ AND A DEGRADED SERVICE GREYS NOTHING HERE. §17.7 is explicit that the
 	 * catalogue does not grey out when an instance is unreachable, because every
 	 * row is a replica row that is exactly as true as it was before. The services
-	 * read below decides the WORDS of the empty state and nothing else; it can
-	 * fail outright and the table still renders.
+	 * read below can fail outright and the table still renders.
+	 *
+	 * ⚠️ IT ALSO USED TO SAY THAT READ DECIDES *"the WORDS of the empty state and
+	 * nothing else"*, WHICH IS NO LONGER TRUE AND WAS NEVER THE WHOLE REQUIREMENT.
+	 * §17.7 asks for a non-modal banner naming the instance on these screens, and
+	 * the all-types twin of this file refused it in a longer form of the same
+	 * sentence, citing ARCHITECTURE.md §17.3 — a rule about duplicate ACTIONS
+	 * WITHIN ONE SCREEN, whose own text blesses a third appearance as *"not a
+	 * duplicate: it is a count with no action"* and authorises this one outright:
+	 * *"a global banner elsewhere in the app links here whenever any instance is
+	 * not healthy."* What §17.3 forbids is a second copy of the FIX, and that
+	 * holds: `DegradedBanner` links to Services and carries none of its controls.
+	 *
+	 * THE BANNER IS THEREFORE HERE, above the table and outside it, off the same
+	 * services read — no second fetch, and nothing new on a render path.
+	 * `$lib/degraded` owns every word of it and every reason for them.
 	 *
 	 * WHERE THE LOGIC LIVES. The sort vocabulary, the `?lib=` rules, the query
 	 * builder, the cursor-reset rule, the paging stop rule and the empty-state
@@ -84,7 +98,9 @@
 	import { pushState } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import { page } from '$app/state';
-	import { ApiError, fetchServicesHealth } from '$lib/api';
+	import { ApiError, fetchServicesHealth, type ServicesHealth } from '$lib/api';
+	import DegradedBanner from '$lib/DegradedBanner.svelte';
+	import { degradedNotices } from '$lib/degraded';
 	import HaveCell from '$lib/HaveCell.svelte';
 	import Icon from '$lib/Icon.svelte';
 	import List from '$lib/List.svelte';
@@ -203,17 +219,26 @@
 	let rejected = $state(false);
 
 	/**
-	 * WHAT IS CONNECTED, WHICH DECIDES THE WORDS OF THE EMPTY STATE AND NOTHING
-	 * ELSE. `modeRead` is separate from `mode` because an unanswered read and a
-	 * failed one are the same value and opposite facts.
+	 * WHAT IS CONNECTED. `modeRead` is separate from `mode` because an unanswered
+	 * read and a failed one are the same value and opposite facts.
+	 *
+	 * ⚠️ IT NO LONGER DECIDES ONLY THE EMPTY STATE, and this note used to say it
+	 * did. `health` keeps the WHOLE response the same read already returned rather
+	 * than collapsing it to a mode, because §17.7's banner needs the per-instance
+	 * name and timestamp that `homeMode()` throws away. Same read, one more
+	 * consumer.
 	 */
 	let mode = $state<HomeMode | undefined>(undefined);
 	let modeRead = $state(false);
+	let health = $state<ServicesHealth | undefined>(undefined);
 
 	let now = $state(new Date());
 
 	const more = $derived(feed !== undefined && browseHasMore(feed));
 	const empty = $derived(query === undefined ? undefined : browseEmptyState(query, mode));
+	/** §17.7's banner, one per degraded catalogue instance. `now` is the same
+	 * ticking value the rows use, so the relative half re-renders with them. */
+	const degraded = $derived(health === undefined ? [] : degradedNotices(health, now));
 
 	/**
 	 * WHETHER THERE IS ANYTHING TRUE TO DRAW YET.
@@ -484,9 +509,15 @@
 	 */
 	async function loadMode() {
 		try {
-			mode = homeMode(await fetchServicesHealth());
+			// The response is KEPT, not reduced. `homeMode()` answers one of three
+			// words and discards the per-instance rows §17.7's banner is made of, so
+			// collapsing here would force a second identical request to get them back.
+			const answer = await fetchServicesHealth();
+			health = answer;
+			mode = homeMode(answer);
 		} catch {
 			mode = undefined;
+			health = undefined;
 		} finally {
 			modeRead = true;
 		}
@@ -703,6 +734,15 @@
 				</div>
 			</div>
 		{/if}
+
+		<!--
+			§17.7'S DEGRADED-BACKEND BANNER, ABOVE THE TABLE AND OUTSIDE IT — one per
+			instance that has stopped answering, and the table below it is untouched.
+			It sits AFTER the read-failure banner because that one is about this
+			screen's own read having failed, which is the more urgent of the two and
+			the only one that means there is nothing under it.
+		-->
+		<DegradedBanner notices={degraded} />
 
 		{#if drawList && feed !== undefined && empty !== undefined}
 			<!--

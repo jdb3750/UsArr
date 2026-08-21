@@ -81,11 +81,27 @@
 	 * ⚠️ AND A DEGRADED SERVICE GREYS NOTHING HERE. §17.7 is explicit that the
 	 * catalogue does not grey out when an instance is unreachable, because every
 	 * row is a replica row that is exactly as true as it was before. The services
-	 * read below therefore decides the WORDS of the empty state and nothing else;
-	 * it can fail outright and the table still renders. The banner that names a
-	 * broken instance belongs to the screen that owns the fix (§17.3 states a
-	 * problem canonically once per screen: Services owns it, and Home's Block B
-	 * surfaces it), so there is no second copy of it here.
+	 * read below can fail outright and the table still renders.
+	 *
+	 * ⚠️ WHAT USED TO FOLLOW THAT WAS A REFUSAL, AND IT MISREAD ITS OWN CITATION.
+	 * It said the services read *"decides the WORDS of the empty state and nothing
+	 * else"*, and that *"the banner that names a broken instance belongs to the
+	 * screen that owns the fix (§17.3 states a problem canonically once per
+	 * screen: Services owns it, and Home's Block B surfaces it), so there is no
+	 * second copy of it here."* The rule at ARCHITECTURE.md §17.3 is about
+	 * duplicate ACTIONS WITHIN ONE SCREEN — it blesses a third appearance in terms
+	 * as *"not a duplicate: it is a count with no action"* — and the same section
+	 * authorises this screen directly: *"a global banner elsewhere in the app
+	 * links here whenever any instance is not healthy."* So the citation said the
+	 * opposite of the refusal built on it, and §17.7 had asked for the banner all
+	 * along. What §17.3 does still forbid is a second copy of the FIX, and that
+	 * holds: `DegradedBanner` carries a link to Services and none of its controls.
+	 *
+	 * THE BANNER IS THEREFORE HERE, above the table and outside it, from the same
+	 * services read — no second fetch, and nothing new on a render path.
+	 * `$lib/degraded` owns every word of it and every reason for them, including
+	 * why it is not `<List>`'s `staleNote` and why the no-change-feed variant of
+	 * §17.7's sentence is deliberately not built.
 	 *
 	 * WHERE THE LOGIC LIVES. The sort vocabulary, the `?lib=` rules, the query
 	 * builder, the cursor-reset rule, the paging stop rule and the empty-state
@@ -99,7 +115,9 @@
 	import { pushState } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import { page } from '$app/state';
-	import { ApiError, fetchServicesHealth } from '$lib/api';
+	import { ApiError, fetchServicesHealth, type ServicesHealth } from '$lib/api';
+	import DegradedBanner from '$lib/DegradedBanner.svelte';
+	import { degradedNotices } from '$lib/degraded';
 	import HaveCell from '$lib/HaveCell.svelte';
 	import Icon from '$lib/Icon.svelte';
 	import List from '$lib/List.svelte';
@@ -213,18 +231,27 @@
 	let rejected = $state(false);
 
 	/**
-	 * WHAT IS CONNECTED, WHICH DECIDES THE WORDS OF THE EMPTY STATE AND NOTHING
-	 * ELSE. `modeRead` is separate from `mode` because an unanswered read and a
-	 * failed one are the same value and opposite facts, and the empty state has
-	 * different words for the failure than for any of the three modes.
+	 * WHAT IS CONNECTED. `modeRead` is separate from `mode` because an unanswered
+	 * read and a failed one are the same value and opposite facts, and the empty
+	 * state has different words for the failure than for any of the three modes.
+	 *
+	 * ⚠️ IT NO LONGER DECIDES ONLY THE EMPTY STATE, and this note used to say it
+	 * did. `health` keeps the WHOLE response the same read already returned rather
+	 * than collapsing it to a mode, because §17.7's banner needs the per-instance
+	 * name and timestamp that `homeMode()` throws away. Same read, same request,
+	 * one more consumer.
 	 */
 	let mode = $state<HomeMode | undefined>(undefined);
 	let modeRead = $state(false);
+	let health = $state<ServicesHealth | undefined>(undefined);
 
 	let now = $state(new Date());
 
 	const more = $derived(feed !== undefined && browseHasMore(feed));
 	const empty = $derived(query === undefined ? undefined : browseEmptyState(query, mode));
+	/** §17.7's banner, one per degraded catalogue instance. `now` is the same
+	 * ticking value the rows use, so the relative half re-renders with them. */
+	const degraded = $derived(health === undefined ? [] : degradedNotices(health, now));
 
 	/**
 	 * WHETHER THERE IS ANYTHING TRUE TO DRAW YET.
@@ -500,9 +527,15 @@
 	 */
 	async function loadMode() {
 		try {
-			mode = homeMode(await fetchServicesHealth());
+			// The response is KEPT, not reduced. `homeMode()` answers one of three
+			// words and discards the per-instance rows §17.7's banner is made of, so
+			// collapsing here would force a second identical request to get them back.
+			const answer = await fetchServicesHealth();
+			health = answer;
+			mode = homeMode(answer);
 		} catch {
 			mode = undefined;
+			health = undefined;
 		} finally {
 			modeRead = true;
 		}
@@ -692,6 +725,15 @@
 				</div>
 			</div>
 		{/if}
+
+		<!--
+			§17.7'S DEGRADED-BACKEND BANNER, ABOVE THE TABLE AND OUTSIDE IT — one per
+			instance that has stopped answering, and the table below it is untouched.
+			It sits AFTER the read-failure banner because that one is about this
+			screen's own read having failed, which is the more urgent of the two and
+			the only one that means there is nothing under it.
+		-->
+		<DegradedBanner notices={degraded} />
 
 		{#if drawList && feed !== undefined && empty !== undefined}
 			<!--
