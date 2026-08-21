@@ -4523,11 +4523,34 @@ loudly at the \*Arr.
    > for: **the decision survives, on limb (b) of ground 3**, and no ADR of its own is owed.
    > This paragraph is kept as written because the routing is part of the record.
 3. *"Fails loudly"* is aspirational either way. **Nothing outside `internal/db/spike/` reads
-   `write_queue`** — measured 2026-08-17 on `b8bb500` with
-   `grep -rn "write_queue" --include=*.go internal/ cmd/ | grep -v _test.go`, whose only hits are the
-   standalone RSS-spike binary under `internal/db/spike/` and one comment at
-   `internal/httpapi/grabs.go:58`; roots searched are `internal/` and `cmd/`, and the claim is made
-   about no others. So without the foreign key the dangling row simply sits there and `ix_wq_work`
+   `write_queue`** — measured with
+   `grep -rn "write_queue" --include=*.go internal/ cmd/ | grep -v _test.go`; the roots searched are
+   `internal/` and `cmd/`, and the claim is made about no others.
+
+   ⚠️ **THIS ENUMERATION IS DELIBERATELY COUNT-FREE, AND THE COUNT IT USED TO CARRY IS WHY.** It read
+   *"whose only hits are the standalone RSS-spike binary under `internal/db/spike/` and one comment at
+   `internal/httpapi/grabs.go:58`"*, measured 2026-08-17 on `b8bb500`. Re-measured 2026-08-21 at this
+   tip, the same command returns hits in `internal/store/` as well and the `grabs.go` comment has
+   moved down its own file — **and the substance did not move at all.** A figure that goes stale while
+   the fact it was cited for does not is a maintenance obligation bought for nothing. So the hits are
+   classified rather than counted:
+
+   - **Readers.** The only line in this tree that reads `write_queue` is the
+     `SELECT id, kind FROM write_queue` in the standalone RSS-spike binary under
+     `internal/db/spike/`. That package is behind `//go:build bench`, so it is compiled by **no step
+     of `go build ./...`** — confirmed at this tip by `go list ./...`, which does not name the
+     package, against `go list -tags bench ./...`, which does. The tree's only *writer* is in the
+     same tagged package and inherits the same exclusion; the package's remaining hits are its own
+     prose and one `printf` label.
+   - **Citations.** Every hit outside `internal/db/spike/` is a **comment**, in `internal/httpapi/`
+     and `internal/store/`, and each is discussing this ADR's `CHECK` trade rather than touching the
+     table. ⚠️ **A comment match is a citation of the ADR, not a reader** — the two are
+     indistinguishable in a hit count, which is the second reason this is classified and not counted.
+     `internal/store/writequeue.go` is the case worth naming: it declares and validates
+     `write_queue.state`'s vocabulary and names the table in comments only. **Declaring a vocabulary
+     is not reading a table.**
+
+   So without the foreign key the dangling row simply sits there and `ix_wq_work`
    returns rows for a `work_id` with no referent. `CASCADE` is the answer the table already gives for
    its other two parents, and it is the one SQLite can enforce today.
 
