@@ -668,6 +668,126 @@ func TestSweepClearsOrphanedAtWhenTheContainerComesBack(t *testing.T) {
 	}
 }
 
+// secondSourceOn attaches an existing library to a second service instance, the
+// way a library fed by two upstreams looks in the row. It is written directly
+// because BindContainers mints a library per container and this fixture needs
+// two instances pointing at ONE.
+func secondSourceOn(t *testing.T, s *Store, libraryID, inst int64, ref string) {
+	t.Helper()
+	if _, err := s.db.Writer().ExecContext(t.Context(), `
+		INSERT INTO library_source
+		  (library_id, service_instance_id, container_kind, container_ref, container_identity)
+		VALUES (?, ?, 'remote_library', ?, ?)`,
+		libraryID, inst, ref, "container "+ref); err != nil {
+		t.Fatalf("seed second source: %v", err)
+	}
+}
+
+// TestSoftDeletingAnInstanceOrphansTheLibrariesItWasTheLastSourceOf is the
+// orphan state's OTHER writer, and until it existed the state was unreachable
+// for the case that produces it most obviously.
+//
+// A soft-deleted instance keeps its library_source rows — the FK cascade fires
+// on a HARD delete only — and librarySourcesSQL hides them, so the library
+// rendered with no sources at all. It was orphaned in fact and un-orphaned in the
+// data, permanently: no sweep runs for a deleted instance, so nothing was ever
+// going to stamp it.
+//
+// ⚠️ ASSERTED BY IDENTITY, NOT BY A COUNT. Two libraries, told apart by which
+// instance feeds them: the one whose last source went with the deleted instance
+// is stamped, and the one another live instance still feeds is not. A count would
+// pass for a delete that orphaned everything.
+func TestSoftDeletingAnInstanceOrphansTheLibrariesItWasTheLastSourceOf(t *testing.T) {
+	s := newTestStore(t)
+	inst, binds := sweepFixture(t, s)
+	manga := binds["1"].LibraryID
+	ebooks := binds["2"].LibraryID
+	if manga == 0 || ebooks == 0 || manga == ebooks {
+		t.Fatalf("the fixture bound %d and %d; this test needs two distinct libraries", manga, ebooks)
+	}
+	// The Ebooks library is ALSO fed by a second instance that is not being
+	// deleted, which is what makes the assertion below about the last source
+	// rather than about the delete having stamped every library it touched.
+	survivor := fixtureInstance(t, s, "kavita-two")
+	secondSourceOn(t, s, ebooks, survivor, "9")
+
+	if err := s.SoftDeleteServiceInstance(t.Context(), inst, sweepLater); err != nil {
+		t.Fatalf("SoftDeleteServiceInstance: %v", err)
+	}
+
+	orphaned := nullStr(t, s, `SELECT orphaned_at FROM library WHERE id = ?`, manga)
+	if !orphaned.Valid {
+		t.Error("the library whose only source was on the deleted instance is not orphaned; it " +
+			"renders with no sources and no reason, and no sweep will ever run to stamp it")
+	}
+	if orphaned.Valid && orphaned.String != FormatTime(sweepLater) {
+		t.Errorf("orphaned_at = %q, want the instant of the delete %q",
+			orphaned.String, FormatTime(sweepLater))
+	}
+	if fed := nullStr(t, s, `SELECT orphaned_at FROM library WHERE id = ?`, ebooks); fed.Valid {
+		t.Errorf("a library another live instance still feeds was orphaned at %q", fed.String)
+	}
+	// ⚠️ library 0 is reserved and has no sources by construction, on
+	// fedLibraries' rule; a delete that stamped it would mark the one library
+	// that must always be there.
+	if unfiled := nullStr(t, s, `SELECT orphaned_at FROM library WHERE id = ?`,
+		UnfiledLibraryID); unfiled.Valid {
+		t.Errorf("the reserved Unfiled library was orphaned at %q", unfiled.String)
+	}
+}
+
+// TestTheSweepDoesNotCountASourceOnASoftDeletedInstance is the same disagreement
+// one step further out, and it is the shape that survived the fix above on its
+// own: the deleted instance is not the LAST source, so nothing is stamped at the
+// delete — and the retained row then keeps the surviving instance's sweep from
+// ever stamping it either.
+//
+// The sweep's NOT EXISTS joined nothing, so any library_source row with
+// missing_since IS NULL satisfied it, including one belonging to an instance the
+// owner deleted and the screen no longer shows. The sweep and the read now use
+// ONE definition of a source that counts.
+func TestTheSweepDoesNotCountASourceOnASoftDeletedInstance(t *testing.T) {
+	s := newTestStore(t)
+	inst, binds := sweepFixture(t, s)
+	ebooks := binds["2"].LibraryID
+	gone := fixtureInstance(t, s, "kavita-deleted")
+	secondSourceOn(t, s, ebooks, gone, "9")
+
+	// The owner deletes the SECOND instance. The library still has a live source
+	// on the first, so it is not orphaned yet and must not be.
+	if err := s.SoftDeleteServiceInstance(t.Context(), gone, sweepLater); err != nil {
+		t.Fatalf("SoftDeleteServiceInstance: %v", err)
+	}
+	if o := nullStr(t, s, `SELECT orphaned_at FROM library WHERE id = ?`, ebooks); o.Valid {
+		t.Fatalf("the library was orphaned at %q while a live instance still reported a source "+
+			"of it; the assertion below would be vacuous", o.String)
+	}
+
+	// The FIRST instance now stops reporting container "2" as well. Every source
+	// of this library is now either missing or on a deleted instance.
+	later := sweepLater.Add(time.Hour)
+	res, err := s.SweepDeletions(t.Context(), inst, allSeen(), oneContainer("1"), later)
+	if err != nil {
+		t.Fatalf("SweepDeletions: %v", err)
+	}
+	orphaned := nullStr(t, s, `SELECT orphaned_at FROM library WHERE id = ?`, ebooks)
+	if !orphaned.Valid {
+		t.Error("the library has no source the Libraries screen can see and is not orphaned: a " +
+			"row on a soft-deleted instance is keeping the sweep's NOT EXISTS satisfied")
+	}
+	if orphaned.Valid && orphaned.String != FormatTime(later) {
+		t.Errorf("orphaned_at = %q, want the sweep's instant %q", orphaned.String, FormatTime(later))
+	}
+	// The Manga library's container was still reported, so it stays.
+	if o := nullStr(t, s, `SELECT orphaned_at FROM library WHERE id = ?`,
+		binds["1"].LibraryID); o.Valid {
+		t.Errorf("the library whose container the read DID report was orphaned at %q", o.String)
+	}
+	if res.LibrariesOrphaned != 1 {
+		t.Errorf("result = %+v, want one library orphaned", res)
+	}
+}
+
 func TestSweepDoesNotStampADeclinedContainerAsMissing(t *testing.T) {
 	// "UsArr has no kind for this" and "the upstream has stopped reporting this"
 	// are different facts. bindPhase passes every container the upstream named,

@@ -654,6 +654,24 @@ func sweepContainers(
 
 // sweepOrphans moves library.orphaned_at both ways for the libraries this
 // instance feeds.
+//
+// ⚠️ A SOURCE ON A SOFT-DELETED INSTANCE IS NOT A SOURCE, and that clause is
+// what makes this agree with the screen. librarySourcesSQL filters
+// `si.deleted_at IS NULL`, so the moment an instance is deleted its
+// library_source rows stop being rendered — but the rows themselves stay (the FK
+// cascade fires on a HARD delete only) with `missing_since` still NULL. Without
+// the EXISTS below, one such row satisfied the NOT EXISTS forever: the library
+// showed no sources, was orphaned in fact, and could never be stamped, because
+// the sweep and the read disagreed about what counts as a source. One
+// definition, used by both.
+//
+// It is called from two places for the same reason. A sweep is one of the two
+// events that can make a library sourceless; SOFT-DELETING AN INSTANCE IS THE
+// OTHER, and no sweep ever runs for a deleted instance — so
+// SoftDeleteServiceInstance calls this inside its own transaction. Both arms are
+// evaluated against the state at call time and nothing is cached, which is what
+// keeps an undeleted instance honest: its rows count again immediately, and the
+// next call clears the stamp through the restore arm below.
 func sweepOrphans(
 	ctx context.Context, tx *sql.Tx, instanceID int64, nowStr string, res *SweepResult,
 ) error {
@@ -671,6 +689,9 @@ func sweepOrphans(
 			UPDATE library SET orphaned_at = ?, updated_at = ?
 			 WHERE id = ? AND orphaned_at IS NULL
 			   AND NOT EXISTS (SELECT 1 FROM library_source ls_orphan
+			                    JOIN service_instance si_orphan
+			                      ON si_orphan.id = ls_orphan.service_instance_id
+			                     AND si_orphan.deleted_at IS NULL
 			                    WHERE ls_orphan.library_id = ? AND ls_orphan.missing_since IS NULL)`,
 			nowStr, nowStr, id, id)
 		if err != nil {
@@ -689,6 +710,9 @@ func sweepOrphans(
 			UPDATE library SET orphaned_at = NULL, updated_at = ?
 			 WHERE id = ? AND orphaned_at IS NOT NULL
 			   AND EXISTS (SELECT 1 FROM library_source ls_orphan
+			                JOIN service_instance si_orphan
+			                  ON si_orphan.id = ls_orphan.service_instance_id
+			                 AND si_orphan.deleted_at IS NULL
 			                WHERE ls_orphan.library_id = ? AND ls_orphan.missing_since IS NULL)`,
 			nowStr, id, id)
 		if err != nil {

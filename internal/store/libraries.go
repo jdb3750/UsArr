@@ -117,11 +117,12 @@ type Library struct {
 	// RETAINED and stamped missing_since. A library is orphaned when no source of
 	// it — on any instance — is still being reported.
 	//
-	// ⚠️ AND ONE CALLER STILL PRODUCES THE STATE WITHOUT THE COLUMN. See
-	// librarySourcesSQL: soft-deleting an instance hides its library_source rows
-	// from this response while the rows themselves remain, so such a library
-	// renders with no sources and an unset orphaned_at. The sweep does not run
-	// for a deleted instance and that path is not channel 4's.
+	// ⚠️ AND IT IS SET BY TWO EVENTS, NOT ONE. A source that stops being
+	// reported is the sweep's; an instance the owner SOFT-DELETES is the other,
+	// and it is the one no sweep can reach — a deleted instance is disabled and
+	// never imports again. SoftDeleteServiceInstance calls sweepOrphans in its
+	// own transaction for that reason, and both use librarySourcesSQL's
+	// definition of a source, so the chip row and this column agree.
 	OrphanedAt sql.NullString
 
 	// ItemCount is the number of library_member rows in this library whose work
@@ -559,9 +560,15 @@ func listLibrariesSQL(scope Scope) (string, []any) {
 // be two screens disagreeing. ⚠️ THE CONSEQUENCE IS STATED RATHER THAN HIDDEN:
 // soft-deleting an instance makes its library_source rows vanish from this
 // response while the rows themselves remain (the FK cascade fires on a HARD
-// delete only), so such a library renders with fewer sources — or with none,
-// looking orphaned — and `orphaned_at`, which is the column that should record
-// it, is written by nothing. That gap belongs to the sweep, not to this read.
+// delete only), so such a library renders with fewer sources — or with none.
+//
+// ⚠️ THAT LAST CASE USED TO BE A NAMED GAP HERE — *"looking orphaned, and
+// `orphaned_at` … is written by nothing"* — and it is closed. reconcile.go's
+// sweepOrphans applies THIS PREDICATE, so a row on a deleted instance is not a
+// source for the orphan rule either, and SoftDeleteServiceInstance calls the
+// sweep inside its own transaction because no import ever runs for a deleted
+// instance. One definition of a source that counts, used by the screen and by
+// the column that explains it.
 //
 // The scope is applied to the SOURCE as well as to the library. A library can be
 // visible because one of its sources is on a visible instance while another sits

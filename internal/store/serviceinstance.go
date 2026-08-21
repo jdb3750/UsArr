@@ -329,6 +329,20 @@ func (s *Store) UpdateServiceInstanceHealth(
 // SoftDeleteServiceInstance tombstones an instance. The id stays burned and is
 // never reused, so a stale northbound reference resolves to "gone" rather than
 // to some other service.
+//
+// ⚠️ IT ORPHANS IN THE SAME TRANSACTION, and that is not an extra feature bolted
+// onto a delete. Deleting an instance is one of exactly two events that can
+// leave a library with no source anybody can see — the other is a source that
+// stops being reported, which is the deletion sweep's business — and it is the
+// one NO SWEEP CAN EVER REACH, because a deleted instance is disabled and never
+// imports again. Without this call a library whose only instance was deleted
+// rendered sourceless with `orphaned_at` NULL forever: orphaned in fact,
+// un-orphaned in the data. sweepOrphans is called rather than reimplemented so
+// there is one definition of "a source that counts", and it is called INSIDE the
+// delete's transaction so the row and its consequence commit together.
+//
+// The SweepResult is discarded because nothing reads it here. The counters
+// belong to a sync_report row that describes an import, and this is not one.
 func (s *Store) SoftDeleteServiceInstance(ctx context.Context, id int64, now time.Time) error {
 	return s.write(ctx, func(ctx context.Context, tx *sql.Tx) error {
 		res, err := tx.ExecContext(ctx,
@@ -337,7 +351,11 @@ func (s *Store) SoftDeleteServiceInstance(ctx context.Context, id int64, now tim
 		if err != nil {
 			return fmt.Errorf("soft delete service_instance %d: %w", id, err)
 		}
-		return expectOneRow(res, "service_instance", id)
+		if err := expectOneRow(res, "service_instance", id); err != nil {
+			return err
+		}
+		var discarded SweepResult
+		return sweepOrphans(ctx, tx, id, FormatTime(now), &discarded)
 	})
 }
 
