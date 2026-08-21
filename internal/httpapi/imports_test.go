@@ -421,7 +421,8 @@ func TestDeltaSyncStartsAWalkAndSaysSoWithoutWaiting(t *testing.T) {
 		}
 	}
 	if got["status"] != "started" {
-		t.Errorf("status = %v, want %q — the audit row is written with this same word", got["status"], "started")
+		t.Errorf("status = %v, want %q — inherited from POST /sync, whose body this one "+
+			"matches field for field", got["status"], "started")
 	}
 	// ⚠️ NO ESCALATION FIELD, AND THERE CANNOT BE ONE. Whether the walk escalates
 	// to a full import is decided after this body is written; a field here would

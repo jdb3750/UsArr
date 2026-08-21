@@ -74,6 +74,20 @@ func TestADeltaSyncOfASourceWithNoDeltaChannelIsRefusedByItsOwnCode(t *testing.T
 			"if this changed, the wire code below stands for nothing", err)
 	}
 
+	// AND THE PORT'S OWN RETURN CARRIES BOTH SENTINELS. StartDeltaSync wraps
+	// httpapi.ErrNotDeltaSource AND libsync.ErrNoDeltaChannel with two %w verbs,
+	// and internal/httpapi/ports.go spends a paragraph on why: internal/httpapi
+	// declares its own sentinel and never imports internal/libsync (§2.3 rule 1),
+	// so cmd/usarr is the ONE place the two are joined and anything below this
+	// line that already speaks the sync core's name can still match it. Nothing
+	// else asserts the second verb — swapping it for %s compiled, passed, and
+	// silently retired that seam.
+	if err := env.app.registry.StartDeltaSync(created.ID); !errors.Is(err, libsync.ErrNoDeltaChannel) {
+		t.Errorf("StartDeltaSync = %v, which does not match libsync.ErrNoDeltaChannel — "+
+			"the pre-flight refused with the wire sentinel alone, so the sync core's own name "+
+			"is off the error and the two are free to drift", err)
+	}
+
 	code, body := deltaSyncNow(t, env, created.ID)
 	if code != http.StatusConflict || !strings.Contains(body, `"error":"not_a_delta_source"`) {
 		t.Fatalf("a delta sync of a Kavita = %d: %s\nwant 409 not_a_delta_source — a 202 here "+

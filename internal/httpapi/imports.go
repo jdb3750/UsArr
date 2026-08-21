@@ -211,8 +211,16 @@ func (s *Server) handleDeltaSyncService(w http.ResponseWriter, r *http.Request) 
 	// The SAME body as the full sync's, field for field, because the four fields
 	// answer the same four questions and a caller that pressed one of two
 	// adjacent buttons should not have to parse two shapes. The status word is
-	// "started" here too, and the audit row above uses that same word so the
-	// journal and the wire agree on what happened.
+	// "started" here too, inherited from POST /sync.
+	//
+	// ⚠️ THE AUDIT ROW ABOVE ALSO SAYS "started", AND THAT IS A COINCIDENCE
+	// RATHER THAN A VIRTUE. DEVELOPMENT.md §11 is explicit that two vocabularies
+	// agreeing on a value is the WRONG repair for a collision, not the right
+	// one; this comment used to offer the agreement as a feature ("so the
+	// journal and the wire agree"), which teaches the opposite of the rule. The
+	// value itself is inherited from the full sync's route and changing it here
+	// would be a wire change on a route that shares a body with that one, so it
+	// stays — named as the coincidence it is, so nobody defends it later.
 	writeJSON(w, http.StatusAccepted, importStartResponse{
 		Status:     "started",
 		InstanceID: si.ID,
