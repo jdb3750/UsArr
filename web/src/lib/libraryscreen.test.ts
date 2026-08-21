@@ -382,9 +382,20 @@ describe('the /library screen is the ALL-TYPES scoped view', () => {
 	 * ⚠️ NO `media_type` IS THE POINT OF THE SCREEN. Six per-type screens already
 	 * exist at `/library/[type]`; this one is the view that filters by no type at
 	 * all, which is what makes it safe for a library scope to land on — a library
-	 * spans media types (§17.8's flagship shape is one upstream library offered
-	 * as Ebooks AND as Audiobooks), so a type filter here would drop part of the
-	 * library a `?lib=` address names.
+	 * can span media types, so a type filter here would drop part of the library
+	 * a `?lib=` address names.
+	 *
+	 * ⚠️ THE AUDIOBOOKSHELF EXAMPLE WAS CITED FOR THAT AND SHOWS THE OPPOSITE.
+	 * §17.8 offers one ABS `mediaType=book` container as *two* libraries, Ebooks
+	 * and Audiobooks — each of the two is SINGLE-type, which is the improvement
+	 * over ABS's own organisation rather than an instance of spanning. (It is
+	 * also not v0.1: §17.8 dates it to the milestone Audiobookshelf lands in.)
+	 * What does support this rule is §17.8's `Kind` control, which is labelled
+	 * `Movies · TV · Music · Books · Comics` and carries a help line under Books:
+	 * *"Books covers ebooks and audiobooks. The format filter below decides which
+	 * this library holds."* A `Books` library with no format filter therefore
+	 * holds two of §17.2's six media types, and a per-type link into it drops
+	 * one of them.
 	 */
 	it('sends no media_type of its own', () => {
 		expect(
@@ -515,10 +526,13 @@ describe('a Libraries row leads to its own scoped view', () => {
 	})();
 
 	/*
-	 * ⚠️ THE ALL-TYPES VIEW, NEVER A PER-TYPE GRID. §17.8's flagship shape is one
-	 * upstream library offered as Ebooks AND as Audiobooks, so a row that led to
-	 * `/library/ebooks?lib=…` would silently drop every audiobook in the library
-	 * it claims to open — and the screen would look correct doing it.
+	 * ⚠️ THE ALL-TYPES VIEW, NEVER A PER-TYPE GRID. §17.8's `Kind: Books` covers
+	 * ebooks and audiobooks together — its own help line says so, and only the
+	 * format filter narrows it — so a row that led to `/library/ebooks?lib=…`
+	 * would silently drop every audiobook in an unfiltered Books library it
+	 * claims to open, and the screen would look correct doing it. ⚠️ THIS CITED
+	 * §17.8's AUDIOBOOKSHELF EXAMPLE, WHICH SHOWS THE REVERSE: one upstream
+	 * container offered as two libraries, each of them single-type.
 	 */
 	it('links to /library and not to a per-type grid', () => {
 		expect(

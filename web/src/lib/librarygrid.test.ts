@@ -919,8 +919,9 @@ describe('all six media types are reachable from the shell', () => {
 	it('labels the all-types view Library, not Recently added', () => {
 		expect(
 			LAYOUT_SOURCE,
-			'routes/+layout.svelte dropped the /library entry. §17.2 keeps that view: it is the ' +
-				'one table across ALL six types and is not superseded by the per-type screens.'
+			'routes/+layout.svelte dropped the /library entry. That view is the one table ' +
+				'across ALL six types and is not superseded by the per-type screens. (§17 names ' +
+				"no /library route; the all-types SHAPE is §17.2's, the route is the tree's.)"
 		).toContain("id: '/library', label: 'Library'");
 		expect(
 			LAYOUT_SOURCE,

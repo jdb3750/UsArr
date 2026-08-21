@@ -20,18 +20,33 @@
 	 * this is not it.
 	 *
 	 * WHAT §17.4 SPECIFIES THAT THIS COMMIT DOES NOT DRAW, NAMED RATHER THAN
-	 * QUIETLY OMITTED — every one of them because the wire cannot carry it, and
-	 * `docs/reference/http-api.md` §6.6 says so field by field:
+	 * QUIETLY OMITTED. `docs/reference/http-api.md` §6.2 is the envelope and §6.6
+	 * is its own list of what the ranking does not do; between them they account
+	 * for each entry below, and where the blocker is the tree rather than the
+	 * wire the entry says which:
 	 *
 	 *   GROUPS. §17.4's rules 1-5 are all about per-media-type groups: the
 	 *     ordering by best hit, the `clamp(floor(40 / groups), 3, 10)` row
 	 *     budget, the `Show all 34 movies →` links, the library column's
-	 *     within-group variance test. §6.2 answers with ONE FLAT LIST and §6.6
-	 *     states "No grouping" first among what it does not do. A client cannot
-	 *     synthesise the groups honestly either: rule 2 orders them by their
-	 *     best-scoring hit and §6.2 publishes NO SCORE, so a client-side
-	 *     grouping would have to order by count, which rule 2 names as exactly
-	 *     the wrong rule a user will otherwise infer.
+	 *     within-group variance test. §6.2 answers with ONE FLAT LIST.
+	 *     ⚠️ THE REASON THIS ENTRY GAVE IS DEAD AND THE OUTCOME IS NOT. It read
+	 *     that rule 2 could not be honoured because *"§6.2 publishes NO SCORE"*.
+	 *     §6.2 publishes `score` on every item, ADR-0054 settled its contract in
+	 *     §6.2.1, and ordering groups by their best-scoring hit is the FIRST of
+	 *     the two uses that section permits — the use the field was put on the
+	 *     wire for. Rule 2 is the one grouping rule a client could satisfy today.
+	 *     WHAT STILL BLOCKS THE GROUPED PRESENTATION IS NARROWER, AND IT IS TWO
+	 *     OTHER RULES. Rule 3's `Show all 34 movies →` must carry, in its own
+	 *     words, *"the real total"*, and §6.2's envelope carries `query`,
+	 *     `limit`, `truncated` and `items` and no total of any kind, per type or
+	 *     overall — so the link would have to name a number it cannot know, and
+	 *     a count of the rows this answer happens to hold is not that number.
+	 *     Rule 4 files a cross-media linked work in exactly one group, which
+	 *     needs `work_relation`; that table is deferred to v0.3 and
+	 *     `TestDeferredTablesAreAbsent` fails if a migration mints it early.
+	 *     A partial grouping that honoured rule 2 and broke rules 3 and 4 would
+	 *     show a truncated group with no honest way to say so, which is the
+	 *     silent truncation rule 3 exists to prevent.
 	 *   THE "NOT IN YOUR LIBRARY" SECTION. §6.6: this endpoint only ever returns
 	 *     things UsArr has. Finding what you do not have is the release search,
 	 *     over a different corpus, on the SSE stream — which is rule 6's action

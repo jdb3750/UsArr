@@ -491,8 +491,10 @@ export function itemsCell(row: ServiceRow): Cell {
  * statement "the last walk read everything it asked for", and a row saying so in
  * words would put a sentence about file reads on every healthy row on the
  * screen. The absence IS the good news; a screen that only speaks when something
- * is worth saying is §17.3's rule for the attention block and the same rule
- * here.
+ * is worth saying is §17.2's rule for the attention block — Home's Block B,
+ * *"hidden entirely when empty"* — and the same rule here. ⚠️ CITED AS §17.3's
+ * UNTIL THIS EDIT; §17.3 is the Services screen and names no attention block at
+ * all. `isProblem` below cites the same block correctly.
  *
  * The number's window is not this file's to restate — `ServiceHealth.fileReadFailures`
  * in ./api carries it, and it is NOT the window the importer's per-run counter

@@ -792,8 +792,16 @@ export type HomeView = (typeof HOME_VIEWS)[number];
 
 /**
  * Table, because it is what Block C has always drawn and what §17.2 asks for
- * first: it sorts, it filters and it answers Ctrl+F, and a grid of art does
- * none of those.
+ * first. §17.2's argument for the shape is that a table *"sorts, it filters, it
+ * Ctrl+Fs (§4.5)"* where a grid of art does none of those.
+ *
+ * ⚠️ ONE THIRD OF THAT IS BUILT AND THIS ONCE CLAIMED ALL THREE. Ctrl+F works,
+ * because the rows are real text in the DOM and that is all it needs. SORTING
+ * AND FILTERING ARE NOT BUILT ON HOME: `List` takes `sortKey`, `sortDir` and
+ * `onsort`, and Home's Block C hands it none of them, so no header is sortable;
+ * there is no filter control on the block either. The argument for a table over
+ * a grid survives on Ctrl+F and on density alone, and the other two are the
+ * shape being ready for them rather than having them.
  */
 export const HOME_VIEW_DEFAULT: HomeView = 'table';
 

@@ -1,8 +1,11 @@
 /**
  * THE PER-TYPE LIBRARY GRID, CLIENT SIDE — `GET /api/v1/library`.
  *
- * ARCHITECTURE.md §17.2's per-type grid and §17.8's library scope, over the one
- * endpoint that serves both. `docs/reference/http-api.md` §7 is the contract and
+ * ARCHITECTURE.md §17.2's per-type grid and its library scope, over the one
+ * endpoint that serves both. ⚠️ THE SCOPE WAS CITED AS §17.8's: that section
+ * CONFIGURES a library, while the chip that scopes a view to one is §17.2's —
+ * its axes table files a library under `scope` rather than navigation and
+ * specifies the multi-select above the nav. `docs/reference/http-api.md` §7 is the contract and
  * this module is written against it rather than against a memory of it.
  *
  * TWO SCREENS, ONE CLIENT. `routes/library/[type]` is one media type at a time

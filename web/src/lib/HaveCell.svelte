@@ -4,8 +4,11 @@
 	 * §6.3's rule and schema.md's polymorphic blob.
 	 *
 	 * ⚠️ WHY THIS IS A COMPONENT AND NOT MARKUP ON ONE SCREEN. The same cell is
-	 * drawn twice — Home's Block C recently-added table and Search's results
-	 * table — and it was drawn by two copies of the same five-arm chain. The two
+	 * drawn by every screen that lists works — grep the importers rather than
+	 * trusting a number here, which is the half that rots. At the extraction
+	 * there were two, Home's Block C recently-added table and Search's results
+	 * table, drawn by two copies of the same five-arm chain; there are more now,
+	 * which is the argument for the component rather than against it. The two
 	 * had already diverged, and not in the markup: the markup was byte-identical,
 	 * but `.availline`, `.availlabel` and `.availgap` were only ever declared in
 	 * Home's own scoped style block, so Search emitted all three class names with

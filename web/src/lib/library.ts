@@ -18,12 +18,21 @@
  * for an upstream, and there is no upstream behind it to wait for.
  *
  * WHAT THIS ENDPOINT DOES NOT SERVE, so that nothing here codes against it:
- * Blocks A and B of §17.2, which server.go does not route, and no `?lib=`
- * library scope — but ⚠️ that last one is a property of
- * THIS endpoint and not of the server. `?lib=` is served by
- * `GET /api/v1/library` (`http-api.md` §7.3), which this module does not call;
- * a client wanting the §17.8 scope chip goes there, not here. `library.go`'s
- * header carries the same split at its own declaration.
+ * Blocks A and B of §17.2, and no `?lib=` library scope. ⚠️ THE TWO BLOCKS ARE
+ * NOT ALIKE, AND THIS ONCE SAID SERVER.GO ROUTED NEITHER. Block A is routed —
+ * `GET /api/v1/library/facets`, registered in `internal/httpapi/server.go`'s
+ * route table and handled by `handleLibraryFacets` — and THIS MODULE EXPORTS
+ * ITS URL, as `LIBRARY_FACETS_URL` below. What is true of Block A is only that
+ * the recent read does not serve it; it has a read of its own. Block B is the
+ * one with no route at all.
+ *
+ * ⚠️ THE `?lib=` SCOPE IS A PROPERTY OF THIS ENDPOINT AND NOT OF THE SERVER.
+ * It is served by `GET /api/v1/library` (`http-api.md` §7.3), which this module
+ * does not call; a client wanting the §17.2 scope chip goes there, not here (§17.8
+ * configures a library; the chip that SCOPES to one is §17.2's axes table,
+ * which files it under `scope` and specifies it as the multi-select above the
+ * nav).
+ * `library.go`'s header carries the same split at its own declaration.
  *
  * ⚠️ COVER ART USED TO BE ON THAT LIST AND IS NOT ANY MORE. This endpoint
  * serves `poster_key` — `image_asset.cache_key`, the key `GET /img/{key}`

@@ -2,11 +2,20 @@
 	/**
 	 * LIBRARY — every media type at once, over `GET /api/v1/library`.
 	 *
-	 * WHAT THIS SCREEN IS. §17.2's catalogue with no type filter on it: ONE
-	 * unified table across all six media types, in one of the orders §7.6 serves,
-	 * inside §7.3's `?lib=` library scope, keyset-paged to the end of the
-	 * catalogue rather than to the first screenful. The six per-type screens are
-	 * the same read with `media_type` set; this is the one where it is omitted.
+	 * WHAT THIS SCREEN IS. The catalogue with no type filter on it: ONE unified
+	 * table across all six media types, in one of the orders §7.6 serves, inside
+	 * §7.3's `?lib=` library scope, keyset-paged to the end of the catalogue
+	 * rather than to the first screenful. The six per-type screens are the same
+	 * read with `media_type` set; this is the one where it is omitted.
+	 *
+	 * ⚠️ §17 NAMES NO `/library` ROUTE, AND THIS ONCE READ AS THOUGH §17.2
+	 * SPECIFIED THIS SCREEN. The SHAPE is §17.2's — one unified table across the
+	 * types rather than a region per type is exactly what it asks of Home's Block
+	 * C — but the all-types ROUTE is the tree's own, and the route table in
+	 * `routes/` is what establishes it. That is a gap in §17's coverage rather
+	 * than a verdict against the screen: it is built, it is linked from the
+	 * shell, and `librarygrid.test.ts` pins its entry. Do not cite §17.2 as
+	 * having required it, and do not read this note as saying it should go.
 	 *
 	 * ⚠️ IT USED TO READ `GET /api/v1/library/recent` AND NO LONGER DOES, AND THE
 	 * SWITCH IS THE POINT OF THIS FILE. That endpoint parses `limit` and `cursor`

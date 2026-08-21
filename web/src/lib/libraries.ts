@@ -626,15 +626,22 @@ export function itemCountText(library: Library): string {
  * THE KEY IS `service_instance.id`, ON BOTH SIDES, AND HERE IS THE PROOF RATHER
  * THAN THE ASSERTION:
  *
+ * ⚠️ CITED BY `file:line` UNTIL THIS EDIT, AND THE LINES HAD DRIFTED OFF THE
+ * FACTS WHILE THE FACTS THEMSELVES ALL HELD — one of the four still landed and
+ * the rest pointed at unrelated declarations. A line number is a COPY of
+ * something that lives somewhere else, and it goes stale on any edit above it;
+ * a symbol is a LOOKUP, and it survives one. Cited by symbol for that reason:
+ *
  *   · `sources[].service_instance_id` is `library_source.service_instance_id`,
  *     declared `INTEGER NOT NULL REFERENCES service_instance(id) ON DELETE
- *     CASCADE` (internal/db/migrations/00005_library_sync.sql:637) and read
- *     through `JOIN service_instance si ON si.id = ls.service_instance_id`
- *     (internal/store/libraries.go:344).
- *   · `services[].id` is `serviceHealthResponse.ID`, assigned `si.ID` in
- *     `healthRow` (internal/httpapi/services.go:714) off the row
- *     `ListServiceInstances` scans from `service_instance`'s own `id` column
- *     (internal/store/serviceinstance.go:68).
+ *     CASCADE` in the `library_source` table of
+ *     `internal/db/migrations/00005_library_sync.sql`, and read through
+ *     `JOIN service_instance si ON si.id = ls.service_instance_id` in
+ *     `internal/store/libraries.go`.
+ *   · `services[].id` is `serviceHealthResponse.ID`, assigned `si.ID` by
+ *     `healthRow` (`internal/httpapi/services.go`) off the row
+ *     `ListServiceInstances` scans, whose `serviceInstanceColumns` leads with
+ *     `service_instance`'s own `id` (`internal/store/serviceinstance.go`).
  *
  * Same table, same primary key, so the two join. ⚠️ THEY ARE STILL TWO READS AT
  * TWO MOMENTS, and both directions of disagreement are real rather than
@@ -756,9 +763,15 @@ function catalogueHealth(source: LibrarySource, read: HealthRead): ServiceHealth
  *
  * It is not a library, so it is not a row on this screen and nothing here
  * invents one. It IS worth one sentence above the table, because on the shipped
- * binary a library appears when a connected service finishes its first import,
- * so a catalogue service feeding nothing is the answer to "why is this screen
- * empty". Indexers are excluded by construction rather than by wording: §17.8
+ * binary a library appears whenever an import runs against a connected
+ * catalogue service, so a catalogue service feeding nothing is the answer to
+ * "why is this screen empty". ⚠️ THIS SAID `finishes its first import`, WHICH IS
+ * THE CLAIM `69cb75e` CORRECTED IN THE USER-FACING COPY AND DELIBERATELY LEFT
+ * HERE; this was its last copy. `BindContainers` runs in `bindPhase`, which
+ * `FullImport` calls, and the first connect is not the only route to it — the
+ * Services screen's `Run full sync now` reaches it too, and a delta escalates
+ * into it. The wording now matches the strings a user actually reads, and names
+ * no number of routes, because a route added later would make one stale. Indexers are excluded by construction rather than by wording: §17.8
  * proposes no library for Prowlarr, so a Prowlarr feeding none is not news.
  */
 export function unboundServices(libraries: readonly Library[], read: HealthRead): ServiceHealth[] {
@@ -1113,10 +1126,36 @@ function plural(n: number, one: string, many: string): string {
  *
  * §17.8 names eight per-library states — importing, one source degraded, all
  * sources down, sources healthy with zero items, orphaned, no sink, needs
- * re-identification, and no change feed. FIVE OF THOSE ARE NOW OBSERVABLE,
- * because the health read supplies the half `GET /api/v1/libraries` never
- * carried, and the other three are still not, for reasons that are about the
- * wire rather than about this function:
+ * re-identification, and no change feed. The health read supplies the half
+ * `GET /api/v1/libraries` never carried, so several of them became observable
+ * with it; the rest are not, for reasons that are about the wire rather than
+ * about this function. ⚠️ THIS NAMED A NUMBER AND THE NUMBER COUNTED SEAMS AS
+ * STATES. The list below is by name for that reason: how many are reachable is
+ * a property of what writes them, which moves without this comment moving.
+ *
+ *   · NEEDS RE-IDENTIFICATION IS A SEAM AND NOT A REACHABLE STATE, and the
+ *     treatment `missing_since` and `orphaned_at` get above is the one it
+ *     needs. `httpapi`'s `healthState` returns it only when the stored
+ *     `health_state` already reads `needs_reidentification` or `needs
+ *     re-identification`, and NOTHING WRITES EITHER STRING. That column's sole
+ *     writer is `cmd/usarr`'s `recordProbe`, which emits `healthy` or `down`
+ *     and nothing else; `internal/store`'s `ServiceInstance` carries the same
+ *     measurement about the `needs_reidentification` column beside its own
+ *     declaration, and calls the column dead. `services.go` says the sync
+ *     engine writes the state (sync.md §4 guard 2) — that is the seam's
+ *     PREMISE, not a reading of the tree, and no v0.1 source reaches it. A mark
+ *     for it would render on no install.
+ *   · ONE SOURCE DEGRADED IS REACHABLE, BUT NOT THROUGH THAT COLUMN, and the
+ *     distinction matters to anyone re-measuring this. `recordProbe` pairs
+ *     `down` with its failure count, so the `consecutive_failures` arm of
+ *     `healthState` is masked by the `down` arm ahead of it. What is not masked
+ *     is the live probe SNAPSHOT: a health row is assembled from two stores
+ *     that settle at different times, and `recordProbe` writes the snapshot
+ *     before the database row, so an error present in the snapshot over a row
+ *     that still reads `healthy` or the insert-time `unknown` derives
+ *     `degraded`. `cmd/usarr`'s Kavita end-to-end test measures that window at
+ *     roughly 2% under concurrent `-race` load, and it also persists whenever
+ *     the health write fails, since that failure is logged and not raised.
  *
  *   · NO SINK is a screen-level fact, not a row-level one: no service v0.1
  *     connects can be a request destination at all, so §17.8 drops the column

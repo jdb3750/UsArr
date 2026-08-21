@@ -993,8 +993,15 @@
 		§17.2 rejects dropping them explicitly: a Home showing
 		only the types one source covers leaves "the only available inference …
 		that UsArr does not do the others", which is the misreading principle 3
-		exists to prevent. DESIGN-DIRECTION rule 13 is why those rows are not the
-		empty section §17.1 bans — they carry a state, a cause and an action.
+		exists to prevent. DESIGN-DIRECTION rule 13 is why those rows are not an
+		empty section — they carry a state, a cause and an action, and rule 13's
+		bound is *no content*, not *no items*. ⚠️ THAT BAN WAS CITED HERE AS
+		§17.1's AND §17.1 DOES NOT CARRY IT: its bullets are no animation,
+		standard controls, density, the phone, and no skeleton shimmer. The rule
+		lives in `design/DESIGN-DIRECTION.md` §13 as rule 13, whose own source
+		column points back at §17.2. §17.2 in turn writes the attribution
+		*"(§17.1, and `design/DESIGN-DIRECTION.md` rule 13)"*, so the
+		mis-citation originates in the design document rather than here.
 
 		WHICH TYPES THOSE ARE IS `$lib/home`'s, READ OFF `internal/libsync` AND
 		NOT OFF A DOCUMENT, and it does not agree with every document. See
