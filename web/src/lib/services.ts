@@ -336,10 +336,28 @@ export interface SyncChannel {
  * `syncCell()` below answers `Not applicable` for every row that can exist
  * today"*, AND THAT IS DEAD — `internal/httpapi`'s `serviceKinds` carries
  * `kavita` and `bookorbit` at role `library` (ADR-0041, ADR-0052), and
- * `syncCell` answers a real timestamp for both. What is still missing is the
- * DELTA: `internal/libsync` does a full import on connect and there is no
- * change-feed channel behind any adapter, so nothing constructs a `SyncChannel`
- * to pass in here. Same conclusion, one layer down from where this put it.
+ * `syncCell` answers a real timestamp for both.
+ *
+ * ⚠️ THE REST OF THAT CORRECTION HAS NOW EXPIRED TOO, and it read *"What is
+ * still missing is the DELTA: `internal/libsync` does a full import on connect
+ * and there is no change-feed channel behind any adapter, so nothing constructs
+ * a `SyncChannel` to pass in here"*. There IS a change-feed channel behind an
+ * adapter: BookOrbit's channel 3b, an arrivals-only walk, reachable at
+ * `POST /api/v1/services/{id}/sync/delta` (reference/http-api.md §4a). What is
+ * still true is the CONSEQUENCE, and only the consequence: nothing constructs a
+ * `SyncChannel`, because the server publishes no per-channel sync time for a
+ * client to build one FROM — `GET /api/v1/services/health` carries
+ * `last_full_sync_at` and no delta equivalent, as the header of this file
+ * already says. So this function stays uncalled for a reason about the WIRE, not
+ * about the engine.
+ *
+ * ⚠️ AND THE `kind` UNION IS NOT YET CORRECT FOR THE CHANNEL THAT SHIPPED.
+ * `'page-walk delta'` is rendered VERBATIM into `Cell.text`, and it is still the
+ * right label for §7.1a's client-side stop — which remains the mechanism for
+ * every source that cannot express a since-filter. BookOrbit's 3b is not that
+ * shape (ADR-0070), so what it needs is an ADDITIONAL member, not an edit to
+ * this one. Choosing the words a user reads is §17.3's decision and not this
+ * type's, so the member is deliberately not invented here.
  *
  *   ordered channel      →  `delta 14:02` / `6 minutes ago`
  *   channel 3b (§7.1a)   →  `page-walk delta 13:40` / `28 minutes ago`
