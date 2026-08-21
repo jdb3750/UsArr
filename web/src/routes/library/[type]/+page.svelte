@@ -17,12 +17,18 @@
 	 * path. Table is the default, because DESIGN-DIRECTION §5.4 makes rows the
 	 * default container and a card the exception.
 	 *
-	 * ⚠️ THE BOX IS 2:3 FOR EVERY TYPE, AND §9.7 ASKS A SINGLE-TYPE GRID FOR THE
-	 * IMAGE'S OWN SHAPE. The shape is not expressible here: `GET /api/v1/library`
-	 * carries `poster_key` and no dimensions, so an image-derived aspect would
-	 * take a layout read per card after each decode, on the render path, which
-	 * Principle 1 rules out. `$lib/PosterGrid`'s CSS carries the full statement of
-	 * the tension and what would be needed to resolve it.
+	 * ⚠️ THE BOX IS 2:3 FOR EVERY TYPE, AND THAT IS A DEFERRAL RATHER THAN A LIMIT.
+	 * This used to say the per-type shape "is not expressible here" because the
+	 * wire carries no dimensions, and that is the wrong half of §9.7. That section
+	 * assigns aspect PER MEDIA TYPE AS DATA — *"portrait 2:3 for films, series,
+	 * ebooks, audiobooks and comic series; square 1:1 for albums and artists; 16:9
+	 * for episodes"* — and on THIS screen the media type is right there in
+	 * `query.mediaType`, so nothing about the wire stands in the way of it. What
+	 * was actually decided is that branching the card's box on the media type is a
+	 * change of its own, and deliberately not one made as a side effect of adding a
+	 * view. `$lib/PosterGrid`'s CSS states the whole of it, including the half §9.7
+	 * asks for that the wire genuinely cannot answer — the shape derived from the
+	 * IMAGE, which would need dimensions this response does not carry.
 	 *
 	 * ⚠️ AND THE GRID IS PART ARTWORK AND PART BLANK ON EVERY REAL INSTALL TODAY.
 	 * `internal/store`'s `PutPosterAsset` is called once per imported book by
@@ -715,9 +721,19 @@
 			would split the free space between them and strand both in the middle.
 		-->
 		<div class="segment" role="group" aria-label="View mode">
-			{#each LIBRARY_VIEWS as mode (mode)}
-				<button type="button" aria-pressed={view.current === mode} onclick={() => showView(mode)}
-					>{mode}</button
+			<!--
+				⚠️ THE LOOP VARIABLE IS `choice` AND NOT `mode`, WHICH IS NOT A STYLE
+				PREFERENCE. This screen already holds `let mode = $state<HomeMode>` — the
+				connected/degraded state §17.7's banner reads — and an `{#each … as mode}`
+				here shadows it for the whole block. Nothing in that block wants the outer
+				one today, so the shadow compiled clean and read as correct; it is the
+				next edit inside these braces that would silently get the wrong value.
+			-->
+			{#each LIBRARY_VIEWS as choice (choice)}
+				<button
+					type="button"
+					aria-pressed={view.current === choice}
+					onclick={() => showView(choice)}>{choice}</button
 				>
 			{/each}
 		</div>
@@ -854,7 +870,14 @@
 					it, the title below the art, the empty tile that answers both a missing key
 					and an uncached one — are `$lib/PosterGrid`'s and are stated there.
 				-->
-				<PosterGrid items={feed.items} />
+				<!--
+					AVAILABILITY ON THE CARD (DESIGN-DIRECTION §9.2), BECAUSE THE TABLE ARM
+					DRAWS A Have COLUMN AND THIS IS THE SAME SCREEN. Toggling to posters must
+					not silently drop a column the reader was looking at a moment ago. It is
+					the same `<HaveCell>` and the same `$lib/library.haveCell` rollup the
+					table uses, so the two arms cannot disagree about what is held.
+				-->
+				<PosterGrid items={feed.items} availability />
 
 				{#if more}
 					<!--

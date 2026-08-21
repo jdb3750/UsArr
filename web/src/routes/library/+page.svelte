@@ -713,9 +713,19 @@
 			would split the free space between them and strand both in the middle.
 		-->
 		<div class="segment" role="group" aria-label="View mode">
-			{#each LIBRARY_VIEWS as mode (mode)}
-				<button type="button" aria-pressed={view.current === mode} onclick={() => showView(mode)}
-					>{mode}</button
+			<!--
+				⚠️ THE LOOP VARIABLE IS `choice` AND NOT `mode`, WHICH IS NOT A STYLE
+				PREFERENCE. This screen already holds `let mode = $state<HomeMode>` — the
+				connected/degraded state §17.7's banner reads — and an `{#each … as mode}`
+				here shadows it for the whole block. Nothing in that block wants the outer
+				one today, so the shadow compiled clean and read as correct; it is the
+				next edit inside these braces that would silently get the wrong value.
+			-->
+			{#each LIBRARY_VIEWS as choice (choice)}
+				<button
+					type="button"
+					aria-pressed={view.current === choice}
+					onclick={() => showView(choice)}>{choice}</button
 				>
 			{/each}
 		</div>
@@ -855,7 +865,14 @@
 					position, so switching views neither re-reads the endpoint nor loses
 					where the reader had got to.
 				-->
-				<PosterGrid items={feed.items} />
+				<!--
+					AVAILABILITY ON THE CARD (DESIGN-DIRECTION §9.2), BECAUSE THE TABLE ARM
+					DRAWS A Have COLUMN AND THIS IS THE SAME SCREEN. Toggling to posters must
+					not silently drop a column the reader was looking at a moment ago. It is
+					the same `<HaveCell>` and the same `$lib/library.haveCell` rollup the
+					table uses, so the two arms cannot disagree about what is held.
+				-->
+				<PosterGrid items={feed.items} availability />
 
 				{#if more}
 					<!--

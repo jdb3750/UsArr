@@ -1665,8 +1665,16 @@
 					LONGER SPELLS EITHER. The CSS comment that used to sit beside the
 					route-scoped `.postergrid` named the condition for lifting it — a
 					second consumer — and the catalogue screens are the second and third.
-					Read that component for the card's rules; nothing about Block C's
-					rendered output changed when they moved.
+					Read that component for the card's rules.
+
+					⚠️ ONE THING ABOUT BLOCK C's OUTPUT DID CHANGE IN THAT MOVE, AND THIS
+					COMMENT USED TO DENY IT. `$lib/library.posterArtSrc` and its `onerror`
+					landed in the same commit, so a work whose `GET /img/{key}` answers
+					`404 not_cached` — which is ordinary, because the key is written by the
+					catalogue import and the bytes by a separate pass — now draws the same
+					empty tile as a work with no key at all, where before it drew the
+					browser's own broken-image glyph. Every other byte of the markup and
+					every CSS declaration moved unchanged.
 				-->
 				<PosterGrid items={recent.items} />
 
