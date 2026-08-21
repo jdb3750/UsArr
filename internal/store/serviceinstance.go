@@ -113,7 +113,12 @@ type ServiceInstance struct {
 	// value nothing compares is not a guard. ⚠️ ITS REACH IS STILL BOUNDED: the
 	// comparison is over the item's external ids, so an item with none hashes
 	// like every other item with none and the guard passes a reused id through.
-	// That is ADR-0074's third named gap, and it has no guard either.
+	// That is ADR-0074's third named gap, and it has no guard either — what it
+	// now has is a RECORD, which is a different thing and does not close it:
+	// every revival made without an identity to compare writes a
+	// SyncReportRevivedWithoutIdentity row saying so, and guardOneVerdict carries
+	// why passing through beats re-minting on this source. A row after the fact
+	// is not a guard before it.
 	//
 	// THE FORM OF THIS ANNOTATION IS libraries.go's Library.OrphanedAt, NOT ITS
 	// PLACEMENT: that one annotates a field that IS selected, and what is being

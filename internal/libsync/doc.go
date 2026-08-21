@@ -44,6 +44,10 @@
 // ⚠️ THE PRECONDITION IS THAT THE READ SAW THE WHOLE LIST, AND ONLY THIS PACKAGE
 // CAN ENFORCE IT: a partial import returns before the call, and DeltaSync passes
 // a nil seen-set because an arrivals walk's set difference is the whole library.
+// "Observed" is what the UPSTREAM reported and not what this importer applied —
+// sweepScope folds in the items the adapter read and could not map, and withholds
+// the containers that answered nothing or were measured short, so an absence is
+// only ever concluded inside a container the read can be vouched for.
 // Guard 1 lives in internal/store, at the upsert where the resurrection it
 // answers is detected. What is NOT here is guard 2 and §7.4 step 4's drift
 // comparison; see the NOT-HERE list below and ADR-0074.

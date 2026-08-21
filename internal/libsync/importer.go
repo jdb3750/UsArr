@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"sort"
 	"time"
 
 	"github.com/jdb3750/UsArr/internal/store"
@@ -67,6 +68,78 @@ const (
 	// syncReportContainerDeclined: a container the caller chose not to bind.
 	syncReportContainerDeclined = "container_declined"
 )
+
+// UnmappedReporter is the optional half of Source that reports link keys its
+// walk READ and did not map.
+//
+// # Why the seen-set cannot be the applied-set
+//
+// ⚠️ "THE ADAPTER HAD NO KIND FOR THIS" AND "THE UPSTREAM HAS STOPPED REPORTING
+// THIS" ARE DIFFERENT FACTS, AND CHANNEL 4 NEEDS THE SECOND. streamAndApply
+// collects its seen-set from the batch — items that reached `fn` — so a book the
+// walk read and declined to map never enters it and is absent from the set
+// difference, which tombstones it as deleted upstream. BookOrbit does exactly
+// that for a book whose MediaKind is unknown, which is what a book with no
+// primary file reads as (getBookMediaKind): a book still in `status =
+// 'processing'` disappears from the replica and takes its work with it, while
+// `rep.ItemsRead` on the very same report counts it.
+//
+// bindPhase already applies the honest rule one grain up — a DECLINED container
+// is still a container the upstream reported — and this interface is the same
+// rule at item grain. The two halves of one read must not disagree about what
+// "observed" means.
+//
+// # It is an interface rather than a field on Source
+//
+// A source with no unmappable items has nothing to implement, on CreditSource's
+// rule (principle 3): the Sonarr and Radarr adapters map everything they read,
+// and requiring a method that returns nil would be ceremony. A source that CAN
+// decline an item and does not implement this is the honest failure mode — it
+// tombstones what it declined, which is the behaviour of the whole tree before
+// this existed, rather than a silent new one.
+//
+// ⚠️ AND IT IS NOT A SECOND UNBOUNDED ALLOCATION IN ANY SENSE THAT MATTERS.
+// SkipTally is deliberately a COUNT and not a list, on the argument that a list
+// of every skipped book in a 20,000-comic library is unbounded — that argument
+// does not reach here, because these keys are unioned into a seen-set that
+// already holds one entry per item the read DID map. The union is bounded by the
+// size of the read either way; what changes is which side of the split each book
+// falls on.
+type UnmappedReporter interface {
+	// Unmapped is the link keys of items this walk read and did not map, with
+	// the container each was read in. It is read AFTER the walk, and only after
+	// a walk that completed — a partial read never reaches the sweep at all.
+	Unmapped() []ObservedItem
+}
+
+// ObservedItem is one item a whole-list read observed, and the container it was
+// observed in.
+//
+// The container travels with the key because the sweep's own protection is per
+// container (store.SweepScope): a container whose every book was unmappable
+// still has a fully observed read, and reporting the books without the container
+// they were in would leave that container looking like one that answered
+// nothing.
+type ObservedItem struct {
+	Ref         store.LinkRef
+	ContainerID string
+}
+
+// CompletenessReporter is the optional half of Source that reports, per
+// container, whether UsArr's credential could see the whole of it.
+//
+// ⚠️ IT IS READ BEFORE THE SWEEP AND IT WAS ALREADY BEING MEASURED. BookOrbit's
+// completeness pass runs from Containers(), so the verdict exists by the time
+// the item stream closes; until this interface existed, cmd/usarr read it AFTER
+// FullImport returned — that is, after the sweep it contradicts had already run.
+// A container whose verdict is `shortfall` is, by that verdict's own definition,
+// one whose read did not see everything the container holds, which is precisely
+// SweepDeletions' violated precondition. FullImport therefore drops it from
+// SweepScope.Observed rather than sweeping on a read it has already measured as
+// short.
+type CompletenessReporter interface {
+	Completeness() []ContainerCompleteness
+}
 
 func (i ImportedItem) creditRequest() CreditRequest {
 	return CreditRequest{RemoteKind: i.RemoteKind, RemoteID: i.RemoteID, Kind: i.Kind}
@@ -353,8 +426,8 @@ func (im *Importer) FullImport(ctx context.Context, instanceID int64) (rep Repor
 		return rep, err
 	}
 
-	var seen []store.LinkRef
-	imported, err := im.streamAndApply(ctx, instanceID, bindings, &rep, im.Source.StreamItems, &seen)
+	var obs readObservation
+	imported, err := im.streamAndApply(ctx, instanceID, bindings, &rep, im.Source.StreamItems, &obs)
 	if err != nil {
 		return rep, err
 	}
@@ -400,7 +473,15 @@ func (im *Importer) FullImport(ctx context.Context, instanceID int64) (rep Repor
 	// this line only by not reaching it — which is the whole tombstone-safety
 	// argument in §7.4 applied one layer up: half a list read is a list of
 	// absences that are not absences.
-	deletions, err := im.Store.SweepDeletions(ctx, instanceID, seen, containerRefs, im.now())
+	//
+	// ⚠️ AND WHAT IT IS HANDED IS WHAT THE UPSTREAM REPORTED, NOT WHAT THIS
+	// IMPORTER MANAGED TO APPLY. sweepScope folds the two corrections that
+	// separates those: the items the adapter read and declined to map, and the
+	// containers whose read is measured short or answered nothing at all. Both
+	// are facts about the READ; the batching loop can only see the ones that
+	// reached it.
+	seen, scope := im.sweepScope(&obs, containerRefs)
+	deletions, err := im.Store.SweepDeletions(ctx, instanceID, seen, scope, im.now())
 	rep.Deletions = deletions
 	if err != nil {
 		return rep, fmt.Errorf("full import of service_instance %d: %w", instanceID, err)
@@ -481,13 +562,73 @@ func (im *Importer) FullImport(ctx context.Context, instanceID int64) (rep Repor
 		"skipped_containers", len(rep.SkippedContainers),
 		"identity_conflicts", len(rep.IdentityConflicts),
 		"ids_reused", rep.IDsReused,
+		"revived_without_identity", rep.RevivedWithoutIdentity,
 		"links_tombstoned", rep.Deletions.LinksTombstoned,
+		"links_unobserved", rep.Deletions.LinksUnobserved,
 		"works_tombstoned", rep.Deletions.WorksTombstoned,
 		"sources_missing", rep.Deletions.SourcesMissing,
 		"libraries_orphaned", rep.Deletions.LibrariesOrphaned,
 		"libraries_restored", rep.Deletions.LibrariesRestored,
 		"duration", rep.Duration())
 	return rep, nil
+}
+
+// sweepScope turns one completed whole-list read into the two things the
+// deletion pass reconciles against: the link keys observed, and the containers
+// whose absence evidence this importer is willing to vouch for.
+//
+// THREE CORRECTIONS, and each one exists because a green import produced a wrong
+// deletion without it:
+//
+//  1. The UNMAPPED items are unioned into the seen-set. A book the walk read and
+//     had no kind for was reported by the upstream in this very read, and
+//     tombstoning it as deleted contradicts `rep.ItemsRead` on the same report.
+//     See UnmappedReporter.
+//  2. A container that delivered NOTHING is not vouched for. That is the
+//     unmounted share, the revoked library grant, the renamed container — the
+//     failure store.ErrSweepRefusedEmptyRead names, one library down, where the
+//     instance-wide refusal cannot see it because the other containers answered.
+//  3. A container MEASURED SHORT is not vouched for either, and this is the arm
+//     that needs no inference at all: the completeness pass has already computed
+//     that UsArr's credential sees fewer books than the container holds. Sweeping
+//     on a read known to be short deletes the difference.
+//
+// ⚠️ THE RESULT IS ALWAYS A SUBSET OF WHAT THE READ COVERED, NEVER A SUPERSET.
+// Every correction here can only REMOVE a container from Observed or ADD a key
+// to the seen-set, and both directions mean "tombstone less". Nothing in this
+// function can widen a deletion, which is the property that makes it safe to
+// extend when a fourth correction is found.
+func (im *Importer) sweepScope(
+	obs *readObservation, containerRefs []string,
+) ([]store.LinkRef, store.SweepScope) {
+	seen := obs.items
+	observed := make(map[string]struct{}, len(obs.containers))
+	for c := range obs.containers {
+		observed[c] = struct{}{}
+	}
+	if src, ok := im.Source.(UnmappedReporter); ok {
+		for _, u := range src.Unmapped() {
+			seen = append(seen, u.Ref)
+			if u.ContainerID != "" {
+				observed[u.ContainerID] = struct{}{}
+			}
+		}
+	}
+	if src, ok := im.Source.(CompletenessReporter); ok {
+		for _, c := range src.Completeness() {
+			if c.State == store.CompletenessShortfall {
+				delete(observed, c.RemoteID)
+			}
+		}
+	}
+	// Sorted so two runs over the same instance hand the sweep the same slice,
+	// which is what makes a failing assertion reproducible.
+	refs := make([]string, 0, len(observed))
+	for c := range observed {
+		refs = append(refs, c)
+	}
+	sort.Strings(refs)
+	return seen, store.SweepScope{Reported: containerRefs, Observed: refs}
 }
 
 // bindPhase is the container read, the library bind and the declined-container
@@ -603,7 +744,34 @@ func (im *Importer) bindPhase(
 // second write path for the same rows.
 type stream func(ctx context.Context, fn func(store.CatalogueItem) error) (int, error)
 
-// seen, when non-nil, accumulates EVERY link key this loop wrote — children and
+// readObservation is what one WHOLE-LIST read observed, in the two grains the
+// deletion pass reconciles at: the link keys, and the containers those keys came
+// from.
+//
+// ⚠️ THE TWO ARE COLLECTED TOGETHER BECAUSE THEY MUST NOT DISAGREE. The sweep
+// protects the items of any container the read cannot vouch for
+// (store.SweepScope.Observed), so a container derived from a different pass than
+// the keys — from the container listing, say — would vouch for a container that
+// answered nothing. Every entry in `containers` is here because an item was
+// observed in it, and that is the only way an entry gets here.
+type readObservation struct {
+	items      []store.LinkRef
+	containers map[string]struct{}
+}
+
+// observe records one link key read in one container.
+func (o *readObservation) observe(ref store.LinkRef, containerID string) {
+	o.items = append(o.items, ref)
+	if containerID == "" {
+		return
+	}
+	if o.containers == nil {
+		o.containers = map[string]struct{}{}
+	}
+	o.containers[containerID] = struct{}{}
+}
+
+// obs, when non-nil, accumulates EVERY link key this loop wrote — children and
 // synthesised parents included, which is what separates it from the returned
 // []ImportedItem. That slice is the per-item passes' work list and deliberately
 // excludes children (see the flush below); a deletion pass fed from it would
@@ -618,7 +786,7 @@ type stream func(ctx context.Context, fn func(store.CatalogueItem) error) (int, 
 func (im *Importer) streamAndApply(
 	ctx context.Context, instanceID int64,
 	bindings map[string]store.CatalogueBinding, rep *Report, read stream,
-	seen *[]store.LinkRef,
+	obs *readObservation,
 ) ([]ImportedItem, error) {
 	rows := im.BatchRows
 	if rows <= 0 {
@@ -663,17 +831,20 @@ func (im *Importer) streamAndApply(
 		// keeps an entry for a child. When one wants to, this is the line that
 		// changes, and the budget above is the argument it has to answer.
 		for _, it := range batch {
-			if seen != nil {
+			if obs != nil {
 				// BEFORE the child skip, and with the parent's own key beside
 				// the item's: applyOneItem writes a link for both, so both are
-				// links the read observed.
-				*seen = append(*seen, store.LinkRef{
+				// links the read observed. The parent is filed under the CHILD's
+				// container, which is the container applyOneItem's step 7 writes
+				// onto the parent link too — parentItem carries the child's
+				// ContainerID.
+				obs.observe(store.LinkRef{
 					RemoteKind: it.RemoteKind, RemoteID: it.RemoteID,
-				})
+				}, it.ContainerID)
 				if it.Parent != nil {
-					*seen = append(*seen, store.LinkRef{
+					obs.observe(store.LinkRef{
 						RemoteKind: it.Parent.RemoteKind, RemoteID: it.Parent.RemoteID,
-					})
+					}, it.ContainerID)
 				}
 			}
 			if it.Parent != nil {

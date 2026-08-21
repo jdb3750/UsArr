@@ -322,6 +322,21 @@ type BookOrbitSource struct {
 	// three and this map is never asked for one.
 	cards map[string]bookOrbitCard
 
+	// unmapped is every book this walk READ and did not map, as the link key it
+	// would have had. It is what keeps channel 4's set difference a statement
+	// about the UPSTREAM rather than about this adapter's kind table — see
+	// Unmapped and UnmappedReporter.
+	//
+	// ⚠️ IT HOLDS ONE ENTRY PER UNMAPPED BOOK WHERE SkipTally HOLDS A COUNT, AND
+	// THAT IS NOT A REVERSAL OF THE TALLY'S RULE. SkipTally is a count because
+	// nobody needs a list of 20,000 skipped comics on a screen; this is a list
+	// because the deletion pass needs each key or it deletes that book. It is
+	// bounded by the same read the seen-set is already bounded by: every entry
+	// here is a book that did NOT get an entry in the importer's seen-set, so the
+	// two together are one entry per book read, which is what the seen-set would
+	// have held if the adapter mapped everything.
+	unmapped []ObservedItem
+
 	// gateOnce makes the §14 consultation happen exactly once per source,
 	// whichever catalogue read comes first.
 	gateOnce sync.Once
@@ -610,6 +625,12 @@ func (s *BookOrbitSource) StreamItems(ctx context.Context, fn func(store.Catalog
 
 	s.mu.Lock()
 	libs := append([]bookorbit.Library(nil), s.containers...)
+	// THIS WALK'S SET, not every walk's. Unmapped() answers "what did the read
+	// that just finished decline to map", and a source walked twice must not
+	// hand the second sweep the first walk's books — those are keys the second
+	// read never observed, which is the precise mistake this whole mechanism
+	// exists to stop making in the other direction.
+	s.unmapped = nil
 	s.mu.Unlock()
 
 	if len(libs) == 0 {
@@ -668,6 +689,16 @@ func (s *BookOrbitSource) StreamItems(ctx context.Context, fn func(store.Catalog
 				return fn(mapBook(b, ref))
 			default:
 				tally.Unknown++
+				// ⚠️ READ, NOT MAPPED — AND CHANNEL 4 NEEDS TO KNOW THE
+				// DIFFERENCE. This book was in the upstream's answer; UsArr
+				// simply has no kind for it, which for BookOrbit means no
+				// primary file (getBookMediaKind), and the commonest cause of
+				// that is a book still being processed. Without this line the
+				// book is missing from the seen-set, the deletion pass reads
+				// that as "the upstream stopped reporting it", and a book the
+				// walk COUNTED in ItemsRead is tombstoned as deleted on the
+				// same report. See UnmappedReporter.
+				s.observeUnmapped(b, ref)
 				return nil
 			}
 		})
@@ -708,6 +739,45 @@ func (s *BookOrbitSource) StreamItems(ctx context.Context, fn func(store.Catalog
 		}
 	}
 	return read, nil
+}
+
+// observeUnmapped records one book the walk read and could not map, under the
+// link key mapBook would have minted for it.
+//
+// THE KEY IS bookRemoteKind FOR EVERY ARM, which is why one entry is enough:
+// mapBook and mapComic both write bookRemoteKind on the item's own link (see
+// mapComic's "STILL bookRemoteKind"), so a book that used to import as prose and
+// a book that used to import as a comic issue share this key. What is NOT
+// reachable from here is the SERIES link a comic's parent holds — its remote id
+// is the series' and this card has no series to name once BookOrbit has stopped
+// classifying it. A comic series whose every issue became unmappable in one read
+// is therefore still swept; it is one container's worth of residue, it is
+// recorded here rather than left to be discovered, and the container-grain
+// protection in store.SweepScope is what bounds it.
+func (s *BookOrbitSource) observeUnmapped(b bookorbit.Book, containerRef string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.unmapped = append(s.unmapped, ObservedItem{
+		Ref: store.LinkRef{
+			RemoteKind: bookRemoteKind,
+			RemoteID:   strconv.FormatInt(b.ID, 10),
+		},
+		ContainerID: containerRef,
+	})
+}
+
+// Unmapped is UnmappedReporter: every book this source's last walk read and did
+// not map.
+//
+// ⚠️ IT IS THE WALK'S SET, NOT Containers()'s, on Skipped()'s rule and for its
+// reason — an entry exists only because a book was actually read. A walk that
+// died in library three contributes what it had read; the importer never reaches
+// the sweep on that path, so the partial set is never used to conclude an
+// absence.
+func (s *BookOrbitSource) Unmapped() []ObservedItem {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return append([]ObservedItem(nil), s.unmapped...)
 }
 
 // keepCard files one mapped book's credits, year and files for the two passes

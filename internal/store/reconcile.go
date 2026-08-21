@@ -111,8 +111,62 @@ const SyncReportDeletionSweepRefused = "deletion_sweep_refused"
 // a SyncReportDeletionSweepRefused row that survives the refusal, this error
 // reaches the importer, and the import that would have swept fails rather than
 // reporting a completed run that quietly skipped its deletion pass.
+//
+// ⚠️ AND IT IS THE INSTANCE-WIDE CASE OF A RULE THAT NOW ALSO RUNS PER
+// CONTAINER. This error covers one failure only: the WHOLE read came back empty.
+// The same failure one library down — one share unmounted, one library grant
+// revoked, one container renamed, on an instance whose other containers answered
+// normally — produces no refusal here, because the read as a whole was not
+// empty. That case is answered by SweepScope.Observed instead: the items of a
+// container the caller cannot vouch for are retained rather than tombstoned, and
+// counted in SweepResult.LinksUnobserved. The two are the same "zero from a
+// source the replica knows had content" rule at two grains; only the
+// instance-wide one is loud enough to fail an import.
 var ErrSweepRefusedEmptyRead = errors.New(
 	"deletion sweep refused: the read reported zero items and the instance has live links")
+
+// SweepScope is what one whole-list read observed AT CONTAINER GRAIN, and it is
+// two different facts that must not be confused with each other.
+//
+// ⚠️ THE TWO FIELDS ARE A STRUCT RATHER THAN TWO ADJACENT []string PARAMETERS,
+// deliberately. They are the same type, they are nearly the same length on every
+// healthy import, and transposing them is invisible to the compiler and to every
+// test whose fixture observes everything it reports — while in production it
+// tombstones the items of a container that went dark and spares the ones the
+// read actually covered. Naming them at the call site is what makes that
+// transposition unwritable.
+type SweepScope struct {
+	// Reported is every container the upstream NAMED in this read, whether or
+	// not UsArr has a kind for it. It drives the container half alone: a
+	// library_source whose container_ref is absent from this set is stamped
+	// missing_since.
+	//
+	// A DECLINED container belongs here. "UsArr has no kind for this" and "the
+	// upstream has stopped reporting this" are different facts, and stamping the
+	// first as the second marks a library missing because an adapter's mapping
+	// changed. internal/libsync's bindPhase carries the same sentence at the
+	// producing end.
+	Reported []string
+
+	// Observed is the subset of containers whose ITEMS the caller vouches for
+	// having read IN FULL. It drives the item half: a live link is tombstoned
+	// only when its own container is in this set.
+	//
+	// ⚠️ IT IS A SUBSET OF Reported AND IT IS NOT THE SAME SET. A container the
+	// upstream still lists and returns zero books for is reported and NOT
+	// observed — that is an unmounted share, a revoked grant or a renamed
+	// container, and it is exactly the failure ErrSweepRefusedEmptyRead names,
+	// one library down where the instance-wide check cannot see it. So is a
+	// container whose read is MEASURED short: internal/libsync's completeness
+	// pass computes, per container, whether UsArr's credential sees fewer books
+	// than the container holds, and a container with that verdict has by
+	// definition not been read in full.
+	//
+	// The caller is what decides; this package cannot. A source that walks
+	// containers one at a time knows which walk answered and which did not, and
+	// nothing in the replica does.
+	Observed []string
+}
 
 // LinkRef identifies one service_item_link row within one service instance.
 //
@@ -137,6 +191,21 @@ type SweepResult struct {
 	// window.
 	LinksTombstoned int
 
+	// LinksUnobserved is live links the read did not report AND DID NOT
+	// TOMBSTONE, because their container is not one the caller vouched for
+	// having read in full (SweepScope.Observed).
+	//
+	// ⚠️ IT IS THE ONLY PLACE THIS NUMBER EXISTS. A retained link is
+	// indistinguishable, on the row, from a link the read reported — both are
+	// simply live — so a sweep that protected half a library and said nothing
+	// would look exactly like a sweep that found nothing to do. It rides
+	// detailJSON for the same reason.
+	//
+	// A steady non-zero figure on an otherwise healthy instance is a container
+	// that has been dark for a while, and it is the operator's cue to look at the
+	// Libraries screen rather than at this counter.
+	LinksUnobserved int
+
 	// WorksTombstoned is works that lost their LAST live link in this sweep. It
 	// is smaller than LinksTombstoned whenever a second instance still reports
 	// the same work, which is the whole reason it is counted separately.
@@ -157,8 +226,8 @@ type SweepResult struct {
 //
 // ⚠️ THE PRECONDITION IS THE WHOLE CORRECTNESS OF THIS FUNCTION AND IT CANNOT BE
 // CHECKED HERE. `seenItems` must be every link the caller's read observed and
-// `seenContainers` every container it observed; anything absent from them is
-// treated as absent upstream. A partial read — a stream that died mid-array, a
+// `scope.Reported` every container it observed; anything absent from them —
+// within the containers scope.Observed names — is treated as absent upstream. A partial read — a stream that died mid-array, a
 // delta walk that by construction returns only what changed — passed to this
 // function tombstones the difference, which is the entire library. The caller is
 // what enforces it: internal/libsync calls this from FullImport's success path
@@ -169,18 +238,29 @@ type SweepResult struct {
 // ErrSweepRefusedEmptyRead and writes nothing. That is a failed read, not an
 // emptied upstream. Every other partial read is still the caller's to prevent.
 //
+// AND ONE SHAPE IS BOUNDED HERE RATHER THAN CHECKED: the item half only reaches
+// links whose container is in scope.Observed, so a caller that cannot vouch for
+// a container cannot tombstone its items by omission. That is what keeps the
+// precondition's blast radius at one container instead of at one instance — see
+// SweepScope, and ErrSweepRefusedEmptyRead for why the instance-wide case is
+// still an error on top of it.
+//
 // now is injectable so the stamps a test asserts are the stamps it chose.
 func (s *Store) SweepDeletions(
 	ctx context.Context, instanceID int64,
-	seenItems []LinkRef, seenContainers []string, now time.Time,
+	seenItems []LinkRef, scope SweepScope, now time.Time,
 ) (SweepResult, error) {
 	seen := make(map[LinkRef]struct{}, len(seenItems))
 	for _, k := range seenItems {
 		seen[k] = struct{}{}
 	}
-	containers := make(map[string]struct{}, len(seenContainers))
-	for _, c := range seenContainers {
+	containers := make(map[string]struct{}, len(scope.Reported))
+	for _, c := range scope.Reported {
 		containers[c] = struct{}{}
+	}
+	observed := make(map[string]struct{}, len(scope.Observed))
+	for _, c := range scope.Observed {
+		observed[c] = struct{}{}
 	}
 
 	var res SweepResult
@@ -210,7 +290,7 @@ func (s *Store) SweepDeletions(
 					SyncReportDeletionSweepRefused, "", "", res.refusalJSON())
 			}
 		}
-		if err := sweepItems(ctx, tx, instanceID, seen, nowStr, &res); err != nil {
+		if err := sweepItems(ctx, tx, instanceID, seen, observed, nowStr, &res); err != nil {
 			return err
 		}
 		if err := sweepContainers(ctx, tx, instanceID, containers, nowStr, &res); err != nil {
@@ -253,9 +333,9 @@ func liveLinkCount(ctx context.Context, tx *sql.Tx, instanceID int64) (int, erro
 // there is no encoding error to handle and no upstream text to redact.
 func (r SweepResult) detailJSON() string {
 	return fmt.Sprintf(
-		`{"links_live":%d,"links_tombstoned":%d,"works_tombstoned":%d,`+
+		`{"links_live":%d,"links_tombstoned":%d,"links_unobserved":%d,"works_tombstoned":%d,`+
 			`"sources_missing":%d,"libraries_orphaned":%d,"libraries_restored":%d}`,
-		r.LinksLive, r.LinksTombstoned, r.WorksTombstoned,
+		r.LinksLive, r.LinksTombstoned, r.LinksUnobserved, r.WorksTombstoned,
 		r.SourcesMissing, r.LibrariesOrphaned, r.LibrariesRestored)
 }
 
@@ -283,11 +363,13 @@ func (r SweepResult) refusalJSON() string {
 // service_item_link; linkLookupSQL's three-column seek on ux_sil is a demand, and
 // TestResurrectionPlanGuardFiresWhenRemoteKindIsDropped is its fired control.
 const absentLinksSQL = `
-	SELECT remote_kind, remote_id, work_id
+	SELECT remote_kind, remote_id, work_id, remote_library_id
 	  FROM service_item_link
 	 WHERE service_instance_id = ? AND deleted_at IS NULL`
 
-// absentLink is one live link the read did not report.
+// absentLink is one live link the read did not report, from a container the read
+// DID observe. A link the read did not report from a container it did not
+// observe is not an absence and never becomes one of these — see absentLinks.
 type absentLink struct {
 	ref    LinkRef
 	workID int64
@@ -307,31 +389,61 @@ type absentLink struct {
 // per row. There is no index to add here and none is wanted;
 // TestTheInstanceSweepIsAllowedToScan records the acceptance, EXPLAINing
 // absentLinksSQL itself.
+//
+// # ABSENCE IS ONLY EVIDENCE INSIDE A CONTAINER THE READ OBSERVED
+//
+// ⚠️ THE SET DIFFERENCE IS TAKEN PER CONTAINER, NOT PER INSTANCE, and that is
+// the whole of this function's second return path. A link the read did not
+// report is an absence only if `observed` holds its container; otherwise the
+// read has said nothing about it and the link is RETAINED and counted.
+//
+// The failure this answers is one library down from the one
+// ErrSweepRefusedEmptyRead catches: an instance with two containers where ONE
+// share is unmounted, one grant revoked, one library renamed. The read comes
+// back non-empty — the other container answered — so the instance-wide refusal
+// does not fire, and every live link in the dark container is absent from a
+// flat seen-set. Before this predicate that stamped the container missing AND
+// tombstoned every work in it, on the same event, which is precisely the
+// collapse ADR-0074 forbids: "collapsing the container stamp into the item
+// tombstone is how an unmounted share becomes a deleted library".
+//
+// ⚠️ A LINK WITH NO remote_library_id IS RETAINED, on the same rule rather than
+// as a special case: a link that names no container cannot be inside one the
+// read vouched for. It is unreachable from the shipped writer — applyOneItem
+// step 7 writes CatalogueItem.ContainerID, and ApplyCatalogueBatch never applies
+// an item whose container has no binding — so this is the fail-safe direction of
+// an input that does not occur, chosen because the alternative is to delete rows
+// on evidence that does not exist.
 func absentLinks(
-	ctx context.Context, tx *sql.Tx, instanceID int64, seen map[LinkRef]struct{},
-) ([]absentLink, int, error) {
+	ctx context.Context, tx *sql.Tx, instanceID int64,
+	seen map[LinkRef]struct{}, observed map[string]struct{},
+) (absent []absentLink, live, unobserved int, err error) {
 	rows, err := tx.QueryContext(ctx, absentLinksSQL, instanceID)
 	if err != nil {
-		return nil, 0, fmt.Errorf("read live links: %w", err)
+		return nil, 0, 0, fmt.Errorf("read live links: %w", err)
 	}
 	defer func() { _ = rows.Close() }()
 
-	var absent []absentLink
-	var live int
 	for rows.Next() {
 		var a absentLink
-		if err := rows.Scan(&a.ref.RemoteKind, &a.ref.RemoteID, &a.workID); err != nil {
-			return nil, 0, fmt.Errorf("scan live link: %w", err)
+		var container sql.NullString
+		if err := rows.Scan(&a.ref.RemoteKind, &a.ref.RemoteID, &a.workID, &container); err != nil {
+			return nil, 0, 0, fmt.Errorf("scan live link: %w", err)
 		}
 		live++
-		if _, ok := seen[a.ref]; !ok {
-			absent = append(absent, a)
+		if _, ok := seen[a.ref]; ok {
+			continue
 		}
+		if _, ok := observed[container.String]; !ok || !container.Valid {
+			unobserved++
+			continue
+		}
+		absent = append(absent, a)
 	}
 	if err := rows.Err(); err != nil {
-		return nil, 0, fmt.Errorf("read live links: %w", err)
+		return nil, 0, 0, fmt.Errorf("read live links: %w", err)
 	}
-	return absent, live, nil
+	return absent, live, unobserved, nil
 }
 
 // absentSources is the container half's set difference: the library_source rows
@@ -404,21 +516,33 @@ func fedLibraries(ctx context.Context, tx *sql.Tx, instanceID int64) ([]int64, e
 // sweepItems tombstones the links the read did not see, and then the works that
 // lost their last live link with them.
 //
-// THE WORK TOMBSTONE IS NOT A SECOND FEATURE. `work.deleted_at` is what
-// browse.go, searchlibrary.go and recent.go all filter on; `service_item_link.
-// deleted_at` is not read by any of the three. A pass that tombstoned only the
-// link would move a column and change nothing a user can see, and would be
-// measurable only by reading the column it wrote — which is the shape of a check
-// that passes over its own deleted subject.
+// THE WORK TOMBSTONE IS NOT A SECOND FEATURE. `work.deleted_at` is what the
+// user-facing work reads filter on; `service_item_link.deleted_at` is not read
+// by them. A pass that tombstoned only the link would move a column and change
+// nothing a user can see, and would be measurable only by reading the column it
+// wrote — which is the shape of a check that passes over its own deleted subject.
+//
+// ⚠️ THIS COMMENT NAMED THREE READERS — *"`work.deleted_at` is what browse.go,
+// searchlibrary.go and recent.go all filter on"* — AND THE ENUMERATION WAS NOT
+// THE ENUMERATION. It was true of every read that goes THROUGH `work`, and it
+// missed the read that does not: listLibrariesSQL's §17.8 item count, which
+// counts `library_member` rows and never touches the work row at all. That count
+// told the owner a library still held two items after both of them were deleted
+// upstream, for as long as this slice made the column reachable. The rule, not
+// the list: a read that renders a work to a user filters `work.deleted_at`,
+// INCLUDING a read that reaches the work through a membership table.
+// TestListLibrariesItemCountExcludesTombstonedWorks is the guard on the one this
+// list missed.
 func sweepItems(
 	ctx context.Context, tx *sql.Tx, instanceID int64,
-	seen map[LinkRef]struct{}, nowStr string, res *SweepResult,
+	seen map[LinkRef]struct{}, observed map[string]struct{}, nowStr string, res *SweepResult,
 ) error {
-	absent, live, err := absentLinks(ctx, tx, instanceID, seen)
+	absent, live, unobserved, err := absentLinks(ctx, tx, instanceID, seen, observed)
 	if err != nil {
 		return err
 	}
 	res.LinksLive = live
+	res.LinksUnobserved = unobserved
 
 	for _, a := range absent {
 		// remote_kind IS NAMED, and it is CORRECTNESS before it is a query plan.

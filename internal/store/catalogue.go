@@ -392,6 +392,17 @@ type BatchResult struct {
 	// resurrected. It is not an error and does not fail an import; it is the one
 	// event whose absence from a report means the guard never had to act.
 	IDsReused int
+
+	// RevivedWithoutIdentity counts guard 1's third outcome: a tombstoned link
+	// revived for an item that carried no identifiers at all, so nothing was
+	// compared and nothing was certified.
+	//
+	// ⚠️ IT IS COUNTED APART FROM IDsReused BECAUSE THE TWO ARE OPPOSITE EVENTS.
+	// One says a link was destroyed and its work abandoned; this one says a link
+	// was kept on no evidence. Summing them would report "the guard acted N
+	// times" and hide which way. See SyncReportRevivedWithoutIdentity for the
+	// durable half.
+	RevivedWithoutIdentity int
 }
 
 func (r *BatchResult) add(o BatchResult) {
@@ -404,6 +415,7 @@ func (r *BatchResult) add(o BatchResult) {
 	r.SearchDocs += o.SearchDocs
 	r.Members += o.Members
 	r.IDsReused += o.IDsReused
+	r.RevivedWithoutIdentity += o.RevivedWithoutIdentity
 }
 
 // Add merges another result into r. Exported so an importer can accumulate
@@ -1498,23 +1510,24 @@ func applyOneItem(
 	//
 	// THE FOUR STATES ARE NAMED SEPARATELY, and guardOneVerdict carries the whole
 	// argument for why: two of them used to be one branch, and the equality that
-	// joined them held VACUOUSLY.
-	if workID != 0 && linkDeletedAt.Valid && guardOne(storedIdentity, it).firesGuard() {
+	// joined them held VACUOUSLY. They collapse into THREE outcomes, and the
+	// verdict is computed ONCE here rather than re-derived per arm — three calls
+	// to guardOne in one branch is three chances for a later edit to move one of
+	// them and leave the row disagreeing with the action it describes.
+	verdict := guardOne(storedIdentity, it)
+	if workID != 0 && linkDeletedAt.Valid && verdict.firesGuard() {
 		if _, err := tx.ExecContext(ctx, `
 			DELETE FROM service_item_link
 			 WHERE service_instance_id = ? AND remote_kind = ? AND remote_id = ?`,
 			instanceID, it.RemoteKind, it.RemoteID); err != nil {
 			return workID, res, fmt.Errorf("hard-delete resurrected link: %w", err)
 		}
-		// The verdict rides the row because the two firing states are NOT the same
-		// finding. `identity_changed` says the upstream's identifiers moved;
-		// `no_incoming_identity` says the item arrived carrying none, so there was
-		// nothing to compare and the guard declined to certify a match it could not
-		// see. A reader who cannot tell those apart cannot tell a real id reuse from
-		// an unidentified library, and on a source whose ordinary state is
-		// unidentified (§6.4, ADR-0035 §1) the second is the common row by far.
+		// The verdict rides the row so a reader can re-derive the decision rather
+		// than take it on trust. Today one state reaches here — `identity_changed`,
+		// the upstream's identifiers moved — and the field stays because the arm is
+		// a disjunction the ruling has already moved once.
 		detail, err := json.Marshal(map[string]any{
-			"verdict":                guardOne(storedIdentity, it).String(),
+			"verdict":                verdict.String(),
 			"abandoned_work_id":      workID,
 			"stored_identity_hash":   storedIdentity.String,
 			"incoming_identity_hash": it.identityHash(),
@@ -1533,6 +1546,33 @@ func applyOneItem(
 		// The old work is NOT adopted. Everything below runs as it does for an
 		// id this instance has never reported.
 		workID = 0
+	} else if workID != 0 && linkDeletedAt.Valid && verdict.recordsRevival() {
+		// ── THE THIRD OUTCOME. The item carried no identifiers, so there was
+		// nothing to compare; the link is left alone and steps 3 and 7 below revive
+		// it and its work exactly as they do for a certified match. What is NOT
+		// left alone is the record: the revival happened on no evidence and this
+		// row is the only thing that says so.
+		//
+		// ⚠️ THE ROW IS THE WHOLE SEPARATION FROM guardOneIdentityMatches. Both
+		// outcomes leave the same rows in the same state, so an assertion that only
+		// checked the work id could not tell a certified revival from this one —
+		// which is how the vacuous equality survived a green suite the first time.
+		detail, err := json.Marshal(map[string]any{
+			"verdict":              verdict.String(),
+			"revived_work_id":      workID,
+			"stored_identity_hash": storedIdentity.String,
+			"external_id_count":    len(it.ExternalIDs),
+			"resolution": "the tombstoned link was revived and kept its work; the item carried no " +
+				"identifiers, so nothing was compared and no match was certified",
+		})
+		if err != nil {
+			return workID, res, fmt.Errorf("encode revival without identity: %w", err)
+		}
+		if err := recordSyncReport(ctx, tx, instanceID,
+			SyncReportRevivedWithoutIdentity, it.RemoteKind, it.RemoteID, string(detail)); err != nil {
+			return workID, res, err
+		}
+		res.RevivedWithoutIdentity++
 	}
 
 	// ── 2. Tier 1 of the §6.4 cascade: an exact strong external id, SAME KIND.
@@ -2615,6 +2655,24 @@ const SyncReportFileWalkFailed = "file_walk_failed"
 // facts: one says an id was reused, the other says an identifier was.
 const SyncReportIDReused = "id_reused"
 
+// SyncReportRevivedWithoutIdentity is sync_report.kind for guard 1's third
+// outcome: a tombstoned link came back on an item carrying NO identifiers, so
+// the guard had nothing to compare and revived the link anyway.
+//
+// IT IS A KIND OF ITS OWN AND NOT A VERDICT ON AN id_reused ROW, on
+// SyncReportDeletionSweepRefused's rule: `id_reused` is the record that an id
+// WAS reused and the old work was abandoned, and a reader counting those must
+// not have to parse a detail payload to discover that half of them are the
+// opposite event. This row says the link was KEPT.
+//
+// ⚠️ IT IS THE ONLY THING SEPARATING THIS CASE FROM A CERTIFIED MATCH. Both
+// revive the tombstone and both leave identical rows behind, so without this row
+// and BatchResult.RevivedWithoutIdentity beside it, "the guard checked and the
+// identity agreed" and "the guard had nothing to check" are indistinguishable
+// after the fact — and on the one source v0.1 ships the second is the common
+// one. See guardOneVerdict for the ruling that made the two share an outcome.
+const SyncReportRevivedWithoutIdentity = "revived_without_identity"
+
 // guardOneVerdict is §7.4 guard 1's answer for one tombstoned link that an
 // upsert is about to revive. FOUR STATES, TWO OUTCOMES.
 //
@@ -2635,19 +2693,45 @@ const SyncReportIDReused = "id_reused"
 //
 // # Which side the evidence-free case falls on, and why that is not arbitrary
 //
-// The two errors are not symmetric, and that asymmetry is the whole ruling:
+// ⚠️ THIS RULING WAS REVERSED, AND THE ARGUMENT IT REPLACED IS QUOTED HERE
+// RATHER THAN DELETED, because it is the argument the next reader will
+// reconstruct from first principles. It read:
 //
-//   - Wrongly deciding "same content" REVIVES the tombstone. Two different books
-//     merge into one work, and the poster, tags, requests, provenance and the
-//     northbound id of the first now name the second. Nothing records what was
-//     overwritten, so the merge is UNRECOVERABLE.
-//   - Wrongly deciding "different content" mints a FRESH link. One book becomes
-//     two rows. The duplicate is visible, the tombstoned work keeps its own
-//     corrections, and a later merge puts it back — the split is RECOVERABLE.
+//	"The two errors are not symmetric, and that asymmetry is the whole ruling:
+//	 · Wrongly deciding "same content" REVIVES the tombstone. Two different books
+//	   merge into one work … Nothing records what was overwritten, so the merge is
+//	   UNRECOVERABLE.
+//	 · Wrongly deciding "different content" mints a FRESH link. One book becomes
+//	   two rows. The duplicate is visible, the tombstoned work keeps its own
+//	   corrections, and a later merge puts it back — the split is RECOVERABLE.
+//	 So the case with no evidence either way falls to the fresh-link side."
 //
-// So the case with no evidence either way falls to the fresh-link side. It must
-// NOT take the same branch as a real match, because taking that branch is
-// precisely the claim the guard has no evidence for.
+// THE REMEDY THAT MADE THE SPLIT RECOVERABLE DOES NOT EXIST. "A later merge puts
+// it back" names `work_merge`, and §6.4 defers tiers 2–5 and the merge/un-merge
+// machinery out of v0.1 — TestDeferredTablesAreAbsent fails a migration that
+// creates that table early. In v0.1 nothing merges two works, so the split is
+// permanent too: the user's tag_assignment and request rows stay on a work that
+// keeps `deleted_at`, on no screen, with nothing that puts them back.
+//
+// AND THE TWO ERRORS HAVE DIFFERENT RATES, which that argument compared severity
+// without ever weighing. bookOrbitExternalIDs writes one identifier,
+// `hardcover_book`, and leaves it null until an operator matches the book — so
+// on the one catalogue source v0.1 ships, "carries no identifier" is the
+// ORDINARY state (§6.4, ADR-0035 §1). Re-minting is therefore CERTAIN on every
+// ordinary resurrection of an unmatched book, while the merge it avoids needs a
+// genuine id REUSE, which ADR-0074's own measurement of BookOrbit's `books.id` —
+// a PostgreSQL `serial`, with no `setval(`, no `TRUNCATE … RESTART IDENTITY` —
+// finds nothing outside a sequence rewind. A certain harm in the common case
+// loses to a conditional harm in the measured-rare case.
+//
+// So the evidence-free case now takes the SAME ACTION as a match — the
+// tombstoned link is revived — and is separated from it by being RECORDED.
+// Nothing here claims two books are the same on the strength of two empty lists
+// matching: guardOneNoIncomingIdentity says the guard had nothing to compare, it
+// says so in its own sync_report row, and it is counted in its own field. What
+// that buys back is the user's owned overlay on the common path; what it gives
+// up is the split's visibility on the rare one, and that residue is chosen
+// rather than overlooked.
 type guardOneVerdict int
 
 const (
@@ -2678,7 +2762,16 @@ const (
 
 	// guardOneNoIncomingIdentity: something is stored, and the incoming item
 	// carries NO external ids at all. There is no identity to compare, so there
-	// is no match to certify. Fires, on the asymmetry above.
+	// is no match to certify — and, on the rate argument above, no re-mint
+	// either. It does NOT fire: it revives the tombstone and RECORDS that it did
+	// so with nothing to compare. See recordsRevival and
+	// SyncReportRevivedWithoutIdentity.
+	//
+	// ⚠️ IT IS STILL ITS OWN STATE, AND THAT IS THE POINT. Sharing an outcome
+	// with guardOneIdentityMatches is exactly how the vacuous equality hid the
+	// first time. What separates them now is not the branch they take but the row
+	// one of them writes and the counter it moves — so the separation has to be
+	// asserted on the row and the counter, never on the work id alone.
 	guardOneNoIncomingIdentity
 
 	// guardOneIdentityChanged: both sides carry identifiers and they differ.
@@ -2686,10 +2779,32 @@ const (
 	guardOneIdentityChanged
 )
 
-// firesGuard is the two-outcome collapse, in ONE place. A caller that wrote the
+// firesGuard is the HARD-DELETE outcome, in ONE place. A caller that wrote the
 // disjunction itself could omit an arm and compile.
+//
+// ⚠️ IT USED TO READ `v == guardOneNoIncomingIdentity || v ==
+// guardOneIdentityChanged`. The first disjunct is gone; the state it named is
+// not. See recordsRevival, and guardOneVerdict's ruling for why the
+// evidence-free case stopped re-minting.
 func (v guardOneVerdict) firesGuard() bool {
-	return v == guardOneNoIncomingIdentity || v == guardOneIdentityChanged
+	return v == guardOneIdentityChanged
+}
+
+// recordsRevival is the THIRD outcome: the tombstone is revived, exactly as it
+// is for a match, and the fact that no identity backed the decision is written
+// down.
+//
+// FOUR STATES, THREE OUTCOMES — fire, revive silently, revive on the record —
+// and this is the collapse point for the third, on firesGuard's rule. No verdict
+// is in both, and TestGuardOneSeparatesItsFourStates asserts BOTH answers for
+// every state, so an edit that folded this case back into "revive silently"
+// cannot pass by moving one arm.
+//
+// guardOneIdentityUnknown is deliberately NOT here. It is unreachable — no
+// shipped writer leaves remote_identity_hash NULL — and a durable row written on
+// an input that cannot occur is a row nobody can interpret on the day it does.
+func (v guardOneVerdict) recordsRevival() bool {
+	return v == guardOneNoIncomingIdentity
 }
 
 // String is the sync_report.detail spelling. These are storage words; no wire

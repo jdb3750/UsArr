@@ -239,3 +239,195 @@ func TestADeltaSyncNeverSweeps(t *testing.T) {
 		t.Errorf("a delta swept: %+v", rep.Deletions)
 	}
 }
+
+// TestABookTheWalkReadButCouldNotMapIsNotTombstoned is the seen-set's OTHER
+// definition, and the one that made the sweep disagree with the report on the
+// same page.
+//
+// ⚠️ THE SEEN-SET USED TO BE WHAT THIS IMPORTER APPLIED, NOT WHAT THE UPSTREAM
+// REPORTED. streamAndApply collects it from the batch, so a book the adapter
+// read and declined to map never entered it — and BookOrbit declines exactly one
+// class of book, the one whose MediaKind is unknown, which is what a book with
+// no primary file reads as. A book still being processed therefore vanished from
+// the replica, took its work with it, and was COUNTED in ItemsRead on the very
+// report that recorded its deletion.
+//
+// It runs through the real BookOrbitSource and the real FullImport, because the
+// defect lives in the seam between the adapter's classification and the
+// importer's collection, and a fake source cannot have that seam.
+func TestABookTheWalkReadButCouldNotMapIsNotTombstoned(t *testing.T) {
+	f := newDeltaFixture(t,
+		[]bookorbit.Library{{ID: 1, Name: "Fiction", BookCount: 2}},
+		map[int64][]bookorbit.Book{1: {
+			proseBook(1, "Kept"),
+			proseBook(2, "Reprocessing"),
+		}})
+
+	if _, err := f.importer().FullImport(t.Context(), f.instance); err != nil {
+		t.Fatalf("seeding FullImport: %v", err)
+	}
+	for _, id := range []string{"1", "2"} {
+		if linkDeletedAt(t, f.st, f.instance, "book", id).Valid {
+			t.Fatalf("book %s was tombstoned by the seeding import", id)
+		}
+	}
+
+	// Book 2 loses its files — BookOrbit still lists it, and still counts it, but
+	// classifies it as media kind unknown, which UsArr has no mapping for.
+	unclassified := proseBook(2, "Reprocessing")
+	unclassified.Files = nil
+	if got := unclassified.MediaKind(); got != bookorbit.MediaKindUnknown {
+		t.Fatalf("the fixture book classifies as %q, not unknown; this test's premise has moved", got)
+	}
+	f.reader.books[1] = []bookorbit.Book{proseBook(1, "Kept"), unclassified}
+	f.reopen()
+
+	rep, err := f.importer().FullImport(t.Context(), f.instance)
+	if err != nil {
+		t.Fatalf("FullImport: %v", err)
+	}
+	if rep.ItemsRead != 2 {
+		t.Fatalf("the walk read %d books, want 2: the upstream must be REPORTING the book "+
+			"this test says is not deleted", rep.ItemsRead)
+	}
+
+	// THE EFFECT, by identity: the book BookOrbit reported in this very read is
+	// still live, link and work alike.
+	if d := linkDeletedAt(t, f.st, f.instance, "book", "2"); d.Valid {
+		t.Errorf("book 2 was tombstoned at %q by a read that reported it — ItemsRead says 2 "+
+			"on the same report", d.String)
+	}
+	var workDeleted sql.NullString
+	if err := f.st.DB().Read().QueryRowContext(t.Context(), `
+		SELECT w.deleted_at FROM work w
+		  JOIN service_item_link l ON l.work_id = w.id
+		 WHERE l.service_instance_id = ? AND l.remote_kind = 'book' AND l.remote_id = '2'`,
+		f.instance).Scan(&workDeleted); err != nil {
+		t.Fatalf("read work: %v", err)
+	}
+	if workDeleted.Valid {
+		t.Errorf("book 2's WORK was tombstoned at %q, so it is off every screen", workDeleted.String)
+	}
+	if rep.Deletions.LinksTombstoned != 0 || rep.Deletions.WorksTombstoned != 0 {
+		t.Errorf("Deletions = %+v, want nothing moved", rep.Deletions)
+	}
+	// AND THE CONTAINER IS STILL VOUCHED FOR. The unmappable book is what kept
+	// the container observed, so a fix that only widened the seen-set — without
+	// carrying the container — would leave the whole library unswept forever and
+	// pass every assertion above.
+	if rep.Deletions.LinksUnobserved != 0 {
+		t.Errorf("LinksUnobserved = %d, want 0: the container was walked and answered, so "+
+			"its absences are still evidence", rep.Deletions.LinksUnobserved)
+	}
+}
+
+// TestAContainerMeasuredShortIsNotSwept is the arm the completeness pass already
+// had the answer to and nobody asked.
+//
+// bookorbitcompleteness.go computes, per container, whether UsArr's credential
+// sees fewer books than the container holds. cmd/usarr read that verdict AFTER
+// FullImport returned — that is, after the sweep had already deleted the
+// difference. A container whose verdict is `shortfall` is by definition one
+// whose read violated the sweep's precondition.
+func TestAContainerMeasuredShortIsNotSwept(t *testing.T) {
+	f := newDeltaFixture(t,
+		[]bookorbit.Library{{ID: 1, Name: "Fiction", BookCount: 2}},
+		map[int64][]bookorbit.Book{1: {proseBook(1, "One"), proseBook(2, "Two")}})
+
+	if _, err := f.importer().FullImport(t.Context(), f.instance); err != nil {
+		t.Fatalf("seeding FullImport: %v", err)
+	}
+
+	// The credential's view narrows: BookOrbit's own statistics say the library
+	// holds 2 books, the listing shows UsArr only 1, and the walk delivers that
+	// one. Without the completeness arm that is an ordinary absence and book 2 is
+	// deleted.
+	f.reader.libs = []bookorbit.Library{{ID: 1, Name: "Fiction", BookCount: 1}}
+	f.reader.stats = map[int64]int64{1: 2}
+	f.reader.books[1] = []bookorbit.Book{proseBook(1, "One")}
+	f.reopen()
+
+	rep, err := f.importer().FullImport(t.Context(), f.instance)
+	if err != nil {
+		t.Fatalf("FullImport: %v", err)
+	}
+	// The premise: the adapter really did measure a shortfall.
+	var short bool
+	for _, c := range f.src.Completeness() {
+		if c.State == store.CompletenessShortfall {
+			short = true
+		}
+	}
+	if !short {
+		t.Fatalf("no container was measured short (%+v); this test would prove nothing",
+			f.src.Completeness())
+	}
+
+	if d := linkDeletedAt(t, f.st, f.instance, "book", "2"); d.Valid {
+		t.Errorf("book 2 was tombstoned at %q on a read UsArr had already measured as short — "+
+			"the credential stopped seeing it, which is not the same as it being deleted", d.String)
+	}
+	if rep.Deletions.LinksUnobserved != 1 {
+		t.Errorf("LinksUnobserved = %d, want 1 (%+v)", rep.Deletions.LinksUnobserved, rep.Deletions)
+	}
+	if rep.Deletions.LinksTombstoned != 0 {
+		t.Errorf("LinksTombstoned = %d, want 0", rep.Deletions.LinksTombstoned)
+	}
+}
+
+// TestADeclinedContainerReachesTheSweepAsReported is bindPhase's own rule,
+// asserted through the path that applies it.
+//
+// ⚠️ THE STORE-SIDE TEST OF THIS NAME PASSES THE CONTAINER LIST TO SweepDeletions
+// DIRECTLY and never runs bindPhase, so it cannot see the rule it is named for:
+// making bindPhase skip declined containers when it builds `refs` is invisible
+// to it. This one drives FullImport, so the list under test is the list bindPhase
+// actually produced.
+//
+// The container must have been bound ONCE for the assertion to mean anything — a
+// container declined from the first import has no library_source row to stamp,
+// and a test over a table with no row in it passes over its own subject. So:
+// bound on the first import, declined on the second, which is exactly the
+// "an adapter's mapping changed" case the rule exists for.
+func TestADeclinedContainerReachesTheSweepAsReported(t *testing.T) {
+	s := newTestStore(t)
+	inst := fixtureInstance(t, s)
+
+	bound := []store.CatalogueContainer{{RemoteID: "1", Name: "Comics", Kind: "comic"}}
+	items := genItems(2, "1", "comic")
+	if _, err := newImporter(t, s, &fakeSource{containers: bound, items: items}).
+		FullImport(t.Context(), inst); err != nil {
+		t.Fatalf("seeding FullImport: %v", err)
+	}
+	if n := countRows(t, s, `SELECT COUNT(*) FROM library_source`); n != 1 {
+		t.Fatalf("%d library_source rows after the seeding import, want 1: there is nothing "+
+			"for the sweep to wrongly stamp", n)
+	}
+
+	// The same container, now DECLINED: UsArr has no kind for it any more.
+	declined := []store.CatalogueContainer{
+		{RemoteID: "1", Name: "Comics", DeclineReason: "no kind for this container"},
+	}
+	rep, err := newImporter(t, s, &fakeSource{containers: declined, items: items}).
+		FullImport(t.Context(), inst)
+	if err != nil {
+		t.Fatalf("FullImport: %v", err)
+	}
+	if len(rep.DeclinedContainers) != 1 {
+		t.Fatalf("the second import declined %d containers, want 1", len(rep.DeclinedContainers))
+	}
+
+	var missing sql.NullString
+	if err := s.DB().Read().QueryRowContext(t.Context(),
+		`SELECT missing_since FROM library_source WHERE service_instance_id = ? AND container_ref = ?`,
+		inst, "1").Scan(&missing); err != nil {
+		t.Fatalf("read library_source: %v", err)
+	}
+	if missing.Valid {
+		t.Errorf("the declined container was stamped missing at %q: an adapter that stopped "+
+			"mapping a container is not an upstream that stopped reporting it", missing.String)
+	}
+	if rep.Deletions.SourcesMissing != 0 {
+		t.Errorf("SourcesMissing = %d, want 0 (%+v)", rep.Deletions.SourcesMissing, rep.Deletions)
+	}
+}
