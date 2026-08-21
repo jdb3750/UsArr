@@ -150,6 +150,14 @@ bytes; on a Pi the parse is the expensive half.
 
 Every 6 h (configurable) plus on demand:
 
+⚠️ **THE SCHEDULE IS BUILT AND *(configurable)* IS NOT** ([ADR-0076](../DECISIONS.md#adr-0076),
+2026-08-21). `cmd/usarr/reconcile.go`'s `startReconciler` is the timer, wired in `main.go`;
+`reconcileInterval` is a **constant**, on the ruling `maintenance.go` states for
+`candidateSweepInterval`, and no configuration key exposes it. **"Plus on demand" was already built**
+and is not duplicated: it is the Services screen's *"Run full sync now"* (`POST
+/api/v1/services/{id}/sync`), which runs the identical pass. Step 6's *"low priority with a bounded
+rate"* is honoured only as **serialisation** — one instance at a time — and ADR-0076 names that gap.
+
 1. Fetch the full entity list per instance.
 2. Left-anti-join against `service_item_link` → **rows deleted upstream**.
 3. **Soft-delete with a 7-day tombstone.** An \*Arr that is temporarily empty (misconfigured root
@@ -173,6 +181,17 @@ there is **no `write_queue` row for that work in `pending`, `inflight` or `verif
 only the first two states means any write the \*Arr accepted but that has not been independently
 observed is reverted by the next sweep — and with no SignalR in v0.1 there is no independent
 observation channel, so that would be *every* write.
+
+⚠️ **THE SHIPPED SWEEP DOES NOT CHECK THIS, AND IT HAS NOTHING TO CHECK**
+([ADR-0076](../DECISIONS.md#adr-0076), 2026-08-21). Both of the precondition's operands are absent
+from the tree. It gates *"correct an item **toward the \*Arr**"* — a **write-back**, and the sweep
+has no write-back path at all; every stamp it writes is local. And nothing in the production binary
+ever creates a `write_queue` row: `internal/store/writequeue.go` holds the state vocabulary and its
+validator and issues no statement, and the only SQL naming the table anywhere in non-test Go is in
+`internal/db/spike`, which is a `//go:build bench` harness. So a guard added to the timer today would
+read an always-empty table on behalf of a pass that never writes upstream — a check that cannot fail,
+which this repo counts as no check. **The precondition stands unchanged for the milestone that builds
+the write-back**, and is not "satisfied" by the schedule; it is simply not yet reachable.
 
 ### Guard 1 — id resurrection
 
@@ -242,8 +261,21 @@ repair is v0.2's *"fix this match"*, not an upstream believed a second time.
 An \*Arr restored from an older backup moves its id space **backwards**: ids UsArr has mapped now
 belong to different content, and ids added after the backup point no longer exist. Under "the \*Arr
 owns the truth", the sweep would (a) see drifted `remote_hash`es, refetch, and silently rewrite
-titles, paths and provenance on existing `work` rows, and (b) find links with no upstream row,
-tombstone them, and after seven days delete the user's tags, requests and playback state.
+titles, paths and provenance on existing `work` rows, and (b) find links with no upstream row and
+tombstone them — hiding works the user can still see the files for, behind a stamp no later sweep
+will ever clear, because the ids now mean different content.
+
+⚠️ **CLAUSE (b) ENDED *"and after seven days delete the user's tags, requests and playback state"*,
+AND NOTHING IN UsArr HAS EVER DONE THAT**
+([ADR-0076](../DECISIONS.md#adr-0076), 2026-08-21). **The seven days are a RESTORATION WINDOW, not a
+countdown to a deletion.** They are the promise that an item which vanished because a share unmounted
+or a credential lost its scope comes back — with its tags, its requests and its playback state intact
+— the moment the backend does; the ordinary write path clears `deleted_at` on the next sight of the
+item, and that restoration is the only thing the number governs. **Nothing reaps a tombstone at the
+end of it**, no reaper is built or scheduled, and this was the only sentence in the docs promising a
+far end. A **retention limit** — any rule that eventually removes a tombstone and whatever hangs off
+it — is a separate decision nobody has taken, and ADR-0076 records why it cannot be taken casually:
+it is a JOINT decision about guard 1's coverage as well, since the two share a row.
 
 ```
 at every connect:
