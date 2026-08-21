@@ -386,23 +386,25 @@ function strip(text: string, kind: Kind): string {
  * 16,718 was spent: two commits took it to 6,291 without anyone noticing,
  * because a margin only announces itself once it is gone, and the §17.7
  * degraded-backend banner then added 17,236 characters and pushed
- * `corpus − largest` above the floor. Figures on the tree that carried this
- * paragraph:
+ * `corpus − largest` above the floor. Figures RE-MEASURED on the merged tree
+ * this landed on, not on the branch tip that first carried the paragraph — the
+ * two differed by 4,087 characters, and a derivation that never described its
+ * own tree is the error this comment already records once:
  *
- *     corpus                                    1,230,955  over 45 files
+ *     corpus                                    1,235,042  over 45 files
  *     largest   `routes/+page.svelte`             120,010
  *     second    `app.css`                         105,274
  *     floor                                     1,150,000
- *     gap     corpus − floor                        80,955
- *     MARGIN  largest − gap                         39,055
+ *     gap     corpus − floor                        85,042
+ *     MARGIN  largest − gap                         34,968
  *
- * 80,955 is under both file sizes, so the claimed property holds again: losing
+ * 85,042 is under both file sizes, so the claimed property holds again: losing
  * either of the two largest fails the floor.
  *
  * ⚠️ AND THE MARGIN ABOVE IS THE LOOSER OF TWO, which no previous derivation
  * said. `largest − gap` is when the floor stops failing on the LARGEST file;
  * the property this rule actually claims is EITHER of the two largest, and that
- * one breaks first — at `second − gap`, which is 24,319. Take 24,319 as the
+ * one breaks first — at `second − gap`, which is 20,232. Take 20,232 as the
  * number a change to `web/src` is spending, not 39,066.
  */
 const CORPUS_FLOOR = 1_150_000;
