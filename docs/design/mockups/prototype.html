@@ -2014,13 +2014,13 @@ select[multiple] { min-height: 88px; padding: var(--sp-2); }
 
        build_prototype.py  sha256:c9489e4fcf81c00a452623c6bb2cc27627c819b410f2cbacdc8edf738e081972
        fonts.css  sha256:0dc70891b71e54a747dbc1a3bebb08429fcebbfe5420836fe3e1617a834a5fc2
-       index.html  sha256:150beb822c83d2eed99e9028f51217d081fa0e69900482bdcf2b9f222b932c69
-       libraries.html  sha256:9ffa62dedca5b196e467ebfde45cd2ca360942ee302d10eeb11c4397bdfa8277
+       index.html  sha256:9f88b6c4d8ea7eb8083beeb1d058980d316dc6fbbfdd0956e84aa87f4174766c
+       libraries.html  sha256:09262b5ea637f51ed53af48ba44ef7af79e0555795492a4229936d620e298a80
        requests.html  sha256:66fb630bda12191934ca07af673379cfc9b9fcd476562a36180e52865a9abf9b
-       search.html  sha256:f02fe23c097773f16fe12f19dcb760f38cf3a08c2f18d343ffdfb6495fc241cd
-       services.html  sha256:ba1648e8a289f8c8994bc552c7c4d2f6a06f40ee406d5250b4a07a388b432262
+       search.html  sha256:a1679e798dd0330467fba28348321fefeed297ac352c1b16a11ee7eb4d8572d3
+       services.html  sha256:5690f1cb12739b7808de4f395ec1d38f466ad2f70cb203107bb7b7c11b5ef6bb
        usarr.css  sha256:382db156c560ebf75497fe6424fe4b5b56f809bd9d7ef55b38bda595299f91f9
-       usarr.js  sha256:600d1e48520dc4f20cbb0228a33f6f029b544d00b5e54783fee94aa0b61010aa
+       usarr.js  sha256:b222a9db21469126e99def655146793864d93570e7bbb130f4d72ef04003a7ee
      END BUILD STAMP -->
 
 <svg id="sprite" xmlns="http://www.w3.org/2000/svg" aria-hidden="true" focusable="false">
@@ -2608,7 +2608,7 @@ select[multiple] { min-height: 88px; padding: var(--sp-2); }
             <tr role="row" aria-rowindex="4">
               <td data-col="state" role="cell" aria-colindex="1"><span class="stacklabel" aria-hidden="true">State</span><span class="st st--warn"><svg class="i i--sm" aria-hidden="true"><use href="#i-alert"/></svg>warning</span></td>
               <td data-col="what-is-wrong" role="cell" aria-colindex="2"><span class="stacklabel" aria-hidden="true">What is wrong</span><span class="cell-title">Kavita</span> reports no external identifier for any series
-                <div class="cell-sub">Identifier fields need Kavita+, so 512 series match by title alone.</div></td>
+                <div class="cell-sub">Identifier fields need Kavita+, so 512 series have no identifier.</div></td>
               <td data-col="action" role="cell" aria-colindex="3"><span class="stacklabel" aria-hidden="true">Action</span><a href="#libraries">Open Libraries</a></td>
             </tr>
             <tr role="row" aria-rowindex="5">
@@ -2646,7 +2646,7 @@ select[multiple] { min-height: 88px; padding: var(--sp-2); }
             <tr role="row" aria-rowindex="3">
               <td data-col="state" role="cell" aria-colindex="1"><span class="stacklabel" aria-hidden="true">State</span><span class="st st--warn"><svg class="i i--sm" aria-hidden="true"><use href="#i-alert"/></svg>warning</span></td>
               <td data-col="what-is-wrong" role="cell" aria-colindex="2"><span class="stacklabel" aria-hidden="true">What is wrong</span><span class="cell-title">Kavita</span> reports no external identifier for any series
-                <div class="cell-sub">Identifier fields need Kavita+, so 512 series match by title alone.</div></td>
+                <div class="cell-sub">Identifier fields need Kavita+, so 512 series have no identifier.</div></td>
               <td data-col="action" role="cell" aria-colindex="3"><span class="stacklabel" aria-hidden="true">Action</span><a href="#libraries">Open Libraries</a></td>
             </tr>
           </tbody>
@@ -3152,12 +3152,12 @@ delta polling uses this host's clock, so recent changes can be missed</div>
             <td data-col="last-successful-sync" role="cell" aria-colindex="3"><span class="stacklabel" aria-hidden="true">Last successful sync</span>page walk 13:31<div class="cell-sub">37 minutes ago</div></td>
             <td data-col="items" class="is-num" role="cell" aria-colindex="4"><span class="stacklabel" aria-hidden="true">Items</span>936</td>
             <td data-col="libraries" role="cell" aria-colindex="5"><span class="stacklabel" aria-hidden="true">Libraries</span><a href="#libraries">Comics</a>, <a href="#libraries">Manga</a>, <a href="#libraries">Ebooks</a><div class="cell-sub">catalogue source, no destination</div></td>
-            <td data-col="problem" role="cell" aria-colindex="6"><span class="stacklabel" aria-hidden="true">Problem</span><div class="cell-problem"><span class="prob trunc" title="0 of 512 series carry an external identifier, so matching is by title">0 of 512 series carry an identifier</span> <button type="button" class="linkish" data-act="expand" data-expand-label aria-expanded="false" aria-controls="x-kavita">Show detail</button></div></td>
+            <td data-col="problem" role="cell" aria-colindex="6"><span class="stacklabel" aria-hidden="true">Problem</span><div class="cell-problem"><span class="prob trunc" title="0 of 512 series carry an external identifier, so none can be linked to the same series from another source">0 of 512 series carry an identifier</span> <button type="button" class="linkish" data-act="expand" data-expand-label aria-expanded="false" aria-controls="x-kavita">Show detail</button></div></td>
             <td data-col="action" role="cell" aria-colindex="7"><span class="stacklabel" aria-hidden="true">Action</span><a href="#libraries">Open Libraries</a></td>
           </tr>
           <tr id="x-kavita" hidden role="row" aria-rowindex="16"><td colspan="7" role="cell" aria-colindex="1" aria-colspan="7">
             <div class="verbatim">0 of 512 series carry an external identifier
-aniListId, malId and comicVineId are null on every series: those fields are a Kavita+ feature and this instance has not supplied them, so matching is by title and cross-media links stay below the merge threshold</div>
+aniListId, malId and comicVineId are null on every series: those fields are a Kavita+ feature and this instance has not supplied them, so no series here carries an identifier and cross-media links stay below the merge threshold</div>
             <div class="detail">
               <div><h4>Sync channels</h4><ul><li>full <span class="num">02:31</span>, 12 hours ago</li><li>page-walk delta <span class="num">13:31</span>, 37 minutes ago</li><li>reconcile <span class="num">02:00</span>, 12 hours ago</li></ul></div>
               <div><h4>Circuit breaker</h4><ul><li>State <span class="mono">CLOSED</span></li><li>Consecutive failures <span class="num">0</span></li></ul></div>
@@ -3208,12 +3208,12 @@ aniListId, malId and comicVineId are null on every series: those fields are a Ka
             <td data-col="last-successful-sync" role="cell" aria-colindex="3"><span class="stacklabel" aria-hidden="true">Last successful sync</span>page walk 13:31<div class="cell-sub">37 minutes ago</div></td>
             <td data-col="items" class="is-num" role="cell" aria-colindex="4"><span class="stacklabel" aria-hidden="true">Items</span>936</td>
             <td data-col="libraries" role="cell" aria-colindex="5"><span class="stacklabel" aria-hidden="true">Libraries</span><a href="#libraries">Comics</a>, <a href="#libraries">Manga</a>, <a href="#libraries">Ebooks</a><div class="cell-sub">catalogue source, no destination</div></td>
-            <td data-col="problem" role="cell" aria-colindex="6"><span class="stacklabel" aria-hidden="true">Problem</span><div class="cell-problem"><span class="prob trunc" title="0 of 512 series carry an external identifier, so matching is by title">0 of 512 series carry an identifier</span> <button type="button" class="linkish" data-act="expand" data-expand-label aria-expanded="false" aria-controls="x-kavita-v01">Show detail</button></div></td>
+            <td data-col="problem" role="cell" aria-colindex="6"><span class="stacklabel" aria-hidden="true">Problem</span><div class="cell-problem"><span class="prob trunc" title="0 of 512 series carry an external identifier, so none can be linked to the same series from another source">0 of 512 series carry an identifier</span> <button type="button" class="linkish" data-act="expand" data-expand-label aria-expanded="false" aria-controls="x-kavita-v01">Show detail</button></div></td>
             <td data-col="action" role="cell" aria-colindex="7"><span class="stacklabel" aria-hidden="true">Action</span><a href="#libraries">Open Libraries</a></td>
           </tr>
           <tr id="x-kavita-v01" hidden role="row" aria-rowindex="3"><td colspan="7" role="cell" aria-colindex="1" aria-colspan="7">
             <div class="verbatim">0 of 512 series carry an external identifier
-aniListId, malId and comicVineId are null on every series: those fields are a Kavita+ feature and this instance has not supplied them, so matching is by title and cross-media links stay below the merge threshold</div>
+aniListId, malId and comicVineId are null on every series: those fields are a Kavita+ feature and this instance has not supplied them, so no series here carries an identifier and cross-media links stay below the merge threshold</div>
             <div class="detail">
               <div><h4>Sync channels</h4><ul><li>full <span class="num">02:31</span>, 12 hours ago</li><li>page-walk delta <span class="num">13:31</span>, 37 minutes ago</li><li>reconcile <span class="num">02:00</span>, 12 hours ago</li></ul></div>
               <div><h4>Circuit breaker</h4><ul><li>State <span class="mono">CLOSED</span></li><li>Consecutive failures <span class="num">0</span></li></ul></div>
@@ -3284,7 +3284,7 @@ aniListId, malId and comicVineId are null on every series: those fields are a Ka
       <li class="banner banner--warn u-mx-0">
         <svg class="i" aria-hidden="true"><use href="#i-alert"/></svg>
         <div class="banner__body"><div class="banner__title">Kavita reports no external identifier for any series</div>
-        <div class="banner__text">Identifier fields need Kavita+, so all 512 series are matched by title and cross-media links stay below the merge threshold.</div></div>
+        <div class="banner__text">Identifier fields need Kavita+, so none of the 512 series carries an identifier and cross-media links stay below the merge threshold.</div></div>
         <div class="banner__actions"><a class="btn btn--sm" href="#libraries">Open Libraries</a></div>
       </li>
     </ul>
@@ -4309,7 +4309,7 @@ aniListId, malId and comicVineId are null on every series: those fields are a Ka
             <!-- The second source, from a different service. This is what the
                  authority radio is for: two instances hold an edition of the
                  same book and their metadata disagrees, and one of them has to
-                 win. Kavita's half is where every "matched by title" row in
+                 win. Kavita's half is where every "no identifier" row in
                  this library comes from, which is the argument for leaving the
                  authority with Audiobookshelf rather than a preference. -->
             <tr role="row" aria-rowindex="3">
@@ -4389,7 +4389,7 @@ aniListId, malId and comicVineId are null on every series: those fields are a Ka
               <td data-col="correction" role="cell" aria-colindex="1"><span class="stacklabel" aria-hidden="true">Correction</span><span class="chip">Re-linked</span></td>
               <td data-col="count" class="is-num" role="cell" aria-colindex="2"><span class="stacklabel" aria-hidden="true">Count</span>2</td>
               <td data-col="what-it-does" role="cell" aria-colindex="3"><span class="stacklabel" aria-hidden="true">What it does</span>Points a row at a different work when the match was wrong.</td>
-              <td data-col="most-recent" role="cell" aria-colindex="4"><span class="stacklabel" aria-hidden="true">Most recent</span><span class="cell-title">Dune</span><div class="cell-sub">8 Aug 2026 · matched to <span class="mono">Dune: House Atreides</span> by title, no ISBN in the file</div></td>
+              <td data-col="most-recent" role="cell" aria-colindex="4"><span class="stacklabel" aria-hidden="true">Most recent</span><span class="cell-title">Dune</span><div class="cell-sub">8 Aug 2026 · re-pointed at <span class="mono">Dune: House Atreides</span>, which arrived with no identifier</div></td>
               <td data-col="action" role="cell" aria-colindex="5"><span class="stacklabel" aria-hidden="true">Action</span><button type="button" class="btn btn--sm">Undo</button></td>
             </tr>
             <tr role="row" aria-rowindex="5">
@@ -4412,7 +4412,7 @@ aniListId, malId and comicVineId are null on every series: those fields are a Ka
       <div class="detail">
         <div><h4>Membership</h4><ul><li>2,266 works</li><li>Recomputed <span class="num">13:40</span>, 28 minutes ago</li><li>Derived 2,265 · manual 1</li></ul></div>
         <div><h4>Source disagreement</h4><ul><li><span class="num">31</span> works held by both sources</li><li><span class="num">7</span> where the two report a different title or year, resolved in favour of Audiobookshelf</li></ul></div>
-        <div><h4>Identity matching</h4><ul><li><span class="num">1,703</span> matched on an external id, all of them Audiobookshelf's</li><li><span class="num">563</span> matched by title only: 139 files that carried no identifier, and every one of Kavita's 424, because a free Kavita returns null identifier fields</li></ul></div>
+        <div><h4>Identity matching</h4><ul><li><span class="num">1,703</span> matched on an external id, all of them Audiobookshelf's</li><li><span class="num">563</span> with no identifier: 139 files that supplied none, and every one of Kavita's 424, because a free Kavita returns null identifier fields</li></ul></div>
         <div><h4>Scope</h4><ul><li>In the URL as <span class="mono">?lib=ebooks</span></li><li>Visible to 1 user</li></ul></div>
       </div>
     </section>
@@ -4444,7 +4444,7 @@ aniListId, malId and comicVineId are null on every series: those fields are a Ka
            reading "the only source" rather than a choice. The full stack owns
            the two-source case now, because it is the install that has two
            services holding books.
-         · An identity panel where EVERYTHING is matched by title, because a
+         · An identity panel where NOTHING carries an identifier, because a
            free Kavita returns null aniListId, malId and comicVineId. ADR-0041
            made that v0.1's ordinary case rather than an edge state, and the
            correction surface has a Re-linked row for exactly that reason.
@@ -4612,17 +4612,18 @@ aniListId, malId and comicVineId are null on every series: those fields are a Ka
               <td data-col="most-recent" role="cell" aria-colindex="4"><span class="stacklabel" aria-hidden="true">Most recent</span><span class="cell-title">Dune</span><div class="cell-sub">7 Aug 2026 · sort title "Dune" instead of "Dune, 1965 ed."</div></td>
               <td data-col="action" role="cell" aria-colindex="5"><span class="stacklabel" aria-hidden="true">Action</span><button type="button" class="btn btn--sm">Undo</button></td>
             </tr>
-            <!-- The Re-linked row is the finding rather than a gap: every
-                 work in this library was matched by title, so a wrong match is
-                 the ordinary risk and undoing one is the ordinary remedy.
-                 ADR-0043 moves the minimal "fix this match" case earlier for
-                 exactly this reason, and ADR-0045 lands it in v0.2 -- so v0.1
-                 draws the badge without its remedy for one milestone. -->
+            <!-- The Re-linked row is the finding rather than a gap: the rows
+                 in this library arrived with no identifier, so their identity
+                 rests on weaker evidence, a wrong link is the ordinary risk,
+                 and undoing one is the ordinary remedy. ADR-0043 moves the
+                 minimal correction case earlier for exactly this reason, and
+                 ADR-0045 lands it in v0.2, so v0.1 draws the badge without its
+                 remedy for one milestone. -->
             <tr role="row" aria-rowindex="4">
               <td data-col="correction" role="cell" aria-colindex="1"><span class="stacklabel" aria-hidden="true">Correction</span><span class="chip">Re-linked</span></td>
               <td data-col="count" class="is-num" role="cell" aria-colindex="2"><span class="stacklabel" aria-hidden="true">Count</span>4</td>
               <td data-col="what-it-does" role="cell" aria-colindex="3"><span class="stacklabel" aria-hidden="true">What it does</span>Points a row at a different work when the match was wrong.</td>
-              <td data-col="most-recent" role="cell" aria-colindex="4"><span class="stacklabel" aria-hidden="true">Most recent</span><span class="cell-title">Dune Messiah</span><div class="cell-sub">6 Aug 2026 · matched by title to the 1969 novel, not the 2023 audio edition</div></td>
+              <td data-col="most-recent" role="cell" aria-colindex="4"><span class="stacklabel" aria-hidden="true">Most recent</span><span class="cell-title">Dune Messiah</span><div class="cell-sub">6 Aug 2026 · re-pointed at the 1969 novel, not the 2023 audio edition</div></td>
               <td data-col="action" role="cell" aria-colindex="5"><span class="stacklabel" aria-hidden="true">Action</span><button type="button" class="btn btn--sm">Undo</button></td>
             </tr>
           </tbody>
@@ -4638,7 +4639,7 @@ aniListId, malId and comicVineId are null on every series: those fields are a Ka
       <div class="detail">
         <div><h4>Membership</h4><ul><li>424 works</li><li>Recomputed <span class="num">13:31</span>, 37 minutes ago</li><li>Derived 422 · manual 2</li></ul></div>
         <div><h4>Source disagreement</h4><ul><li class="muted">One source, so there is nothing to disagree about</li><li class="muted">The column exists because a second source is one Add source away, and the full stack has one</li></ul></div>
-        <div><h4>Identity matching</h4><ul><li class="muted"><span class="num">0</span> matched on an external id</li><li><span class="num">424</span> matched by title: a free Kavita returns null aniListId, malId and comicVineId, so the weaker tier is the only one reached on this install</li></ul></div>
+        <div><h4>Identity matching</h4><ul><li class="muted"><span class="num">0</span> matched on an external id</li><li><span class="num">424</span> with no identifier: a free Kavita returns null aniListId, malId and comicVineId, so the weaker tier is the only one reached on this install</li></ul></div>
         <div><h4>Scope</h4><ul><li>In the URL as <span class="mono">?lib=ebooks</span></li><li>Visible to 1 user</li></ul></div>
       </div>
     </section>
@@ -4942,8 +4943,8 @@ aniListId, malId and comicVineId are null on every series: those fields are a Ka
                  the badge an exception among fourteen rows; on the v0.1
                  install the same fact is hoisted into the group header,
                  because there it is true of every row. -->
-            <tr role="row" aria-rowindex="6"><td data-col="title" class="cell-title" role="cell" aria-colindex="1"><span class="stacklabel" aria-hidden="true">Title</span>Heretics of Dune <span class="st st--warn"><svg class="i i--sm" aria-hidden="true"><use href="#i-alert"/></svg>matched by title</span></td><td data-col="author" role="cell" aria-colindex="2"><span class="stacklabel" aria-hidden="true">Author</span>Frank Herbert</td><td data-col="year" class="num" role="cell" aria-colindex="3"><span class="stacklabel" aria-hidden="true">Year</span>1984</td><td data-col="formats" role="cell" aria-colindex="4"><span class="stacklabel" aria-hidden="true">Formats</span><span class="mono">EPUB</span></td><td data-col="size" class="is-num" role="cell" aria-colindex="5"><span class="stacklabel" aria-hidden="true">Size</span>1.1 <span class="unit unit--size">MiB</span></td><td data-col="instance" class="muted" role="cell" aria-colindex="6"><span class="stacklabel" aria-hidden="true">Instance</span>Kavita</td></tr>
-            <tr role="row" aria-rowindex="7"><td data-col="title" class="cell-title" role="cell" aria-colindex="1"><span class="stacklabel" aria-hidden="true">Title</span>Chapterhouse: Dune <span class="st st--warn"><svg class="i i--sm" aria-hidden="true"><use href="#i-alert"/></svg>matched by title</span></td><td data-col="author" role="cell" aria-colindex="2"><span class="stacklabel" aria-hidden="true">Author</span>Frank Herbert</td><td data-col="year" class="num" role="cell" aria-colindex="3"><span class="stacklabel" aria-hidden="true">Year</span>1985</td><td data-col="formats" role="cell" aria-colindex="4"><span class="stacklabel" aria-hidden="true">Formats</span><span class="mono">EPUB</span></td><td data-col="size" class="is-num" role="cell" aria-colindex="5"><span class="stacklabel" aria-hidden="true">Size</span>1.2 <span class="unit unit--size">MiB</span></td><td data-col="instance" class="muted" role="cell" aria-colindex="6"><span class="stacklabel" aria-hidden="true">Instance</span>Kavita</td></tr>
+            <tr role="row" aria-rowindex="6"><td data-col="title" class="cell-title" role="cell" aria-colindex="1"><span class="stacklabel" aria-hidden="true">Title</span>Heretics of Dune <span class="st st--warn"><svg class="i i--sm" aria-hidden="true"><use href="#i-alert"/></svg>no identifier</span></td><td data-col="author" role="cell" aria-colindex="2"><span class="stacklabel" aria-hidden="true">Author</span>Frank Herbert</td><td data-col="year" class="num" role="cell" aria-colindex="3"><span class="stacklabel" aria-hidden="true">Year</span>1984</td><td data-col="formats" role="cell" aria-colindex="4"><span class="stacklabel" aria-hidden="true">Formats</span><span class="mono">EPUB</span></td><td data-col="size" class="is-num" role="cell" aria-colindex="5"><span class="stacklabel" aria-hidden="true">Size</span>1.1 <span class="unit unit--size">MiB</span></td><td data-col="instance" class="muted" role="cell" aria-colindex="6"><span class="stacklabel" aria-hidden="true">Instance</span>Kavita</td></tr>
+            <tr role="row" aria-rowindex="7"><td data-col="title" class="cell-title" role="cell" aria-colindex="1"><span class="stacklabel" aria-hidden="true">Title</span>Chapterhouse: Dune <span class="st st--warn"><svg class="i i--sm" aria-hidden="true"><use href="#i-alert"/></svg>no identifier</span></td><td data-col="author" role="cell" aria-colindex="2"><span class="stacklabel" aria-hidden="true">Author</span>Frank Herbert</td><td data-col="year" class="num" role="cell" aria-colindex="3"><span class="stacklabel" aria-hidden="true">Year</span>1985</td><td data-col="formats" role="cell" aria-colindex="4"><span class="stacklabel" aria-hidden="true">Formats</span><span class="mono">EPUB</span></td><td data-col="size" class="is-num" role="cell" aria-colindex="5"><span class="stacklabel" aria-hidden="true">Size</span>1.2 <span class="unit unit--size">MiB</span></td><td data-col="instance" class="muted" role="cell" aria-colindex="6"><span class="stacklabel" aria-hidden="true">Instance</span>Kavita</td></tr>
             <!-- Silent truncation makes people believe they have seen
                  everything, so the last row carries the real total. -->
             <tr role="row" aria-rowindex="15"><td data-col="title" colspan="6" role="cell" aria-colindex="1" aria-colspan="6"><span class="stacklabel" aria-hidden="true">Title</span><a href="#search?type=ebook">Show all 14 ebooks matching <span class="mono">dune</span></a></td></tr>
@@ -4954,14 +4955,14 @@ aniListId, malId and comicVineId are null on every series: those fields are a Ka
 
     <!-- The same group on the v0.1 install, over the four of the fourteen
          Kavita holds. Instance leaves the columns and joins the header,
-         because it is constant again -- and so does "matched by title", which
+         because it is constant again -- and so does "no identifier", which
          is the hoisting rule doing exactly what it is for. A badge on every
          row of a group is not a badge; it is a fact about the group, and on a
          free Kavita it is the ordinary one. -->
     <section data-inst="v01" hidden class="section section--group u-z-6">
       <div class="section__head">
         <h2>Ebooks <span class="section__count num">4</span></h2>
-        <span class="section__count">all in the <strong>Ebooks</strong> library · all from Kavita · all matched by title</span>
+        <span class="section__count">all in the <strong>Ebooks</strong> library · all from Kavita · none with an identifier</span>
       </div>
       <div class="tablewrap">
         <table aria-rowcount="5" class="tbl tbl--stack cols-search-ebooks-v01" data-roving="tbody tr" aria-label="Ebook results" aria-colcount="5" role="table">
@@ -5082,8 +5083,8 @@ aniListId, malId and comicVineId are null on every series: those fields are a Ka
                  true, and the gap list, which UsArr computes from the issue
                  numbers it already holds. -->
             <tr role="row" aria-rowindex="2">
-              <td data-col="series" class="cell-title" role="cell" aria-colindex="1"><span class="stacklabel" aria-hidden="true">Series</span>Dune: House Atreides <span class="st st--warn"><svg class="i i--sm" aria-hidden="true"><use href="#i-alert"/></svg>matched by title</span>
-                <div class="cell-sub">Kavita returns null identifier fields without Kavita+, so this series was matched by title alone.</div></td>
+              <td data-col="series" class="cell-title" role="cell" aria-colindex="1"><span class="stacklabel" aria-hidden="true">Series</span>Dune: House Atreides <span class="st st--warn"><svg class="i i--sm" aria-hidden="true"><use href="#i-alert"/></svg>no identifier</span>
+                <div class="cell-sub">Kavita+ writes the identifier fields, so this series cannot be linked to another source's copy.</div></td>
               <td data-col="publisher" role="cell" aria-colindex="2"><span class="stacklabel" aria-hidden="true">Publisher</span>BOOM! Studios</td>
               <td data-col="year" class="num" role="cell" aria-colindex="3"><span class="stacklabel" aria-hidden="true">Year</span>2020</td>
               <td data-col="issues" role="cell" aria-colindex="4"><span class="stacklabel" aria-hidden="true">Issues</span><span class="avail avail--part">11 issues · #7 missing</span></td>
@@ -5293,7 +5294,7 @@ aniListId, malId and comicVineId are null on every series: those fields are a Ka
 
     <section class="section section--group">
       <div class="section__head">
-        <h2>Dune: House Atreides <span class="section__count">2020 · all in the <strong>Comics</strong> library · all from Kavita · matched by title</span></h2>
+        <h2>Dune: House Atreides <span class="section__count">2020 · all in the <strong>Comics</strong> library · all from Kavita · none with an identifier</span></h2>
         <div class="section__actions"><span class="avail avail--part">11 issues · #7 missing</span></div>
       </div>
       <div class="tablewrap">
@@ -5330,7 +5331,7 @@ aniListId, malId and comicVineId are null on every series: those fields are a Ka
 
     <p class="section note">Eleven issues and one gap, and there is no denominator. A declared total is unreliable here in a way an episode count is not: the ComicInfo spec concedes that the <span class="mono">Count</span> field "could be different on each book in a series", so UsArr shows the count it can prove and the contiguity gap it computes from the issue numbers it holds. It never renders "11 / 12".</p>
 
-    <p class="section note">Matched by title, and that is the ordinary case on this install rather than a warning about this one series. A free Kavita returns null <span class="mono">aniListId</span>, <span class="mono">malId</span> and <span class="mono">comicVineId</span>, so title is the only identity there is, and the badge is hoisted into the heading above rather than repeated on every row.</p>
+    <p class="section note">No identifier, and that is the ordinary case on this install rather than a warning about this one series. A free Kavita returns null <span class="mono">aniListId</span>, <span class="mono">malId</span> and <span class="mono">comicVineId</span>, so there is no identifier to hold, and the badge is hoisted into the heading above rather than repeated on every row.</p>
 
     <p class="section note"><span class="statebar__tag">mockup</span> Nothing on this screen is a per-type component. The breadcrumb is a level control, the container below it is the same table the other groups use, and the columns, the default sort and the number of levels come from a configuration table keyed by media type.</p>
     </div>
@@ -5378,7 +5379,7 @@ aniListId, malId and comicVineId are null on every series: those fields are a Ka
           <tbody role="rowgroup">
             <tr role="row" aria-rowindex="2">
               <td data-col="series" class="cell-title" role="cell" aria-colindex="1"><span class="stacklabel" aria-hidden="true">Series</span>Dune: House Atreides
-                <div class="cell-sub"><span class="st st--warn"><svg class="i i--sm" aria-hidden="true"><use href="#i-alert"/></svg>matched by title</span> Kavita returns null identifier fields without Kavita+, so this series is matched by title.</div></td>
+                <div class="cell-sub"><span class="st st--warn"><svg class="i i--sm" aria-hidden="true"><use href="#i-alert"/></svg>no identifier</span> Kavita+ writes the identifier fields, so this series cannot be linked to another source's copy.</div></td>
               <td data-col="publisher" role="cell" aria-colindex="2"><span class="stacklabel" aria-hidden="true">Publisher</span>BOOM! Studios</td>
               <td data-col="year" class="num" role="cell" aria-colindex="3"><span class="stacklabel" aria-hidden="true">Year</span>2020</td>
               <td data-col="issues" role="cell" aria-colindex="4"><span class="stacklabel" aria-hidden="true">Issues</span><span class="avail avail--part">11 issues · #7 missing</span></td>
@@ -6500,7 +6501,7 @@ aniListId, malId and comicVineId are null on every series: those fields are a Ka
      The two installs also demonstrate the OPPOSITE identity tiers, and that is
      the sharpest thing the switcher shows. The v0.1 install's one source as
      drawn is a free Kavita, which returns null aniListId, malId and
-     comicVineId, so "matched by title" is the ordinary case there rather than
+     comicVineId, so "no identifier" is the ordinary case there rather than
      an exception. That is MEASURED for free Kavita (ADR-0035 section 1) and
      it is why the null-identifier screens exist; it is NOT re-measured for
      BookOrbit, whose own tier ADR-0052 read off source as mixed -- ComicVine

@@ -941,7 +941,7 @@
             <!-- The second source, from a different service. This is what the
                  authority radio is for: two instances hold an edition of the
                  same book and their metadata disagrees, and one of them has to
-                 win. Kavita's half is where every "matched by title" row in
+                 win. Kavita's half is where every "no identifier" row in
                  this library comes from, which is the argument for leaving the
                  authority with Audiobookshelf rather than a preference. -->
             <tr role="row" aria-rowindex="3">
@@ -1021,7 +1021,7 @@
               <td data-col="correction" role="cell" aria-colindex="1"><span class="stacklabel" aria-hidden="true">Correction</span><span class="chip">Re-linked</span></td>
               <td data-col="count" class="is-num" role="cell" aria-colindex="2"><span class="stacklabel" aria-hidden="true">Count</span>2</td>
               <td data-col="what-it-does" role="cell" aria-colindex="3"><span class="stacklabel" aria-hidden="true">What it does</span>Points a row at a different work when the match was wrong.</td>
-              <td data-col="most-recent" role="cell" aria-colindex="4"><span class="stacklabel" aria-hidden="true">Most recent</span><span class="cell-title">Dune</span><div class="cell-sub">8 Aug 2026 · matched to <span class="mono">Dune: House Atreides</span> by title, no ISBN in the file</div></td>
+              <td data-col="most-recent" role="cell" aria-colindex="4"><span class="stacklabel" aria-hidden="true">Most recent</span><span class="cell-title">Dune</span><div class="cell-sub">8 Aug 2026 · re-pointed at <span class="mono">Dune: House Atreides</span>, which arrived with no identifier</div></td>
               <td data-col="action" role="cell" aria-colindex="5"><span class="stacklabel" aria-hidden="true">Action</span><button type="button" class="btn btn--sm">Undo</button></td>
             </tr>
             <tr role="row" aria-rowindex="5">
@@ -1044,7 +1044,7 @@
       <div class="detail">
         <div><h4>Membership</h4><ul><li>2,266 works</li><li>Recomputed <span class="num">13:40</span>, 28 minutes ago</li><li>Derived 2,265 · manual 1</li></ul></div>
         <div><h4>Source disagreement</h4><ul><li><span class="num">31</span> works held by both sources</li><li><span class="num">7</span> where the two report a different title or year, resolved in favour of Audiobookshelf</li></ul></div>
-        <div><h4>Identity matching</h4><ul><li><span class="num">1,703</span> matched on an external id, all of them Audiobookshelf's</li><li><span class="num">563</span> matched by title only: 139 files that carried no identifier, and every one of Kavita's 424, because a free Kavita returns null identifier fields</li></ul></div>
+        <div><h4>Identity matching</h4><ul><li><span class="num">1,703</span> matched on an external id, all of them Audiobookshelf's</li><li><span class="num">563</span> with no identifier: 139 files that supplied none, and every one of Kavita's 424, because a free Kavita returns null identifier fields</li></ul></div>
         <div><h4>Scope</h4><ul><li>In the URL as <span class="mono">?lib=ebooks</span></li><li>Visible to 1 user</li></ul></div>
       </div>
     </section>
@@ -1076,7 +1076,7 @@
            reading "the only source" rather than a choice. The full stack owns
            the two-source case now, because it is the install that has two
            services holding books.
-         · An identity panel where EVERYTHING is matched by title, because a
+         · An identity panel where NOTHING carries an identifier, because a
            free Kavita returns null aniListId, malId and comicVineId. ADR-0041
            made that v0.1's ordinary case rather than an edge state, and the
            correction surface has a Re-linked row for exactly that reason.
@@ -1244,17 +1244,18 @@
               <td data-col="most-recent" role="cell" aria-colindex="4"><span class="stacklabel" aria-hidden="true">Most recent</span><span class="cell-title">Dune</span><div class="cell-sub">7 Aug 2026 · sort title "Dune" instead of "Dune, 1965 ed."</div></td>
               <td data-col="action" role="cell" aria-colindex="5"><span class="stacklabel" aria-hidden="true">Action</span><button type="button" class="btn btn--sm">Undo</button></td>
             </tr>
-            <!-- The Re-linked row is the finding rather than a gap: every
-                 work in this library was matched by title, so a wrong match is
-                 the ordinary risk and undoing one is the ordinary remedy.
-                 ADR-0043 moves the minimal "fix this match" case earlier for
-                 exactly this reason, and ADR-0045 lands it in v0.2 -- so v0.1
-                 draws the badge without its remedy for one milestone. -->
+            <!-- The Re-linked row is the finding rather than a gap: the rows
+                 in this library arrived with no identifier, so their identity
+                 rests on weaker evidence, a wrong link is the ordinary risk,
+                 and undoing one is the ordinary remedy. ADR-0043 moves the
+                 minimal correction case earlier for exactly this reason, and
+                 ADR-0045 lands it in v0.2, so v0.1 draws the badge without its
+                 remedy for one milestone. -->
             <tr role="row" aria-rowindex="4">
               <td data-col="correction" role="cell" aria-colindex="1"><span class="stacklabel" aria-hidden="true">Correction</span><span class="chip">Re-linked</span></td>
               <td data-col="count" class="is-num" role="cell" aria-colindex="2"><span class="stacklabel" aria-hidden="true">Count</span>4</td>
               <td data-col="what-it-does" role="cell" aria-colindex="3"><span class="stacklabel" aria-hidden="true">What it does</span>Points a row at a different work when the match was wrong.</td>
-              <td data-col="most-recent" role="cell" aria-colindex="4"><span class="stacklabel" aria-hidden="true">Most recent</span><span class="cell-title">Dune Messiah</span><div class="cell-sub">6 Aug 2026 · matched by title to the 1969 novel, not the 2023 audio edition</div></td>
+              <td data-col="most-recent" role="cell" aria-colindex="4"><span class="stacklabel" aria-hidden="true">Most recent</span><span class="cell-title">Dune Messiah</span><div class="cell-sub">6 Aug 2026 · re-pointed at the 1969 novel, not the 2023 audio edition</div></td>
               <td data-col="action" role="cell" aria-colindex="5"><span class="stacklabel" aria-hidden="true">Action</span><button type="button" class="btn btn--sm">Undo</button></td>
             </tr>
           </tbody>
@@ -1270,7 +1271,7 @@
       <div class="detail">
         <div><h4>Membership</h4><ul><li>424 works</li><li>Recomputed <span class="num">13:31</span>, 37 minutes ago</li><li>Derived 422 · manual 2</li></ul></div>
         <div><h4>Source disagreement</h4><ul><li class="muted">One source, so there is nothing to disagree about</li><li class="muted">The column exists because a second source is one Add source away, and the full stack has one</li></ul></div>
-        <div><h4>Identity matching</h4><ul><li class="muted"><span class="num">0</span> matched on an external id</li><li><span class="num">424</span> matched by title: a free Kavita returns null aniListId, malId and comicVineId, so the weaker tier is the only one reached on this install</li></ul></div>
+        <div><h4>Identity matching</h4><ul><li class="muted"><span class="num">0</span> matched on an external id</li><li><span class="num">424</span> with no identifier: a free Kavita returns null aniListId, malId and comicVineId, so the weaker tier is the only one reached on this install</li></ul></div>
         <div><h4>Scope</h4><ul><li>In the URL as <span class="mono">?lib=ebooks</span></li><li>Visible to 1 user</li></ul></div>
       </div>
     </section>
