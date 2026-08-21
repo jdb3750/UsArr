@@ -1111,7 +1111,10 @@ heading rather than the chip**, because `.st` never wraps (`design/mockups/usarr
 `white-space: nowrap`), the observed label ceiling across the five authored screens is 23
 characters, and naming the source in the badge spends about ten of them restating the `Instance`
 column two cells to the right, which is the redundancy the hoisting rule in `search.html` exists to
-prevent.
+prevent. The sub-line is budgeted rather than free: it renders inside a table cell that wraps, and
+Search's tallest row sits 2px under the row-height ceiling `design/check.mjs` check 5 enforces, so a
+sub-line much past 95 characters costs a wrapped line and fails the check. Name the source, name why
+it supplied none, name what the absence costs, and stop.
 
 **A work with no resolvable identity is kept, marked, and stays searchable — and that is a v0.1
 rule, not a later one.** Whatever the backend reports, UsArr writes the row: a title, a file, and a
