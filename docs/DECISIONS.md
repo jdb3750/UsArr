@@ -6940,6 +6940,20 @@ two library shapes §6.5 asks for by name.
 > migrations into it is a plan for whatever subset loaded before the error: migration 0005 contains
 > `RAISE(ABORT, 'a' || 'b')` and the CLI rejects it. `internal/store/browse_test.go` carries this
 > note where someone doing plan work will meet it.
+>
+> 🔻 **Rider, 2026-08-21 — the sentence above stands, and half of what a reader takes from it no
+> longer does. BUILDING and READING are different claims and this note only ever measured the
+> first.** Building: unchanged and still true — migration 0005 is not edited, a merged migration
+> never is, and it still contains two expression-valued `RAISE`s, so piping the migrations into an
+> old `sqlite3` still fails. Reading: **fixed**. The advice this note is usually summarised as —
+> *you need a newer SQLite, and no query avoids it* — was true of the whole file and is now false of
+> the second half: the blocker in the **persisted** schema was one trigger body, editable by a
+> migration, and migration `00013` edited it. **Measured**: a database built by running every
+> migration is now read by a real **3.43.0** build — the declared floor — answering
+> `PRAGMA integrity_check` with `ok` across all 123 objects, where before `00013` the same binary
+> answered `malformed database schema (trg_library_unfiled_no_delete) - near "||": syntax error (11)`
+> on every statement. So a **migrated** database is now open to plan work with an external CLI; a
+> **migrations directory** is still not. [ADR-0075](#adr-0075) carries the matrix.
 
 **The member-driven shape, `added_at` order, one library and two libraries over one kind:**
 

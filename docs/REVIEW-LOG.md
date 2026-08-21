@@ -2309,6 +2309,16 @@ drove all six refusal rows against the real binary and got the verbatim messages
   `client_credential`, with `ANALYZE` applied).
 - **Toolchain floor holds:** `ncruces/go-sqlite3` ships **SQLite 3.53.4**, above
   `docs/reference/schema.md:12`'s `>= 3.43.0`.
+  🔻 **Rider, 2026-08-21 — true, and it checked the wrong side of the floor.** The bullet stands as
+  written: the *toolchain* was above 3.43.0 and still is. But a floor is a claim about **readers**,
+  and the engine UsArr bundles is the one reader that never consults it — so *"the floor holds"* was
+  established by measuring the only participant that could not violate it. The **schema** was
+  violating it at the moment this was written: `trg_library_unfiled_no_delete` needed **3.47.0** to
+  parse, and every external reader between 3.43.0 and 3.47.0 failed on every statement. Migration
+  `00013` repaired it and `TestPersistedSchemaRaisesOnlyLiterals` now checks the other side;
+  [`DECISIONS.md`](./DECISIONS.md#adr-0075) carries the reader matrix. ⚠️ **The cite was also wrong
+  when written** — `docs/reference/schema.md:12` is a sentence about deferred tables at
+  `f014dc2` as it was then; the floor is stated at **`:19`**.
 
 **Documents against code, doc pass:**
 

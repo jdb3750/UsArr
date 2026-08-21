@@ -19,6 +19,16 @@ reasoning; this file carries the DDL and the invariant behind each index.
 SQLite dialect, `STRICT` tables throughout. **Minimum SQLite version: 3.43.0** — `STRICT` needs
 3.37, but FTS5 `contentless_delete=1` (§7 below) arrived in 3.43.0 and is mandatory.
 
+⚠️ **2026-08-21 — this number is now a measurement, and it was not one before.** The floor is a claim
+about **readers**: UsArr bundles its own engine and never consults it. From migration 0005 until
+migration `00013`, `trg_library_unfiled_no_delete` raised a `||`-concatenated message — legal as
+`RAISE()`'s second argument only from **3.47.0** — and because SQLite stores schema objects as text,
+every reader below 3.47.0 failed at PREPARE on **every** statement with `malformed database schema`.
+`00013` rewrote that message as a static literal and a real 3.43.0 build now answers
+`PRAGMA integrity_check` with `ok` over the whole schema, contentless FTS5 and all.
+**`RAISE()`'s message must be a static literal in anything that reaches the persisted schema** —
+[ADR-0075](../DECISIONS.md#adr-0075), enforced by `TestPersistedSchemaRaisesOnlyLiterals`.
+
 **Timestamps are SQLite `datetime()` text — `YYYY-MM-DD HH:MM:SS`, UTC, no `T` and no `Z`.** This is
 *not* ISO-8601, which this document previously claimed while every column default in it reads
 `DEFAULT (datetime('now'))`. The SQLite format is the correct one and the code implements it

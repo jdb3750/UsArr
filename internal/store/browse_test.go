@@ -27,6 +27,15 @@ import (
 // CLI rejects it, so a plan measured by piping the migrations into `sqlite3` is
 // not a plan for this schema — it is a plan for whatever subset loaded before
 // the error. `go test ./internal/store -run TestBrowseWorks` is the cheap way in.
+//
+// ⚠️ BUILDING IS STILL REFUSED; READING NO LONGER IS, AND THE TWO GET CONFUSED.
+// Since migration 00013 (ADR-0075) a database that has ALREADY been migrated
+// opens fine in an external sqlite3 as old as 3.43.0 — the persisted blocker was
+// one trigger's `||`-built RAISE message and 00013 made it a literal. The
+// paragraph above is unchanged because the thing it forbids is unchanged: 0005
+// is a merged migration, it is never edited, and piping the migrations in still
+// fails. So `sqlite3 already-migrated.db "EXPLAIN QUERY PLAN …"` is available to
+// you; `cat migrations/*.sql | sqlite3 fresh.db` is not.
 // ─────────────────────────────────────────────────────────────────────────────
 
 func seedBrowseCorpus(t *testing.T, s *Store) {

@@ -547,6 +547,17 @@ connection in the pool, not once at startup.
 on an FTS5 table — without which a contentless index can never `DELETE` or `UPDATE`, so deleted works
 haunt search results forever — arrived in **3.43.0**.
 
+⚠️ **A floor is a claim about READERS, and until 2026-08-21 the persisted schema did not honour this
+one — 3.43.0 is now MEASURED rather than declared.** UsArr brings its own engine
+(`ncruces/go-sqlite3`, SQLite 3.53.4) and never consults the floor, so the number only ever meant
+"what else can open a UsArr database". `trg_library_unfiled_no_delete` raised a message built with
+`||`, which `RAISE()` accepts only from **3.47.0** — and SQLite stores schema objects as text, so
+every reader between 3.43.0 and 3.47.0 failed at **PREPARE, on every statement**, with `malformed
+database schema … near "||"`. Migration `00013` rewrote that message as a static literal;
+[`DECISIONS.md`](./DECISIONS.md#adr-0075) carries the reader matrix and the rejected alternative.
+**Whatever you add to this schema, `RAISE()`'s message must be a static literal** —
+`TestPersistedSchemaRaisesOnlyLiterals` fails the build otherwise.
+
 ### Workflow
 
 ```bash

@@ -741,7 +741,10 @@ Full DDL and the invariant behind every index: [`reference/schema.md`](./referen
 
 SQLite, `STRICT` throughout. **Minimum SQLite is 3.43, not 3.37**: `STRICT` needs 3.37, but the FTS5
 `contentless_delete=1` option that makes search deletable arrived in **3.43.0**, and without it
-deleted works stay in the search index forever (§8.2).
+deleted works stay in the search index forever (§8.2). ⚠️ **The floor binds the SCHEMA, not just the
+engine** — it is a claim about what else can read a UsArr database, and one trigger body broke it
+from migration 0005 until `00013` repaired it on 2026-08-21. `RAISE()`'s message must be a static
+literal in any object that reaches the persisted schema: [ADR-0075](./DECISIONS.md#adr-0075).
 
 ### 6.1 The three-layer core
 
