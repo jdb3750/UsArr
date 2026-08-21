@@ -446,13 +446,31 @@ export function posterTile(item: RecentItem): PosterTile {
  * about the pipeline and the same fact on screen — there is no art — and giving
  * them two renderings would put two spellings of "no cover" on one row.
  *
- * THE SET IS THE CALLER'S, held for the page view. This function is the rule and
- * holds nothing, so `vitest.config.ts`'s node environment can call it: the
+ * THE RECORD IS THE CALLER'S, held for the page view. This function is the rule
+ * and holds nothing, so `vitest.config.ts`'s node environment can call it: the
  * failure is discovered in an `onerror` a component owns, and a rule left in
  * that handler is a rule nothing can test.
+ *
+ * ⚠️ A KEYED RECORD AND NOT A `SvelteSet`, AND THE REASON IS THE RENDER PATH
+ * RATHER THAN TASTE. In `svelte@5.56.9`'s `src/reactivity/set.js`, `has()` on a
+ * MISS subscribes the reader to the SET-WIDE `#version` signal — the source says
+ * so in as many words: *"If the value doesn't exist, track the version in case
+ * it's added later but don't create sources willy-nilly to track all possible
+ * values"* — and `add()` calls `increment(this.#version)`. Every card whose
+ * cover is fine is a miss, so one broken cover invalidates all of them and
+ * re-runs the tile build for the whole grid: O(K·N) over K failures and N cards,
+ * on a page "Load more" grows without bound. A `$state`-proxied record has
+ * per-key granularity instead — `src/internal/client/proxy.js`'s `get` trap
+ * creates a source for an ABSENT property too (`if (s === undefined && (!exists
+ * || …))`, seeded `UNINITIALIZED` and returned as `undefined`), and the
+ * `version` a new key increments is read only by `ownKeys`, which a card that
+ * reads one id never touches.
  */
-export function posterArtSrc(tile: PosterTile, failed: ReadonlySet<number>): string | undefined {
-	return tile.src !== undefined && !failed.has(tile.id) ? tile.src : undefined;
+export function posterArtSrc(
+	tile: PosterTile,
+	failed: Readonly<Record<number, true | undefined>>
+): string | undefined {
+	return tile.src !== undefined && failed[tile.id] === undefined ? tile.src : undefined;
 }
 
 /**

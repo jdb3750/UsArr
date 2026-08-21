@@ -28,11 +28,26 @@
 	 * transition, and an image that fades in is the same effect spelt as a load
 	 * handler. `loading="lazy"` is the browser's own deferral and costs no script.
 	 */
-	import { SvelteSet } from 'svelte/reactivity';
+	import HaveCell from '$lib/HaveCell.svelte';
 	import { NOTHING } from '$lib/list';
 	import { posterArtSrc, posterTile, type RecentItem } from '$lib/library';
 
-	let { items }: { items: readonly RecentItem[] } = $props();
+	/**
+	 * `availability` IS OPT-IN, AND ⚠️ THE DEFAULT IS THE HALF THAT MATTERS.
+	 *
+	 * DESIGN-DIRECTION §9.2 puts availability on this card — *"Availability
+	 * renders per §6.3's rollup rule"* — and the catalogue screens need it,
+	 * because their TABLE arm draws a Have column and toggling to posters would
+	 * otherwise drop a column the same screen showed a moment ago.
+	 *
+	 * Home does not get it. Block C's shape is ARCHITECTURE §17.2's and ADR-0028's
+	 * rather than this component's, and changing what that section renders is not
+	 * a thing to do as a side effect of a card edit — so the prop defaults OFF and
+	 * Home's output is byte-for-byte what it was. Turning it on there is a
+	 * §17.2 decision, and this is the seam it would use.
+	 */
+	let { items, availability = false }: { items: readonly RecentItem[]; availability?: boolean } =
+		$props();
 
 	/**
 	 * THE WORKS WHOSE ART FAILED TO LOAD IN THIS PAGE VIEW.
@@ -43,11 +58,21 @@
 	 * upstream leaves the key behind. Without this the browser draws its own
 	 * broken-image glyph, which on a screenful of covers reads as a broken screen.
 	 *
-	 * A SET OF IDS RATHER THAN PER-CARD STATE, because the `{#each}` is keyed by
-	 * `work.id` and a card that scrolls out and back must not re-request an image
-	 * already known to be missing.
+	 * KEYED BY WORK ID RATHER THAN HELD PER CARD, because the `{#each}` is keyed
+	 * by `work.id` and a card that scrolls out and back must not re-request an
+	 * image already known to be missing.
+	 *
+	 * ⚠️ AND IT IS A `$state` RECORD RATHER THAN A `SvelteSet`, WHICH IS A RENDER
+	 * -PATH DECISION AND NOT A STYLISTIC ONE. `SvelteSet.has()` on a MISS
+	 * subscribes the reader to the whole set's `#version` and `add()` increments
+	 * it, so on a grid where most covers are missing bytes each failure would
+	 * invalidate the `{@const}` of every still-good card and rebuild every tile
+	 * URL — O(K·N) on a list "Load more" grows without bound, which is exactly the
+	 * render path Principle 1 exists to protect. The proxied record gives one
+	 * signal per id. `$lib/library.posterArtSrc` carries the verbatim Svelte
+	 * sources this was read off.
 	 */
-	const failed = new SvelteSet<number>();
+	const failed = $state<Record<number, true>>({});
 </script>
 
 <div class="postergrid">
@@ -91,7 +116,7 @@
 					title={tile.tooltip}
 					loading="lazy"
 					decoding="async"
-					onerror={() => failed.add(tile.id)}
+					onerror={() => (failed[tile.id] = true)}
 				/>
 			{:else}
 				<span class="postercard__art" title={tile.tooltip}></span>
@@ -116,6 +141,17 @@
 			{#if tile.year !== undefined}
 				<div class="postercard__year num">{tile.year}</div>
 			{/if}
+			{#if availability}
+				<!--
+					§9.2's last content rule, THROUGH THE CELL THE TABLE ARM ALREADY
+					DRAWS. `$lib/library.haveCell` owns every decision §6.3 states — the
+					tick that must never fire on a `total: null`, the cross that belongs
+					only to a measured zero, the fraction otherwise — and a card that
+					recomputed `have == total` here would be a second implementation of
+					the one rule schema.md says must not be reconstructed by markup.
+				-->
+				<div class="postercard__avail"><HaveCell {item} /></div>
+			{/if}
 		</div>
 	{/each}
 </div>
@@ -137,7 +173,7 @@
 	 *
 	 * A FIXED PX FLOOR ON THE TRACK, NOT A CONTENT-SIZED ONE. `$lib/list`'s
 	 * `isContentSized` refuses `auto`, `max-content`, `min-content`,
-	 * `fit-content()` and a content-sided `minmax()` on a row grid for a reason
+	 * `fit-content()` and a content-sized `minmax()` on a row grid for a reason
 	 * that applies here too: a content-sized track resolves against whatever
 	 * happens to be in it, so the column width would move as titles change.
 	 */
@@ -149,8 +185,39 @@
 		padding: 0 var(--row-pad-x) var(--space-5);
 	}
 
+	/*
+	 * OFF-SCREEN CARDS SKIP THEIR OWN LAYOUT AND PAINT, WHICH IS WHAT ADR-0029
+	 * PAIRS WITH "Load more" INSTEAD OF VIRTUALIZATION. `.row` in `app.css` has
+	 * carried this since the list primitive was built; the grid arm pages to the
+	 * same unbounded card count and had neither half of it.
+	 *
+	 * ⚠️ AND IT ACTUALLY APPLIES HERE, WHICH IS NOT AUTOMATIC — this repo has one
+	 * recorded instance of `content-visibility` declared where it does NOTHING.
+	 * CSS Containment Level 2 says size containment "has no effect ... if its
+	 * principal box is an internal table box", and `content-visibility: auto` is
+	 * defined entirely in terms of size, layout and paint containment, so it is
+	 * inert on a `<tr>` — which is why `app.css`'s list primitive computes to
+	 * block/grid rather than to a table layout. `.postercard` is a `<div>` grid
+	 * item inside `display: grid`, an ordinary block-level box and not an
+	 * internal table box, so containment applies to it.
+	 *
+	 * ⚠️ THE LENGTH IS AN ESTIMATE AND NOT A MEASUREMENT, and saying which is the
+	 * point. It is arithmetic at the track FLOOR, the one card width this file
+	 * actually pins: a 132px track gives a 2:3 border box 198px tall; the title
+	 * adds `--space-3` 6px plus `--leading-base` 18px; the year adds
+	 * `--leading-sm` 16px; the availability line, where a caller asks for one,
+	 * adds `--space-2` 4px plus another 16px. 198 + 24 + 16 + 20 = 258. A wider
+	 * track makes a taller tile, so no single length is right for every viewport.
+	 *
+	 * `auto` IN FRONT OF THE LENGTH IS WHAT MAKES THAT ACCEPTABLE, and it is the
+	 * same reasoning `.row` records: once a card has been rendered the browser
+	 * remembers its real size and uses that instead, so this number only ever
+	 * governs a card that has never been on screen.
+	 */
 	.postercard {
 		min-width: 0;
+		content-visibility: auto;
+		contain-intrinsic-size: auto 258px;
 	}
 
 	/*
@@ -205,6 +272,30 @@
 	.postercard__year {
 		font-size: var(--text-sm);
 		line-height: var(--leading-sm);
+		color: var(--fg-muted);
+	}
+
+	/*
+	 * THE ROLLUP TAKES THE SAME SMALL STEP AS THE YEAR LINE, and its sub-lines
+	 * take the same rule the table gives them. `app.css` declares `.cell-sub`
+	 * ONLY under `.tbl`, so the "+N more", "N missing" and "Gaps at …" lines
+	 * would render at body size and full contrast on a card — a difference the
+	 * reader would read as two different cells. `:global()` because those
+	 * elements are `HaveCell.svelte`'s, not this file's, which is the same reason
+	 * `routes/libraries` reaches `.cell-chips :global(.chip)`.
+	 *
+	 * THE FRACTION KEEPS `--fg` AND IS NOT MUTED, which is §9.5 read the right
+	 * way round: chroma and de-emphasis mark what is wrong or secondary, and
+	 * "250 / 300" is the answer the reader came for.
+	 */
+	.postercard__avail {
+		margin-top: var(--space-2);
+		font-size: var(--text-sm);
+		line-height: var(--leading-sm);
+		color: var(--fg);
+	}
+
+	.postercard__avail :global(.cell-sub) {
 		color: var(--fg-muted);
 	}
 </style>
