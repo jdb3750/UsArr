@@ -58,10 +58,15 @@
  * `$lib/requests`' vocabulary, reused rather than restated.
  *
  * §17.2's hard rule is the one an implementer breaks first: a media type the
- * user does not have is not shown AT ALL, not in Block A, not in the sidebar,
- * not as a search group. ⚠️ IT WAS ONCE READ HERE AS AN ARGUMENT FOR DRAWING
- * NO ROWS, on the premise that *"with no catalogue there are no types the user
- * has"*, and that premise died twice over: a connected catalogue source writes
+ * user does not have is not shown AT ALL — in Block A or as a search group.
+ * ⚠️ THAT SENTENCE ONCE NAMED THE SIDEBAR AS A THIRD PLACE AND NO LONGER DOES.
+ * ADR-0053 struck the sidebar clause from §17.2 and DESIGN-DIRECTION §8.1: the
+ * axes table reads *"all six, always"* for navigation, and the rule's own
+ * sentence in §17.2 carries a 🚩 strike recording that its sidebar third *"was
+ * never buildable"*. The rule is unchanged for the two surfaces it still binds,
+ * and this module is one of them. ⚠️ IT WAS ONCE READ HERE AS AN ARGUMENT FOR
+ * DRAWING NO ROWS, on the premise that *"with no catalogue there are no types
+ * the user has"*, and that premise died twice over: a connected catalogue source writes
  * `book` and `comic` works, and the per-type read that would count them now
  * exists. **The rule is satisfied by the `unconfigured` STATE rather than by
  * omission** — §17.2 says so itself, and `design/DESIGN-DIRECTION.md` rule 13

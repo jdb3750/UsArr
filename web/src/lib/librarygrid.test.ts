@@ -867,11 +867,16 @@ describe('all six media types are reachable from the shell', () => {
 	/*
 	 * A screen with no route into it is a screen that does not exist.
 	 *
-	 * ⚠️ ALL SIX SHIP, INCLUDING THE ONES AN INSTALL HAS NOTHING IN, and that is a
-	 * recorded trade-off rather than an oversight: §17.2 and DESIGN-DIRECTION
-	 * §8.1 want a type with no content hidden, and doing that honestly needs a
-	 * per-type COUNT that http-api.md §7.1 states is not on the wire. Hiding a
-	 * type on a count nobody measured would hide a library that is really there.
+	 * ⚠️ ALL SIX SHIP, INCLUDING THE ONES AN INSTALL HAS NOTHING IN, and that is
+	 * what the specs ask for rather than a trade-off against them. ADR-0053
+	 * amended §17.2 and DESIGN-DIRECTION §8.1 for their sidebar clause only:
+	 * §17.2's axes table now reads *"all six, always"* for navigation, and its
+	 * hide-an-empty-type sentence carries a 🚩 strike saying the sidebar third of
+	 * it *"was never buildable"*. That rule survives for Block A and for search
+	 * groups, neither of which this suite covers. Hiding a type here would have
+	 * needed a per-type COUNT that http-api.md §7.1 states is not on the wire,
+	 * and hiding one on a count nobody measured would hide a library that is
+	 * really there.
 	 */
 	it('has an entry and a title for every one of the six', () => {
 		expect(
