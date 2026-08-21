@@ -51,6 +51,23 @@ type ImportedItem struct {
 	RemoteSubtype string
 }
 
+// The two sync_report kinds this file writes.
+//
+// They were inline literals at their single call sites. A member that exists
+// only as an argument is a member no vocabulary check can enumerate, so they are
+// constants for the reason SyncReportDeltaWalk already gives — and additionally
+// so cmd/usarr's TestSyncReportKindsDoNotCollide can derive them from the tree
+// rather than from a list somebody has to remember to update.
+const (
+	// syncReportIdentityConflict: two works claim one strong external id. See
+	// store.SyncReportIDReused for why that is a different fact from a reused
+	// remote id, and not a spelling of it.
+	syncReportIdentityConflict = "identity_conflict"
+
+	// syncReportContainerDeclined: a container the caller chose not to bind.
+	syncReportContainerDeclined = "container_declined"
+)
+
 func (i ImportedItem) creditRequest() CreditRequest {
 	return CreditRequest{RemoteKind: i.RemoteKind, RemoteID: i.RemoteID, Kind: i.Kind}
 }
@@ -423,7 +440,7 @@ func (im *Importer) FullImport(ctx context.Context, instanceID int64) (rep Repor
 			return rep, fmt.Errorf("full import of service_instance %d: encode conflict: %w", instanceID, err)
 		}
 		if err := im.Store.RecordSyncReport(ctx, instanceID,
-			"identity_conflict", "series", c.RemoteID, string(detail)); err != nil {
+			syncReportIdentityConflict, "series", c.RemoteID, string(detail)); err != nil {
 			return rep, fmt.Errorf("full import of service_instance %d: %w", instanceID, err)
 		}
 	}
@@ -545,7 +562,7 @@ func (im *Importer) bindPhase(
 			return nil, nil, fmt.Errorf("%s of service_instance %d: encode decline: %w", what, instanceID, err)
 		}
 		if err := im.Store.RecordSyncReport(ctx, instanceID,
-			"container_declined", "library", d.RemoteID, string(detail)); err != nil {
+			syncReportContainerDeclined, "library", d.RemoteID, string(detail)); err != nil {
 			return nil, nil, fmt.Errorf("%s of service_instance %d: %w", what, instanceID, err)
 		}
 	}

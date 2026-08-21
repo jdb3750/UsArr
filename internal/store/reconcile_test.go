@@ -2,6 +2,7 @@ package store
 
 import (
 	"database/sql"
+	"errors"
 	"strings"
 	"testing"
 	"time"
@@ -83,6 +84,124 @@ func allSeen() []LinkRef {
 }
 
 // ── the item half ───────────────────────────────────────────────────────────
+
+// TestTheSweepRefusesAZeroReadWhileTheInstanceHasLiveLinks is the zero-read
+// refusal, and it is the arm that fires it.
+//
+// A read that returns success and an empty list is what a lost credential scope,
+// an unmounted share and a renamed container all look like from here. Handed to
+// the sweep unguarded, it is an absence for EVERY live link on the instance, and
+// the pass tombstones the entire library.
+func TestTheSweepRefusesAZeroReadWhileTheInstanceHasLiveLinks(t *testing.T) {
+	s := newTestStore(t)
+	inst, _ := sweepFixture(t, s)
+
+	res, err := s.SweepDeletions(t.Context(), inst, nil, nil, sweepLater)
+	if !errors.Is(err, ErrSweepRefusedEmptyRead) {
+		t.Fatalf("SweepDeletions err = %v, want ErrSweepRefusedEmptyRead", err)
+	}
+
+	// NOTHING MOVED. Asserted per row, by identity, and not as a count of rows
+	// in a state — a count passes over its own deleted subject.
+	for _, id := range []string{"41", "42", "77"} {
+		st := readLink(t, s, inst, "series", id)
+		if st.linkDeleted.Valid || st.workDeleted.Valid {
+			t.Errorf("item %s was tombstoned by a refused sweep: link=%v work=%v",
+				id, st.linkDeleted, st.workDeleted)
+		}
+	}
+	// THE CONTAINER HALF IS REFUSED TOO. One failed read produced both seen-sets,
+	// so a refusal that swept containers anyway would orphan every library on the
+	// instance while claiming to have protected the items.
+	for _, ref := range []string{"1", "2"} {
+		if m := nullStr(t, s, `SELECT missing_since FROM library_source
+			 WHERE service_instance_id = ? AND container_ref = ?`, inst, ref); m.Valid {
+			t.Errorf("container %s was stamped missing by a refused sweep: %v", ref, m)
+		}
+	}
+
+	// OBSERVABLE, NOT A SILENT NO-OP. The report row is written and COMMITTED —
+	// returning the refusal as an error inside the transaction would have rolled
+	// back the only durable record that the sweep declined.
+	if n := count(t, s, `SELECT COUNT(*) FROM sync_report WHERE service_instance_id = ? AND kind = ?`,
+		inst, SyncReportDeletionSweepRefused); n != 1 {
+		t.Errorf("%d deletion_sweep_refused rows, want 1: the refusal left no record", n)
+	}
+	if n := count(t, s, `SELECT COUNT(*) FROM sync_report WHERE service_instance_id = ? AND kind = ?`,
+		inst, SyncReportDeletionSweep); n != 0 {
+		t.Errorf("%d deletion_sweep rows for a pass that did not run", n)
+	}
+	// The denominator rides the result and the row, so a reader can re-derive
+	// the decision rather than take it on trust.
+	if res.LinksLive != 3 {
+		t.Errorf("LinksLive = %d, want 3", res.LinksLive)
+	}
+	d := nullStr(t, s, `SELECT detail FROM sync_report
+		 WHERE service_instance_id = ? AND kind = ?`, inst, SyncReportDeletionSweepRefused)
+	if !strings.Contains(d.String, `"links_live":3`) {
+		t.Errorf("the refusal detail does not carry the live count: %s", d.String)
+	}
+}
+
+// TestAGenuinelyEmptyInstanceStillSweeps is the OTHER half of the same rule, and
+// without it the refusal is untested in the direction that matters most.
+//
+// Zero read against zero live links is not a failed read — it is an instance
+// whose content really has gone, and the pass has real work to do in the
+// container half. A guard that refused here would be a guard that never lets a
+// library be orphaned, which is the state §6.5 rule 5 exists to record.
+func TestAGenuinelyEmptyInstanceStillSweeps(t *testing.T) {
+	s := newTestStore(t)
+	inst, _ := sweepFixture(t, s)
+
+	// Empty the instance first, through the ordinary pass. The seed read is
+	// NON-EMPTY — one ref for an item that does not exist — so it is not itself a
+	// refusal, and it reports none of the three real items, which tombstones all
+	// of them.
+	if _, err := s.SweepDeletions(t.Context(), inst,
+		[]LinkRef{{RemoteKind: "series", RemoteID: "no-such-item"}}, nil, sweepLater); err != nil {
+		t.Fatalf("seed sweep: %v", err)
+	}
+	// Now every link is tombstoned, so the instance has no LIVE links at all.
+	if n := count(t, s, `SELECT COUNT(*) FROM service_item_link
+		 WHERE service_instance_id = ? AND deleted_at IS NULL`, inst); n != 0 {
+		t.Fatalf("%d live links remain; this test's premise does not hold", n)
+	}
+
+	res, err := s.SweepDeletions(t.Context(), inst, nil, nil, sweepLater)
+	if err != nil {
+		t.Fatalf("a genuinely empty instance was refused: %v", err)
+	}
+	if res.LinksLive != 0 {
+		t.Errorf("LinksLive = %d, want 0", res.LinksLive)
+	}
+	if n := count(t, s, `SELECT COUNT(*) FROM sync_report WHERE service_instance_id = ? AND kind = ?`,
+		inst, SyncReportDeletionSweep); n == 0 {
+		t.Error("the pass ran but wrote no deletion_sweep row")
+	}
+}
+
+// TestTheZeroReadRefusalIsNotAThreshold records the boundary the ruling drew, as
+// a test rather than only as a comment: ONE item read against an instance with
+// three live links SWEEPS, and takes two of them with it.
+//
+// ⚠️ THAT IS A LARGE PROPORTIONAL DROP AND IT IS DELIBERATELY UNGUARDED. Refusing
+// it needs a percentage somebody has to defend and tune, and no ruling sets one.
+// This test is here so a later reader adding a threshold has to delete an
+// assertion that says the threshold was declined, rather than filling a silence.
+func TestTheZeroReadRefusalIsNotAThreshold(t *testing.T) {
+	s := newTestStore(t)
+	inst, _ := sweepFixture(t, s)
+
+	res, err := s.SweepDeletions(t.Context(), inst,
+		[]LinkRef{{RemoteKind: "series", RemoteID: "42"}}, []string{"1", "2"}, sweepLater)
+	if err != nil {
+		t.Fatalf("a one-item read was refused; the rule is zero, not a proportion: %v", err)
+	}
+	if res.LinksTombstoned != 2 {
+		t.Errorf("LinksTombstoned = %d, want 2: two of three live links went", res.LinksTombstoned)
+	}
+}
 
 func TestSweepTombstonesWhatTheReadDidNotSeeAndSparesWhatItDid(t *testing.T) {
 	s := newTestStore(t)
@@ -384,38 +503,32 @@ func TestSweepDoesNotStampADeclinedContainerAsMissing(t *testing.T) {
 
 // ── guard 1: id resurrection ────────────────────────────────────────────────
 
+// TestATombstonedIDComingBackWithTheSameIdentityRevivesItsWork is the IDENTIFIED
+// half of guard 1's non-firing case: stored identity and incoming identity both
+// exist and agree, which is the only state that is positive evidence of sameness.
+//
+// ⚠️ THIS TEST USED TO CARRY THE UNIDENTIFIED ITEM AS ITS SUBJECT AND ASSERT THAT
+// IT REVIVED. That assertion is INVERTED rather than deleted — see
+// TestAnUnidentifiedItemOnAReusedIDDoesNotRebindOntoTheOldWork below, which
+// asserts the opposite outcome for the same input — because an inverted assertion
+// records that a decision changed and a deleted one is silence. The old subject's
+// premise was that an equality proved sameness; guardOneVerdict's comment carries
+// why that equality held VACUOUSLY for an item with no external ids.
 func TestATombstonedIDComingBackWithTheSameIdentityRevivesItsWork(t *testing.T) {
-	// ⚠️ THE UNIDENTIFIED ITEM IS THE SUBJECT AND THAT IS DELIBERATE. An item
-	// with a strong external id is recovered by §6.4 tier 1 whether the guard
-	// resurrects its link or hard-deletes it, so it CANNOT tell a working guard
-	// from a deleted comparison — both land on the same work and the test is
-	// green either way. An item with no external ids has nothing to resolve
-	// through: if the comparison stops running, the link is hard-deleted, tier 1
-	// finds nothing, and the item comes back as a DUPLICATE work with the
-	// original still tombstoned beside it. On a source whose ordinary state is
-	// unidentified (§6.4, ADR-0035 §1) that is the whole catalogue.
-	//
-	// Item 41 carries no external ids; item 77 does, and is asserted alongside it
-	// so the identified path is covered too.
 	s := newTestStore(t)
 	inst, binds := sweepFixture(t, s)
-	unidentified := readLink(t, s, inst, "series", "41").workID
 	identified := readLink(t, s, inst, "series", "77").workID
 
-	// Both go away.
 	if _, err := s.SweepDeletions(t.Context(), inst,
 		[]LinkRef{{RemoteKind: "series", RemoteID: "42"}}, []string{"1", "2"}, sweepLater); err != nil {
 		t.Fatalf("SweepDeletions: %v", err)
 	}
-	for _, id := range []string{"41", "77"} {
-		if !readLink(t, s, inst, "series", id).workDeleted.Valid {
-			t.Fatalf("%s was not tombstoned; the resurrection below would not be one", id)
-		}
+	if !readLink(t, s, inst, "series", "77").workDeleted.Valid {
+		t.Fatal("77 was not tombstoned; the resurrection below would not be one")
 	}
 
-	// Both come back UNCHANGED: same remote ids, same identities.
+	// It comes back UNCHANGED: same remote id, same identity.
 	back := []CatalogueItem{
-		item("41", "1", "comic", "Frieren"),
 		item("77", "2", "book", "The Hobbit",
 			ExternalIdentifier{Source: "hardcover_book", Value: "445", Confidence: 1.0}),
 	}
@@ -424,23 +537,17 @@ func TestATombstonedIDComingBackWithTheSameIdentityRevivesItsWork(t *testing.T) 
 		t.Fatalf("ApplyCatalogueBatch: %v", err)
 	}
 
-	if got := readLink(t, s, inst, "series", "41").workID; got != unidentified {
-		t.Errorf("the unidentified item came back on work %d, want the original %d — "+
-			"it was duplicated rather than revived", got, unidentified)
-	}
 	if got := readLink(t, s, inst, "series", "77").workID; got != identified {
 		t.Errorf("the identified item came back on work %d, want the original %d", got, identified)
 	}
-	for _, id := range []string{"41", "77"} {
-		st := readLink(t, s, inst, "series", id)
-		if st.linkDeleted.Valid || st.workDeleted.Valid {
-			t.Errorf("%s: the tombstone was not cleared for an item whose identity did not change", id)
-		}
+	st := readLink(t, s, inst, "series", "77")
+	if st.linkDeleted.Valid || st.workDeleted.Valid {
+		t.Error("the tombstone was not cleared for an item whose identity did not change")
 	}
 	// AND NOTHING WAS LEFT BEHIND. A hard-delete-and-rebuild leaves the old work
 	// tombstoned beside the new one; a revival leaves no such row.
-	if n := count(t, s, `SELECT COUNT(*) FROM work WHERE deleted_at IS NOT NULL AND title IN ('Frieren','The Hobbit')`); n != 0 {
-		t.Errorf("%d tombstoned works remain under the revived titles; they were duplicated", n)
+	if n := count(t, s, `SELECT COUNT(*) FROM work WHERE deleted_at IS NOT NULL AND title = 'The Hobbit'`); n != 0 {
+		t.Errorf("%d tombstoned works remain under the revived title; it was duplicated", n)
 	}
 	if res.IDsReused != 0 {
 		t.Errorf("guard 1 fired on an unchanged identity: %+v", res)
@@ -448,6 +555,150 @@ func TestATombstonedIDComingBackWithTheSameIdentityRevivesItsWork(t *testing.T) 
 	if n := count(t, s, `SELECT COUNT(*) FROM sync_report WHERE service_instance_id = ? AND kind = ?`,
 		inst, SyncReportIDReused); n != 0 {
 		t.Errorf("%d id_reused rows for an unchanged identity", n)
+	}
+}
+
+// TestAnUnidentifiedItemOnAReusedIDDoesNotRebindOntoTheOldWork is guard 1's
+// third state — guardOneNoIncomingIdentity — and it is THE ASSERTION THAT WAS
+// VACUOUS BEFORE.
+//
+// # What was wrong
+//
+// identityHash over an item with no external ids is the hash of an EMPTY LIST: a
+// single constant that every unidentified item on the instance shares. The guard
+// compared that constant to itself, found equality, and read the equality as
+// "same content". So a tombstoned link belonging to one book was revived for a
+// completely different book that happened to arrive on the same reused remote id,
+// and the two merged into one work — silently, with the first book's poster,
+// tags, requests and northbound id now naming the second.
+//
+// AN EQUALITY THAT HOLDS VACUOUSLY IS NOT EVIDENCE. The subject here is the exact
+// input that used to pass: item 41 carries no external ids, goes away, and comes
+// back on the same remote id as DIFFERENT CONTENT.
+//
+// # Why a fresh link and not a revival
+//
+// The two errors are not symmetric. A wrong revival MERGES two books and is
+// unrecoverable — nothing records what was overwritten. A wrong fresh link SPLITS
+// one book into two visible rows, and the tombstoned work keeps its own
+// corrections, so a later merge puts it back. The state with no evidence either
+// way therefore falls to the fresh-link side, and must NOT take the same branch as
+// a real match.
+func TestAnUnidentifiedItemOnAReusedIDDoesNotRebindOntoTheOldWork(t *testing.T) {
+	s := newTestStore(t)
+	inst, binds := sweepFixture(t, s)
+	original := readLink(t, s, inst, "series", "41").workID
+
+	if _, err := s.SweepDeletions(t.Context(), inst,
+		[]LinkRef{{RemoteKind: "series", RemoteID: "42"}}, []string{"1", "2"}, sweepLater); err != nil {
+		t.Fatalf("SweepDeletions: %v", err)
+	}
+	if !readLink(t, s, inst, "series", "41").workDeleted.Valid {
+		t.Fatal("41 was not tombstoned; the resurrection below would not be one")
+	}
+
+	// The upstream reuses id 41 for something else entirely. It carries no
+	// external ids either — which is the point: BOTH sides hash to the empty
+	// list, so the old comparison saw them as the same book.
+	back := []CatalogueItem{item("41", "1", "comic", "Vinland Saga")}
+	res, err := s.ApplyCatalogueBatch(t.Context(), inst, binds, back, sweepLater)
+	if err != nil {
+		t.Fatalf("ApplyCatalogueBatch: %v", err)
+	}
+
+	got := readLink(t, s, inst, "series", "41").workID
+	if got == original {
+		t.Errorf("the reused id rebound onto work %d, the work that belonged to Frieren — "+
+			"two unrelated books are now one row, and nothing records what was overwritten", original)
+	}
+	if title := nullStr(t, s, `SELECT title FROM work WHERE id = ?`, got).String; title != "Vinland Saga" {
+		t.Errorf("the new link points at work %d titled %q, want the new content", got, title)
+	}
+
+	// THE ABANDONED WORK KEEPS ITS TOMBSTONE AND ITS OWN CORRECTIONS. That is
+	// what makes the split recoverable, which is the whole reason this branch is
+	// the safe one.
+	if del := nullStr(t, s, `SELECT deleted_at FROM work WHERE id = ?`, original); !del.Valid {
+		t.Errorf("work %d lost its tombstone; it was adopted rather than left alone", original)
+	}
+	if title := nullStr(t, s, `SELECT title FROM work WHERE id = ?`, original).String; title != "Frieren" {
+		t.Errorf("the abandoned work is titled %q; its content was overwritten", title)
+	}
+
+	// AND THE REFUSAL IS ON THE RECORD. A guard that declined to certify a match
+	// but said nothing would be indistinguishable from one that never ran.
+	if res.IDsReused != 1 {
+		t.Errorf("IDsReused = %d, want 1: guard 1 did not report the firing (%+v)", res.IDsReused, res)
+	}
+	if n := count(t, s, `SELECT COUNT(*) FROM sync_report
+		 WHERE service_instance_id = ? AND kind = ? AND detail LIKE '%"verdict":"no_incoming_identity"%'`,
+		inst, SyncReportIDReused); n != 1 {
+		t.Errorf("%d id_reused rows carry the no_incoming_identity verdict, want 1 — "+
+			"a reader cannot tell a real id reuse from an unidentified library without it", n)
+	}
+}
+
+// TestGuardOneSeparatesItsFourStates is the unit half, on the decision function
+// itself rather than through a whole batch apply.
+//
+// It exists because the four states collapse into two OUTCOMES, and a table that
+// only ever checked the outcome would be green again the day two states were
+// merged back — which is the defect this type was introduced to prevent.
+func TestGuardOneSeparatesItsFourStates(t *testing.T) {
+	withIDs := item("1", "1", "comic", "Frieren",
+		ExternalIdentifier{Source: "hardcover_book", Value: "445", Confidence: 1.0})
+	bare := item("1", "1", "comic", "Frieren")
+
+	for _, c := range []struct {
+		name  string
+		hash  sql.NullString
+		it    CatalogueItem
+		want  guardOneVerdict
+		fires bool
+	}{
+		{"nothing stored", sql.NullString{}, withIDs, guardOneIdentityUnknown, false},
+		{
+			"stored, incoming carries none",
+			sql.NullString{String: "abc", Valid: true},
+			bare, guardOneNoIncomingIdentity, true,
+		},
+		{
+			"both present, differ",
+			sql.NullString{String: "abc", Valid: true},
+			withIDs, guardOneIdentityChanged, true,
+		},
+		{
+			"both present, agree",
+			sql.NullString{String: withIDs.identityHash(), Valid: true},
+			withIDs, guardOneIdentityMatches, false,
+		},
+		// THE INTERSECTION, ruled at the seam: nothing stored AND nothing
+		// incoming answers "unknown", because that is the older and narrower
+		// rule. Unreachable today — no shipped writer leaves the column NULL.
+		{"nothing stored, incoming carries none", sql.NullString{}, bare, guardOneIdentityUnknown, false},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			got := guardOne(c.hash, c.it)
+			if got != c.want {
+				t.Errorf("guardOne = %s, want %s", got, c.want)
+			}
+			if got.firesGuard() != c.fires {
+				t.Errorf("%s.firesGuard() = %v, want %v", got, got.firesGuard(), c.fires)
+			}
+		})
+	}
+
+	// THE VACUOUS EQUALITY, NAMED. Two unrelated bare items hash identically —
+	// that is the fact the guard used to read as proof of sameness, and it is
+	// still true. What changed is that the length check runs first.
+	other := item("2", "1", "comic", "Vinland Saga")
+	if bare.identityHash() != other.identityHash() {
+		t.Fatal("two items with no external ids no longer share a hash; " +
+			"this test's whole premise, and the bug it guards, have moved")
+	}
+	if v := guardOne(sql.NullString{String: other.identityHash(), Valid: true}, bare); !v.firesGuard() {
+		t.Errorf("guardOne returned %s for two unrelated unidentified books whose hashes are "+
+			"equal; the equality is vacuous and the guard treated it as evidence", v)
 	}
 }
 
@@ -654,29 +905,97 @@ func TestResurrectionPlanGuardFiresWhenRemoteKindIsDropped(t *testing.T) {
 	t.Logf("guard fired without remote_kind:\n  plan:   %s\n  faults: %v", degraded, faults)
 }
 
-// TestTheInstanceSweepIsAllowedToScan is the other half, and it is an ACCEPTANCE
-// rather than a demand.
+// instanceSweepPlanFaults judges the unqualified instance sweep's plan.
 //
-// The sweep's own read has no predicate beyond the instance, and on a
-// single-instance install that predicate selects the whole table — so after
-// ANALYZE the correct plan is a SCAN, and a guard that demanded an index here
-// would be red on every real install and would provoke exactly the index this
-// slice does not need. What IS asserted is that the read stays on
-// service_item_link and acquires no sort: a temp B-tree over every link on the
-// instance is real work the sweep never asked for.
+// ⚠️ THE ACCEPTANCE IS NARROW AND IT IS SCOPED TO ONE STATEMENT. A SCAN is fine
+// HERE — the read has no predicate beyond the instance and on a single-instance
+// install that predicate selects the whole table, so after ANALYZE a SCAN is the
+// correct plan and a guard demanding an index would be red on every real install
+// while provoking an index nothing needs. It is NOT a general licence to scan
+// service_item_link: linkLookupSQL's three-column seek on ux_sil stays a demand,
+// judged by resurrectionPlanFaults and fired by
+// TestResurrectionPlanGuardFiresWhenRemoteKindIsDropped.
+//
+// ⚠️ AND IT ASSERTS WHAT IT MEANS. The previous version asked only whether the
+// string `service_item_link` appeared anywhere in the plan and whether a temp
+// B-tree did not — which a plan that scanned service_item_link AND joined
+// something else would satisfy, and which a plan that had stopped scanning
+// service_item_link at all could satisfy by naming it in a subquery. Three things
+// are checked instead: the plan is ONE step, that step SCANS, and the table it
+// scans is service_item_link.
+func instanceSweepPlanFaults(plan string) []string {
+	var faults []string
+	if strings.Contains(plan, " | ") {
+		faults = append(faults, "the read is no longer a single step; it acquired a join or a subquery")
+	}
+	if !db.PlanHas(plan, "SCAN service_item_link") {
+		faults = append(faults, "the read is not a SCAN of service_item_link")
+	}
+	if strings.Contains(plan, "TEMP B-TREE") {
+		faults = append(faults, "the read acquired a sort it never asked for")
+	}
+	return faults
+}
+
+// TestTheInstanceSweepIsAllowedToScan is the other half of the plan gate, and it
+// is an ACCEPTANCE rather than a demand. instanceSweepPlanFaults carries the
+// argument for how narrow that acceptance is.
+//
+// It EXPLAINs absentLinksSQL — the shipped identifier, not a copy. The statement
+// was an inline literal in reconcile.go with this test EXPLAINing a hand-written
+// duplicate, which is the shape linkLookupSQL's own comment warns against: a test
+// that EXPLAINs its own copy of a query is green while the copy is faithful and
+// silent the moment it stops being. Measured: adding an ORDER BY to the shipped
+// literal on the pre-fix tree left this test GREEN.
 func TestTheInstanceSweepIsAllowedToScan(t *testing.T) {
 	s := newTestStore(t)
 	inst := analyzedSweepCorpus(t, s)
 
-	plan := sweepPlan(t, s, `
-		SELECT remote_kind, remote_id, work_id
-		  FROM service_item_link
-		 WHERE service_instance_id = ? AND deleted_at IS NULL`, inst)
-	if !db.PlanHas(plan, "service_item_link") {
-		t.Errorf("the sweep's read left service_item_link:\n  %s", plan)
-	}
-	if strings.Contains(plan, "TEMP B-TREE") {
-		t.Errorf("the sweep's read acquired a sort it never asked for:\n  %s", plan)
+	plan := sweepPlan(t, s, absentLinksSQL, inst)
+	if faults := instanceSweepPlanFaults(plan); len(faults) > 0 {
+		t.Errorf("the instance sweep's plan is wrong:\n  plan: %s\n  %s",
+			plan, strings.Join(faults, "\n  "))
 	}
 	t.Logf("instance sweep: %s", plan)
+}
+
+// FIRING THE ACCEPTANCE, on the two mutations it exists to catch. Both are edits
+// a reader plausibly makes, and both were INVISIBLE to the previous assertions:
+// the sorted variant still contains `service_item_link`, and the joined variant
+// contains it too while doing a table's worth of extra work per sweep.
+//
+// The degraded statements are literals here rather than edits to reconcile.go for
+// the reason planlint_test.go extracts its own judgement: an arm that can only
+// fire by mutating the shipped source is an arm that never fires.
+func TestTheInstanceSweepAcceptanceFiresOnASortAndOnAJoin(t *testing.T) {
+	s := newTestStore(t)
+	inst := analyzedSweepCorpus(t, s)
+
+	healthy := sweepPlan(t, s, absentLinksSQL, inst)
+	if faults := instanceSweepPlanFaults(healthy); len(faults) > 0 {
+		t.Fatalf("the shipped plan was already faulty; this arm proves nothing:\n  %s", healthy)
+	}
+
+	for _, m := range []struct {
+		what string
+		sql  string
+	}{
+		{"an ORDER BY the sweep never asked for", `
+			SELECT remote_kind, remote_id, work_id
+			  FROM service_item_link
+			 WHERE service_instance_id = ? AND deleted_at IS NULL
+			 ORDER BY remote_id`},
+		{"a join onto work", `
+			SELECT l.remote_kind, l.remote_id, l.work_id
+			  FROM service_item_link l JOIN work w ON w.id = l.work_id
+			 WHERE l.service_instance_id = ? AND l.deleted_at IS NULL`},
+	} {
+		degraded := sweepPlan(t, s, m.sql, inst)
+		faults := instanceSweepPlanFaults(degraded)
+		if len(faults) == 0 {
+			t.Errorf("the acceptance passed %s:\n  plan: %s", m.what, degraded)
+			continue
+		}
+		t.Logf("acceptance fired on %s:\n  plan:   %s\n  faults: %v", m.what, degraded, faults)
+	}
 }

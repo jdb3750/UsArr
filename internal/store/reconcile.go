@@ -3,6 +3,7 @@ package store
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"time"
 )
@@ -46,12 +47,72 @@ import (
 // sweep changed.
 //
 // It is a CONSTANT for SyncReportFileWalkFailed's reason — sync_report.kind
-// carries no CHECK, so a typo is a row that silently never matches — and it is
-// spelled to collide with nothing already in that vocabulary: `delta_walk`,
-// `identity_conflict`, `container_declined`, `container_bind_failed`,
-// `container_kind_changed`, `items_skipped`, `content_completeness`,
-// `file_walk_failed`.
+// carries no CHECK, so a typo is a row that silently never matches.
+//
+// ⚠️ THE "COLLIDES WITH NOTHING" CLAIM IS DERIVED, NOT RESTATED. This comment
+// used to carry a hand-copied list of the other members and it named EIGHT of
+// them. It named no non-member, so it was incomplete rather than wrong — but an
+// incomplete vocabulary check is the same defect class as the `comic_residue`
+// one corrected in internal/libsync/delta.go: a check whose enumeration is not
+// the enumeration is a check that did not run, and it passes either way.
+//
+// syncreportvocab_test.go's TestSyncReportKindsDoNotCollide reads the vocabulary
+// OUT OF THE TREE — every `syncReport…`/`SyncReport…` string constant in
+// non-test Go — and asserts the members are pairwise distinct. A member added
+// anywhere joins the check by existing; a member deleted leaves it the same way.
+// No count is stated here, in either direction, because a count maintained by a
+// different act than the thing it counts is the drift this is fixing
+// (DEVELOPMENT.md §11).
 const SyncReportDeletionSweep = "deletion_sweep"
+
+// SyncReportDeletionSweepRefused is sync_report.kind for a pass that REFUSED to
+// run: the caller's read reported zero items while the instance still has live
+// links. See ErrSweepRefusedEmptyRead for the rule and its boundary.
+//
+// It is a SECOND kind rather than a `refused: true` field on the ordinary
+// deletion_sweep detail, because the two rows answer different questions and a
+// reader counting sweeps must not have to parse a payload to find out which ones
+// happened. A row of this kind is the record that a sweep did NOT run.
+//
+// The collision check is not restated here. syncreportvocab_test.go's
+// TestSyncReportKindsDoNotCollide DERIVES the vocabulary from the tree and
+// asserts it, which is a check that cannot fall out of step with the tree the
+// way a hand-copied list can — and did, twice.
+const SyncReportDeletionSweepRefused = "deletion_sweep_refused"
+
+// ErrSweepRefusedEmptyRead is what SweepDeletions returns instead of sweeping
+// when the read it was handed reported ZERO items and the instance currently has
+// at least one live link.
+//
+// # The failure this guards, and the one it does not
+//
+// SweepDeletions' precondition is that `seenItems` is the upstream's WHOLE list.
+// The pass cannot check that (see its doc comment), but there is one shape of
+// violated precondition it CAN check without a number anybody has to defend: a
+// read that came back completely empty from a source the replica knows had
+// content. A credential that lost its scope, an unmounted share, a library the
+// operator renamed, a response body that parsed to an empty array — each returns
+// success and zero rows, and each would tombstone the entire library.
+//
+// ⚠️ ZERO IS THE WHOLE RULE, AND THE LARGE-BUT-NONZERO DROP GOES ON THE RECORD AS
+// UNGUARDED. A read that returns 3 items from an instance with 40,000 live links
+// sweeps, exactly as before. Refusing that case needs a threshold, a threshold is
+// a percentage somebody has to defend and tune, and no ruling sets one. What is
+// guarded here is the failure actually described: the read failed and came back
+// empty.
+//
+// ⚠️ AND A GENUINELY EMPTY INSTANCE STILL SWEEPS. Zero read against zero live
+// links is not a refusal — there is nothing to protect and the pass has real work
+// to do in the container half, which is how a library whose last container went
+// away gets stamped. The live-link count is what separates the two, and it is the
+// reason the rule is a conjunction rather than a check on the read alone.
+//
+// It is OBSERVABLE THREE WAYS rather than being an early return: the sweep writes
+// a SyncReportDeletionSweepRefused row that survives the refusal, this error
+// reaches the importer, and the import that would have swept fails rather than
+// reporting a completed run that quietly skipped its deletion pass.
+var ErrSweepRefusedEmptyRead = errors.New(
+	"deletion sweep refused: the read reported zero items and the instance has live links")
 
 // LinkRef identifies one service_item_link row within one service instance.
 //
@@ -103,6 +164,11 @@ type SweepResult struct {
 // what enforces it: internal/libsync calls this from FullImport's success path
 // only, and its delta channel collects no seen-set at all.
 //
+// ONE SHAPE OF VIOLATED PRECONDITION IS CHECKED HERE, and only one: a read that
+// reported zero items against an instance that still has live links returns
+// ErrSweepRefusedEmptyRead and writes nothing. That is a failed read, not an
+// emptied upstream. Every other partial read is still the caller's to prevent.
+//
 // now is injectable so the stamps a test asserts are the stamps it chose.
 func (s *Store) SweepDeletions(
 	ctx context.Context, instanceID int64,
@@ -118,8 +184,32 @@ func (s *Store) SweepDeletions(
 	}
 
 	var res SweepResult
+	var refused bool
 	nowStr := FormatTime(now)
 	err := s.write(ctx, func(ctx context.Context, tx *sql.Tx) error {
+		// ── THE ZERO-READ REFUSAL, AHEAD OF EVERY WRITE. See
+		// ErrSweepRefusedEmptyRead. It is checked here rather than inside
+		// sweepItems for two reasons: the refusal covers the CONTAINER half too,
+		// because one failed read produced both seen-sets; and absentLinks with an
+		// empty seen map would materialise every live link on the instance into
+		// the absent slice — hundreds of thousands of rows on the install this
+		// exists to protect — to compute a number COUNT(*) answers directly.
+		if len(seen) == 0 {
+			live, err := liveLinkCount(ctx, tx, instanceID)
+			if err != nil {
+				return err
+			}
+			if live > 0 {
+				refused = true
+				res = SweepResult{LinksLive: live}
+				// The report row is written and COMMITTED. The refusal is
+				// returned to the caller after this function returns nil,
+				// because returning an error here would roll back the only
+				// durable record that the sweep declined.
+				return recordSyncReport(ctx, tx, instanceID,
+					SyncReportDeletionSweepRefused, "", "", res.refusalJSON())
+			}
+		}
 		if err := sweepItems(ctx, tx, instanceID, seen, nowStr, &res); err != nil {
 			return err
 		}
@@ -132,7 +222,30 @@ func (s *Store) SweepDeletions(
 	if err != nil {
 		return SweepResult{}, fmt.Errorf("deletion sweep of service_instance %d: %w", instanceID, err)
 	}
+	if refused {
+		return res, fmt.Errorf("deletion sweep of service_instance %d: %w",
+			instanceID, ErrSweepRefusedEmptyRead)
+	}
 	return res, nil
+}
+
+// liveLinkCount is the refusal's denominator: how many links this instance still
+// has that are not tombstoned.
+//
+// It shares absentLinksSQL's predicate and therefore its plan acceptance — an
+// unqualified count over one instance, correctly a SCAN after ANALYZE. It is a
+// separate statement rather than a reuse of that constant because the two want
+// different things back, and a COUNT that had to build the row set to count it
+// would be the very cost this path exists to avoid.
+func liveLinkCount(ctx context.Context, tx *sql.Tx, instanceID int64) (int, error) {
+	var n int
+	err := tx.QueryRowContext(ctx, `
+		SELECT COUNT(*) FROM service_item_link
+		 WHERE service_instance_id = ? AND deleted_at IS NULL`, instanceID).Scan(&n)
+	if err != nil {
+		return 0, fmt.Errorf("count live links: %w", err)
+	}
+	return n, nil
 }
 
 // detailJSON is the sweep's sync_report.detail. It is hand-rolled rather than
@@ -145,6 +258,34 @@ func (r SweepResult) detailJSON() string {
 		r.LinksLive, r.LinksTombstoned, r.WorksTombstoned,
 		r.SourcesMissing, r.LibrariesOrphaned, r.LibrariesRestored)
 }
+
+// refusalJSON is the detail on a SyncReportDeletionSweepRefused row. It carries
+// the two numbers the rule is a function of and nothing else, so a reader can
+// re-derive the decision rather than take it on trust.
+func (r SweepResult) refusalJSON() string {
+	return fmt.Sprintf(
+		`{"links_live":%d,"items_read":0,`+
+			`"rule":"zero items read while the instance has live links; no threshold, `+
+			`a large-but-nonzero drop is not guarded"}`, r.LinksLive)
+}
+
+// absentLinksSQL is the unqualified instance sweep's read.
+//
+// ⚠️ IT IS A CONSTANT SO THE PLAN GUARD MEASURES THE SHIPPED STATEMENT, on
+// linkLookupSQL's rule and for the same reason: a test that EXPLAINs its own copy
+// of a query is green while the copy is faithful and SILENT THE MOMENT IT STOPS
+// BEING. This statement was an inline literal with its plan test EXPLAINing a
+// hand-written duplicate — the exact shape the sibling guard's comment warns
+// against, reproduced one file away from the warning.
+//
+// The acceptance this statement is granted — a SCAN is fine here — is granted to
+// THIS predicate and no other. It is not a general licence to scan
+// service_item_link; linkLookupSQL's three-column seek on ux_sil is a demand, and
+// TestResurrectionPlanGuardFiresWhenRemoteKindIsDropped is its fired control.
+const absentLinksSQL = `
+	SELECT remote_kind, remote_id, work_id
+	  FROM service_item_link
+	 WHERE service_instance_id = ? AND deleted_at IS NULL`
 
 // absentLink is one live link the read did not report.
 type absentLink struct {
@@ -164,14 +305,12 @@ type absentLink struct {
 // after ANALYZE that is correctly a SCAN — on a single-instance install the
 // predicate selects the whole table, so an index seek would only add a lookup
 // per row. There is no index to add here and none is wanted;
-// TestTheInstanceSweepIsAllowedToScan records the acceptance.
+// TestTheInstanceSweepIsAllowedToScan records the acceptance, EXPLAINing
+// absentLinksSQL itself.
 func absentLinks(
 	ctx context.Context, tx *sql.Tx, instanceID int64, seen map[LinkRef]struct{},
 ) ([]absentLink, int, error) {
-	rows, err := tx.QueryContext(ctx, `
-		SELECT remote_kind, remote_id, work_id
-		  FROM service_item_link
-		 WHERE service_instance_id = ? AND deleted_at IS NULL`, instanceID)
+	rows, err := tx.QueryContext(ctx, absentLinksSQL, instanceID)
 	if err != nil {
 		return nil, 0, fmt.Errorf("read live links: %w", err)
 	}

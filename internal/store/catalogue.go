@@ -547,7 +547,7 @@ func (s *Store) BindContainers(
 			// ignore a returned slice, and a skip nobody can see is the failure
 			// mode this whole change exists to remove.
 			if err := recordSyncReport(ctx, tx, instanceID,
-				"container_bind_failed", "library", c.RemoteID, string(detail)); err != nil {
+				syncReportContainerBindFailed, "library", c.RemoteID, string(detail)); err != nil {
 				return err
 			}
 			skipped = append(skipped, sk)
@@ -604,6 +604,15 @@ func isSkippableBindError(err error) bool {
 // `detail` is untyped JSON. Same seam container_declined and
 // container_bind_failed use.
 const SyncReportContainerKindChanged = "container_kind_changed"
+
+// syncReportContainerBindFailed is sync_report.kind for a container whose bind
+// was rolled back. It was an inline literal at its single call site; it is a
+// constant now so TestSyncReportKindsDoNotCollide can DERIVE it — a member that
+// exists only as an argument is a member no vocabulary check can see, which is
+// how a hand-copied list comes to be incomplete without anyone noticing.
+//
+// Unexported: nothing outside this package writes it.
+const syncReportContainerBindFailed = "container_bind_failed"
 
 // bindReason is WHO is asking for a binding, and it exists for exactly one
 // decision: whether a container already bound at a different kind is a CHANGE
@@ -1487,31 +1496,29 @@ func applyOneItem(
 	// partial one, so (instance, kind, id) admits exactly one row whatever its
 	// deleted_at says.
 	//
-	// ⚠️ A NULL STORED HASH IS "UNKNOWN", NOT "MISMATCHED", and the difference is
-	// the nightmare bug. No shipped writer can produce one — step 7 always writes
-	// the column — but treating an unreadable identity as proof of reuse would
-	// make every reappearing item a fresh work, which duplicates the library
-	// rather than corrupting one row of it.
-	//
-	// ⚠️ AND THE BLIND SPOT IS STATED RATHER THAN HIDDEN: identityHash over an
-	// item with NO external ids is the hash of an empty list, which every
-	// unidentified item shares. On a source whose ordinary state is unidentified
-	// (§6.4, ADR-0035 §1) the guard therefore certifies nothing for those items —
-	// it discriminates exactly as far as the upstream identifies its content.
-	// Widening it means widening what identityHash covers, which is a change to a
-	// value already stored on every row.
-	if workID != 0 && linkDeletedAt.Valid && storedIdentity.Valid &&
-		storedIdentity.String != it.identityHash() {
+	// THE FOUR STATES ARE NAMED SEPARATELY, and guardOneVerdict carries the whole
+	// argument for why: two of them used to be one branch, and the equality that
+	// joined them held VACUOUSLY.
+	if workID != 0 && linkDeletedAt.Valid && guardOne(storedIdentity, it).firesGuard() {
 		if _, err := tx.ExecContext(ctx, `
 			DELETE FROM service_item_link
 			 WHERE service_instance_id = ? AND remote_kind = ? AND remote_id = ?`,
 			instanceID, it.RemoteKind, it.RemoteID); err != nil {
 			return workID, res, fmt.Errorf("hard-delete resurrected link: %w", err)
 		}
+		// The verdict rides the row because the two firing states are NOT the same
+		// finding. `identity_changed` says the upstream's identifiers moved;
+		// `no_incoming_identity` says the item arrived carrying none, so there was
+		// nothing to compare and the guard declined to certify a match it could not
+		// see. A reader who cannot tell those apart cannot tell a real id reuse from
+		// an unidentified library, and on a source whose ordinary state is
+		// unidentified (§6.4, ADR-0035 §1) the second is the common row by far.
 		detail, err := json.Marshal(map[string]any{
+			"verdict":                guardOne(storedIdentity, it).String(),
 			"abandoned_work_id":      workID,
 			"stored_identity_hash":   storedIdentity.String,
 			"incoming_identity_hash": it.identityHash(),
+			"external_id_count":      len(it.ExternalIDs),
 			"resolution": "the tombstoned link was hard-deleted and the id resolved as a fresh item; " +
 				"the previous work keeps its own tombstone and its owned corrections",
 		})
@@ -2607,6 +2614,119 @@ const SyncReportFileWalkFailed = "file_walk_failed"
 // one external id produce (see IdentityConflict). Two kinds because they are two
 // facts: one says an id was reused, the other says an identifier was.
 const SyncReportIDReused = "id_reused"
+
+// guardOneVerdict is §7.4 guard 1's answer for one tombstoned link that an
+// upsert is about to revive. FOUR STATES, TWO OUTCOMES.
+//
+// ⚠️ THE STATES ARE ENUMERATED BECAUSE TWO OF THEM WERE ONE BRANCH AND THE
+// EQUALITY THAT JOINED THEM HELD VACUOUSLY. The guard's original condition was
+// `storedIdentity.String != it.identityHash()`, and identityHash over an item
+// with no external ids is the hash of an EMPTY LIST — a single constant that
+// every unidentified item on the instance shares. bookOrbitExternalIDs writes
+// exactly one identifier, `hardcover_book`, and it is null until an operator has
+// matched the book, so on that source "no external ids" is the ordinary state
+// rather than the edge case. Two unrelated books therefore compared EQUAL, the
+// guard read that as "same content", and a tombstoned link was revived onto a
+// work that has nothing to do with the item that came back.
+//
+// AN EQUALITY THAT HOLDS VACUOUSLY IS NOT EVIDENCE. The fix is a length check
+// ahead of the comparison; it changes no stored value, and identityHash is not
+// widened — widening it would change a value already written on every row.
+//
+// # Which side the evidence-free case falls on, and why that is not arbitrary
+//
+// The two errors are not symmetric, and that asymmetry is the whole ruling:
+//
+//   - Wrongly deciding "same content" REVIVES the tombstone. Two different books
+//     merge into one work, and the poster, tags, requests, provenance and the
+//     northbound id of the first now name the second. Nothing records what was
+//     overwritten, so the merge is UNRECOVERABLE.
+//   - Wrongly deciding "different content" mints a FRESH link. One book becomes
+//     two rows. The duplicate is visible, the tombstoned work keeps its own
+//     corrections, and a later merge puts it back — the split is RECOVERABLE.
+//
+// So the case with no evidence either way falls to the fresh-link side. It must
+// NOT take the same branch as a real match, because taking that branch is
+// precisely the claim the guard has no evidence for.
+type guardOneVerdict int
+
+const (
+	// guardOneIdentityMatches: both sides carry identifiers and they agree. The
+	// ONLY state that is positive evidence of sameness, and the only one that
+	// revives a tombstone on the strength of the hash.
+	guardOneIdentityMatches guardOneVerdict = iota
+
+	// guardOneIdentityUnknown: nothing is stored. A NULL stored hash is
+	// "unknown", NOT "mismatched", and that distinction predates this type — no
+	// shipped writer can produce one (step 7 always writes the column), but
+	// treating an unreadable identity as proof of reuse would make every
+	// reappearing item on such a row a fresh work, duplicating the library
+	// wholesale rather than corrupting one row of it. It does not fire.
+	//
+	// ⚠️ IT IS A DISTINCT STATE RATHER THAN A SYNONYM FOR "matches". The two
+	// share an outcome and nothing else, and the reason this type exists is that
+	// sharing an outcome is exactly how the vacuous case hid.
+	//
+	// ⚠️ AND THE INTERSECTION IS RULED HERE RATHER THAN LEFT TO ORDERING. A NULL
+	// stored hash against an incoming item that also carries no identifiers is
+	// unreachable today and is answered "unknown", because that is the older and
+	// narrower rule and this change was not licensed to move it. It is written
+	// down because the two rules argue for opposite outcomes on that one input,
+	// and a reader who meets the conflict later should meet it as a recorded
+	// choice rather than as an accident of which `if` came first.
+	guardOneIdentityUnknown
+
+	// guardOneNoIncomingIdentity: something is stored, and the incoming item
+	// carries NO external ids at all. There is no identity to compare, so there
+	// is no match to certify. Fires, on the asymmetry above.
+	guardOneNoIncomingIdentity
+
+	// guardOneIdentityChanged: both sides carry identifiers and they differ.
+	// This is the state §7.4 and reference/sync.md §4 describe. Fires.
+	guardOneIdentityChanged
+)
+
+// firesGuard is the two-outcome collapse, in ONE place. A caller that wrote the
+// disjunction itself could omit an arm and compile.
+func (v guardOneVerdict) firesGuard() bool {
+	return v == guardOneNoIncomingIdentity || v == guardOneIdentityChanged
+}
+
+// String is the sync_report.detail spelling. These are storage words; no wire
+// vocabulary carries them and nothing translates either set into the other by
+// string manipulation (DEVELOPMENT.md §11).
+func (v guardOneVerdict) String() string {
+	switch v {
+	case guardOneIdentityMatches:
+		return "identity_matches"
+	case guardOneIdentityUnknown:
+		return "identity_unknown"
+	case guardOneNoIncomingIdentity:
+		return "no_incoming_identity"
+	case guardOneIdentityChanged:
+		return "identity_changed"
+	}
+	return "unknown_verdict"
+}
+
+// guardOne is the whole decision, ordered so each arm answers one question.
+//
+// The length check is on ExternalIDs and not on the hash string, deliberately:
+// comparing against "the hash of the empty list" would mean recomputing a
+// constant to ask a question the slice answers directly, and would go quietly
+// wrong the day identityHash's encoding changed.
+func guardOne(storedIdentity sql.NullString, it CatalogueItem) guardOneVerdict {
+	if !storedIdentity.Valid {
+		return guardOneIdentityUnknown
+	}
+	if len(it.ExternalIDs) == 0 {
+		return guardOneNoIncomingIdentity
+	}
+	if storedIdentity.String != it.identityHash() {
+		return guardOneIdentityChanged
+	}
+	return guardOneIdentityMatches
+}
 
 // RecordSyncReport appends one operational note about a sync.
 //
