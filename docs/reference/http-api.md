@@ -945,9 +945,11 @@ catalogue read is, and says so in its own code.
 | `409` | `import_in_progress` | A full import **or** a delta (§4a) is already running for this instance; a second was **not** started. The two claim one guard, because they write the same rows through the same pipeline. Safe to press twice — the second press changes nothing. ⚠️ This row said *"an import for this instance"* until 2026-08-21, when `StartDeltaSync` began claiming the same map. | `Wait for the running import to finish` |
 | `409` | `not_a_catalogue_source` | The instance has no library to import — an indexer, not a catalogue source ([ADR-0041](../DECISIONS.md#adr-0041)). | `Run a sync on a catalogue service` |
 | `409` | `service_disabled` | The service exists and is switched off. | `Enable the service` |
-| `404` | `not_found` | No such instance **for this user** — the read is access-scoped. | — |
+| `404` | `not_found` | Two conditions, one code: the `{id}` was not a positive integer, which is decided by `pathInt64` and never reaches the store; **or** there is no such instance **for this user** — that read is access-scoped. | — |
 | `403` | `sudo_required` | The sudo window closed. Prompt, then retry the pending press (§17.3.3). | `Confirm your password` |
 | `403` | `csrf` | Stale page token. | (its own) |
+| `401` | `unauthorized` | No session, or one that has expired. It is decided by `authenticated`, the layer **between** the two 403s: a CSRF failure is answered before it and a closed sudo window after it. | — |
+| `415` | `unsupported_media_type` | The request was not sent as `Content-Type: application/json`. This is the **first** thing checked, ahead of the CSRF token, because the header requirement is itself half the CSRF defence (§4a.4). | — |
 | `501` | `not_configured` | This build has no catalogue importer wired in. | — |
 | `500` | `internal` | The import could not be started — most often a stored credential that will not open. The upstream reason is in `message`, redacted. | `Test connection` |
 
@@ -1020,6 +1022,15 @@ a library UsArr has never imported would return none of its back catalogue — s
 to read the library. The escalation is handled inside the run and is **not an error**: it is why this
 endpoint's tail is a full import's tail, and why it cannot be synchronous.
 
+**It is invisible on this response and NOT invisible everywhere — `GET /api/events` (§5) is where it
+shows.** An escalated walk reaches `fullImportLocked` → `runImport`, which builds its importer with a
+non-nil `Progress`, so it publishes the ordinary full import's `import.progress` frames because it
+**is** a full import. A delta that does not escalate publishes none at all: its importer's `Progress`
+is nil on purpose, so a five-minute arrivals poll does not render "import in progress" on the Services
+screen. So the frames are the honest live signal for the escalation, and their **absence** is not
+evidence a walk failed — §5.1's rule that silence means UNKNOWN is exactly why a client must not read
+it as one.
+
 **What a delta actually did is a durable record, not a response.** `internal/libsync` writes one
 `sync_report` row of kind `delta_walk` per run, carrying the walk's outcome class, its window and its
 watermark movement. That row — not this endpoint — is where "what happened" is read.
@@ -1051,11 +1062,18 @@ refuse itself where nobody can read it.
 | `409` | `import_in_progress` | A full import **or** a delta is already running for this instance; a second was **not** started. The two claim one guard, because they write the same rows through the same pipeline. | `Wait for the running import to finish` |
 | `409` | `not_a_catalogue_source` | The instance has no library at all — an indexer, not a catalogue source ([ADR-0041](../DECISIONS.md#adr-0041)). | `Run a delta sync on a catalogue service` |
 | `409` | `service_disabled` | The service exists and is switched off. | `Enable the service` |
-| `404` | `not_found` | No such instance **for this user** — the read is access-scoped. | — |
+| `404` | `not_found` | Two conditions, one code: the `{id}` was not a positive integer, which `pathInt64` decides before any store read; **or** there is no such instance **for this user** — that read is access-scoped. | — |
 | `403` | `sudo_required` | The sudo window closed. Prompt, then retry the pending press (§17.3.3). | `Confirm your password` |
 | `403` | `csrf` | Stale page token. | (its own) |
+| `401` | `unauthorized` | No session, or one that has expired. Decided by `authenticated`, the layer **between** the two 403s above — so a client that met the CSRF check can still be told to sign in, and a signed-in client can still be told its sudo window closed. | — |
+| `415` | `unsupported_media_type` | The request was not sent as `Content-Type: application/json`. `checkContentTypeJSON` runs **first**, ahead of the CSRF token comparison, because requiring the header is itself half the CSRF defence: a cross-origin `<form>` cannot send it without a preflight. | — |
 | `501` | `not_configured` | This build has no catalogue importer wired in. | — |
 | `500` | `internal` | The walk could not be started — most often a stored credential that will not open. The upstream reason is in `message`, redacted. | `Test connection` |
+
+**The gate answers before the route does, and its three codes are in that order**: `415` from the
+content-type check, `403 csrf`, `401 unauthorized`, `403 sudo_required`. None of them means anything
+about this instance, this service kind or this walk — they are the same four answers every write on
+this screen gives.
 
 **`not_a_delta_source` and `not_a_catalogue_source` are separate codes on purpose**, and the split is
 sharper than §4.4's. `not_a_catalogue_source` says *press this somewhere else*; `not_a_delta_source`
