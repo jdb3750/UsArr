@@ -2749,7 +2749,9 @@ were v0.1's *kept* sinks. [ADR-0041](./DECISIONS.md#adr-0041) removed those two 
 statement is **zero command sinks and no command path to one** — Lidarr, LazyLibrarian, Mylar3 and
 Kapowarr are still out, and Sonarr and Radarr are out with them.
 Sync channels **1 and 4**, with **3b reduced to the books half at best**: full import; and
-**channel 3b (§7.1a) — the ordered page walk with a client-side stop — available for `work_book` only,
+**channel 3b (§7.1a) — an arrivals-only read, asked for with a server-side `after(addedAt)` filter
+rather than by ordering the collection and stopping client-side
+([ADR-0070](./DECISIONS.md#adr-0070)) — available for `work_book` only,
 and unavailable for `work_comic`**. ⚠️ **This read *"Sync channels 1, 3b and 4 … channel 3b … for
 Kavita … built here rather than only specified (ADR-0041)"*, and
 [ADR-0052](./DECISIONS.md#adr-0052) does not re-answer it for BookOrbit.** ADR-0041 clause 4 earned
