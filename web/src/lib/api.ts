@@ -968,18 +968,28 @@ export interface ServiceHealth {
 	 * BEGAN READING the upstream, or `null` for never
 	 * (`json:"last_full_sync_at"` on `serviceHealthResponse`).
 	 *
-	 * ⚠️ THE RUN'S START, NOT ITS FINISH. This is the number §17.7's degraded
-	 * banner renders — "Kavita is unreachable — showing cached data from 14:02"
-	 * — and "cached as of" is ambiguous between three instants that coincide on
-	 * a healthy system and diverge exactly when that banner is on screen. It is
-	 * NOT when the import finished, NOT when any row was written locally, and
-	 * NOT `lastOkAt` or `observedAt` on this same object. The start is the only
-	 * lower bound on the freshness of the rows the run wrote, so it is the only
-	 * one safe to put in that sentence. docs/reference/http-api.md §3.5 is the
-	 * contract and names each instant it is not.
+	 * ⚠️ THE RUN'S START, NOT ITS FINISH. "Cached as of" is ambiguous between
+	 * three instants that coincide on a healthy system and diverge exactly when
+	 * an instance has stopped answering — which is the only moment a freshness
+	 * sentence is worth putting in front of a user. It is NOT when the import
+	 * finished, NOT when any row was written locally, and NOT `lastOkAt` or
+	 * `observedAt` on this same object. The start is the only lower bound on the
+	 * freshness of the rows the run wrote, so it is the only one safe to render.
+	 * docs/reference/http-api.md §3.5 is the contract and names each instant it
+	 * is not.
 	 *
-	 * ⚠️ IT IS PER INSTANCE. §17.7: the banner's timestamp is "that instance's
-	 * own last successful sync, never the global delta time". Read it off the
+	 * ⚠️ THE ONLY THING IN `web/` THAT RENDERS THIS FIELD IS THE SERVICES
+	 * SCREEN'S `Synced` CELL — `syncCell` in ./services. §17.7 SPECIFIES a second
+	 * reader, the non-modal degraded-backend banner — "Kavita is unreachable —
+	 * showing cached data from 14:02" — and the tree implements none of it:
+	 * `$lib/List.svelte` carries a `staleNote` slot that no route passes, and
+	 * that sentence exists nowhere in `web/` but in notes such as this one. So
+	 * the rules below are the contract this field carries for whoever builds
+	 * that banner, not a description of a rendering that exists.
+	 *
+	 * ⚠️ IT IS PER INSTANCE. §17.7 fixes the banner's timestamp as "that
+	 * instance's own last successful sync, never the global delta time", and
+	 * there is deliberately no global one to reach for instead. Take it off the
 	 * same object as the `name` that goes in the sentence.
 	 *
 	 * ⚠️ NEVER RENDER A BANNER TIMESTAMP OFF `null`. `null` is "no full import

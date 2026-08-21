@@ -768,3 +768,48 @@ export function summaryCount(rows: readonly SummaryRow[]): string {
 	const catalogued = rows.filter((r) => r.catalogued).length;
 	return `${rows.length} media types, ${catalogued} catalogued`;
 }
+
+/**
+ * BLOCK C'S TWO VIEW MODES.
+ *
+ * ARCHITECTURE.md §17.2 (as amended by ADR-0028) settles the shape: Block C is
+ * ONE unified region across every media type, never one strip per type, and
+ * *"choosing the Posters view renders Block C as one wrapping grid across all
+ * types"*. DESIGN-DIRECTION §9.1 gives the control — a toolbar view toggle,
+ * *"persisted client-side per media type"* — and names the pair that ships:
+ * table and posters. Sonarr and Radarr's third mode, `overview`, is the
+ * row-with-thumbnail shape and is explicitly not required to ship first, so
+ * there is no third value here and a cover does not go in a table row.
+ */
+export const HOME_VIEWS = ['table', 'posters'] as const;
+
+export type HomeView = (typeof HOME_VIEWS)[number];
+
+/**
+ * Table, because it is what Block C has always drawn and what §17.2 asks for
+ * first: it sorts, it filters and it answers Ctrl+F, and a grid of art does
+ * none of those.
+ */
+export const HOME_VIEW_DEFAULT: HomeView = 'table';
+
+/**
+ * ⚠️ ONE KEY, NOT SIX. DESIGN-DIRECTION §9.1 persists this *"per media type"*,
+ * and Home is the all-types view — there is no type to key it on. The per-type
+ * grids under `routes/library/[type]` are where that sentence applies, and each
+ * of those will want its own key when it grows a toggle. Keys are contract:
+ * renaming this one silently resets every browser that has already stored a
+ * choice, exactly as `$lib/prefs.svelte` says of its three.
+ */
+export const HOME_VIEW_KEY = 'usarr.home.view';
+
+/**
+ * A stored view, or the default for anything that is not one of the two.
+ *
+ * ANYTHING UNRECOGNISED FALLS BACK RATHER THAN THROWING. localStorage is
+ * writable by anything running on this origin and survives a version that
+ * spelt the value differently, so an unparseable preference must not be able
+ * to take the screen down.
+ */
+export function parseHomeView(raw: string | null): HomeView {
+	return HOME_VIEWS.includes(raw as HomeView) ? (raw as HomeView) : HOME_VIEW_DEFAULT;
+}

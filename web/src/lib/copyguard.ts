@@ -22,10 +22,19 @@
  * `src/**` and there is no other test-support directory yet.
  *
  * `vitest.config.ts` is `environment: 'node'` with no Svelte plugin, so a
- * component cannot be imported and compiled in a test at all. `node:fs` would
- * have been the obvious way to read one and is not available either: this
- * workspace ships no `@types/node`, and adding one to read two files is a
- * dependency for nothing.
+ * component cannot be imported and compiled in a test at all. That is what
+ * makes these guards read TEXT, and this module is only the stripping half of
+ * it: every export here takes a string and none of them opens a file, so how
+ * the caller obtained the text is deliberately not this module's business.
+ *
+ * WHICH IS WHY BOTH READS FEED IT, AND THE CHOICE IS ABOUT THE QUESTION RATHER
+ * THAN ABOUT WHAT THE WORKSPACE SHIPS. Vite's `?raw` answers what ONE NAMED
+ * file contains, and `home.test.ts` and `requests.test.ts` hand over templates
+ * imported that way; `node:fs` answers what the WHOLE TREE contains, and
+ * `havecell.test.ts` walks `web/src` off disk and hands `drawsHaveColumn` the
+ * sources it finds. `node:fs` is available here — `web/package.json` carries
+ * `@types/node` as a devDependency — and `havecell.test.ts`'s own header sets
+ * out why the two reads are not substitutes for each other.
  */
 
 /**

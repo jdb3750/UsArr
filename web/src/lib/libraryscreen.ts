@@ -31,8 +31,20 @@
  * is the table's SHAPE, one table rather than one strip per type — which this
  * module does not touch. The one order is the endpoint's own, and nothing
  * authorises it — which is the state of the ground as of 2026-08-20, and the
- * three facts above are the whole of what carries this paragraph. Covers are absent from every one of these screens: no endpoint
- * in the mux serves an image.
+ * three facts above are the whole of what carries this paragraph.
+ *
+ * ⚠️ AND A FOURTH WRONG THING, SAME SHAPE AS THE THIRD — a reason asserted
+ * about a file nobody opened. It read *"Covers are absent from every one of
+ * these screens: no endpoint in the mux serves an image."* The reason was false
+ * when it was written: `internal/httpapi/server.go` registers `GET /img/{key}`
+ * behind the same session auth as the JSON API, and `$lib/library.posterUrl`
+ * has always built that URL. What was missing was a CALLER, which is a fact
+ * about `web/src` rather than about the mux — and one commit later it is a
+ * different fact again, which is why the corrected sentence is a pointer and
+ * not a second inventory: **read the templates.** As of this writing Home's
+ * Block C draws covers in its Posters view and nothing else in `web/src` calls
+ * `posterUrl` at all, so the all-types view and the six per-type grids are
+ * still text.
  *
  * WHY THE COPY LIVES HERE RATHER THAN IN THE TEMPLATE. `vitest.config.ts` is
  * `environment: 'node'` with no Svelte plugin, so a rule inside an `{#if}` in a
@@ -102,12 +114,23 @@ const LIBRARY_EMPTY: RecentEmptyState = {
 export function recentEmptyState(mode: HomeMode | undefined): RecentEmptyState {
 	if (mode === 'library') return LIBRARY_EMPTY;
 	if (mode === 'search-and-grab') {
+		/*
+		 * ⚠️ THIS SENTENCE NAMED ONE SERVICE AND THE WRONG ONE: *"Kavita is the
+		 * library-bearing service this build connects"*. ADR-0052 made BookOrbit
+		 * v0.1's catalogue source and sunset Kavita WITHOUT removing it, so
+		 * `serviceKinds` admits both and `cmd/usarr/import.go` imports from both.
+		 * The replacement names both and states no count, which is the voice
+		 * `$lib/home`'s summary rows already use ("BookOrbit or Kavita") for the
+		 * same reason: an install has whichever of them its owner runs, and a
+		 * sentence that picks one is wrong for half of them.
+		 */
 		return {
 			title: 'No library-bearing service is connected',
 			text:
 				'Every service configured here is an indexer, and an indexer has no catalogue for UsArr ' +
-				'to replicate, so there is nothing for this screen to list. Kavita is the library-bearing ' +
-				'service this build connects, and UsArr imports its catalogue once, on that first connect.'
+				'to replicate, so there is nothing for this screen to list. Connect a library-bearing ' +
+				'service — BookOrbit or Kavita — and UsArr imports its catalogue once, on that first ' +
+				'connect.'
 		};
 	}
 	if (mode === 'unconfigured') {
