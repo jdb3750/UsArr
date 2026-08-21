@@ -120,6 +120,15 @@
 WRITTEN.** It is `git rev-parse HEAD~1` of the landing commit — the tree `make check` ran against.
 **A baseline naming a tip nobody verified at is worse than a stale one**, because it launders unread
 commits as attested.
+⚠️ **AND `origin/main` MOVED AGAIN WHILE THE GATE RAN — TO `9694447`, SEVEN NON-MERGE COMMITS — SO
+IT WAS MERGED FORWARD (NOT REBASED) AND THE GATE RE-RUN ON THE MERGED TREE.** Those seven touch
+`docs/DECISIONS.md`, `docs/FUTURE.md`, `docs/REVIEW-LOG.md` and `docs/reference/schema.md` and no
+other file. **Every claim in this pass that cites one of those two first files was re-fired on the
+merged tree** — the ADR-0070 / 0052 / 0068 / 0072 / 0074 quotes, ADR-0001 Correction 3, the two
+*"nullable column and the badge"* sites, the `GOARCH=arm64` check and its `amd64` control, and
+`reference/schema.md`'s `work` block — and every one still holds. **`7c8cb1b` stays the baseline
+because it is the tip this pass actually READ every box against**; the seven merged commits are
+attested only on the narrow re-fire just named, and **nothing else in them was read.**
 ⚠️ **Advanced from `6533f1c` (2026-08-20), which was the Block-A / facet-consumer pass's baseline**,
 and **the range is large and is emphatically not documentation-only** — **114 non-merge commits**
 (172 including merges, 99 files) carrying `web/src/` (37 files), `cmd/usarr` (11), `internal/store`
@@ -2009,8 +2018,12 @@ Items marked 🛑 **STOPPED** are the different case: those are stopped by the d
       2026-08-21: EMPTY, exit 1.** ⚠️ **And the shape was proved to find such a row rather than
       assumed to** — the same grep for `GOARCH=amd64` returns Correction 3's own hardware line, so
       the emptiness is the arm64 run's absence and not a grep that cannot see hardware lines. And
-      **no `arm64` hit anywhere in `docs/` carries a measured RSS figure at all** —
-      `grep -rn -i arm64 docs/ | grep -iE 'MiB|GiB'` is **EMPTY, exit 1**.
+      **no `arm64` hit in any of the four documents that could carry the figure holds one** —
+      `grep -rn -i arm64 docs/DECISIONS.md docs/ARCHITECTURE.md docs/DEVELOPMENT.md
+      docs/REVIEW-LOG.md | grep -iE 'MiB|GiB'` is **EMPTY, exit 1**, against the control that the
+      same shape over `amd64` returns Correction 3's `15.7 GiB RAM` hardware line. ⚠️ **The range is
+      four named files rather than `docs/` because a `docs/`-wide form would match THIS SENTENCE and
+      stop discriminating** — which is the exact defect this box repairs.
 
 - [ ] **The zero-external-providers evidence clause for BookOrbit.** §16 says v0.1 needs no TMDB
       account because the source carries its own metadata. That claim was evidenced against Radarr's
