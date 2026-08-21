@@ -4454,6 +4454,22 @@ and the decision stands on the two that survive.** A 7-day tombstone expiry that
 would silently take a queued command with it, where no foreign key would leave the command to fail
 loudly at the \*Arr.
 
+> ⚠️ **RIDER, 2026-08-21 ([ADR-0076](#adr-0076), REVIEW-LOG LS-394.13). THE ANTECEDENT DOES NOT
+> OCCUR: NOTHING IN THIS TREE HARD-DELETES A `work`, ON AGE OR OTHERWISE.** Measured, single-token and
+> line-oriented, `grep -n "DELETE"` over every tracked `.go` and `.sql` excluding `_test.go` — **no
+> `DELETE FROM work` anywhere**; and `work`'s only cascade parent in the built schema
+> (`internal/db/testdata/schema.sql`) is `work` itself via `parent_work_id`, so no `DELETE` the binary
+> does issue reaches a `work` row either. Positive control: `internal/store/releases.go:178`'s
+> `DELETE FROM release_candidate WHERE expires_at <= ?` is found. ⚠️ **A narrower age-keyed instrument
+> would have missed the near miss and is recorded so nobody re-runs only that one**: guard 1 DOES hard
+> delete, at `internal/store/catalogue.go:1523` — `DELETE FROM service_item_link WHERE
+> service_instance_id = ? AND remote_kind = ? AND remote_id = ?` — and it is not age-keyed. **Measured
+> reach: `service_item_link` only**, cascading solely into `service_item_alias`; it never touches
+> `work`. **The paragraph above stays as written.** It is a conditional and its consequent is what
+> decision 3's `ON DELETE CASCADE` answers; what changes is that the condition is not a state this
+> tree can currently be in, which is what the two riders below turn on. **Nothing here moves the
+> Status line, and no decision is superseded.**
+
 1. ~~`sync.md` §4's write-queue guard is normative and forbids the sweep from acting on a work with a
    row in `pending`, `inflight` or `verifying` — so the collision is one the sweep may not cause, and
    `ix_wq_runnable` is the index that guard uses.~~ 🚩 **STRUCK 2026-08-17, and struck rather than
@@ -4464,12 +4480,43 @@ loudly at the \*Arr.
    step 3 soft-deletes **locally** a row the \*Arr has already dropped, and the hard delete seven days
    later is local too. So the guard does not forbid this collision, and there is no other precondition
    in §4 that does. **The collision is one the sweep may cause**, and this ADR is decided knowing that.
+
+   > ⚠️ **RIDER, 2026-08-21 ([ADR-0076](#adr-0076), REVIEW-LOG LS-394.13).** *"the hard delete seven
+   > days later"* names an event that **has never existed in this tree**. The struck text is kept, as
+   > the strike's own note says, because the error is instructive — but the phrase is a second
+   > instance of the same false far-end premise ADR-0076 Decision 4 corrects in `reference/sync.md`,
+   > and ADR-0076's claim that that was *"the only sentence in the docs promising a far end"* is
+   > corrected there on the strength of this site. **Search scope for the absence:** every tracked
+   > `.go` and `.sql` in this repository, `_test.go` excluded; instrument and positive control are in
+   > the rider above. **This rider changes nothing about the strike**, which stands on its own
+   > quotation error and not on this.
 2. A work reaches hard delete only because the \*Arr itself no longer has it, so a surviving
    *"monitor this"* command can only ever fail. Keeping it produces an alarm in Home's attention
    block that the user cannot act on and cannot distinguish from a real fault. **This ground is
    independent of ground 1 and is unaffected by its withdrawal** — it argues from what the \*Arr holds,
    not from what the sweep is permitted to do, and it is the ground that answers the collision ground 1
    was wrongly said to prevent.
+
+   > ⚠️ **RIDER, 2026-08-21 ([ADR-0076](#adr-0076), REVIEW-LOG LS-394.13). THIS GROUND HOLDS
+   > VACUOUSLY, AND THEREFORE SUPPORTS NOTHING.** It is not false and it is not withdrawn. *"A work
+   > reaches hard delete"* is a conditional whose antecedent never occurs: **nothing in this tree
+   > hard-deletes a `work`**, measured with the instrument and positive control in the rider at the
+   > head of this section, over every tracked `.go` and `.sql` with `_test.go` excluded. A conditional
+   > with an antecedent that never occurs is true and carries no load. **The general form, which is
+   > why this is written down rather than filed as a curiosity: an equality that holds vacuously is
+   > not evidence; a ground that holds vacuously is not support. Count surviving grounds by the ones
+   > that can bear load, not by the ones that are true.**
+   >
+   > ⚠️ **SO THE LEAD-IN SENTENCE *"the decision stands on the two that survive"* IS NO LONGER TRUE AS
+   > A COUNT OF LOAD-BEARING GROUNDS.** Ground 1 is struck; this ground holds vacuously; **ground 3 is
+   > the only one left that can bear load** — and it is a measurement about `write_queue` readers, not
+   > about deletions, so its withdrawal is not implied by anything here.
+   >
+   > ⚠️ **WHETHER DECISION 3 STILL STANDS ON WHAT IS LEFT IS ROUTED AND UNANSWERED, AND IS NOT THIS
+   > SLICE'S CALL.** It is the coordinator's and the PM's. **The Status line is deliberately
+   > untouched: no decision is superseded here, and this rider records a measurement rather than
+   > taking one.** If the answer is that the decision survives, a further dated rider saying so is the
+   > whole remedy; if it is not, that is a correction motion with an ADR of its own.
 3. *"Fails loudly"* is aspirational either way. **Nothing outside `internal/db/spike/` reads
    `write_queue`** — measured 2026-08-17 on `b8bb500` with
    `grep -rn "write_queue" --include=*.go internal/ cmd/ | grep -v _test.go`, whose only hits are the
@@ -13293,11 +13340,33 @@ the difference between that set and the truth is tombstoned. That is the whole l
 read, which is the nightmare bug §7.4 exists to prevent.
 
 **§7.4's "plus on demand" was ALREADY BUILT and is not duplicated.** The Services screen's *"Run full
-sync now"* (`POST /api/v1/services/{id}/sync` → `StartImport`) runs the identical pass through the
-identical guard. So this loop is shaped like `startCandidateSweeper` — ticker, `ctx.Done()`, `done`
-channel — and **not** like `RunProber`, whose request channel would have had no caller. An
-unreachable fourth entry in `import.go`'s explicit trigger list would have made that list wrong in
-the direction hardest to notice.
+sync now"* (`POST /api/v1/services/{id}/sync` → `StartImport`) takes **the identical guard**: the same
+`beginImport` claim over the same `importMu`/`importing` map, refusing with the same
+`httpapi.ErrImportInProgress`. Executed and confirmed. So this loop is shaped like
+`startCandidateSweeper` — ticker, `ctx.Done()`, `done` channel — and **not** like `RunProber`, whose
+request channel would have had no caller. An unreachable extra entry in `import.go`'s explicit trigger
+list would have made that list wrong in the direction hardest to notice.
+
+⚠️ **THE GUARD IS IDENTICAL; THE PASS IS NOT, AND THIS DECISION MUST NOT BE READ AS SAYING SO.** The
+differences, in descending order of how much they matter to what this ADR decides:
+
+1. **Shutdown.** The scheduler runs under `reconcilerCtx`, and `main.go` both cancels it and **waits**
+   (`<-reconcilerDone`) before `a.Close()`. `StartImport`'s goroutine is cancelled by `stopProber()`
+   and is **never waited for** before the database closes. ⚠️ **PRE-EXISTING AND EXPLICITLY NOT THIS
+   SLICE'S TO FIX** — recorded because it means the two paths do not stand in the same relation to the
+   hazard `main.go`'s own comment cites, not because anything here repairs it.
+2. **Concurrency.** `StartImport` returns immediately, so N presses across N instances put N upstream
+   walks on the wire at once. Decision 2's *"bounded rate is honoured as serialisation"* therefore
+   holds on the **timer path only**.
+3. **Pre-flight.** `StartImport` synchronously runs `catalogueSource`'s kind check and the
+   `errImportsNotArmed` check and answers its caller. The scheduler runs neither, and relies entirely
+   on `reconcileDue`'s never-synced clause to keep a Prowlarr off the wire — pinned by
+   `TestTheScheduleNeverReadsAServiceThatHasNeverCompletedAFullSync`, which fires when that clause is
+   inverted.
+4. **Authorization.** The route is `csrfProtected` + `authenticated` + `sudo`. The scheduler has no
+   principal at all.
+5. **Error surface.** `StartImport` returns typed errors to the handler; the scheduler logs and
+   discards.
 
 **Due-ness is read off `last_full_sync_at`, not off the ticker.** `reconcileInterval` is 6 h;
 `reconcileTick` is 30 min and only sets the resolution at which the durable column is consulted. A
@@ -13377,22 +13446,67 @@ schedule. `reference/sync.md` now carries that at the precondition's own site.
 ### Decision 4 — NO REAPER. The seven days are a RESTORATION WINDOW
 
 `reference/sync.md` §4, guard 2's clause (b), read: *"find links with no upstream row, tombstone them,
-and after seven days delete the user's tags, requests and playback state."* **It was wrong, and it was
-the only sentence in the docs promising a far end.** Scope searched: every occurrence of
-`seven day`/`7-day`/`7 day` in `docs/*.md` and `docs/reference/*.md`; every other mention describes
-the window's effect on reads or on guard 1's hazard, and `ROADMAP.md` correctly states the absence.
+and after seven days delete the user's tags, requests and playback state."* **It was wrong.**
+
+⚠️ **IT WAS NOT THE ONLY SENTENCE PROMISING A FAR END, AND THIS DECISION SAID IT WAS.** The scope was
+declared correctly — every occurrence of `seven day`/`7-day`/`7 day` in `docs/*.md` and
+`docs/reference/*.md` — and the sweep over it was not performed correctly. Re-run 2026-08-21 with
+`grep -rniE "seven[ -]day|7[ -]day" docs/*.md docs/reference/*.md`, positive control `tombstone`,
+which is found in both `DECISIONS.md` and `reference/sync.md` — stated as a fired control rather than
+as a hit count, since a figure written here and re-read after either file moves is the exact drift
+DEVELOPMENT.md §11 rule 8 names. The sites inside that scope that assert or
+presuppose a far end, rather than describing the window's effect on reads or on guard 1's hazard, are
+all in [ADR-0039](#adr-0039)'s *Why — decision 3*:
+
+- its lead-in — *"A 7-day tombstone expiry that hard-deletes a `work` would silently take a queued
+  command with it"* — conditional, and the antecedent both grounds below discharge;
+- **ground 1**, struck 2026-08-17 but landed prose — *"the hard delete seven days later is local
+  too."*;
+- **ground 2**, live and unstruck and in the present tense — *"A work reaches hard delete only because
+  the \*Arr itself no longer has it, so a surviving *'monitor this'* command can only ever fail."*
+
+Each of those three carries a dated rider at its own site recording the measurement below. **Every
+other mention in scope** — `ARCHITECTURE.md` §7.4, `reference/http-api.md`, `reference/schema.md`'s
+column comments, the §16.1 roadmap-entry quotations, and `ROADMAP.md`'s and
+[ADR-0074](#adr-0074) Decision 10's own statements of the absence — describes reads, guard 1's hazard,
+or correctly states that nothing reaps.
+
+**The measurement, widened.** ⚠️ The first instrument was age-keyed —
+`grep -rnE "deleted_at *<|deleted_at *>|orphaned_at *<|orphaned_at *>|missing_since *<"` over
+non-test tracked `.go`, **empty**, control `expires_at *<=` finds `internal/store/releases.go:178`'s
+`DELETE FROM release_candidate WHERE expires_at <= ?`. That supports *"nothing reaps on AGE"*, which
+is **narrower than "nothing hard-deletes"**, and there is a non-age-keyed hard delete in the tree. So
+it was re-fired single-token and line-oriented: `grep -n "DELETE"` over every tracked `.go` and
+`.sql`, non-test only. **No `DELETE FROM work` exists anywhere in that corpus**, and `work`'s only
+cascade parent in the built schema is `work` itself (`parent_work_id`), so no `DELETE` the binary does
+issue can reach a `work` row either. The near miss the narrow instrument would have hidden is **guard
+1's own hard delete**, `internal/store/catalogue.go:1523`: `DELETE FROM service_item_link WHERE
+service_instance_id = ? AND remote_kind = ? AND remote_id = ?`. Measured, not reasoned — **it reaches
+`service_item_link` only**, cascading solely into `service_item_alias`
+(`internal/db/testdata/schema.sql:684`, the built-schema snapshot `internal/db/migrate_test.go`
+asserts against the migrations); it never reaches `work`, and the row it writes says so:
+*"the previous work keeps its own tombstone and its owned corrections"*. The other non-test `DELETE`
+statements are replace-set writes and scoped cleanups — `work_alt_title`, `library_member`,
+`search_fts`/`search_trgm`/`search_doc`, `work_credit`, `media_file`, `indexer_catalog` — and the
+`release_candidate` reaper.
 
 **The seven days are the promise that a vanished item comes back.** An item that disappeared because
-a share unmounted or a credential lost its scope returns — with its tags, its requests and its
-playback state intact — the moment the backend does; the ordinary write path clears `deleted_at` on
-the next sight of it. That restoration is the only thing the number governs. **Nothing hard-deletes a
-tombstone at the end of it, and nothing is scheduled to.** `ARCHITECTURE.md` §7.4 never claimed
-otherwise and is untouched.
+a share unmounted or a credential lost its scope returns — with its `tag_assignment` rows, its
+`library_member` rows and its `library_override` corrections still attached to the same `work` — the
+moment the backend does; the ordinary write path clears `deleted_at` on the next sight of it. That
+restoration is the only thing the number governs. **Nothing hard-deletes a tombstone at the end of it,
+and nothing is scheduled to.** `ARCHITECTURE.md` §7.4 never claimed otherwise and is untouched.
 
 ⚠️ **THE SENTENCE NAMED THREE THINGS TO DELETE AND TWO OF THEM DO NOT EXIST.** Measured against the
-migrations: there is **no `request` table, no `playback_state` table and no `play_history` table** in
-any migration — they are `schema.md`'s "later tables", v0.2 and v1.0. The one named table that does
-exist, `tag_assignment`, is the one a reaper would get wrong (Decision 5).
+**built** schema at migration 13 — `sqlite_master` enumerated, on LS-394.7's rule that a schema claim
+read out of migration text is a claim about text — there is **no `request` table, no `playback_state`
+table and no `play_history` table**, and no table name contains the substring `play` or `state` at
+all. Positive control: `tag_assignment` is found. They are `schema.md`'s "later tables", v0.2 and
+v1.0. ⚠️ **AND THE SAME FALSE VOCABULARY SURVIVED INTO THE REPLACEMENT SENTENCE** in both this
+decision and `reference/sync.md` — corrected above and there (LS-394.12); a rewrite that fixes the
+deletion clause and re-uses the nouns in the restoration clause has moved the error, not removed it.
+The one named table that does exist, `tag_assignment`, is the one a reaper would get wrong
+(Decision 5).
 
 ### Decision 5 — a retention limit is a JOINT decision with guard 1, because the two share a row
 

@@ -25533,7 +25533,7 @@ cases, including a `\|\|` legitimately outside `RAISE()` (must not fire) and a `
 
 ---
 
-## LS-394 — §7.4's schedule reviewed: the routed trap is **unreachable at this tip and for four reasons**, the C-7 figures re-measure ~1.3× on different hardware with their ratio intact, and the `write_queue` precondition turns out to have **no operands** rather than no checker
+## LS-394 — §7.4's schedule reviewed: the routed trap is **unreachable at this tip, and not by the mechanism it was routed on**, the C-7 figures re-measure ~1.3× on different hardware with their ratio intact, and the `write_queue` precondition turns out to have **no operands** rather than no checker
 
 **Date:** 2026-08-21. **Target:** `wip/sweep-schedule`, branched from `origin/main` at
 `f87aef4442d453bf4697159f913c7dcf05328196` (`git rev-parse --is-shallow-repository` → `false`).
@@ -25541,9 +25541,25 @@ cases, including a `\|\|` legitimately outside `RAISE()` (must not fire) and a `
 report — `git grep -c 'LS-394' f87aef44 -- docs/` returned nothing and `LS-393` is the highest entry
 on `main`. **Scope:** `cmd/usarr/reconcile.go` and its tests, the `main.go` wiring, the comment
 corrections the timer falsifies, `reference/sync.md`'s three edits and
-[ADR-0076](./DECISIONS.md#adr-0076). Every finding below is **applied** or **rebutted in writing**.
+[ADR-0076](./DECISIONS.md#adr-0076).
 
-### LS-394.1 🚩 The routed trap does not exist at this tip — **rebutted as a hazard, applied as a guard anyway, and the four real barriers are now named where the next person will look**
+**Every finding below is APPLIED, REBUTTED IN WRITING, or NAMED AND NOT FIXED**, and the third
+disposition is a real one rather than a euphemism: §9 and §15 carry findings that are recorded,
+scoped and left open on purpose. ⚠️ **THIS SENTENCE READ *"Every finding below is applied or rebutted
+in writing"* AND WAS FALSE WHEN IT WAS WRITTEN** — §9 was already headed *"Named and not fixed"* on
+the same day. Corrected 2026-08-21 (LS-394.17).
+
+⚠️ **THIS ENTRY IS DELIBERATELY COUNT-FREE, AND WAS NOT.** Its heading claimed *"four reasons"*, §1's
+claimed *"the four real barriers"*, and neither number survived re-measurement; §2's, §3's and §6's
+headings counted their own contents as well. A number maintained by a different act than the thing it
+counts is what DEVELOPMENT.md §11 rule 8 is about, and this entry is the case in point. Findings are
+numbered for citation; nothing states how many there are.
+
+**A SECOND ADVERSARIAL ROUND ran on 2026-08-21 against the same branch**, and its findings are §10
+onward. It is under this same id on the coordinator's ruling: **an LS number covers a slice's review,
+not a round.**
+
+### LS-394.1 🚩 The routed trap does not exist at this tip — **rebutted as a hazard, applied as a guard anyway, and the real barriers are now named where the next person will look**
 
 The slice was routed on the claim that copying `probeAll`'s `Scope{AllInstances: true}`
 (`cmd/usarr/services.go:1035`) would re-run `sweepOrphans` for **soft-deleted** instances and clear
@@ -25552,17 +25568,18 @@ the `orphaned_at` stamps `SoftDeleteServiceInstance` sets (C-6), through the res
 
 **`Scope` cannot do that, and neither can anything else reachable from one edit.** `Scope` decides
 WHICH VISIBLE instance a caller may see; it never decides whether a tombstoned one is visible at all.
-`store.listServiceInstances` hard-codes `WHERE deleted_at IS NULL` into the statement **ahead of**
-the scope predicate, so `AllInstances: true` renders `1=1` over the live rows only. Four independent
-filters had to be removed, in this order, before the assertion could be made to fail:
+⚠️ **THIS SECTION FIRST GAVE A FOUR-STRIP ACCOUNT ENDING AT `LastFullSyncAt`, AND IT WAS WRONG IN BOTH
+DIRECTIONS — see §10, which re-ran every strip.** The corrected drill, re-measured 2026-08-21:
 
 1. `store.listServiceInstances`' `WHERE deleted_at IS NULL` — bypassed by replacing the call with raw
    `SELECT id, enabled FROM service_instance`. **Test still green.**
 2. `registry.entry`'s disabled refusal **and** `store.getServiceInstance`'s own `deleted_at IS NULL`.
    **Test still green.**
-3. C-6's `si_orphan.deleted_at IS NULL` in `sweepOrphans`' restore arm. **Test still green.**
-4. `store.LastFullSyncAt`'s `deleted_at IS NULL` (`internal/store/catalogue.go:2522`) — which is what
-   actually kept a tombstoned instance from ever being **due**. **Test finally red:**
+3. C-6's `si_orphan.deleted_at IS NULL` in `sweepOrphans`' **restore arm — that arm alone**. **Test
+   still green.**
+4. `store.LastFullSyncAt`'s `deleted_at IS NULL` (`internal/store/catalogue.go:2522`). **STILL
+   GREEN** — and this is where the first account stopped and declared the red (`ok 0.18s`).
+5. `reconcileOnce`'s own `!si.Enabled` continue. **Test finally red:**
    `a scheduled pass cleared the orphaned_at stamp SoftDeleteServiceInstance set.`
 
 **Applied**: `TestTheScheduleLeavesADeletedServicesLibraryOrphaned` ships, asserting the STAMP'S
@@ -25571,7 +25588,7 @@ recorded in its own doc comment. **Rebutted**: it is not the hazard it was route
 says so — presenting a four-deep conjunction as "the thing standing between the stamp and a
 scheduler" would invite the next reader to delete the other three as redundant.
 
-### LS-394.2 🚩 The `enabled` half had the same shape, and the drill only fires on TWO sites — **applied**
+### LS-394.2 🚩 The `enabled` half had the same shape, and the drill fires only on the conjunction — **applied**
 
 `reconcileOnce`'s `if !si.Enabled { continue }` looked like the load-bearing clause. It is not:
 `registry.entry` already refuses a disabled instance (`"%q is disabled"`, `cmd/usarr/services.go`) and
@@ -25587,7 +25604,7 @@ hour about a state the operator chose deliberately is a log an operator learns t
 arrives only after a row read and a credential open. **Cheapness and quiet, not correctness**, and the
 comment now says exactly that.
 
-### LS-394.3 🚩 Two of the three tests would have passed against an empty function — **applied: a positive control and a negative control, both fired**
+### LS-394.3 🚩 Both refusal tests would have passed against an empty function — **applied: a positive control and a negative control, both fired**
 
 `TestTheScheduleDoesNotRead…` and `TestTheScheduleLeaves…Orphaned` are both refusals. A
 `reconcileOnce` that did nothing at all satisfies both. Two controls were added and both were fired:
@@ -25633,7 +25650,7 @@ upstream: a check that cannot fail. **Applied** as a rider at the precondition's
 the precondition stands for the milestone that builds the write-back and must not be recorded as
 "satisfied" by this schedule.
 
-### LS-394.6 🚩 The corrected sentence promised deletions from two tables that do not exist — **applied**
+### LS-394.6 🚩 The corrected sentence promised deletions from tables that do not exist — **applied**
 
 `reference/sync.md` §4 promised that after seven days the sweep would *"delete the user's tags,
 requests and playback state."* Measured against the migrations: **there is no `request` table, no
@@ -25649,14 +25666,27 @@ carries the full column list.
 
 The first census was a `grep` for `REFERENCES work(id)` over the migration files, and it reported
 `write_queue.work_id` as having **no** FK — which would have put a false row in ADR-0076's reaper
-table. `write_queue`'s rebuild carries the constraint at **table level**, below the column list, and
-the grep could not see it. Re-measured with `PRAGMA foreign_key_list` over every table carrying a
-`work_id` in a **built** database at migration 13: `write_queue.work_id → work(id) ON DELETE CASCADE`.
-Exactly five columns name a work with no FK, and three of those five are **deliberate** with the
-reason written in `00005` (`sync_report`, and `library_override` twice).
+table. Re-measured with `PRAGMA foreign_key_list` over every table carrying a `work_id` in a **built**
+database at migration 13: `write_queue.work_id → work(id) ON DELETE CASCADE`. The columns that name a
+work with no FK are listed in ADR-0076; three of them are **deliberate** with the reason written in
+`00005` (`sync_report`, and `library_override` twice).
 
-**Applied.** ADR-0076's table is the measured one and says which instrument produced it. Recorded
-because the failure mode generalises: a schema claim read out of migration text is a claim about text.
+⚠️ **THE RECORDED CAUSE WAS FALSE, AND OF EVERY FINDING IN THIS ENTRY THIS IS THE ONE THAT COULD LEAST
+AFFORD IT** — its whole point is that the METHOD is written down because it caught the reviewer, and
+the method it named was not the one that failed. Corrected 2026-08-21 (§10). This section read:
+*"`write_queue`'s rebuild carries the constraint at **table level**, below the column list, and the
+grep could not see it."* **Measured:** `internal/db/migrations/00005_library_sync.sql:903` is
+`  work_id             INTEGER REFERENCES work(id) ON DELETE CASCADE,` — **column-level**, and a
+plain `grep -rn "REFERENCES work(id)" internal/db/migrations/` finds it, at that line, among the
+others. **There is no table-level `FOREIGN KEY` clause anywhere in `00005`**; `grep -n "FOREIGN KEY"`
+over that file returns only prose comments and a `RAISE` message. **The real cause is the table's
+NAME**: at that point in the rebuild the table is `write_queue_new`, and the census was keyed on
+`write_queue`, so the constraint was visible to the instrument and the TABLE was not.
+
+**Applied.** ADR-0076's table is the measured one and says which instrument produced it. The
+conclusion is unchanged and was right for a reason the first write-up got wrong: **a schema claim read
+out of migration text is a claim about text** — and a migration that renames a table mid-rebuild is
+exactly where text and schema part company.
 
 ### LS-394.8 Rebutted findings
 
@@ -25682,9 +25712,280 @@ because the failure mode generalises: a schema claim read out of migration text 
   parenthetical is now false. **Out of this slice's allocation** (which was ADR-0076 and LS-394 and
   nothing else) and deliberately left alone; recorded so it is not re-found from scratch. The check
   that would work is a caller of `FullImport` on a ticker, or simply the presence of
-  `cmd/usarr/reconcile.go`.
+  `cmd/usarr/reconcile.go`. ⚠️ **CLOSED 2026-08-21 by §19**, under announce-first, with a check that
+  was verified to discriminate at both ends; the replacement is neither of the two suggested here.
 * **§7.4 step 6's "low priority with a bounded rate" is honoured as serialisation only.** One instance
   at a time; no priority class, no request-rate limiter. Named in ADR-0076 Decision 2 and in
   `reference/sync.md` §4 rather than closed.
 * **`reference/sync.md` §4 step 4's drift comparison is still built for nobody**, and the schedule
   does not change that. It is [ADR-0074](./DECISIONS.md#adr-0074)'s, unchanged.
+
+---
+
+## LS-394 — second round, 2026-08-21
+
+**Target:** the same branch, at the tip whose **tree** is
+`5132934cad65c295fa89fee194996cd0102727ee` — the last commit before this round's fixes, branched from
+`origin/main` at `f87aef44`. ⚠️ **CITED BY TREE RATHER THAN BY COMMIT SHA, DELIBERATELY:** this
+branch's commit messages were rewritten in the same lane that wrote this entry (§20), so the SHA that
+named that tip at review time no longer resolves. A message-only rewrite does not touch trees, so the
+tree hash identifies the reviewed state across the rewrite and the SHA would not. **Two
+adversarial verifiers**, and one of them corrected the other — so nothing below is taken on either
+one's report: every measurement in §10-§17 was re-fired in the fix lane before it was written down.
+**Same id, on the coordinator's ruling: an LS number covers a slice's review, not a round.**
+
+### LS-394.10 🚩 THE CLOCK WAS UNPINNED — `startReconciler` had no test caller anywhere in the tree — **applied, and the guard was fired before it was believed**
+
+`grep -rn "startReconciler" --include=*_test.go .` returned nothing. **Deleting the whole
+`reconcilerCtx`/`reconcilerDone` block from `main.go`'s `run()` left the entire `cmd/usarr` suite
+green** — re-fired in the fix lane: `build ok`, `ok github.com/jdb3750/UsArr/cmd/usarr 10.669s` before
+the guard existed. Every test in `reconcile_schedule_test.go` calls `reconcileOnce` **directly**, so
+the slice's headline claim — *"the sweep runs on a six-hourly clock"* — was pinned by nothing, and a
+refactor of `run()`'s shutdown block would have deleted the feature under four green tests. **This is
+the deaf-guard shape `web/src/lib/services-screen.test.ts` records for the Services screen's `Synced`
+column**, which shipped as a hardcoded word under seven green unit tests of the helper that was
+supposed to draw it.
+
+**Applied — `cmd/usarr/reconcile_loop_test.go`.** ⚠️ **The pin is a SOURCE READ and says so at its own
+site.** A behavioural pin would have to run `run()` itself — a flag parse, a bound listener and a
+signal — which is a larger restructuring than the schedule it would be guarding, and the brief
+permitted a source pin on exactly that condition. It is an **AST walk**, not a grep, so a call inside
+a comment or a string literal cannot satisfy it; parsing is deliberately without `ParseComments`. What
+it still cannot see is a call that is present but unreachable, and it does not claim otherwise.
+Controls run first — the `buildApp` call and the `<-serveErr` receive, neither owned by this slice —
+so a walk that inspected the wrong node cannot look like a clean tree. **Fired both ways:**
+
+* call deleted → `cmd/usarr/main.go's run() no longer calls startReconciler.`
+* call kept, `<-reconcilerDone` replaced with `_ = reconcilerDone` →
+  `run() binds startReconciler's channel to "reconcilerDone" and never receives from it.`
+
+Restored from a saved copy and green again (`run(): 102 statement nodes, 43 distinct callees, 3
+distinct identifiers received from`).
+
+### LS-394.11 🚩 Three more behaviours were unguarded, all three sabotaged green — **applied, each with its own drill**
+
+| behaviour | sabotage that used to stay green | guard, and the verbatim red |
+| --- | --- | --- |
+| `reconcileDue`'s never-synced arm — the clause its own doc comment calls *"the load-bearing arm"* | `if !at.Valid { return true }` → `ok 12.580s` | `TestTheScheduleNeverReadsAServiceThatHasNeverCompletedAFullSync` → `a scheduled pass found an instance that has never completed a full sync DUE.` |
+| the first pass runs immediately | move `reconcileOnce` below the `select` → `ok 11.153s` | `TestTheReconcilerRunsAPassBeforeItsFirstTick` → `the reconciler's first pass never ran: 30m0s is one reconcileTick, so a loop that ticks before it sweeps cannot be caught inside a test's lifetime.` |
+| the shutdown wait `main.go`'s `<-reconcilerDone` stands on | `close(done)` at the top of the goroutine → `ok 11.065s` | `TestTheReconcilersDoneChannelStaysOpenWhileAPassIsRunning` → `startReconciler's channel was already closed while a pass was still parked inside the upstream read.` |
+
+**Nothing is registered as undrilled.** Two design notes, because each was the thing that made the
+drill possible rather than a coin flip:
+
+* **The never-synced drill uses a PROWLARR beside a due Kavita, in one pass over one process log.** A
+  Prowlarr never writes `last_full_sync_at`, so it is the case that cannot be argued away as a
+  transient. Control and subject are **the same log sentence about two instances** —
+  `reconcileInstance`'s *"due a re-read"* line, matched with the instance id and a trailing space so
+  `instance_id=2` is not a prefix of `instance_id=20` — so a pass that enumerated nothing, or a
+  message that was later reworded, fails on the control before the refusal is asserted.
+* **The shutdown drill HOLDS the pass open** with `fakeKavita.holdSeriesList` rather than racing it,
+  and deliberately does **not** cancel while the hold is on: a cancel aborts the HTTP round trip, the
+  goroutine finishes in microseconds, and the assertion becomes a coin flip.
+
+### LS-394.12 🚩 `reconcile.go`'s own doc comment was FALSE in shipped source, in both halves of one sentence — **applied**
+
+The `deleted_at IS NULL` bullet read *"FOUR independent filters, **none of them here**… All four had
+to be removed together before the guard could be made to fail."* Re-measured in the fix lane, three
+ways:
+
+1. **It takes five strips, and one of them is in `reconcile.go` itself.**
+   `internal/store/serviceinstance.go:365` soft-deletes with
+   `UPDATE service_instance SET deleted_at = ?, enabled = 0 WHERE id = ? AND deleted_at IS NULL` —
+   the delete clears `enabled` in the same statement, so `reconcileOnce`'s own `!si.Enabled` continue
+   **is** a protection on the tombstone half. With the four named filters stripped and `!si.Enabled`
+   intact the guard stayed **GREEN** (`ok 0.18s`); the fifth strip produced the claimed red.
+2. **Strip 3's *"both arms"* is wrong.** `sweepOrphans`' STAMP arm carries
+   `si_orphan.deleted_at IS NULL` inside a `NOT EXISTS` — that is the **mechanism** by which a soft
+   delete orphans the library, not a protection. Strip it and `SoftDeleteServiceInstance` never sets
+   `orphaned_at`, so the test dies at its own vacuity guard
+   (`soft-deleting the only instance did not orphan its library; the drill below would be vacuous`)
+   rather than at the assertion. **Only the RESTORE arm's copy is a protection.**
+3. **Two clauses are INDIVIDUALLY DECISIVE**, measured from the five-strip red by restoring one thing
+   at a time: `store.LastFullSyncAt`'s `deleted_at IS NULL`
+   (`internal/store/catalogue.go:2522`) → green; `sweepOrphans`' restore arm → green.
+
+**Applied at both sites** — `cmd/usarr/reconcile.go`'s `reconcileOnce` comment and the duplicate
+account in `cmd/usarr/reconcile_schedule_test.go` — **as a LIST of the sites rather than a number**,
+which is the same defect DEVELOPMENT.md §11 rule 8 names and this entry's own headings had.
+
+### LS-394.13 🚩 The routed hazard, the routing lane's mechanism and the build lane's rebuttal were EACH wrong, in three different ways — **recorded in full, because two of the three were corrections**
+
+This is the finding the entry would most like to soften and must not.
+
+* **The routed prediction** — that a scheduler copying `probeAll`'s `Scope{AllInstances: true}` would
+  re-run the sweep for soft-deleted instances and clear the `orphaned_at` stamps the soft-delete had
+  just set. ⚠️ **REAL IN KIND, WRONG IN MECHANISM.** The failure it names is reachable — the five-strip
+  state produces exactly it, verbatim — but `Scope` is not how you get there. `Scope` decides which
+  VISIBLE instance a caller may see; it never decides whether a tombstoned one is visible at all.
+* **The build lane's rebuttal** — *"`store.listServiceInstances` hard-codes `WHERE deleted_at IS NULL`
+  ahead of the scope predicate, so `AllInstances: true` is `1=1` over live rows only."* ⚠️ **TRUE
+  ABOUT THAT ONE STATEMENT AND WRONG AS AN ACCOUNT OF WHAT PROTECTS THE PASS.** Measured with the
+  lister's filter stripped and nothing else: `AllInstances enumerated 1 row(s) … id=1 name="Kavita"
+  enabled=false`. The tombstoned row **is** handed to the loop. What keeps the pass off it is
+  downstream — `store.LastFullSyncAt`'s clause and `reconcileOnce`'s `!si.Enabled` — not the lister.
+  Control, same probe on the pristine tree: `AllInstances enumerated 0 row(s)`.
+* **The `enabled=false` in that output is the whole three-state picture in one line.** The soft delete
+  disabled the row, so even the enumerated tombstone is stopped by a clause nobody counted as a
+  tombstone protection — which is §12's finding arrived at from the other side.
+
+**Nothing here is softened and nothing is withdrawn.** The guard
+`TestTheScheduleLeavesADeletedServicesLibraryOrphaned` ships regardless, asserting the STAMP'S
+SURVIVAL rather than any predicate's text, precisely because the account of which layer is doing the
+work has now been wrong twice.
+
+### LS-394.14 🚩 *"Runs the identical pass"* overstates the on-demand equivalence — **the decline stands, the wording is narrowed**
+
+The decline is unchanged: a second on-demand door into one behaviour would be a trigger with no
+caller, and `import.go`'s header enumerates triggers explicitly. But **ADR-0076 Decision 1** and
+**`reference/sync.md` §4** both claimed the route *"runs the identical pass"*. **The GUARD is
+literally identical** — same `beginImport`, same `importMu`/`importing` map, same
+`httpapi.ErrImportInProgress`, all read and confirmed. **The PASS is not.** In descending order of
+what it costs the claim:
+
+1. **Shutdown.** The scheduler runs under `reconcilerCtx` and `main.go` both cancels it and **waits**
+   before `a.Close()`. `StartImport`'s goroutine is cancelled by `stopProber()` and is **never waited
+   for**. ⚠️ **PRE-EXISTING, and explicitly NOT this slice's to fix** — registered here, not repaired.
+2. **Concurrency.** `StartImport` returns immediately, so N presses across N instances run N upstream
+   walks at once. §7.4 step 6's *"bounded rate"*, honoured as serialisation, holds on the **timer path
+   only**.
+3. **Pre-flight.** `StartImport` synchronously runs `catalogueSource`'s kind check and
+   `errImportsNotArmed`; the scheduler does neither and relies entirely on `reconcileDue`'s
+   never-synced clause — the clause §11 has now drilled.
+4. **Authorization.** The route is `csrfProtected` + `authenticated` + `sudo`; the scheduler has no
+   principal at all.
+5. **Error surface.** Typed errors to a handler, versus logged and discarded.
+
+**Applied** in `cmd/usarr/reconcile.go`'s header, ADR-0076 Decision 1 and `reference/sync.md` §4.
+
+### LS-394.15 🚩 The corrected restoration clause re-used the same nonexistent nouns — **applied**
+
+§6 corrected *"delete the user's tags, requests and playback state"* and then wrote *"comes back —
+with its tags, its requests and its playback state intact"*. **The rewrite fixed the deletion half and
+left the false vocabulary standing in the restoration half**, in `reference/sync.md` and in ADR-0076
+Decision 4 alike. Re-measured against the **built** schema at migration 13, `sqlite_master`
+enumerated: **no `request` table, no `playback_state` table, no `play_history` table; no table name
+contains the substring `play` or `state` at all.** Positive control: `tag_assignment` is found.
+**Applied** — both sites now name `tag_assignment`, `library_member` and `library_override`, which
+exist.
+
+### LS-394.16 🚩 ADR-0076's *"only sentence in the docs promising a far end"* was false INSIDE ITS OWN DECLARED SCOPE, and the widened absence instrument found a near miss — **applied, with dated riders at the landed sites**
+
+The scope was declared correctly — `seven day`/`7-day`/`7 day` over `docs/*.md` and
+`docs/reference/*.md` — and **the sweep over it was not performed correctly**. Re-run with
+`grep -rniE "seven[ -]day|7[ -]day" docs/*.md docs/reference/*.md`; positive control `tombstone`,
+found in both `DECISIONS.md` and `reference/sync.md`. ⚠️ **The control is recorded as FIRED and not as
+a hit count**, deliberately: a figure written here is read after both files have moved again, which is
+DEVELOPMENT.md §11 rule 8's drift and this entry's own §17. The sites in scope that assert or presuppose a
+far end are all in [ADR-0039](./DECISIONS.md#adr-0039)'s *Why — decision 3*: its conditional lead-in,
+its **struck ground 1** (*"the hard delete seven days later is local too."*), and its **live,
+unstruck, present-tense ground 2**.
+
+⚠️ **THE FIRST ABSENCE INSTRUMENT WAS TOO NARROW AND IS RECORDED SO NOBODY RE-RUNS ONLY IT.** It was
+age-keyed —
+`grep -rnE "deleted_at *<|deleted_at *>|orphaned_at *<|orphaned_at *>|missing_since *<"` over
+non-test tracked `.go`, **empty**, control `expires_at *<=` finding
+`internal/store/releases.go:178`'s `DELETE FROM release_candidate WHERE expires_at <= ?`. That
+supports **"nothing reaps on AGE"**, which is strictly narrower than **"nothing hard-deletes"** — and
+there **is** a non-age-keyed hard delete in the tree. Re-fired single-token and line-oriented:
+`grep -n "DELETE"` over every tracked `.go` and `.sql`, `_test.go` excluded.
+
+* **No `DELETE FROM work` exists in that corpus.** `work`'s only cascade parent in the built schema
+  (`internal/db/testdata/schema.sql`) is `work` itself via `parent_work_id`, so no `DELETE` the binary
+  does issue reaches a `work` row either.
+* **The near miss:** guard 1's hard delete, `internal/store/catalogue.go:1523` —
+  `DELETE FROM service_item_link WHERE service_instance_id = ? AND remote_kind = ? AND remote_id = ?`.
+  **Measured reach, not reasoned: `service_item_link` only**, cascading solely into
+  `service_item_alias` (`internal/db/testdata/schema.sql:684`). It never reaches `work`, and the
+  `sync_report` row it writes says so — *"the previous work keeps its own tombstone and its owned
+  corrections"*.
+* **Nothing else in the widened result hard-deletes.** The remaining non-test `DELETE` statements are
+  replace-set writes and scoped cleanups — `work_alt_title`, `library_member`, `search_fts`,
+  `search_trgm`, `search_doc`, `work_credit`, `media_file`, `indexer_catalog` — plus the
+  `release_candidate` reaper that is the control.
+
+⚠️ **ADR-0039's GROUND 2 HOLDS VACUOUSLY, WHICH IS NOT THE SAME AS BEING FALSE, AND THE DISTINCTION IS
+THE RULING.** *"A work reaches hard delete only because the \*Arr itself no longer has it"* is a
+conditional whose antecedent never occurs. It is true, it is not withdrawn, and **it supports
+nothing**. The general form, ruled by the PM and recorded here because it generalises past this ADR:
+**an equality that holds vacuously is not evidence; a ground that holds vacuously is not support.
+Count surviving grounds by the ones that can bear load, not by the ones that are true.**
+
+**Applied:** ADR-0076 Decision 4 is corrected in place (the draft is unlanded and uncirculated, so it
+gets a correction rather than apparatus), and **dated riders** are added at ADR-0039's three landed
+sites. ⚠️ **ADR-0039's Status line is deliberately untouched and no decision is superseded.**
+
+⚠️ **ROUTED AND UNANSWERED: whether decision 3 still stands on what is left.** Ground 1 is struck
+(2026-08-17), ground 2 now holds vacuously, and **ground 3 — a measurement about `write_queue` having
+no readers, not about deletions — is the only one left that can bear load.** ADR-0039's own lead-in
+still reads *"the decision stands on the two that survive"*, and that sentence is no longer true as a
+count of load-bearing grounds. **This is the coordinator's and the PM's call and is explicitly not
+this slice's.** ⚠️ **The routing note that reached this lane said the ADR now rests on *"ground 1"
+alone*; ground 1 is the STRUCK one, so the numbering needs settling before anyone acts on it** — the
+measurement above is what it is either way.
+
+### LS-394.17 🚩 This entry's own preamble was false and its headings counted their own contents — **applied**
+
+*"Every finding below is applied or rebutted in writing"* was false on the day it was written: §9 was
+already headed *"Named and not fixed"*, and three of its bullets are exactly that. And the entry
+counted itself in four places — the main heading's *"four reasons"*, §1's *"the four real barriers"*,
+§2's *"TWO sites"*, §3's *"Two of the three tests"*, §6's *"two tables"* — of which the first two were
+also **wrong** once §12's re-measurement landed. **Applied:** the preamble names all three
+dispositions, and the entry is count-free. Findings are numbered for citation; nothing states how many
+there are.
+
+### LS-394.18 Named and not fixed, second round
+
+* **The `StartImport` shutdown asymmetry** (§14 item 1). `StartImport`'s goroutine is never waited for
+  before `a.Close()`. **Pre-existing, registered, not repaired**, and named in ADR-0076 Decision 1 and
+  in `reconcile.go`'s header so it is not re-found from scratch. ⚠️ **TRIGGER that should close it:**
+  the next slice that touches `run()`'s shutdown ordering, or the first report of a database closed
+  under a hand-pressed import.
+* **ADR-0039's soundness on ground 3 alone** (§16). Routed, unanswered, and not this slice's.
+  ⚠️ **TRIGGER:** the PM's ruling. If decision 3 survives, a further dated rider saying so is the whole
+  remedy; if it does not, that is a correction motion with an ADR of its own.
+* ⚠️ **THE BRANCH'S HISTORY WAS REWRITTEN ONCE, ON PURPOSE, AND THAT INVALIDATES ANY SHA ANYBODY
+  QUOTED FROM IT** (§20). Nothing is owed here; it is recorded so a stale SHA reads as expected rather
+  than as a lost commit.
+* **§9's three items are unchanged**, except that `ROADMAP.md`'s Channel 4 check is now **fixed**
+  rather than named — see §19.
+
+### LS-394.19 🚩 `ROADMAP.md`'s Channel 4 *"done when"* check is a FALSE NEGATIVE by construction — **applied, under announce-first**
+
+§9 named this and left it alone as out of allocation. It is fixed here, on a settled ownership
+question: **`docs/DEVELOPMENT.md` carries no file-ownership map and names `ROADMAP.md` nowhere**; the
+only governing sentence is §11's *"Announce before pushing an edit to a shared document outside the
+area you lead… so the other side hears about it before building on text you are about to change."*
+The announce was made and relayed before this landed.
+
+The item was wrong in two places. Its **opening** said the scheduler has not landed — riddered, since
+that is landed text. Its **check** greps for *"any caller of `SweepDeletions` other than
+`FullImport`"* — and the scheduler that shipped calls `FullImport`, deliberately, because
+`SweepDeletions`' precondition is satisfiable only by a real upstream read. **So the grep stays empty
+while a scheduler exists.** Measured at both ends: at `f87aef44` and at this branch's tip, the only
+non-test call of `SweepDeletions` is `internal/libsync/importer.go`'s, inside `FullImport`. **The
+second half of the parenthetical — *"nothing hard-deletes a tombstone after seven days"* — is still
+TRUE** (§16) and is carried in the item's opening rather than in a check that cannot see it.
+
+**Struck with a dated note rather than deleted**, and replaced with a check that discriminates:
+`grep -n 'startReconciler(' cmd/usarr/main.go` must be NON-EMPTY. ⚠️ **The control was re-verified in
+the fix lane rather than carried on the verifier's word**: empty at `f87aef44`, and
+`204:	reconcilerDone := a.registry.startReconciler(reconcilerCtx)` at this tip. It asserts the loop is
+**wired**, not merely defined — which is §10's whole subject — and the stronger form of the same
+assertion is `TestTheReconcilerIsStartedFromRun`.
+
+### LS-394.20 The branch's commit messages were rewritten once, deliberately — **recorded, because it breaks SHA citations**
+
+Every commit on this branch carried a `Co-Authored-By` trailer naming a model. It was rewritten to the
+model-free `Co-Authored-By: Claude <noreply@anthropic.com>` — **an established form on this
+repository's history that carries no model name**, which is why it is the one used. ⚠️ **The routing
+note that reached this lane justified it as *"the majority form on main (15 of the last 30)"*; over
+the last 400 commits the model-bearing form leads 171 to 64, so the majority claim is false and is not
+the reason.** The `Claude-Session:` trailer carries no model name and is untouched.
+
+**Verified safe before the rewrite:** `git branch -r --contains HEAD` empty (unpushed and
+uncirculated), no active hook in `.git/hooks`, no `commit.template` configured. **The rewrite was
+message-only**, so every tree on the branch is byte-identical across it. ⚠️ **Its one cost is that
+SHAs quoted from this branch no longer resolve**, which is why this entry's own target is cited by
+tree — see the preamble. The false *"only sentence in the docs promising a far end"* claim (§16) was
+corrected in the rewritten message of the commit that made it, in the same motion.
