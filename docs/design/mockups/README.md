@@ -160,9 +160,9 @@ has to do any work:
   audiobooks matching dune` — and two groups get ten, which both of v0.1's groups are under at 4 and
   2. There is no `Show all` row anywhere on the v0.1 install.
 - **What moves the other way is hoisting.** The full stack's Ebooks group carries Instance as a
-  column, because the group holds two of them; v0.1's carries `all from Kavita · all matched by
-  title` in the group header instead, because it holds one. Same §17.4 rule, opposite outcome, and
-  the two installs are what make it visible.
+  column, because the group holds two of them; v0.1's carries `all in the Ebooks library · all
+  from Kavita · none with an identifier` in the group header instead, because it holds one. Same
+  §17.4 rule, opposite outcome, and the two installs are what make it visible.
 
 ### What each install is *for*
 

@@ -1244,17 +1244,18 @@
               <td data-col="most-recent" role="cell" aria-colindex="4"><span class="stacklabel" aria-hidden="true">Most recent</span><span class="cell-title">Dune</span><div class="cell-sub">7 Aug 2026 · sort title "Dune" instead of "Dune, 1965 ed."</div></td>
               <td data-col="action" role="cell" aria-colindex="5"><span class="stacklabel" aria-hidden="true">Action</span><button type="button" class="btn btn--sm">Undo</button></td>
             </tr>
-            <!-- The Re-linked row is the finding rather than a gap: every
-                 work in this library was matched by title, so a wrong match is
-                 the ordinary risk and undoing one is the ordinary remedy.
-                 ADR-0043 moves the minimal "fix this match" case earlier for
-                 exactly this reason, and ADR-0045 lands it in v0.2 -- so v0.1
-                 draws the badge without its remedy for one milestone. -->
+            <!-- The Re-linked row is the finding rather than a gap: the rows
+                 in this library arrived with no identifier, so their identity
+                 rests on weaker evidence, a wrong link is the ordinary risk,
+                 and undoing one is the ordinary remedy. ADR-0043 moves the
+                 minimal correction case earlier for exactly this reason, and
+                 ADR-0045 lands it in v0.2, so v0.1 draws the badge without its
+                 remedy for one milestone. -->
             <tr role="row" aria-rowindex="4">
               <td data-col="correction" role="cell" aria-colindex="1"><span class="stacklabel" aria-hidden="true">Correction</span><span class="chip">Re-linked</span></td>
               <td data-col="count" class="is-num" role="cell" aria-colindex="2"><span class="stacklabel" aria-hidden="true">Count</span>4</td>
               <td data-col="what-it-does" role="cell" aria-colindex="3"><span class="stacklabel" aria-hidden="true">What it does</span>Points a row at a different work when the match was wrong.</td>
-              <td data-col="most-recent" role="cell" aria-colindex="4"><span class="stacklabel" aria-hidden="true">Most recent</span><span class="cell-title">Dune Messiah</span><div class="cell-sub">6 Aug 2026 · matched by title to the 1969 novel, not the 2023 audio edition</div></td>
+              <td data-col="most-recent" role="cell" aria-colindex="4"><span class="stacklabel" aria-hidden="true">Most recent</span><span class="cell-title">Dune Messiah</span><div class="cell-sub">6 Aug 2026 · re-pointed at the 1969 novel, not the 2023 audio edition</div></td>
               <td data-col="action" role="cell" aria-colindex="5"><span class="stacklabel" aria-hidden="true">Action</span><button type="button" class="btn btn--sm">Undo</button></td>
             </tr>
           </tbody>

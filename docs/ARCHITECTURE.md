@@ -1112,8 +1112,9 @@ heading rather than the chip**, because `.st` never wraps (`design/mockups/usarr
 characters, and naming the source in the badge spends about ten of them restating the `Instance`
 column two cells to the right, which is the redundancy the hoisting rule in `search.html` exists to
 prevent. The sub-line is budgeted rather than free: it renders inside a table cell that wraps, and
-Search's tallest row sits 2px under the row-height ceiling `design/check.mjs` check 5 enforces, so a
-sub-line much past 95 characters costs a wrapped line and fails the check. Name the source, name why
+`design/check.mjs` check 5 holds every row inside a per-density height band, so a longer sub-line
+can cost a wrapped line and push a row past its ceiling. Search is the tightest screen. Do not guess
+the margin, measure it: run `make design` after changing one. Name the source, name why
 it supplied none, name what the absence costs, and stop.
 
 **A work with no resolvable identity is kept, marked, and stays searchable — and that is a v0.1

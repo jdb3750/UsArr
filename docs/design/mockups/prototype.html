@@ -2015,7 +2015,7 @@ select[multiple] { min-height: 88px; padding: var(--sp-2); }
        build_prototype.py  sha256:c9489e4fcf81c00a452623c6bb2cc27627c819b410f2cbacdc8edf738e081972
        fonts.css  sha256:0dc70891b71e54a747dbc1a3bebb08429fcebbfe5420836fe3e1617a834a5fc2
        index.html  sha256:9f88b6c4d8ea7eb8083beeb1d058980d316dc6fbbfdd0956e84aa87f4174766c
-       libraries.html  sha256:f9c6a8cb76a9b86e5795a22f29694c98aad63740333e80b59126fa0295d353fb
+       libraries.html  sha256:09262b5ea637f51ed53af48ba44ef7af79e0555795492a4229936d620e298a80
        requests.html  sha256:66fb630bda12191934ca07af673379cfc9b9fcd476562a36180e52865a9abf9b
        search.html  sha256:a1679e798dd0330467fba28348321fefeed297ac352c1b16a11ee7eb4d8572d3
        services.html  sha256:5690f1cb12739b7808de4f395ec1d38f466ad2f70cb203107bb7b7c11b5ef6bb
@@ -4612,17 +4612,18 @@ aniListId, malId and comicVineId are null on every series: those fields are a Ka
               <td data-col="most-recent" role="cell" aria-colindex="4"><span class="stacklabel" aria-hidden="true">Most recent</span><span class="cell-title">Dune</span><div class="cell-sub">7 Aug 2026 · sort title "Dune" instead of "Dune, 1965 ed."</div></td>
               <td data-col="action" role="cell" aria-colindex="5"><span class="stacklabel" aria-hidden="true">Action</span><button type="button" class="btn btn--sm">Undo</button></td>
             </tr>
-            <!-- The Re-linked row is the finding rather than a gap: every
-                 work in this library was matched by title, so a wrong match is
-                 the ordinary risk and undoing one is the ordinary remedy.
-                 ADR-0043 moves the minimal "fix this match" case earlier for
-                 exactly this reason, and ADR-0045 lands it in v0.2 -- so v0.1
-                 draws the badge without its remedy for one milestone. -->
+            <!-- The Re-linked row is the finding rather than a gap: the rows
+                 in this library arrived with no identifier, so their identity
+                 rests on weaker evidence, a wrong link is the ordinary risk,
+                 and undoing one is the ordinary remedy. ADR-0043 moves the
+                 minimal correction case earlier for exactly this reason, and
+                 ADR-0045 lands it in v0.2, so v0.1 draws the badge without its
+                 remedy for one milestone. -->
             <tr role="row" aria-rowindex="4">
               <td data-col="correction" role="cell" aria-colindex="1"><span class="stacklabel" aria-hidden="true">Correction</span><span class="chip">Re-linked</span></td>
               <td data-col="count" class="is-num" role="cell" aria-colindex="2"><span class="stacklabel" aria-hidden="true">Count</span>4</td>
               <td data-col="what-it-does" role="cell" aria-colindex="3"><span class="stacklabel" aria-hidden="true">What it does</span>Points a row at a different work when the match was wrong.</td>
-              <td data-col="most-recent" role="cell" aria-colindex="4"><span class="stacklabel" aria-hidden="true">Most recent</span><span class="cell-title">Dune Messiah</span><div class="cell-sub">6 Aug 2026 · matched by title to the 1969 novel, not the 2023 audio edition</div></td>
+              <td data-col="most-recent" role="cell" aria-colindex="4"><span class="stacklabel" aria-hidden="true">Most recent</span><span class="cell-title">Dune Messiah</span><div class="cell-sub">6 Aug 2026 · re-pointed at the 1969 novel, not the 2023 audio edition</div></td>
               <td data-col="action" role="cell" aria-colindex="5"><span class="stacklabel" aria-hidden="true">Action</span><button type="button" class="btn btn--sm">Undo</button></td>
             </tr>
           </tbody>
