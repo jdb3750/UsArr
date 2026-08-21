@@ -1743,13 +1743,17 @@
 		<div class="empty">
 			<h2 class="empty__title">No services configured</h2>
 			<!--
-				Prowlarr AND Kavita are named, and naming exactly those two is a
-				correctness call rather than brevity.
-				`internal/httpapi.serviceKinds` (internal/httpapi/services.go:50-53)
-				accepts exactly two kinds — `prowlarr` with role `indexer`, `kavita`
-				with role `library` — so a sentence offering Sonarr, Radarr or a
-				media server BY NAME here would send a brand-new user to a dialog
-				that refuses all three.
+				The services named here are named because the API accepts them, which
+				is a correctness call rather than brevity.
+				`internal/httpapi.serviceKinds` (internal/httpapi/services.go) is the
+				admissible set, and `prowlarr` is the only `indexer` in it — so a
+				sentence offering Sonarr, Radarr or an arbitrary media server BY NAME
+				here would send a brand-new user to a dialog that refuses all three.
+				⚠️ THIS PARAGRAPH USED TO FIX THE SET AT TWO, *"`prowlarr` with role
+				`indexer`, `kavita` with role `library`"*, with a line range attached.
+				ADR-0052 added `bookorbit` and the range had already moved. Read the
+				map; do not re-state its members or its size here, because this
+				comment has now been wrong about both.
 
 				⚠️ KAVITA WAS DELIBERATELY LEFT OUT OF THIS SENTENCE, AND THE
 				CONDITION FOR PUTTING IT IN WAS WRITTEN HERE RATHER THAN ON A
@@ -1789,11 +1793,11 @@
 				<a class="btn btn--primary" href={servicesPath}>Add a service</a>
 			</div>
 			<p class="note home-note">
-				This build connects two services. Prowlarr gives you free-text search across your indexers
-				and a grab that goes to Prowlarr's own download client. Kavita gives you a library: its
-				catalogue is imported once, when you connect it. Adding either takes four things: which
-				application it is, a name for it, its base URL and an API key. The connection is tested
-				before anything is saved, and a service that fails its test is never stored.
+				Prowlarr gives you free-text search across your indexers and a grab that goes to Prowlarr's
+				own download client. BookOrbit or Kavita gives you a library: its catalogue is imported
+				once, when you connect it. Adding any of them takes four things: which application it is, a
+				name for it, its base URL and an API key. The connection is tested before anything is saved,
+				and a service that fails its test is never stored.
 			</p>
 		</div>
 	</div>
@@ -1874,9 +1878,10 @@
 				so this is the configuration rather than a stage on the way to
 				another one."
 
-				`internal/httpapi.serviceKinds` (internal/httpapi/services.go:50-53)
-				accepts TWO kinds, and the second is `kavita` with role `library`. So
-				every clause above fails on the same fact: the build DOES accept a
+				`internal/httpapi.serviceKinds` (internal/httpapi/services.go) admits
+				more than the one indexer kind: it carries library-bearing kinds too,
+				`bookorbit` and `kavita`, both with role `library`. So every clause
+				above fails on the same fact: the build DOES accept a
 				media server, that media server IS library-bearing, Prowlarr is NOT
 				the only kind it can connect, and adding a Kavita leaves this mode
 				outright, because `homeMode` ($lib/home.ts) returns `search-and-grab`
@@ -1899,13 +1904,20 @@
 				copy below therefore says a first import and says it is not a running
 				sync, and it names no milestone and no date for the one that is not
 				built.
+
+				⚠️ AND THE COPY NAMED ONE SERVICE FOR A WHILE AFTER IT SHOULD HAVE
+				NAMED TWO — *"a library-bearing service: Kavita"* — which is the same
+				sentence `$lib/libraryscreen`'s search-and-grab empty state was
+				carrying, in a second file. Naming both is what `$lib/home`'s summary
+				rows already do ("BookOrbit or Kavita"): an install has whichever its
+				owner runs, and picking one is wrong for the other half of them.
 			-->
 			<p class="note home-note">
-				This build does connect a library-bearing service: Kavita, a media server UsArr replicates
-				from rather than commands. Add one on Services and UsArr imports its catalogue on that first
-				connect, which is what takes an install out of this mode. It is a first import and not a
-				running sync: nothing re-reads the catalogue on a schedule yet. Sonarr and Radarr are not
-				accepted, so they are not the way out today.
+				This build does connect library-bearing services: BookOrbit or Kavita, media servers UsArr
+				replicates from rather than commands. Add one on Services and UsArr imports its catalogue on
+				that first connect, which is what takes an install out of this mode. It is a first import
+				and not a running sync: nothing re-reads the catalogue on a schedule yet. Sonarr and Radarr
+				are not accepted, so they are not the way out today.
 			</p>
 		</div>
 	</div>
