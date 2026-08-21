@@ -859,6 +859,91 @@ func (g *registry) StartImport(instanceID int64) error {
 	return nil
 }
 
+// StartDeltaSync is the delta half of httpapi.CatalogueImports: channel 3b's
+// arrivals walk, started on demand and not waited for.
+//
+// # The pre-flight, which is the whole reason this is not three lines
+//
+// ⚠️ THE CAPABILITY QUESTION MUST BE ANSWERED HERE AND NOT IN THE WALK. The sync
+// core discovers "this source has no delta channel" at a DeltaSource type
+// assertion inside Importer.DeltaSync — i.e. after the goroutine has started,
+// which is after the handler has already written 202. An implementation that let
+// the walk find out would refuse into a log line nobody is reading, and the 409
+// this endpoint documents would be unreachable in principle. So the source is
+// constructed and asked the same question, synchronously, before anything is
+// launched.
+//
+// IT COSTS NO NETWORK I/O, and that is what keeps it off principle 1's forbidden
+// list rather than a promise that it is fast. entry() reads one SQLite row and
+// opens a stored credential; catalogueSource() is a struct literal per adapter;
+// the assertion is a type check. The egress client the entry holds RESOLVES AT
+// DIAL TIME, so building it dials nothing. This is exactly the work StartImport
+// already does synchronously on the same handler path.
+//
+// The assertion is written against the same interface, on the same value, that
+// the walk will assert on — catalogueSource is asked once here and once in
+// runDelta, so the two cannot answer differently for one instance. The guard on
+// that is delta_route_e2e_test.go's
+// TestADeltaSyncOfASourceWithNoDeltaChannelIsRefusedByItsOwnCode, which asks the
+// ENGINE and the ROUTE the same question about one instance and fails if they
+// disagree.
+//
+// # The guard is the import guard, not a second one
+//
+// A delta and a full import write the same catalogue rows through the same
+// batching loop, so they claim ONE guard (see DeltaSync above). A delta arriving
+// while an import runs is refused with the same sentinel a second import gets,
+// and the escalation runs on the LOCKED path so it cannot collide with the claim
+// this function already made.
+func (g *registry) StartDeltaSync(instanceID int64) error {
+	entry, err := g.entry(context.Background(), instanceID)
+	if err != nil {
+		return err
+	}
+	src, err := catalogueSource(entry, g.log)
+	if err != nil {
+		return fmt.Errorf("%w: %q has kind %q (ADR-0052, ADR-0041)",
+			httpapi.ErrNotCatalogueSource, entry.instance.Name, entry.instance.Kind)
+	}
+	if _, ok := src.(libsync.DeltaSource); !ok {
+		// BOTH SENTINELS ARE WRAPPED, on purpose. internal/httpapi declares the
+		// port's own and never imports internal/libsync (§2.3 rule 1), so the
+		// first %w is what the handler matches; the second keeps the sync core's
+		// name on the error for anything below this line that already speaks it,
+		// so the two cannot drift into meaning different things.
+		return fmt.Errorf("%w: %w: %q has kind %q",
+			httpapi.ErrNotDeltaSource, libsync.ErrNoDeltaChannel,
+			entry.instance.Name, entry.instance.Kind)
+	}
+	if g.importCtx == nil {
+		return errImportsNotArmed
+	}
+	if !g.beginImport(instanceID) {
+		return fmt.Errorf("%w for service instance %d", httpapi.ErrImportInProgress, instanceID)
+	}
+
+	// Not the caller's context, for StartImport's reason and more sharply: a
+	// delta that escalates runs a full import, and a request deadline measured in
+	// seconds would kill it halfway through.
+	ctx := g.importCtx
+	go func() {
+		defer g.endImport(instanceID)
+		rep, err := g.deltaSyncLocked(ctx, instanceID)
+		if err != nil {
+			g.log.Warn("the requested delta sync did not finish; the rows it wrote stand",
+				"instance_id", instanceID,
+				"escalated", rep.Escalated,
+				"items_read", rep.ItemsRead, "items_applied", rep.ItemsApplied, "err", err)
+			return
+		}
+		g.log.Info("the requested delta sync is complete",
+			"instance_id", instanceID,
+			"escalated", rep.Escalated,
+			"items_read", rep.ItemsRead, "items_applied", rep.ItemsApplied)
+	}()
+	return nil
+}
+
 // errImportsNotArmed is the honest answer from a build or a test that never
 // called enableBootstrapImport: there is no process-lifetime context to run an
 // import under, so saying "started" would be a lie.

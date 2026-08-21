@@ -275,6 +275,18 @@ func (s *Server) routes(mux *http.ServeMux) {
 	// 202 without waiting for the import (principle 1); see imports.go for what
 	// a caller may and may not conclude from that.
 	mux.Handle("POST /api/v1/services/{id}/sync", s.csrfProtected(s.authenticated(s.sudo(s.wrap(s.handleSyncService)))))
+	// Channel 3b's arrivals walk, on demand. Gated identically to the sync above
+	// it and to the five writes above that, and the argument transfers unchanged:
+	// a delta writes the same catalogue rows through the same pipeline as a full
+	// import, so a gate that was right for one cannot be optional for the other.
+	// It returns 202 without waiting, for the full sync's reason and one more — a
+	// delta can escalate to a full import, so its tail is a full import's tail;
+	// see imports.go for what a caller may and may not conclude.
+	//
+	// The literal /sync beats nothing here and needs to beat nothing: ServeMux
+	// matches path segments, so /sync and /sync/delta are separate patterns
+	// rather than one shadowing the other.
+	mux.Handle("POST /api/v1/services/{id}/sync/delta", s.csrfProtected(s.authenticated(s.sudo(s.wrap(s.handleDeltaSyncService)))))
 
 	// ── Library ─────────────────────────────────────────────────────────────
 	//

@@ -70,6 +70,25 @@ const (
 	// library to read — a Prowlarr is an indexer (ADR-0041). Distinct from
 	// import_in_progress because the fixes are opposite.
 	CodeNotCatalogueSource ErrorCode = "not_a_catalogue_source"
+	// CodeNotDeltaSource answers a DELTA sync aimed at a service that has a
+	// catalogue UsArr can read and no change feed to read it incrementally —
+	// today, a Kavita. Distinct from not_a_catalogue_source because the service
+	// is not the wrong kind: a full sync of it works, and that is the fix.
+	//
+	// ⚠️ THE SPELLING DIVERGES FROM internal/libsync's STORED CLASS ON PURPOSE,
+	// AND THE NEXT READER'S INSTINCT WILL BE TO "FIX" IT.
+	// internal/libsync/delta.go's errorClass writes the literal
+	// "no_delta_channel" into sync_report.detail for this same condition,
+	// against ErrNoDeltaChannel. That is the STORAGE
+	// vocabulary; this is the WIRE vocabulary, and DEVELOPMENT.md §11 ("a wire
+	// vocabulary and a storage vocabulary never share a term") is explicit that
+	// the repair for a collision is distinct spellings, never making the two
+	// values agree — because two vocabularies that match today are free to
+	// diverge tomorrow, and one shared identifier turns a change to a durable
+	// record into a change on the wire. So: distinct by construction, and
+	// spelled to match its sibling not_a_catalogue_source rather than to match
+	// the journal.
+	CodeNotDeltaSource ErrorCode = "not_a_delta_source"
 	// CodeServiceDisabled answers a request that NAMED a service the user has
 	// turned off. It is distinct from not_configured (nothing is set up) and
 	// from no_indexer_service (nothing enabled to fall back to): here the
@@ -137,6 +156,7 @@ var errorCodes = map[ErrorCode]struct{}{
 	CodeNotCached:                 {},
 	CodeNotCatalogueSource:        {},
 	CodeNotConfigured:             {},
+	CodeNotDeltaSource:            {},
 	CodeNotFound:                  {},
 	CodeSearchFailed:              {},
 	CodeServiceDisabled:           {},

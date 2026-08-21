@@ -151,8 +151,17 @@ type HealthProbes interface {
 	ProbeNow(instanceID int64)
 }
 
-// CatalogueImports re-runs the catalogue full import for one service instance —
-// the Services screen's "Run full sync now" (ARCHITECTURE.md §17.3).
+// CatalogueImports re-reads one service instance's catalogue on demand — the
+// Services screen's "Run full sync now" (ARCHITECTURE.md §17.3), and channel
+// 3b's arrivals walk beside it.
+//
+// TWO METHODS BECAUSE THERE ARE TWO READS, not two flavours of one. A full
+// import re-reads the whole library and can repair a row UsArr itself wrote
+// wrongly; an arrivals walk revisits only what arrived upstream and can never do
+// that (cmd/usarr/import.go's header states the asymmetry). A single method with
+// a mode flag would put the choice in a parameter and the refusals — which
+// differ, because a source can have a catalogue and no change feed — in one
+// error space.
 //
 // It is a THIRD port rather than a method on HealthProbes because it is a
 // different kind of thing: a probe is a read this package may take at will, and
@@ -169,6 +178,33 @@ type CatalogueImports interface {
 	// this returns — an implementation that decides "already running" inside
 	// its own goroutine cannot report it.
 	StartImport(instanceID int64) error
+
+	// StartDeltaSync begins channel 3b's arrivals walk and RETURNS WITHOUT
+	// WAITING FOR IT, for StartImport's reason and one more: a delta may
+	// ESCALATE to a full import when the instance is not in a state an arrivals
+	// filter is meaningful for, so its tail is a full import's tail. A handler
+	// that waited would have an unbounded one.
+	//
+	// EVERY REFUSAL BELOW IS SYNCHRONOUS, AND THAT IS THE WHOLE CONTRACT. The
+	// capability answer — does this source have a change feed at all — lives in
+	// the sync core, behind an interface assertion the walk performs after it
+	// starts. An implementation that let the walk discover it would have already
+	// answered 202, so the refusal could reach nobody. The implementation
+	// therefore constructs the source and asks the capability question BEFORE it
+	// launches anything, and the question is answerable without touching the
+	// network, so this stays off principle 1's forbidden list.
+	//
+	// Nil means a delta is now running. The sentinels are ErrNotDeltaSource,
+	// ErrNotCatalogueSource and ErrImportInProgress — the last one shared with
+	// StartImport, and shared deliberately: the two write the same catalogue
+	// rows through the same pipeline, so they claim ONE guard, and a delta is
+	// refused while a full import runs exactly as a second full import is.
+	//
+	// An escalation is NOT a sentinel and never reaches this signature. It is
+	// handled inside the run, on the goroutine, on the path that already holds
+	// the guard; a caller sees 202 and the escalated full import happens behind
+	// it.
+	StartDeltaSync(instanceID int64) error
 }
 
 // ErrImportInProgress means this instance already has an import running, so a
@@ -183,3 +219,22 @@ var ErrImportInProgress = errors.New("httpapi: a catalogue import is already run
 // is distinct from ErrImportInProgress because the fixes are opposite: wait, vs
 // stop asking this service for something it does not have.
 var ErrNotCatalogueSource = errors.New("httpapi: this service instance carries no catalogue")
+
+// ErrNotDeltaSource means the instance has a catalogue UsArr can read and no
+// CHANGE FEED to read it incrementally, so only a full sync is on offer.
+//
+// It is distinct from ErrNotCatalogueSource because the service is not the wrong
+// kind and the fix is not "press this somewhere else": a full sync of this very
+// row works, and that is what the caller should press. Kavita is the live
+// example — its own 3b would be a client-side stop over a sorted list, because
+// its filter vocabulary carries no timestamp member at all, so the adapter
+// declines to implement the delta half rather than implement a lie.
+//
+// ⚠️ THIS PACKAGE DECLARES ITS OWN SENTINEL RATHER THAN MATCHING THE SYNC
+// CORE'S. internal/libsync has ErrNoDeltaChannel for the same condition and
+// internal/httpapi does not import internal/libsync — §2.3 rule 1 keeps handlers
+// and the sync core apart, and internal/httpapi/fixture_shape_test.go already
+// records that separation as a property. cmd/usarr, which imports both, is where
+// the two are joined: its StartDeltaSync wraps BOTH sentinels, so a reader below
+// the port can still match libsync's and this package never has to name it.
+var ErrNotDeltaSource = errors.New("httpapi: this service instance has no delta channel; only a full sync is on offer")

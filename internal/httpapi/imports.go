@@ -142,6 +142,107 @@ func importStartError(err error) error {
 		withAction("Test connection").wrapping(err)
 }
 
+// POST /api/v1/services/{id}/sync/delta — channel 3b's arrivals walk, on demand.
+//
+// # Why it is a separate route and not a parameter on /sync
+//
+// The two reads answer different questions and refuse for different reasons. A
+// full import re-reads the whole library and is the only thing that can repair a
+// row UsArr itself wrote wrongly, a skip, or a deletion; a delta asks the source
+// for what has ARRIVED since a stored cursor and, by construction, revisits
+// nothing else. A source can have a catalogue and no change feed — Kavita is the
+// live one — so the delta has a refusal the full sync does not, and folding them
+// into one route with a mode flag would put that refusal into a status code that
+// also means four other things.
+//
+// # 202, for the full sync's reason and one more
+//
+// A delta may ESCALATE to a full import: an instance that has never completed
+// one, or a container bound since the last walk, has no state an arrivals filter
+// is meaningful against, and the honest answer is to read the library rather than
+// to refuse. So this endpoint's tail is a full import's tail — minutes — and a
+// synchronous handler would be principle 1's violation with the worst possible
+// distribution: fast almost always, unbounded exactly when something changed.
+//
+// ⚠️ THE ESCALATION IS NOT VISIBLE ON THIS RESPONSE, AND CANNOT BE. It is
+// decided inside the run, after the 202 is written. The walk's outcome — its
+// class, its window, whether it escalated — is recorded durably as a
+// `delta_walk` sync_report row by internal/libsync, so nothing is lost by the
+// response not carrying it; what a caller may conclude from a 202 is exactly
+// what §4.3 says for the full sync, and no more.
+//
+// EVERY NON-2XX HERE IS DECIDED BEFORE ANYTHING UPSTREAM IS TOUCHED, including
+// the one that is a fact about the SOURCE rather than about the row: the port's
+// implementation performs the capability check synchronously, before it launches
+// anything, precisely so this endpoint can refuse a Kavita instead of accepting a
+// walk that would refuse itself out of earshot.
+func (s *Server) handleDeltaSyncService(w http.ResponseWriter, r *http.Request) error {
+	a, _ := sessionFrom(r)
+	id, err := pathInt64(r, "id")
+	if err != nil {
+		return err
+	}
+	// Scoped, for handleSyncService's reason: "unknown instance" must mean
+	// unknown TO THIS USER (principle 4).
+	si, err := s.store.GetServiceInstance(r.Context(), storeScope(a), id)
+	if err != nil {
+		return notFoundOr(err, "service")
+	}
+	if !si.Enabled {
+		return errStatus(http.StatusConflict, CodeServiceDisabled,
+			"this service is turned off, so its catalogue is not being read").
+			withAction("Enable the service")
+	}
+	if serviceKinds[si.Kind] != roleLibrary {
+		return errStatus(http.StatusConflict, CodeNotCatalogueSource,
+			"this service is an indexer, not a catalogue source; there is no library here to sync").
+			withAction("Run a delta sync on a catalogue service")
+	}
+	if s.cfg.Imports == nil {
+		return errStatus(http.StatusNotImplemented, CodeNotConfigured,
+			"this build has no catalogue importer wired in")
+	}
+
+	if err := s.cfg.Imports.StartDeltaSync(si.ID); err != nil {
+		return deltaStartError(err)
+	}
+
+	s.audit(r, "service.sync.delta", "service_instance", si.ID, "started", "")
+	// The SAME body as the full sync's, field for field, because the four fields
+	// answer the same four questions and a caller that pressed one of two
+	// adjacent buttons should not have to parse two shapes. The status word is
+	// "started" here too, and the audit row above uses that same word so the
+	// journal and the wire agree on what happened.
+	writeJSON(w, http.StatusAccepted, importStartResponse{
+		Status:     "started",
+		InstanceID: si.ID,
+		Kind:       si.Kind,
+		Name:       si.Name,
+	})
+	return nil
+}
+
+// deltaStartError maps the delta port's sentinels onto the wire.
+//
+// IT IS A SEPARATE FUNCTION THAT DELEGATES RATHER THAN AN EXTRA CASE IN
+// importStartError, and the choice is deliberate. The delta shares four outcomes
+// with the full sync and adds exactly one; growing importStartError with the new
+// case would mean POST /sync could suddenly answer `not_a_delta_source` — a code
+// its documented error table (reference/http-api.md §4.4) does not carry and no
+// client of it branches on — the moment any future path returned that sentinel.
+// A wrapper adds the delta's own outcome and inherits the rest, so neither route
+// can emit the other's vocabulary by accident and the shared sentences stay
+// written once.
+func deltaStartError(err error) error {
+	if errors.Is(err, ErrNotDeltaSource) {
+		return errStatus(http.StatusConflict, CodeNotDeltaSource,
+			"UsArr can import this service's catalogue, but this service offers no "+
+				"change feed to read it incrementally").
+			withAction("Run a full sync instead").wrapping(err)
+	}
+	return importStartError(err)
+}
+
 // roleLibrary is the role a catalogue source takes in serviceKinds. Named so the
 // check above reads as a role check rather than as a string comparison that
 // happens to work.
