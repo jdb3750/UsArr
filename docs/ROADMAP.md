@@ -1250,15 +1250,29 @@ re-sectioned on the strength of this note**, and none of the three is thereby pl
       Until he answers, the two own-voice claims above are **restored rather than struck**, **with
       no repository falsifier** — which is exactly what the struck mark itself conceded when it
       said *"it is an install fact with no falsifier in this repository."*
-      ⚠️ **`internal/imagepipeline`'s PACKAGE DOC IS THE SITE OF RECORD AND CARRIES THE SAME
-      UNSOUND STEP, SO A COMPANION CORRECTION IS OWED THERE — AND IS NOT DONE.** The sentence
-      immediately above calls that doc the site of record, so correcting only this file leaves the
-      falsified claim standing where the next reader meets it. `internal/imagepipeline/pipeline.go`
-      **retired** the *"NEVER AGAINST A REAL COVER"* admission on this inference, states the step
+      ⚠️ **`internal/imagepipeline`'s PACKAGE DOC IS THE SITE OF RECORD AND CARRIED THE SAME
+      UNSOUND STEP, SO A COMPANION CORRECTION WAS OWED THERE.** The sentence immediately above
+      calls that doc the site of record, so correcting only this file would have left the falsified
+      claim standing where the next reader meets it. `internal/imagepipeline/pipeline.go`
+      **retired** the *"NEVER AGAINST A REAL COVER"* admission on this inference, stated the step
       verbatim — *"A grid rendering covers is not reachable with any of those links broken, which
-      is the entire strength of the evidence"* — and draws *"AND THAT CALLER HAS NOW RUN"* from it.
-      **This pass is docs-only and changed no Go file. This is a pointer to work that is OWED, not
-      a claim that it is done.**
+      is the entire strength of the evidence"* — and drew *"AND THAT CALLER HAS NOW RUN"* from it.
+      ✅ **DISCHARGED 2026-08-21 by the CONTENT commit `8ecb77e1efd5`** — *"docs: imagepipeline's
+      package doc restores the admission its own inference retired"* — a single-parent commit whose
+      diff touches `internal/imagepipeline/pipeline.go` and nothing else. **ALL THREE sites this
+      rider named are in that diff**, which is what makes the discharge checkable instead of taken
+      on trust: the retired admission (*"the admission is retired rather than hedged"*), the
+      evidence step (*"which is the entire strength of the evidence"*) and the caller paragraph
+      (*"AND THAT CALLER HAS NOW RUN"*) are each removed or rewritten there.
+      🚩 **STRUCK 2026-08-21, with the bar it set kept legible rather than deleted:** this read
+      *"~~SO A COMPANION CORRECTION IS OWED THERE — AND IS NOT DONE~~"* and closed *"~~This pass is
+      docs-only and changed no Go file. This is a pointer to work that is OWED, not a claim that it
+      is done.~~"* Both were true when written. The pointer's whole value was that it distinguished
+      **owed** from **done**, so it is struck in place with its discharge named beside it rather
+      than quietly removed.
+      ⚠️ **WHAT THAT FILE SAYS NOW IS NOT RESTATED HERE.** It is the site of record and the tree is
+      status authority, so it is read there and not off this line, which would go stale the next
+      time it moves — this box has already been rewritten twice for exactly that reason.
       ⚠️ **THE THREE GAPS ARE UNAFFECTED EITHER WAY**, and the struck paragraph scoped them
       correctly: coverage unmeasured, §4.4.1's cold start untouched, `coverGate` never known to be
       contended. **The box stays open on those alone**, and would have stayed open on them under
