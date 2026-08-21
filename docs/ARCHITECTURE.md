@@ -1098,8 +1098,8 @@ than being unable to fix it. Evidence: [`RESEARCH.md`](./RESEARCH.md) Track 06 �
 **The badge is named in the user's words, and it carries its reason wherever it appears.** It
 shipped as `no work identity` — `work` is a table in §6.1, so a user reading it on a book they own
 learns nothing and has no action attached — while the same chip in another state carried the useful
-sentence (*"Komga reports no external identifier of any kind, so this series carries no identifier
-and cannot be linked to the same series from another source"*). **The chip reads `no identifier`**,
+sentence (*"Komga reports no external identifier of any kind, so this series cannot be linked to the
+same series from another source"*). **The chip reads `no identifier`**,
 which names what UsArr does not hold rather than naming a table, and the sub-line travels with it
 everywhere the chip appears, not only where it was remembered. ⚠️ The chip read **`matched by
 title`** until 2026-08-21, and that was false at every level: v0.1 runs **tier 1 only**, as this
