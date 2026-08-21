@@ -370,6 +370,57 @@ export function posterUrl(item: RecentItem, width: ImageWidth = 'orig'): string 
 }
 
 /**
+ * THE WIDTH THE POSTER GRID ASKS FOR, out of `IMAGE_WIDTHS` and not out of
+ * arithmetic. A grid column is about 150 CSS px, which is 300 device px on the
+ * 2× displays this is mostly read on; `342` is the first allowlisted width that
+ * covers that without asking the server for a size it refuses.
+ */
+export const POSTER_GRID_WIDTH: ImageWidth = '342';
+
+/**
+ * ONE POSTER CARD, DECIDED HERE RATHER THAN IN THE TEMPLATE.
+ *
+ * `vitest.config.ts` is `environment: 'node'` with no Svelte plugin, so a rule
+ * written as an expression inside an `{#each}` is a rule nothing can test —
+ * which is why `$lib/home`, `$lib/search` and this module already hold their
+ * screens' decisions. The decisions here are which URL the tile draws and what
+ * the native tooltip says, and both can be got wrong silently.
+ */
+export interface PosterTile {
+	/** `work.id`, the each-block key. */
+	id: number;
+	/** The title verbatim. Empty is a real state and the caller draws it as one,
+	 * exactly as the table's Title cell does. */
+	title: string;
+	year?: number;
+	/**
+	 * `posterUrl` at `POSTER_GRID_WIDTH`, ABSENT where the work has no artwork.
+	 * `posterUrl` returns `undefined` on purpose so the absent case is the
+	 * caller's to draw, and it stays absent here rather than becoming an empty
+	 * string: `<img src="">` re-requests the current document.
+	 */
+	src?: string;
+	/**
+	 * The full title, for the native `title` attribute DESIGN-DIRECTION §9.2
+	 * puts on both the art and the title line — the card's title is one
+	 * ellipsised line, so the untruncated string has to be reachable somewhere.
+	 * Absent where there is no title, because `title=""` is a tooltip promising
+	 * nothing.
+	 */
+	tooltip?: string;
+}
+
+/** One card's worth of a recent item. */
+export function posterTile(item: RecentItem): PosterTile {
+	const tile: PosterTile = { id: item.id, title: item.title };
+	if (item.year !== undefined) tile.year = item.year;
+	const src = posterUrl(item, POSTER_GRID_WIDTH);
+	if (src !== undefined) tile.src = src;
+	if (item.title !== '') tile.tooltip = item.title;
+	return tile;
+}
+
+/**
  * One row, or `undefined` for a frame this screen cannot draw.
  *
  * The id is the only required field: it is the row key and the item route, and

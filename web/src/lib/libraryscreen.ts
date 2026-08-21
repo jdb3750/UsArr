@@ -35,13 +35,16 @@
  *
  * ⚠️ AND A FOURTH WRONG THING, SAME SHAPE AS THE THIRD — a reason asserted
  * about a file nobody opened. It read *"Covers are absent from every one of
- * these screens: no endpoint in the mux serves an image."* The FACT is true and
- * the REASON is not: `internal/httpapi/server.go` registers `GET /img/{key}`
+ * these screens: no endpoint in the mux serves an image."* The reason was false
+ * when it was written: `internal/httpapi/server.go` registers `GET /img/{key}`
  * behind the same session auth as the JSON API, and `$lib/library.posterUrl`
- * already builds that URL. What is missing is a CALLER — no template on any of
- * these screens draws one — which is a fact about `web/src`, not about the mux,
- * and it is the kind of fact a single commit can change. Read the templates
- * for it rather than this paragraph.
+ * has always built that URL. What was missing was a CALLER, which is a fact
+ * about `web/src` rather than about the mux — and one commit later it is a
+ * different fact again, which is why the corrected sentence is a pointer and
+ * not a second inventory: **read the templates.** As of this writing Home's
+ * Block C draws covers in its Posters view and nothing else in `web/src` calls
+ * `posterUrl` at all, so the all-types view and the six per-type grids are
+ * still text.
  *
  * WHY THE COPY LIVES HERE RATHER THAN IN THE TEMPLATE. `vitest.config.ts` is
  * `environment: 'node'` with no Svelte plugin, so a rule inside an `{#if}` in a

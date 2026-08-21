@@ -3298,8 +3298,14 @@ Concretely, this constrains implementation:
   with a size control for people who want otherwise.
 - **Every screen must be usable on a phone browser**, because that is where a request gets made from
   the sofa. Responsive layout, not a separate mobile design.
-- **No skeleton shimmer.** A skeleton is a `dominant_color` block with the title in it (§4.4.1) —
-  informative, not decorative.
+- **No skeleton shimmer.** A skeleton is a `dominant_color` block (§4.4.1) with the title **below
+  it, on the chrome's own ground, never over the art** (`design/DESIGN-DIRECTION.md` §9.2).
+  Informative, not decorative, and it never pulses. Putting the title below the tile **deletes**
+  §4.4.1's OKLCh contrast solver rather than moving it: that machinery constrained text against a
+  single averaged colour, and real cover art is not one colour — a white title over the light half
+  of a sleeve fails whatever the average says. It is also less code and less render cost on a grid,
+  and `dominant_color` has no writer today, so the solver would have been solving for a colour that
+  never arrives.
 
 ### 17.2 Navigation and Home
 
