@@ -941,7 +941,7 @@
             <!-- The second source, from a different service. This is what the
                  authority radio is for: two instances hold an edition of the
                  same book and their metadata disagrees, and one of them has to
-                 win. Kavita's half is where every "matched by title" row in
+                 win. Kavita's half is where every "no identifier" row in
                  this library comes from, which is the argument for leaving the
                  authority with Audiobookshelf rather than a preference. -->
             <tr role="row" aria-rowindex="3">
@@ -1044,7 +1044,7 @@
       <div class="detail">
         <div><h4>Membership</h4><ul><li>2,266 works</li><li>Recomputed <span class="num">13:40</span>, 28 minutes ago</li><li>Derived 2,265 · manual 1</li></ul></div>
         <div><h4>Source disagreement</h4><ul><li><span class="num">31</span> works held by both sources</li><li><span class="num">7</span> where the two report a different title or year, resolved in favour of Audiobookshelf</li></ul></div>
-        <div><h4>Identity matching</h4><ul><li><span class="num">1,703</span> matched on an external id, all of them Audiobookshelf's</li><li><span class="num">563</span> matched by title only: 139 files that carried no identifier, and every one of Kavita's 424, because a free Kavita returns null identifier fields</li></ul></div>
+        <div><h4>Identity matching</h4><ul><li><span class="num">1,703</span> matched on an external id, all of them Audiobookshelf's</li><li><span class="num">563</span> with no identifier: 139 files that supplied none, and every one of Kavita's 424, because a free Kavita returns null identifier fields</li></ul></div>
         <div><h4>Scope</h4><ul><li>In the URL as <span class="mono">?lib=ebooks</span></li><li>Visible to 1 user</li></ul></div>
       </div>
     </section>
@@ -1076,7 +1076,7 @@
            reading "the only source" rather than a choice. The full stack owns
            the two-source case now, because it is the install that has two
            services holding books.
-         · An identity panel where EVERYTHING is matched by title, because a
+         · An identity panel where NOTHING carries an identifier, because a
            free Kavita returns null aniListId, malId and comicVineId. ADR-0041
            made that v0.1's ordinary case rather than an edge state, and the
            correction surface has a Re-linked row for exactly that reason.

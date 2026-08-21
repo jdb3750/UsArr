@@ -177,10 +177,10 @@ cannot:
   truncate; an Audiobookshelf library split by edition format into two UsArr libraries; a library
   over two instances of one service with one of them degraded; a metadata-authority radio that is a
   real choice rather than a cell reading *"the only source"*; and a **mixed** identity panel — 1,703
-  works matched on an external id against 563 matched by title, in one library.
+  works matched on an external id against 563 with no identifier, in one library.
 - **Only the v0.1 install** can show a media type that exists with no catalogue source behind it,
   and it shows four at once with a service and a milestone against each; an identity panel where
-  **everything** is matched by title, 0 against 424, which §17.3 marks as v0.1's **ordinary**
+  **nothing** carries an identifier, 0 against 424, which §17.3 marks as v0.1's **ordinary**
   rendering rather than an edge state; a health table that is nothing but a media server and an
   indexer manager; a search whose groups both fit inside the cap; and a drilldown that stops at two
   levels, `Comics › Dune: House Atreides`, because a series and its issues is all the depth the
@@ -685,7 +685,7 @@ reachable from a states switcher:
 | State | Where | Why it is drawn |
 | --- | --- | --- |
 | A comics series with a **gap list**, not a fraction | Search, comics group | Issue totals are declarations, and the ComicInfo spec concedes "the `Count` could be different on each book in a series". `11 · #7 missing` is computed from numbers UsArr already holds and is always true. Home's type summary says `7,891 issues · 34 with gaps` for the same reason. |
-| A work with **no work-level identity** | Search, ebooks and comics groups | Kavita returns null identifier fields without Kavita+, so a series with no identifier is matched by title and says so; an ebook added from a file with no ISBN is in the same position. |
+| A work with **no work-level identity** | Search, ebooks and comics groups | Kavita returns null identifier fields without Kavita+, so a series carries no identifier and says so; an ebook added from a file that supplied none is in the same position. |
 | **All sources down, fully browsable** | Libraries, Movies row | Radarr is Movies' only source and its breaker is open. Every one of the 1,204 rows still renders, sorts and searches, because nothing on a render path talks to Radarr. §17.8 calls this the replica principle's demonstration; it had never been drawn. |
 | **Sources healthy, zero items** | Libraries, Manga row | Kavita answers and reports 0 series. §17.8 contrasts this explicitly with "not synced yet", and the copy says which one it is: the last page walk finished at 13:31 and returned nothing. |
 | **One source degraded** | Libraries, TV row | Two Sonarrs feed one library and the anime instance's clock is 212 seconds ahead, so delta polling can miss changes inside the skew window. One row, both instances. |

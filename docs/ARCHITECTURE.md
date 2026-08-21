@@ -1098,10 +1098,20 @@ than being unable to fix it. Evidence: [`RESEARCH.md`](./RESEARCH.md) Track 06 �
 **The badge is named in the user's words, and it carries its reason wherever it appears.** It
 shipped as `no work identity` — `work` is a table in §6.1, so a user reading it on a book they own
 learns nothing and has no action attached — while the same chip in another state carried the useful
-sentence (*"Komga reports no external identifier of any kind, so this series is matched by title"*).
-**The chip reads `matched by title`**, which is a phrase every \*Arr's manual-import screen has
-already taught this audience, and the sub-line travels with it everywhere the chip appears, not only
-where it was remembered.
+sentence (*"Komga reports no external identifier of any kind, so this series carries no identifier
+and cannot be linked to the same series from another source"*). **The chip reads `no identifier`**,
+which names what UsArr does not hold rather than naming a table, and the sub-line travels with it
+everywhere the chip appears, not only where it was remembered. ⚠️ The chip read **`matched by
+title`** until 2026-08-21, and that was false at every level: v0.1 runs **tier 1 only**, as this
+section's own opening says, and no code path binds a work by title. An identifier is written or it
+is not (`internal/libsync`), the not-identified state is derived from `EXISTS(external_id)`
+(`internal/store`), and the binding in its absence is a remote id on `service_item_link`, or
+nothing. **The badge is a bare noun phrase, and the source name rides the sub-line and the group
+heading rather than the chip**, because `.st` never wraps (`design/mockups/usarr.css`,
+`white-space: nowrap`), the observed label ceiling across the five authored screens is 23
+characters, and naming the source in the badge spends about ten of them restating the `Instance`
+column two cells to the right, which is the redundancy the hoisting rule in `search.html` exists to
+prevent.
 
 **A work with no resolvable identity is kept, marked, and stays searchable — and that is a v0.1
 rule, not a later one.** Whatever the backend reports, UsArr writes the row: a title, a file, and a
@@ -3424,7 +3434,7 @@ positions are the ones the rules have to survive:
 | **v0.1** | **§16 owns this list; read it there.** At the time of writing it is one catalogue source plus Prowlarr | The media types that one source covers are catalogued; the rest are present as media types with **no catalogue source**, each naming the service that will populate it (§17.2). Requests still covers all six over the Prowlarr free-text path. |
 
 Where a rule below reads differently on the two — Block A's sourceless rows (§17.2), the group set
-on Search (§17.4), `matched by title` (§17.3), a library's binding (§17.8) — the difference is marked
+on Search (§17.4), `no identifier` (§17.3), a library's binding (§17.8) — the difference is marked
 at the rule rather than left for the reader to infer. **The rules themselves do not fork.**
 
 ### 17.1 The UI philosophy, as a design constraint
@@ -3676,11 +3686,11 @@ explaining a decision to a human. The mechanism is real, correct and valuable; i
 second line and behind the expander, which already carries it precisely
 (`State OPEN · Next probe 14:19, in 4 minutes · Consecutive failures 7 · Backoff 4m00s`). So:
 **`paused — 7 failed attempts, retrying 14:19`** rather than `degraded / breaker open`; **`this may
-be a different Sonarr`** rather than `needs re-identification`; **`matched by title`** rather than
+be a different Sonarr`** rather than `needs re-identification`; **`no identifier`** rather than
 `no work identity` (§6.4), which reads to a normal person as "something is broken with my copy of
-this book" when it means "the source gave us no ISBN".
+this book" when it means the source supplied no identifier for it.
 
-⚠️ **`matched by title` is reachable in v0.1 and may be the ORDINARY rendering there, and the rule
+⚠️ **`no identifier` is reachable in v0.1 and may be the ORDINARY rendering there, and the rule
 is written now because it cannot be retrofitted.** This paragraph read `matched by title is not
 reachable in v0.1 … v0.1's only sources are Radarr and Sonarr, which carry TMDB and TVDB ids, so
 every v0.1 work resolves at the identifier tier`, and [ADR-0041](./DECISIONS.md#adr-0041) replaced

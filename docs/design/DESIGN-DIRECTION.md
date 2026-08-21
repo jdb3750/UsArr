@@ -3197,7 +3197,7 @@ widened, and nothing else. The `[review]` rules below are still human judgement 
   Measured: H2 → H4 on the Libraries detail screen, with `Identity` appearing as both.
 - `[review]` **No raw schema identifier in running copy**, outside an explicitly-labelled
   Diagnostics panel where identifiers are the content: `managed_by user` → "user-managed",
-  `sort_title` → "sort title", `no work identity` → "matched by title", `breaker open` → "paused:
+  `sort_title` → "sort title", `no work identity` → "no identifier", `breaker open` → "paused:
   7 failed attempts, retrying 14:19". The replacement obeys the Copy block below like any other UI
   string, so its beat is a colon; it carried an em dash until 2026-08-17, which is a seven-word
   violation this checklist was prescribing three bullets above the rule that bans it.

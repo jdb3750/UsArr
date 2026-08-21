@@ -90,7 +90,7 @@
      The two installs also demonstrate the OPPOSITE identity tiers, and that is
      the sharpest thing the switcher shows. The v0.1 install's one source as
      drawn is a free Kavita, which returns null aniListId, malId and
-     comicVineId, so "matched by title" is the ordinary case there rather than
+     comicVineId, so "no identifier" is the ordinary case there rather than
      an exception. That is MEASURED for free Kavita (ADR-0035 section 1) and
      it is why the null-identifier screens exist; it is NOT re-measured for
      BookOrbit, whose own tier ADR-0052 read off source as mixed -- ComicVine
