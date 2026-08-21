@@ -28,6 +28,25 @@
 > in **any** version from v1.0 to v1.7. So the underlying instruction is referenced here exactly as
 > the struck sentence referenced it, and no fresher claim about its wording is made.
 >
+> ⚠️ **THE OWNER WAS ASKED, AND REPLIED — RECORDED 2026-08-21 AS A REPLY RATHER THAN AS AN ANSWER,
+> WHICH IS THE WHOLE POINT OF THE ENTRY.** The question put to him was whether to scope the struck
+> sentence above, in this file. His words, in full, from the project chat at 2026-08-21 17:55:04Z
+> (`cmsg_01S5UQT5yPAMR4PFkxyLGSj9CkXqASMQtp6HxUjyJHqZrH`): *"okay i mean i think having dates
+> available is probably a fine thing for maybe future filtering or something. or sorting."*
+> ⚠️ **FILTERING AND SORTING ARE THINGS DONE TO DATA, NOT TO A DOCUMENT CONVENTION, SO THE REPLY AND
+> THE QUESTION MAY NOT SHARE A SUBJECT** — it reads equally as being about dates on library items in
+> the application, which this file does not govern. **The PAIRING is what is recorded; neither
+> reading is resolved and neither is treated as ratification.** He was offered a veto and did not
+> take it, which **means nobody objected when given the chance, and is worth exactly that.**
+>
+> ❗ **SO THE SCOPED RULE ABOVE RESTS ON THIS FILE'S OWN PRACTICE — dated riders throughout, never
+> once treated as a violation — AND NOT ON THIS REPLY.**
+>
+> ⚠️ **AND THE ORIGINAL INSTRUCTION'S PROVENANCE REMAINS UNRECORDED.** He neither confirmed nor
+> denied giving it, and was deliberately not pressed. The ruling's own *"about time estimates"*
+> ground was **withdrawn by its author the same day**, as a requote carrying no address — the same
+> defect one hop further up. **Nothing here upgrades what is known about what he said.**
+>
 > Where a line is inference rather than something read off §16, an ADR or the tree, it is marked 🔍.
 >
 > ~~⚠️ **DATED RIDER, 2026-08-21 — THE SENTENCE ABOVE IS FALSIFIED BY THIS FILE'S OWN PRACTICE, AND
