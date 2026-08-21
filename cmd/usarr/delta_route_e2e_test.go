@@ -216,11 +216,20 @@ func TestADeltaStartedFromTheWireThatEscalatesNeverPutsItsSentinelOnTheWire(t *t
 		}
 	}
 
-	// The escalation is not a refusal: the full import RAN, and the new library
-	// is in the catalogue.
-	waitFor(t, "the escalated full import to land the newly bound library", func() bool {
-		return countIn(t, env,
-			`SELECT COUNT(*) FROM library WHERE id <> 0 AND managed_by = 'auto'`) == 2
+	// The escalation is not a refusal: the full import RAN, and the newly bound
+	// library's BOOK is in the catalogue.
+	//
+	// ⚠️ THE SUBJECT IS THE `work` ROWS AND IT CANNOT BE THE `library` ROWS. This
+	// assertion counted auto libraries until 2026-08-21, and that count is
+	// satisfied by the delta itself: bindPhase runs INSIDE DeltaSync, ahead of
+	// deltaPreconditions, so the second library row exists before the escalation
+	// has even been decided — the test passed with the whole escalation branch in
+	// deltaSyncLocked deleted. `delta_walk`.`escalated_to_full_import` is no
+	// better: libsync writes it when it DECIDES to escalate, not when cmd/usarr
+	// carries the decision out. Only rows that exclusively a full import lands
+	// distinguish the two, and the newly bound library's book is one.
+	waitFor(t, "the escalated full import to land the newly bound library's book", func() bool {
+		return countIn(t, env, `SELECT COUNT(*) FROM work`) == 2
 	})
 }
 

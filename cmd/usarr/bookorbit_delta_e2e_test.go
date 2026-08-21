@@ -62,8 +62,15 @@ func TestADeltaThatEscalatesDoesNotDeadlockAgainstItsOwnImportGuard(t *testing.T
 	if !rep.Completed {
 		t.Errorf("the escalated full import did not complete: %+v", rep.Report)
 	}
-	if n := countIn(t, env, `SELECT COUNT(*) FROM library WHERE id <> 0 AND managed_by = 'auto'`); n != 2 {
-		t.Errorf("auto libraries = %d, want 2 — the escalation is what imports the new one", n)
+	// ⚠️ THE SUBJECT IS THE `work` ROWS AND IT CANNOT BE THE `library` ROWS. This
+	// counted auto libraries until 2026-08-21 under the comment "the escalation is
+	// what imports the new one", and that was false: bindPhase runs INSIDE
+	// DeltaSync, ahead of deltaPreconditions, so the second library row is written
+	// by the delta before the escalation is decided. The escalation is what
+	// imports the new library's CONTENTS, and those are what to count.
+	if n := countIn(t, env, `SELECT COUNT(*) FROM work`); n != 2 {
+		t.Errorf("works = %d, want 2 — the escalated full import is the only thing that "+
+			"reads the newly bound container, so its book is the escalation's own evidence", n)
 	}
 }
 
