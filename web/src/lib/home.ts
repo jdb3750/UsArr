@@ -58,10 +58,15 @@
  * `$lib/requests`' vocabulary, reused rather than restated.
  *
  * §17.2's hard rule is the one an implementer breaks first: a media type the
- * user does not have is not shown AT ALL, not in Block A, not in the sidebar,
- * not as a search group. ⚠️ IT WAS ONCE READ HERE AS AN ARGUMENT FOR DRAWING
- * NO ROWS, on the premise that *"with no catalogue there are no types the user
- * has"*, and that premise died twice over: a connected catalogue source writes
+ * user does not have is not shown AT ALL — in Block A or as a search group.
+ * ⚠️ THAT SENTENCE ONCE NAMED THE SIDEBAR AS A THIRD PLACE AND NO LONGER DOES.
+ * ADR-0053 struck the sidebar clause from §17.2 and DESIGN-DIRECTION §8.1: the
+ * axes table reads *"all six, always"* for navigation, and the rule's own
+ * sentence in §17.2 carries a 🚩 strike recording that its sidebar third *"was
+ * never buildable"*. The rule is unchanged for the two surfaces it still binds,
+ * and this module is one of them. ⚠️ IT WAS ONCE READ HERE AS AN ARGUMENT FOR
+ * DRAWING NO ROWS, on the premise that *"with no catalogue there are no types
+ * the user has"*, and that premise died twice over: a connected catalogue source writes
  * `book` and `comic` works, and the per-type read that would count them now
  * exists. **The rule is satisfied by the `unconfigured` STATE rather than by
  * omission** — §17.2 says so itself, and `design/DESIGN-DIRECTION.md` rule 13
@@ -156,10 +161,40 @@ import {
  *
  * The SHAPE of that import is what is still worth stating, because the dead
  * sentence undershot and a bare "the library sync is built" would overshoot by
- * as much: ON CONNECT, gated on `last_full_sync_at` being unset, so it runs at
- * most once per instance per database; NO timer and NO periodic re-sync; and the
- * manual `FullImport` has no HTTP route and no CLI flag in front of it, so
- * nothing a user can reach asks for a second import.
+ * as much: ON CONNECT, gated on `last_full_sync_at` being unset, so a first
+ * import runs once per instance per database.
+ *
+ * ⚠️ IT WENT ON TO SAY **"NO timer and NO periodic re-sync; and the manual
+ * `FullImport` has no HTTP route and no CLI flag in front of it, so nothing a
+ * user can reach asks for a second import"**, AND EVERY CLAUSE OF THAT IS NOW
+ * FALSE. ADR-0076 put a reconciliation sweep on a timer, and a full import has
+ * a route in front of it. What survives is the property those clauses were
+ * written to protect: a whole-library re-read still happens only by a trigger
+ * something asked for out loud. The triggers are neither counted nor copied
+ * here — `cmd/usarr/import.go`'s package doc owns that list, for the same
+ * reason the next paragraph gives about copying a list into a comment.
+ *
+ * WHAT THE SWEEP DOES, read off `cmd/usarr/reconcile.go` rather than
+ * summarised: it wakes on a short tick and re-reads any instance whose last
+ * completed full sync is older than the reconciliation interval. The tick is
+ * how often it ASKS; the interval is the period, and they are not the same
+ * number.
+ *
+ * AN INSTANCE THAT HAS NEVER COMPLETED A FULL SYNC IS DELIBERATELY NOT DUE, and
+ * the reason travels with the word, because a bare "deliberately" reads as an
+ * oversight someone will later tidy away. `last_full_sync_at` is written on
+ * SUCCESS ONLY, so unset means never-completed — and re-reading on unset would
+ * re-run a bootstrap the on-connect path already owns, would re-hammer a source
+ * whose bootstrap is already failing, and would leave an indexer permanently
+ * overdue, since an indexer never writes the column at all. An unreadable
+ * timestamp is not due either, erring on the same quiet side.
+ *
+ * ⚠️ `last_full_sync_at` IS THE RUN'S START, NOT ITS FINISH. `StampFullSync`
+ * stores the run's start instant and is called only after the run SUCCEEDS, so
+ * the column means "the replica is no older than this instant" — the lower
+ * bound a full import can honestly claim, since it re-reads every item between
+ * its start and its finish. Anything reasoning from this field, here or in
+ * `$lib/services`, is reasoning about a start.
  *
  * ⚠️ WHICH ADAPTERS ARE BEHIND IT IS NOT WRITTEN HERE, AND IT USED TO BE: this
  * read **"ONE adapter, Kavita and nothing else"** and ADR-0052 falsified it by
@@ -618,11 +653,20 @@ const COUNT = new Intl.NumberFormat('en-GB');
  * `unconfigured` in the sourceless-row sentence quoted above, `importing` in
  * the sentence about what `Synced` reads while an import runs.
  *
- * `Catalogued` is deliberately not `Up to date`. There is no periodic re-sync in
- * this build — `cmd/usarr/import.go` runs at most one import per instance per
- * database, on connect, with no timer behind it — so a freshness claim would be
- * one nothing measures. What the word asserts is exactly what was checked: an
- * import completed and these rows came out of it.
+ * `Catalogued` is deliberately not `Up to date`, and THE REASON CHANGED EVEN
+ * THOUGH THE WORD DID NOT. This read *"there is no periodic re-sync in this
+ * build … so a freshness claim would be one nothing measures"*, and ADR-0076
+ * falsified that premise: `cmd/usarr/reconcile.go` re-reads an instance whose
+ * last completed full sync is older than the reconciliation interval.
+ *
+ * THE CONCLUSION OUTLIVES THE PREMISE, which is why the word stands. A re-read
+ * cadence is per INSTANCE and this row is per MEDIA TYPE, aggregated over every
+ * instance that writes the type. An instance that has never completed a full
+ * sync is deliberately never due, so the sweep never re-reads it — see the
+ * `HomeMode` note above for why unset must read that way. And a failed run
+ * leaves `last_full_sync_at` unwritten. So there is still no instant this
+ * number can point at and call itself current. What the word asserts is exactly
+ * what was checked: an import completed and these rows came out of it.
  */
 export const SUMMARY_STATE = {
 	/** No connected service can write works of this type. */
@@ -787,8 +831,16 @@ export type HomeView = (typeof HOME_VIEWS)[number];
 
 /**
  * Table, because it is what Block C has always drawn and what §17.2 asks for
- * first: it sorts, it filters and it answers Ctrl+F, and a grid of art does
- * none of those.
+ * first. §17.2's argument for the shape is that a table *"sorts, it filters, it
+ * Ctrl+Fs (§4.5)"* where a grid of art does none of those.
+ *
+ * ⚠️ ONE THIRD OF THAT IS BUILT AND THIS ONCE CLAIMED ALL THREE. Ctrl+F works,
+ * because the rows are real text in the DOM and that is all it needs. SORTING
+ * AND FILTERING ARE NOT BUILT ON HOME: `List` takes `sortKey`, `sortDir` and
+ * `onsort`, and Home's Block C hands it none of them, so no header is sortable;
+ * there is no filter control on the block either. The argument for a table over
+ * a grid survives on Ctrl+F and on density alone, and the other two are the
+ * shape being ready for them rather than having them.
  */
 export const HOME_VIEW_DEFAULT: HomeView = 'table';
 

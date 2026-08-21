@@ -4,14 +4,23 @@
 > What runs today is Prowlarr Search-and-Grab: free-text indexer search, results streaming in per
 > indexer, and grab — served by a Go binary with an embedded SPA shell. There is no release and no
 > container image yet, so running it means building it (`make build`). A catalogue import exists as
-> of `c56c8e4`, and only the first-import channel: it fires once when you connect a catalogue
-> source, or on demand, and there is no periodic re-sync behind it. 🚩 **STRUCK 2026-08-20 by
+> of `c56c8e4`. 🚩 **STRUCK 2026-08-20 by
 > [ADR-0052](docs/DECISIONS.md#adr-0052):** this read *"for Kavita and for nothing else … it fires
 > once when you connect a Kavita"*, and both halves are false — `cmd/usarr/import.go` dispatches on
 > `entry.bookorbit` beside `entry.kavita`, and says so itself. **No fresher list replaces them**,
 > because which sources import is the same kind of question as which channels exist, and a list
 > here would go stale the same way. Both are questions for `internal/libsync` and
-> `cmd/usarr/import.go`, whose package docs answer them. The rest moves week to week, so what exists is
+> `cmd/usarr/import.go`, whose package docs answer them.
+> 🚩 **STRUCK 2026-08-21 by [ADR-0073](docs/DECISIONS.md#adr-0073) and
+> [ADR-0076](docs/DECISIONS.md#adr-0076) — A SEPARATE STRIKE FROM THE ONE ABOVE:** the sentence
+> also read *"and only the first-import channel: it fires once when you connect a catalogue source,
+> or on demand, and there is no periodic re-sync behind it"*. The channel clause and the cadence
+> clause are both false now — a delta channel has an HTTP route in front of it, and a
+> reconciliation sweep re-reads a catalogue on a timer. ⚠️ **The strike above covers the
+> WHICH-SOURCE clauses ONLY.** It is about which adapters import, it says nothing about how many
+> channels there are or how often anything re-reads, and it must not be read as having covered
+> this. No fresher list replaces these either, for the reason the strike above gives.
+> The rest moves week to week, so what exists is
 > whatever is in the tree (`web/src/routes`, `internal/`) rather than whatever this paragraph last
 > claimed. If you are here to install something finished, come back later.
 

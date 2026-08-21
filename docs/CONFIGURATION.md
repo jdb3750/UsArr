@@ -717,6 +717,16 @@ cp /config/kek.salt "/config/backups/usarr-$stamp.kek.salt"   # ← do not skip 
 # Also correct: stop UsArr, then copy the .db AND -wal AND -shm together.
 ```
 
+⚠️ **If that `sqlite3` answers `Error: stepping, database disk image is malformed (11)` and writes
+no file, your database is almost certainly FINE and your `sqlite3` is old.** Before migration
+`00013` the stored schema contained one trigger whose abort message was built with `||`, which
+`RAISE()` accepts only from SQLite **3.47.0** — so an older CLI rejects the schema at parse time and
+reports it as a corrupt disk image, which is the worst possible lie to tell at this moment.
+`PRAGMA integrity_check` fails the same way and is not a second opinion. **Update to a build that
+includes `00013`, then start UsArr once** so it applies its migrations — an older binary starts fine
+and applies nothing — or take the backup with a `sqlite3` ≥ 3.47.0; a database migrated past
+`00013` is readable by any `sqlite3` ≥ 3.43.0. [ADR-0075](./DECISIONS.md#adr-0075) has the detail.
+
 **Wrong:** `cp usarr.db backup.db` on a running instance. In WAL mode the newest committed
 transactions live in `usarr.db-wal`, so a bare copy of the main file is a torn, older database that
 may not even open.

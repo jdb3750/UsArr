@@ -9,13 +9,16 @@
 	 * `?lib=` on the routes that already exist, never a nav list.
 	 *
 	 * ⚠️ ALL SIX TYPES ARE SHOWN, INCLUDING THE ONES THIS INSTALL HAS NOTHING IN,
-	 * AND THAT IS A DELIBERATE DEPARTURE FROM §17.2'S DATA-DRIVEN RULE RATHER
-	 * THAN AN OVERSIGHT. §17.2 and DESIGN-DIRECTION §8.1 both want a type the
-	 * user does not have hidden entirely, and doing that honestly needs a per-type
-	 * COUNT BESIDE THESE CHIPS. `docs/reference/http-api.md` §7.1 states that
-	 * there are *"no facet counts beside the chips; each is its own aggregate and
-	 * its own read"*, and this header used to say the rows were absent because
-	 * nothing could drive them. Six one-row probes on every navigation is exactly
+	 * AND THAT IS WHAT §17.2 NOW ASKS FOR RATHER THAN A DEPARTURE FROM IT.
+	 * ADR-0053 amended §17.2 and DESIGN-DIRECTION §8.1 for their sidebar clause:
+	 * §17.2's axes table reads *"all six, always"* against the navigation cell,
+	 * and the hide-an-empty-type sentence carries a 🚩 strike recording that its
+	 * sidebar third *"was never buildable"*. The surviving rule is scoped to
+	 * Block A and to search groups, and it is untouched. Hiding a type here
+	 * would have needed a per-type COUNT BESIDE THESE CHIPS.
+	 * `docs/reference/http-api.md` §7.1 states that there are *"no facet counts
+	 * beside the chips; each is its own aggregate and its own read"*, and this
+	 * header used to say the rows were absent because nothing could drive them. Six one-row probes on every navigation is exactly
 	 * the render-path cost principle 1 exists to refuse, and hiding a type on a
 	 * count nobody measured would hide a library that is really there — the worse
 	 * of the two failures, because it is silent. So all six ship and an empty type

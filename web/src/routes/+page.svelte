@@ -219,6 +219,7 @@
 	import HaveCell from '$lib/HaveCell.svelte';
 	import Icon from '$lib/Icon.svelte';
 	import List from '$lib/List.svelte';
+	import PosterGrid from '$lib/PosterGrid.svelte';
 	import RecentGrabs from '$lib/RecentGrabs.svelte';
 	import { LOAD_MORE_PAGE_SIZE, NOTHING, type ListColumn } from '$lib/list';
 	import {
@@ -232,7 +233,6 @@
 		mediaTypeLabel,
 		nextRequest,
 		NO_MEDIA_TYPE_COUNTS,
-		posterTile,
 		type MediaTypeCounts,
 		type RecentFeed,
 		type RecentItem
@@ -993,21 +993,44 @@
 		§17.2 rejects dropping them explicitly: a Home showing
 		only the types one source covers leaves "the only available inference …
 		that UsArr does not do the others", which is the misreading principle 3
-		exists to prevent. DESIGN-DIRECTION rule 13 is why those rows are not the
-		empty section §17.1 bans — they carry a state, a cause and an action.
+		exists to prevent. DESIGN-DIRECTION rule 13 is why those rows are not an
+		empty section — they carry a state, a cause and an action, and rule 13's
+		bound is *no content*, not *no items*. ⚠️ THAT BAN WAS CITED HERE AS
+		§17.1's AND §17.1 DOES NOT CARRY IT: its bullets are no animation,
+		standard controls, density, the phone, and no skeleton shimmer. The rule
+		lives in `design/DESIGN-DIRECTION.md` §13 as rule 13, whose own source
+		column points back at §17.2. §17.2 in turn writes the attribution
+		*"(§17.1, and `design/DESIGN-DIRECTION.md` rule 13)"*, so the
+		mis-citation originates in the design document rather than here.
 
 		WHICH TYPES THOSE ARE IS `$lib/home`'s, READ OFF `internal/libsync` AND
 		NOT OFF A DOCUMENT, and it does not agree with every document. See
 		`librarySummary`, which names the disagreement and what was measured.
 
-		DRAWN ONLY IN `library` MODE, and that is principle 3 rather than an
-		omission — the same gate Block C and the search box take, for the same
-		reason. With no library-bearing service every one of the six rows would
-		say `no catalogue source connected`, and §17.2 rules on exactly that
-		shape: "Rendering six rows of which six are `no catalogue source` is not
-		§17.2's screen; it is a table with no data in it, and rule 13's own bound
-		— the ban is on a region that says NOTHING — does not rescue a block whose
-		every row says the same nothing." An `unconfigured` install goes to the
+		DRAWN ONLY IN `library` MODE. THE BEHAVIOUR STANDS; ITS STATED
+		JUSTIFICATION DOES NOT, AND A RE-DERIVATION IS OWED. This gate was
+		defended here by a sentence in quotation marks attributed to §17.2, ruling
+		that six rows all reading `no catalogue source` amount to an empty table
+		that DESIGN-DIRECTION rule 13 does not rescue. That sentence is nowhere in
+		§17.2 and nowhere else in this repo — it was quoted from no source, and it
+		is removed rather than reworded, because text that cannot be located does
+		not get quotation marks around it. It is not restated verbatim here
+		either: a fabrication reproduced in quotes is still a quotation with no
+		address, and the next reader grepping for it should find nothing.
+
+		WHAT REMOVING IT DOES NOT DO IS DECIDE THE QUESTION EITHER WAY. Void
+		reasoning does not falsify the conclusion it was offered for, so the gate
+		is left exactly as it is; nor does it establish it, so no replacement
+		justification is invented here. Whoever next touches this gate owes it a
+		derivation from §17.2 and principle 3 themselves — and owes it to Block C
+		and the search box in the same pass, which take this same gate and were
+		defended by this same removed sentence.
+
+		WHAT §17.2 DOES SAY IS ABOUT A DIFFERENT INSTALL, AND IT CUTS THE OTHER
+		WAY: the case it rules on is the one where SOME of the six are sourceless,
+		and it rejects dropping those rows in the words the paragraph above
+		quotes. The all-sourceless install — no library-bearing service at all —
+		is a case §17.2 does not reach. An `unconfigured` install goes to the
 		wizard and never to a home page at all (§17.7).
 
 		NOTHING IS DRAWN BEFORE THE READ LANDS. No skeleton, no shimmer, no zeroed
@@ -1514,7 +1537,9 @@
 				THE VIEW TOGGLE, AND IT IS `.segment` FROM app.css RATHER THAN A NEW
 				CONTROL. That class was ported from the mockups with its
 				`[aria-pressed='true']` state already styled and had no consumer; this
-				is the consumer. The markup is the mockup's own
+				was the first, and the two catalogue screens' toolbars are now the
+				second and third, drawing the same markup for the same choice. The
+				markup is the mockup's own
 				(docs/design/mockups/index.html): a `role="group"` wrapper with an
 				accessible name, and two real `<button type="button">`s.
 
@@ -1636,80 +1661,22 @@
 					per card after each image decodes, which is the render-path cost
 					Principle 1 rules out.
 
-					NO ANIMATION, NO TRANSITION, NO FADE-IN, and nothing here is
-					deferred to an intersection observer. §17.1 bans animation on any
-					list, grid or navigation transition, and an image that fades in is
-					the same effect spelt as a load handler.
+					⚠️ THE GRID AND THE CARD ARE `$lib/PosterGrid` NOW, AND THIS FILE NO
+					LONGER SPELLS EITHER. The CSS comment that used to sit beside the
+					route-scoped `.postergrid` named the condition for lifting it — a
+					second consumer — and the catalogue screens are the second and third.
+					Read that component for the card's rules.
+
+					⚠️ ONE THING ABOUT BLOCK C's OUTPUT DID CHANGE IN THAT MOVE, AND THIS
+					COMMENT USED TO DENY IT. `$lib/library.posterArtSrc` and its `onerror`
+					landed in the same commit, so a work whose `GET /img/{key}` answers
+					`404 not_cached` — which is ordinary, because the key is written by the
+					catalogue import and the bytes by a separate pass — now draws the same
+					empty tile as a work with no key at all, where before it drew the
+					browser's own broken-image glyph. Every other byte of the markup and
+					every CSS declaration moved unchanged.
 				-->
-				<div class="postergrid">
-					{#each recent.items as item (item.id)}
-						{@const tile = posterTile(item)}
-						<div class="postercard">
-							<!--
-								THE PLACEHOLDER IS A `dominant_color` FILL AND NEVER A GREY
-								BOX, NEVER A SHIMMER — §4.4.1 rule 3, and §17.1 and
-								DESIGN-DIRECTION §13 both ban the shimmer by name ("it never
-								pulses"). `aspect-ratio` on a `display: block` box reserves the
-								space before anything arrives, so a decoded image shifts
-								nothing.
-
-								⚠️ WHAT ACTUALLY RENDERS TODAY IS THE FALLBACK, AND THAT IS
-								WORTH SAYING RATHER THAN LEAVING TO BE DISCOVERED.
-								`image_asset.dominant_color` is declared in migration 00005
-								and HAS NO WRITER — `docs/ROADMAP.md` says so, and
-								`PutPosterAsset`'s INSERT names it nowhere — so `--dc` is set
-								by nothing and every empty tile draws `var(--bg-raised)`. The
-								`var(--dc, …)` is the seam the column will hang off when
-								something writes it; it is not a live feature. A fill sourced
-								from a column with no writer is a live-looking thing that
-								never fires, which is the defect class this repo already
-								names for guards that cannot trigger.
-							-->
-							{#if tile.src}
-								<!--
-									`alt=""` IS DELIBERATE AND IS NOT A GAP. The title is
-									rendered as text immediately below, in the same card, so a
-									descriptive alt would make a screen reader announce the same
-									work twice. The art is presentation here; the title is the
-									content.
-								-->
-								<img
-									class="postercard__art"
-									src={tile.src}
-									alt=""
-									title={tile.tooltip}
-									loading="lazy"
-									decoding="async"
-								/>
-							{:else}
-								<span class="postercard__art" title={tile.tooltip}></span>
-							{/if}
-							<!--
-								THE TITLE AND YEAR SIT BELOW THE TILE, ON THE CHROME'S OWN
-								GROUND, NEVER OVER THE ART (DESIGN-DIRECTION §9.2). Set over
-								the art they would need the OKLCh contrast solver §4.4.1
-								specified, and that solver cannot be made safe: it constrains
-								against a SINGLE AVERAGED colour, and real cover art is not one
-								colour. Below the tile these are ordinary tokens on a known
-								ground.
-
-								ONE LINE, ELLIPSISED, WITH THE FULL STRING IN `title` — on the
-								art and on the title line both. Card height became a function
-								of title length the moment the text moved out of the tile, and
-								a wrapped title stands a row of cards ragged. Measuring each
-								card to decide whether a tooltip is needed would be a layout
-								read per card on the render path, so the attribute is
-								unconditional wherever there is a title at all.
-							-->
-							<div class="postercard__title trunc" title={tile.tooltip}>
-								{#if tile.title}{tile.title}{:else}<span class="muted">{NOTHING.empty}</span>{/if}
-							</div>
-							{#if tile.year !== undefined}
-								<div class="postercard__year num">{tile.year}</div>
-							{/if}
-						</div>
-					{/each}
-				</div>
+				<PosterGrid items={recent.items} />
 
 				{#if recentMore}
 					<!--
@@ -2403,77 +2370,5 @@
 		margin: 0 var(--space-6) var(--space-7);
 		border: 0;
 		border-top: 1px solid var(--border);
-	}
-
-	/*
-	 * BLOCK C'S POSTERS VIEW.
-	 *
-	 * SCOPED TO THIS ROUTE RATHER THAN ADDED TO app.css, and that is a choice
-	 * about where a shared class earns its place: Home's Block C is the only
-	 * grid of art in the tree today, and `web/src/app.css` is a hand-port of
-	 * `docs/design/tokens.css` that `tokenparity.test.ts` holds to it. The
-	 * per-type grids under `routes/library/[type]` are the second consumer this
-	 * would need before it is a component, and lifting it then is cheap.
-	 *
-	 * `auto-fill` AND NOT `auto-fit`. `auto-fit` collapses the empty tracks and
-	 * stretches the last row's cards across the full width, so a page whose
-	 * final page holds two items draws two enormous posters. `auto-fill` keeps
-	 * the track width and leaves the row short, which is what a grid of fixed
-	 * artwork should do.
-	 */
-	.postergrid {
-		display: grid;
-		grid-template-columns: repeat(auto-fill, minmax(132px, 1fr));
-		gap: var(--space-6) var(--space-5);
-		align-items: start;
-		padding: 0 var(--row-pad-x) var(--space-5);
-	}
-
-	.postercard {
-		min-width: 0;
-	}
-
-	/*
-	 * ONE SHAPE FOR EVERY CARD IN THIS GRID (DESIGN-DIRECTION §9.7). 2:3 is the
-	 * portrait cover, and a 1:1 album sleeve is FITTED inside it rather than
-	 * cropped to it — `contain`, not `cover`, because cropping a square sleeve
-	 * to portrait cuts art off both ends.
-	 *
-	 * THE RATIO IS A LITERAL AND NOT A TOKEN, on purpose. There is no
-	 * aspect-ratio token in `docs/design/tokens.css`, app.css is a hand-port of
-	 * that file rather than a place to invent one, and a single-use value is not
-	 * what the token vocabulary is for. The mockups write the same literal.
-	 *
-	 * `display: block` IS LOAD-BEARING ON THE PLACEHOLDER, not tidiness: the
-	 * empty arm is a <span>, `aspect-ratio` does not apply to an inline box, and
-	 * the tile collapses to nothing without it.
-	 */
-	.postercard__art {
-		display: block;
-		width: 100%;
-		height: auto;
-		aspect-ratio: 2 / 3;
-		object-fit: contain;
-		background: var(--dc, var(--bg-raised));
-		border: 1px solid var(--border);
-	}
-
-	.postercard__title {
-		margin-top: var(--space-3);
-		font-size: var(--text-base);
-		line-height: var(--leading-base);
-		color: var(--fg);
-	}
-
-	/*
-	 * NO `opacity` ON EITHER LINE, and it is a rule rather than a preference
-	 * (§4.4.1): a composited opacity changes the effective contrast ratio by a
-	 * mechanism no contrast check can see, so the year takes a real colour
-	 * token.
-	 */
-	.postercard__year {
-		font-size: var(--text-sm);
-		line-height: var(--leading-sm);
-		color: var(--fg-muted);
 	}
 </style>

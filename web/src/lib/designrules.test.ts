@@ -406,8 +406,40 @@ function strip(text: string, kind: Kind): string {
  * the property this rule actually claims is EITHER of the two largest, and that
  * one breaks first — at `second − gap`, which is 20,232. Take 20,232 as the
  * number a change to `web/src` is spending, not 39,066.
+ *
+ * ⚠️ AND IT WAS SPENT THE SAME DAY. RE-DERIVED AGAIN 2026-08-21, hours after the
+ * derivation above, by the drill failing a second time — which is now twice this
+ * guard has caught its own floor going deaf, and the paragraph about `second −
+ * gap` earning its place immediately.
+ *
+ * WHAT SPENT IT, measured rather than inferred. The 20,232 was already gone
+ * before this change touched the tree: at the merge base `f87aef4` the corpus
+ * was 1,258,221 and `corpus − second` was 1,152,176, ABOVE the 1,150,000 floor —
+ * so the "either of the two largest" property was false by 2,176 characters and
+ * nothing said so, because the drill only ever fires on the LARGEST file. The
+ * covers branch then left `corpus − largest` at 1,149,478, inside the floor by
+ * 522 characters, and this pass's additions carried it over and turned the drill
+ * red.
+ *
+ *     corpus                                    1,277,844  over 47 files
+ *     largest   `routes/+page.svelte`             116,725
+ *     second    `app.css`                         106,045
+ *     third     `routes/requests/+page.svelte`     93,598
+ *     floor                                     1,190,000
+ *     gap     corpus − floor                        87,844
+ *     MARGIN  second − gap                          18,201
+ *
+ * 87,844 is under both of the two largest, so the claimed property holds again:
+ * losing either fails the floor. 87,844 is also the shrinkage this tolerates,
+ * which is the same order as the 85,042 the previous derivation accepted.
+ *
+ * ⚠️ THE DRILL BELOW STILL ONLY FIRES ON THE LARGEST FILE, so it cannot catch
+ * the state this tree was actually in — the one where the largest still trips
+ * and the second no longer does. That is the gap that let 2,176 characters of
+ * falsehood sit here unremarked, and it is left named rather than fixed because
+ * widening the drill is a change to a guard outside the diff that surfaced it.
  */
-const CORPUS_FLOOR = 1_150_000;
+const CORPUS_FLOOR = 1_190_000;
 
 /**
  * The least credible NUMBER of files, which is the char floor's blind spot:
@@ -1847,7 +1879,7 @@ describe('DESIGN-DIRECTION §13 — the static rules, over web/src', () => {
 			'removing the largest file must not trip the FILE floor'
 		).toBeGreaterThanOrEqual(FILE_FLOOR);
 		expect(corpusShortfall(lost), `losing ${largest.file} did not trip the floor`).toMatch(
-			/below the floor of 1150000/
+			/below the floor of 1190000/
 		);
 
 		/* And the negative half — the real corpus must NOT trip either floor, or the

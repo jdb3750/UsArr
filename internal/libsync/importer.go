@@ -460,7 +460,15 @@ func (im *Importer) FullImport(ctx context.Context, instanceID int64) (rep Repor
 	// ── CHANNEL 4'S DELETION PASS, and it is here rather than on a timer of its
 	// own for one reason: this is the only place in the tree that has just read
 	// an upstream's WHOLE list, which is SweepDeletions' uncheckable
-	// precondition. §7.4's every-6-h scheduler is not built and this is not it.
+	// precondition.
+	//
+	// ⚠️ THIS SENTENCE READ *"§7.4's every-6-h scheduler is not built and this
+	// is not it"*, AND HALF OF IT IS NOW FALSE (ADR-0076). The scheduler IS built
+	// — cmd/usarr's startReconciler — and this is still not it: what the scheduler
+	// does is call FullImport on a clock, so it reaches the sweep through this very
+	// line rather than around it. The reason stated above is exactly why it has to:
+	// a timer holds no list, and the precondition is satisfiable only by the read
+	// FullImport performs.
 	//
 	// AFTER the item stream, the two per-item passes and the rollup flush, so
 	// nothing downstream of it re-reads a row it tombstoned; and BEFORE

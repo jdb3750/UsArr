@@ -2,11 +2,20 @@
 	/**
 	 * LIBRARY — every media type at once, over `GET /api/v1/library`.
 	 *
-	 * WHAT THIS SCREEN IS. §17.2's catalogue with no type filter on it: ONE
-	 * unified table across all six media types, in one of the orders §7.6 serves,
-	 * inside §7.3's `?lib=` library scope, keyset-paged to the end of the
-	 * catalogue rather than to the first screenful. The six per-type screens are
-	 * the same read with `media_type` set; this is the one where it is omitted.
+	 * WHAT THIS SCREEN IS. The catalogue with no type filter on it: ONE unified
+	 * table across all six media types, in one of the orders §7.6 serves, inside
+	 * §7.3's `?lib=` library scope, keyset-paged to the end of the catalogue
+	 * rather than to the first screenful. The six per-type screens are the same
+	 * read with `media_type` set; this is the one where it is omitted.
+	 *
+	 * ⚠️ §17 NAMES NO `/library` ROUTE, AND THIS ONCE READ AS THOUGH §17.2
+	 * SPECIFIED THIS SCREEN. The SHAPE is §17.2's — one unified table across the
+	 * types rather than a region per type is exactly what it asks of Home's Block
+	 * C — but the all-types ROUTE is the tree's own, and the route table in
+	 * `routes/` is what establishes it. That is a gap in §17's coverage rather
+	 * than a verdict against the screen: it is built, it is linked from the
+	 * shell, and `librarygrid.test.ts` pins its entry. Do not cite §17.2 as
+	 * having required it, and do not read this note as saying it should go.
 	 *
 	 * ⚠️ IT USED TO READ `GET /api/v1/library/recent` AND NO LONGER DOES, AND THE
 	 * SWITCH IS THE POINT OF THIS FILE. That endpoint parses `limit` and `cursor`
@@ -60,17 +69,24 @@
 	 * `media_type`, `added_at` and `popularity` rather than with anything the
 	 * reader can see or click.
 	 *
-	 * COVERS ARE ABSENT FROM THIS SCREEN, AND ⚠️ THE REASON HAS CHANGED TWICE.
-	 * It used to say there was no image endpoint in `internal/httpapi/server.go`'s
-	 * route table; there is one — `GET /img/{key}` — and this response now
-	 * carries `poster_key`, which `$lib/library`'s `posterUrl` turns into a URL.
-	 * It then said nothing wrote `image_asset` yet, and that is false too:
-	 * `internal/store`'s `PutPosterAsset` writes it, called once per imported book
-	 * by `internal/libsync`'s phase D on a BookOrbit import. What is missing is
-	 * the poster VIEW — this screen draws rows and no artwork — and a key is
-	 * still absent for every other adapter, for anything imported before that
-	 * pass and for a cover that 404'd, so a grid drawn today would be part
-	 * artwork and part blank rather than empty.
+	 * COVERS. This screen draws them, in a posters view the toolbar toggles into
+	 * and out of, over the `poster_key` this response already carried.
+	 * `$lib/PosterGrid` is the grid and the card; `$lib/library`'s `posterUrl`
+	 * owns the URL and the `?w=` allowlist, and nothing here spells an `/img`
+	 * path.
+	 *
+	 * ⚠️ TABLE IS THE DEFAULT AND THAT IS A RULE, NOT A STARTING POSITION.
+	 * DESIGN-DIRECTION §5.4: rows and tables are the default container, a card is
+	 * the exception justified only when the item's primary content is cover art.
+	 *
+	 * ⚠️ AND THE GRID IS PART ARTWORK AND PART BLANK ON EVERY REAL INSTALL TODAY.
+	 * `internal/store`'s `PutPosterAsset` is called once per imported book by
+	 * `internal/libsync`'s phase D on a BookOrbit import and by nothing else, so a
+	 * key is absent for every other adapter, for anything imported before that
+	 * pass and for any cover that 404'd. `GET /img/{key}` is a cache read that
+	 * never fetches upstream, so a key whose bytes are not there answers
+	 * `404 not_cached`. Both absences draw the same empty tile — see
+	 * `$lib/library.posterArtSrc` for why they are one rendering and not two.
 	 *
 	 * A LOCAL SQLITE READ, so principle 1 holds all the way through: one statement
 	 * per page plus at most one small statement to resolve `?lib=` slugs, no *Arr,
@@ -121,6 +137,7 @@
 	import HaveCell from '$lib/HaveCell.svelte';
 	import Icon from '$lib/Icon.svelte';
 	import List from '$lib/List.svelte';
+	import PosterGrid from '$lib/PosterGrid.svelte';
 	import { homeMode, type HomeMode } from '$lib/home';
 	import { LOAD_MORE_PAGE_SIZE, NOTHING, type ListColumn } from '$lib/list';
 	import { cursorRejected, mediaTypeLabel, type RecentItem } from '$lib/library';
@@ -136,6 +153,8 @@
 		emptyBrowseFeed,
 		fetchBrowsePage,
 		libraryScopeLine,
+		libraryViewKey,
+		LIBRARY_VIEWS,
 		MAX_LIBRARY_SLUGS,
 		nextBrowsePage,
 		NO_LIBRARY_NAMES,
@@ -143,8 +162,10 @@
 		sameBrowseQuery,
 		type BrowseFeed,
 		type BrowseQuery,
-		type LibraryNames
+		type LibraryNames,
+		type LibraryView
 	} from '$lib/librarygrid';
+	import { createLibraryView } from '$lib/libraryview.svelte';
 	import {
 		SCOPE_SELECT_LABEL,
 		scopeSelectOptions,
@@ -246,6 +267,24 @@
 	let health = $state<ServicesHealth | undefined>(undefined);
 
 	let now = $state(new Date());
+
+	/**
+	 * WHICH OF THE TWO VIEWS IS DRAWN, remembered per browser under this screen's
+	 * own key. `libraryViewKey(undefined)` is the all-types member: this screen
+	 * has no media type, and it is a different screen from Home with a different
+	 * toolbar, so it does not share Home's key either.
+	 *
+	 * A GETTER RATHER THAN A CAPTURED STRING because that is the factory's
+	 * contract — the per-type screen's key moves under the component, and one
+	 * shape for both callers is one thing to get wrong instead of two.
+	 */
+	const view = createLibraryView(() => libraryViewKey(undefined));
+
+	/** The toggle's own handler, so both buttons take the same path and the write
+	 * cannot end up on one of them. */
+	function showView(value: LibraryView): void {
+		view.set(value);
+	}
 
 	const more = $derived(feed !== undefined && browseHasMore(feed));
 	const empty = $derived(query === undefined ? undefined : browseEmptyState(query, mode));
@@ -656,6 +695,41 @@
 				{/each}
 			</select>
 		{/if}
+
+		<!--
+			THE VIEW TOGGLE, AND IT IS `.segment` FROM app.css RATHER THAN A NEW
+			CONTROL. DESIGN-DIRECTION §9.1's last bullet puts it in the toolbar and
+			names the pair that ships — table and posters — with Sonarr and Radarr's
+			third mode, `overview`, explicitly not required first.
+
+			`aria-pressed` RATHER THAN `role="radio"` OR A `<select>`. Each button is
+			a toggle whose pressed state IS the answer, which is what `aria-pressed`
+			means; a radio group would need arrow-key roving over two options, and a
+			`<select>` for a binary choice hides one half of it behind a click. Native
+			buttons keep Tab, Space and Enter for free.
+
+			BESIDE THE OTHER TOOLBAR CONTROLS AND NOT PUSHED RIGHT. The scope line
+			below already takes the toolbar's one `toolbar__spacer`, and a second one
+			would split the free space between them and strand both in the middle.
+		-->
+		<div class="segment" role="group" aria-label="View mode">
+			<!--
+				⚠️ THE LOOP VARIABLE IS `choice` AND NOT `mode`, WHICH IS NOT A STYLE
+				PREFERENCE. This screen already holds `let mode = $state<HomeMode>` — the
+				connected/degraded state §17.7's banner reads — and an `{#each … as mode}`
+				here shadows it for the whole block. Nothing in that block wants the outer
+				one today, so the shadow compiled clean and read as correct; it is the
+				next edit inside these braces that would silently get the wrong value.
+			-->
+			{#each LIBRARY_VIEWS as choice (choice)}
+				<button
+					type="button"
+					aria-pressed={view.current === choice}
+					onclick={() => showView(choice)}>{choice}</button
+				>
+			{/each}
+		</div>
+
 		{#if sortNote}
 			<!--
 				⚠️ STATED, NOT OFFERED-THEN-REFUSED, AND IN UsArr's OWN WORDS. The
@@ -748,23 +822,75 @@
 				200" when the truth is "row 3 of 4,000", and it is what would put a "200
 				of 200" count under a button that has thousands of rows left to fetch.
 			-->
-			<List
-				label="Library"
-				columns={COLUMNS}
-				rows={feed.items}
-				key={(item: RecentItem) => String(item.id)}
-				total={more ? undefined : feed.items.length}
-				rowIntrinsic={ROW_INTRINSIC_LIBRARY}
-				stack="two-line"
-				state={feed.items.length === 0 ? 'empty' : 'default'}
-				emptyTitle={empty.title}
-				emptyText={empty.text}
-				emptyActions={servicesLink}
-				hasMore={more}
-				loadingMore={loading}
-				onloadmore={loadPage}
-				cell={libraryCell}
-			/>
+			{#if view.current === 'table'}
+				<List
+					label="Library"
+					columns={COLUMNS}
+					rows={feed.items}
+					key={(item: RecentItem) => String(item.id)}
+					total={more ? undefined : feed.items.length}
+					rowIntrinsic={ROW_INTRINSIC_LIBRARY}
+					stack="two-line"
+					state={feed.items.length === 0 ? 'empty' : 'default'}
+					emptyTitle={empty.title}
+					emptyText={empty.text}
+					emptyActions={servicesLink}
+					hasMore={more}
+					loadingMore={loading}
+					onloadmore={loadPage}
+					cell={libraryCell}
+				/>
+			{:else if feed.items.length === 0}
+				<!--
+					THE SAME WORDS AS THE TABLE'S EMPTY STATE, and it is the same
+					`browseEmptyState` answer both arms take. An install whose catalogue is
+					empty — or whose `?lib=` scope is — must not be told two different
+					stories depending on which view it happens to be in, and a grid with no
+					cards in it says nothing at all.
+				-->
+				<div class="empty">
+					<h2 class="empty__title">{empty.title}</h2>
+					<p class="empty__text">{empty.text}</p>
+					<div class="empty__actions">{@render servicesLink()}</div>
+				</div>
+			{:else}
+				<!--
+					ONE BOX SHAPE ACROSS EVERY MEDIA TYPE, WITH THE IMAGE FITTED INSIDE IT.
+					This is the all-types view, so DESIGN-DIRECTION §9.7's amendment applies
+					to it exactly as it applies to Home's Block C: 2:3 film posters and 1:1
+					album sleeves land on the same visual row, and per-card shapes would put
+					their title lines at four different heights across it.
+
+					THE SAME ROWS AS THE TABLE ARM, from the same feed and the same paging
+					position, so switching views neither re-reads the endpoint nor loses
+					where the reader had got to.
+				-->
+				<!--
+					AVAILABILITY ON THE CARD (DESIGN-DIRECTION §9.2), BECAUSE THE TABLE ARM
+					DRAWS A Have COLUMN AND THIS IS THE SAME SCREEN. Toggling to posters must
+					not silently drop a column the reader was looking at a moment ago. It is
+					the same `<HaveCell>` and the same `$lib/library.haveCell` rollup the
+					table uses, so the two arms cannot disagree about what is held.
+				-->
+				<PosterGrid items={feed.items} availability />
+
+				{#if more}
+					<!--
+						"Load more" over keyset pages, never infinite scroll (ADR-0029), and
+						the same control the table arm gets from `<List>`.
+					-->
+					<div class="list__more">
+						<button
+							type="button"
+							class="btn"
+							onclick={loadPage}
+							aria-disabled={loading ? 'true' : undefined}
+						>
+							{loading ? 'Loading' : 'Load more'}
+						</button>
+					</div>
+				{/if}
+			{/if}
 		{/if}
 	</section>
 {/if}

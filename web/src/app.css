@@ -1752,7 +1752,19 @@ select[multiple] {
 
 /* The settings anatomy's second-level nav. Services and Libraries are
  * top-level screens and are deliberately NOT in it (§17.3): two navigation
- * trees claiming one node is what shipped two aria-current elements at once. */
+ * trees claiming one node is what shipped two aria-current elements at once.
+ *
+ * ⚠️ NOTHING RENDERS EITHER SELECTOR, AND THE COMMENT ABOVE READS AS THOUGH
+ * SOMETHING DOES. No screen emits `class="settings"` or `class="subnav"` —
+ * `routes/settings` uses `.settings-form`, which is a different class and is
+ * matched by neither rule below. So this block styles a component that does not
+ * exist, and the §17.3 exclusion it records is a rule about a sub-nav nobody has
+ * built rather than a description of one that ships.
+ *
+ * KEPT RATHER THAN DELETED, because the exclusion is the load-bearing half: it
+ * is the reason the sub-nav has no Services entry, and it has to survive to the
+ * commit that builds one. Read this as a decision waiting for its component, and
+ * do not cite it as evidence the settings screen has a second-level nav. */
 .settings {
 	display: grid;
 	grid-template-columns: 168px minmax(0, 1fr);

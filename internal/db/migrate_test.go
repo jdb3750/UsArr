@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -60,7 +61,7 @@ func TestMigrationRoundTrip(t *testing.T) {
 // asserted rather than derived so that adding a migration is a deliberate edit
 // here too — a version the tests do not know about is a migration nobody
 // round-tripped.
-const latestSchemaVersion int64 = 12
+const latestSchemaVersion int64 = 13
 
 // Down is not a supported user path, but it must work, because it is the
 // cheapest way to test a migration locally. A Down that leaves objects behind
@@ -3761,4 +3762,361 @@ func indexColumns(t *testing.T, ctx context.Context, d *DB, index string) []stri
 		t.Fatal(err)
 	}
 	return cols
+}
+
+// unfiledDeleteError attempts the one delete `trg_library_unfiled_no_delete`
+// exists to refuse and returns the driver's error verbatim, failing the test if
+// the delete SUCCEEDS. It is the EFFECT probe, not a presence probe: a trigger
+// that has been dropped, renamed, or had its WHEN clause weakened all show up
+// here as a nil error, which asserting on `sqlite_master` cannot see.
+func unfiledDeleteError(t *testing.T, ctx context.Context, d *DB) string {
+	t.Helper()
+	err := d.Write(ctx, func(ctx context.Context, tx *sql.Tx) error {
+		_, err := tx.ExecContext(ctx, `DELETE FROM library WHERE id = 0`)
+		return err
+	})
+	if err == nil {
+		t.Fatal("DELETE FROM library WHERE id = 0 SUCCEEDED. The reserved row is unprotected.")
+	}
+	var n int
+	if qerr := d.Read().QueryRowContext(ctx,
+		`SELECT count(*) FROM library WHERE id = 0`).Scan(&n); qerr != nil {
+		t.Fatal(qerr)
+	}
+	if n != 1 {
+		t.Fatalf("the delete was refused but library 0 is gone anyway (count = %d)", n)
+	}
+	return err.Error()
+}
+
+// TestMigrate0013PreservesTheAbortMessageExactly is 0013's central claim made
+// executable: rewriting the RAISE message from four concatenated fragments to
+// one literal changed WHERE the concatenation happens and nothing else.
+//
+// The comparison is between two RUNS of the trigger, not between two strings in
+// two files. The message an operator sees is produced by executing the delete at
+// 13 and again at 12 — where 0013's Down has restored 00005's body — and the two
+// are required to be equal byte for byte. A rewrite that dropped a fragment, or
+// silently "tidied" the wording, is a diff here and nowhere else: the round-trip
+// snapshot would accept any message, and a `strings.Contains` check on one word
+// would accept three of the four fragments going missing.
+func TestMigrate0013PreservesTheAbortMessageExactly(t *testing.T) {
+	ctx := t.Context()
+	d := openTestDB(t)
+
+	at13 := unfiledDeleteError(t, ctx, d)
+
+	migrateDownTo(t, ctx, d, 12)
+	at12 := unfiledDeleteError(t, ctx, d)
+
+	if at13 != at12 {
+		t.Errorf("0013 changed the message the operator reads.\n at 13: %q\n at 12: %q", at13, at12)
+	}
+
+	// …and the 12 really is 00005's trigger, not a paraphrase of it. Without
+	// this the comparison above could be two copies of the SAME mistake.
+	var ddl string
+	if err := d.Read().QueryRowContext(ctx,
+		`SELECT sql FROM sqlite_master WHERE type = 'trigger'
+		   AND name = 'trg_library_unfiled_no_delete'`).Scan(&ddl); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(ddl, "||") {
+		t.Error("0013's Down did not restore 00005's expression-valued message, so the " +
+			"comparison above was not against the body 0013 replaced")
+	}
+}
+
+// TestMigrate0013TriggerStillRefusesAndStillPermits drills the rewritten trigger
+// in BOTH directions on a post-migration database.
+//
+// Direction 1 is the refusal, and it is asserted by ATTEMPTING THE DELETE — the
+// row must survive and the statement must abort. Direction 2 is the permission:
+// a delete the trigger must NOT refuse has to still succeed, because a trigger
+// that aborts every delete on `library` passes direction 1 perfectly and is a
+// worse bug than the one it was written for.
+func TestMigrate0013TriggerStillRefusesAndStillPermits(t *testing.T) {
+	ctx := t.Context()
+	d := openTestDB(t)
+
+	// Direction 1 — refused, row still present.
+	msg := unfiledDeleteError(t, ctx, d)
+	if !strings.Contains(msg, `library 0 ("Unfiled") is reserved`) {
+		t.Errorf("library 0 is protected by something other than its own message: %q", msg)
+	}
+
+	// Direction 2 — an ordinary library still deletes, and is really gone.
+	if err := d.Write(ctx, func(ctx context.Context, tx *sql.Tx) error {
+		_, err := tx.ExecContext(ctx, `
+			INSERT INTO library (id, user_id, name, slug, kind)
+			VALUES (7, 0, 'Films', 'films-0013', 'movie')`)
+		return err
+	}); err != nil {
+		t.Fatalf("fixture: %v", err)
+	}
+	if err := d.Write(ctx, func(ctx context.Context, tx *sql.Tx) error {
+		_, err := tx.ExecContext(ctx, `DELETE FROM library WHERE id = 7`)
+		return err
+	}); err != nil {
+		t.Fatalf("an ordinary library is no longer deletable after 0013: %v", err)
+	}
+	var n int
+	if err := d.Read().QueryRowContext(ctx,
+		`SELECT count(*) FROM library WHERE id = 7`).Scan(&n); err != nil {
+		t.Fatal(err)
+	}
+	if n != 0 {
+		t.Errorf("the ordinary delete reported success and left %d row(s) behind", n)
+	}
+}
+
+// oldSQLite3Env names a sqlite3 CLI binary OLDER than 3.47.0 to run 0013's
+// acceptance test against. It is opt-in because the agent container ships no
+// sqlite3 at all and fetching one is a network call, which docs/DEVELOPMENT.md
+// §8 keeps out of the default suite. Run it by hand:
+//
+//	USARR_OLD_SQLITE3=/path/to/sqlite3 go test ./internal/db -run TestOldSQLite -v
+const oldSQLite3Env = "USARR_OLD_SQLITE3"
+
+// migrateToOnDisk builds a database at `path`, brings it to `version`, and
+// CLOSES it, so the WAL is checkpointed and an external process reading the file
+// sees a complete database.
+func migrateToOnDisk(t *testing.T, ctx context.Context, path string, version int64) {
+	t.Helper()
+	d, err := Open(ctx, path)
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	if version != latestSchemaVersion {
+		migrateDownTo(t, ctx, d, version)
+	}
+	if err := d.Close(); err != nil {
+		t.Fatalf("Close: %v", err)
+	}
+}
+
+// TestOldSQLiteReadsThePersistedSchema is migration 0013's ACCEPTANCE TEST, and
+// the only one of 0013's tests that measures the thing 0013 was written for.
+//
+// Every other test here runs on this project's own engine, which is SQLite
+// 3.53.4 and accepts both spellings of the message — so all of them would stay
+// green if 0013 had never been written. The defect is only visible to a READER
+// older than 3.47.0, the release that first allowed an arbitrary expression as
+// RAISE()'s second argument. So the assertion is an actual old binary actually
+// preparing a statement against the actual persisted schema.
+//
+// ⚠️ THE CONTROL IS HALF THE TEST. A green run against the 13 schema proves
+// nothing on its own — it is equally consistent with the old binary never having
+// had a problem, with the statement not requiring a schema parse, and with the
+// binary silently being a new one. The same binary is therefore run against the
+// SAME database stepped back to 12, where 0013's Down has restored 00005's
+// expression-valued message, and is REQUIRED to fail. If both pass, the test
+// fails and says so.
+func TestOldSQLiteReadsThePersistedSchema(t *testing.T) {
+	bin := os.Getenv(oldSQLite3Env)
+	if bin == "" {
+		t.Skipf("set %s to a sqlite3 CLI older than 3.47.0 to run this", oldSQLite3Env)
+	}
+	ctx := t.Context()
+	dir := t.TempDir()
+
+	ver, err := exec.CommandContext(ctx, bin, "--version").CombinedOutput()
+	if err != nil {
+		t.Fatalf("%s --version: %v", bin, err)
+	}
+	t.Logf("reader under test: %s", strings.TrimSpace(string(ver)))
+
+	// A statement that cannot be answered without preparing against the whole
+	// stored schema. `library` is an ordinary table and the failure, when it
+	// comes, is not about it.
+	const probe = `SELECT count(*) FROM library;`
+
+	run := func(version int64) (string, error) {
+		path := filepath.Join(dir, fmt.Sprintf("usarr-v%d.db", version))
+		migrateToOnDisk(t, ctx, path, version)
+		out, err := exec.CommandContext(ctx, bin, path, probe).CombinedOutput()
+		return strings.TrimSpace(string(out)), err
+	}
+
+	at13, err13 := run(latestSchemaVersion)
+	at12, err12 := run(12)
+
+	if err13 != nil {
+		t.Errorf("the old reader still cannot read the schema 0013 produces, which is the "+
+			"whole point of 0013.\n  %v\n  output: %s", err13, at13)
+	} else {
+		t.Logf("at %d (post-0013): %q", latestSchemaVersion, at13)
+	}
+
+	switch {
+	case err12 == nil:
+		t.Errorf("THE CONTROL DID NOT FIRE. The same binary read the pre-0013 schema too "+
+			"(output %q), so this test's green above measures nothing about 0013 — it "+
+			"measures a reader that never had the defect.", at12)
+	case !strings.Contains(at12, "malformed database schema"):
+		t.Errorf("the control failed, but not with the failure 0013 addresses.\n  %v\n"+
+			"  output: %s", err12, at12)
+	default:
+		t.Logf("control at 12 (pre-0013) failed as required: %s", at12)
+	}
+}
+
+// raiseArgs returns the text of every RAISE(…) argument list in one trigger's
+// stored DDL, with single-quoted literals blanked out first.
+//
+// Blanking the literals is what makes the paren matching correct rather than
+// approximately correct: this schema's longest abort message contains
+// `("Unfiled")`, so a scanner that counted parens naively would find the closing
+// one inside the message and report an argument list that stops mid-string.
+// Line and block comments are tracked for the same reason in reverse — SQLite
+// stores comment text inside a schema object verbatim, so an apostrophe in one
+// would otherwise open a literal that never closes. Double-quoted identifiers
+// are tracked for that same reason and not for paren balance: an apostrophe
+// inside one would otherwise blank the rest of the object, which is a FALSE
+// NEGATIVE — the direction a guard must not fail in.
+func raiseArgs(ddl string) []string {
+	b := []byte(ddl)
+	const (
+		code = iota
+		str
+		ident
+		line
+		block
+	)
+	state := code
+	blank := make([]byte, len(b))
+	for i := 0; i < len(b); i++ {
+		c := b[i]
+		blank[i] = c
+		switch state {
+		case code:
+			switch {
+			case c == '\'':
+				state, blank[i] = str, ' '
+			case c == '"':
+				state, blank[i] = ident, ' '
+			case c == '-' && i+1 < len(b) && b[i+1] == '-':
+				state = line
+				blank[i] = ' '
+			case c == '/' && i+1 < len(b) && b[i+1] == '*':
+				state = block
+				blank[i] = ' '
+			}
+		case str:
+			blank[i] = ' '
+			if c == '\'' {
+				if i+1 < len(b) && b[i+1] == '\'' { // '' is an escaped quote
+					i++
+					blank[i] = ' '
+					continue
+				}
+				state = code
+			}
+		case ident:
+			blank[i] = ' '
+			if c == '"' {
+				if i+1 < len(b) && b[i+1] == '"' { // "" is an escaped quote
+					i++
+					blank[i] = ' '
+					continue
+				}
+				state = code
+			}
+		case line:
+			if c == '\n' {
+				state = code
+			} else {
+				blank[i] = ' '
+			}
+		case block:
+			blank[i] = ' '
+			if c == '*' && i+1 < len(b) && b[i+1] == '/' {
+				i++
+				blank[i] = ' '
+				state = code
+			}
+		}
+	}
+
+	var out []string
+	s := string(blank)
+	for i := 0; ; {
+		j := strings.Index(s[i:], "RAISE(")
+		if j < 0 {
+			return out
+		}
+		start := i + j + len("RAISE(")
+		depth, end := 1, -1
+		for k := start; k < len(s); k++ {
+			switch s[k] {
+			case '(':
+				depth++
+			case ')':
+				if depth--; depth == 0 {
+					end = k
+				}
+			}
+			if end >= 0 {
+				break
+			}
+		}
+		if end < 0 {
+			return append(out, s[start:]) // unbalanced: report it rather than skip it
+		}
+		out = append(out, s[start:end])
+		i = end
+	}
+}
+
+// TestPersistedSchemaRaisesOnlyLiterals is the general form of the defect
+// migration 0013 repaired, and it is here so that the repair survives the next
+// migration rather than the next grep.
+//
+// SQLite accepted an arbitrary expression as RAISE()'s second argument only from
+// 3.47.0 (2024-10-21, "Allow arbitrary expressions in the second argument to the
+// RAISE function"). This project's declared floor is 3.43.0 — schema.md §1 — and
+// a floor is a claim about READERS, so any object in the PERSISTED schema that
+// needs 3.47.0 to parse breaks every reader between the two, at PREPARE time,
+// with `malformed database schema`. See ADR-0075.
+//
+// ⚠️ Scope is the persisted schema and nothing else. A trigger a migration
+// creates and drops within its own transaction never reaches `sqlite_master`
+// and is therefore invisible here — correctly so: `trg_wq_rebuild_guard` in
+// 00005 carries a COUNT in its message deliberately and must not be "fixed".
+func TestPersistedSchemaRaisesOnlyLiterals(t *testing.T) {
+	ctx := t.Context()
+	d := openTestDB(t)
+
+	rows, err := d.Read().QueryContext(ctx,
+		`SELECT name, sql FROM sqlite_master WHERE type = 'trigger' AND sql IS NOT NULL`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = rows.Close() }()
+
+	checked := 0
+	for rows.Next() {
+		var name, ddl string
+		if err := rows.Scan(&name, &ddl); err != nil {
+			t.Fatal(err)
+		}
+		for _, arg := range raiseArgs(ddl) {
+			checked++
+			if strings.Contains(arg, "||") {
+				t.Errorf("trigger %s raises a CONCATENATED message: RAISE(%s).\n"+
+					"That needs SQLite >= 3.47.0 to PREPARE, this project's floor is 3.43.0, "+
+					"and the schema is stored as text — so every reader below 3.47.0 fails on "+
+					"EVERY statement with `malformed database schema`, not just on the delete "+
+					"this trigger guards. Concatenate the message at authoring time instead.",
+					name, arg)
+			}
+		}
+	}
+	if err := rows.Err(); err != nil {
+		t.Fatal(err)
+	}
+	if checked == 0 {
+		t.Fatal("no RAISE() found in any persisted trigger — this test asserted nothing. " +
+			"Either the scanner stopped working or the guards it protects are gone.")
+	}
 }

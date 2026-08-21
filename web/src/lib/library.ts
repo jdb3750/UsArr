@@ -18,12 +18,21 @@
  * for an upstream, and there is no upstream behind it to wait for.
  *
  * WHAT THIS ENDPOINT DOES NOT SERVE, so that nothing here codes against it:
- * Blocks A and B of §17.2, which server.go does not route, and no `?lib=`
- * library scope — but ⚠️ that last one is a property of
- * THIS endpoint and not of the server. `?lib=` is served by
- * `GET /api/v1/library` (`http-api.md` §7.3), which this module does not call;
- * a client wanting the §17.8 scope chip goes there, not here. `library.go`'s
- * header carries the same split at its own declaration.
+ * Blocks A and B of §17.2, and no `?lib=` library scope. ⚠️ THE TWO BLOCKS ARE
+ * NOT ALIKE, AND THIS ONCE SAID SERVER.GO ROUTED NEITHER. Block A is routed —
+ * `GET /api/v1/library/facets`, registered in `internal/httpapi/server.go`'s
+ * route table and handled by `handleLibraryFacets` — and THIS MODULE EXPORTS
+ * ITS URL, as `LIBRARY_FACETS_URL` below. What is true of Block A is only that
+ * the recent read does not serve it; it has a read of its own. Block B is the
+ * one with no route at all.
+ *
+ * ⚠️ THE `?lib=` SCOPE IS A PROPERTY OF THIS ENDPOINT AND NOT OF THE SERVER.
+ * It is served by `GET /api/v1/library` (`http-api.md` §7.3), which this module
+ * does not call; a client wanting the §17.2 scope chip goes there, not here (§17.8
+ * configures a library; the chip that SCOPES to one is §17.2's axes table,
+ * which files it under `scope` and specifies it as the multi-select above the
+ * nav).
+ * `library.go`'s header carries the same split at its own declaration.
  *
  * ⚠️ COVER ART USED TO BE ON THAT LIST AND IS NOT ANY MORE. This endpoint
  * serves `poster_key` — `image_asset.cache_key`, the key `GET /img/{key}`
@@ -418,6 +427,50 @@ export function posterTile(item: RecentItem): PosterTile {
 	if (src !== undefined) tile.src = src;
 	if (item.title !== '') tile.tooltip = item.title;
 	return tile;
+}
+
+/**
+ * THE URL A CARD SHOULD ACTUALLY PUT IN ITS `<img>`, OR `undefined` FOR THE
+ * EMPTY TILE.
+ *
+ * ⚠️ A KEY IS NOT A PROMISE THAT BYTES EXIST, AND THAT IS THE DEFECT THIS
+ * ANSWERS. `GET /img/{key}` is a cache read and never fetches upstream, so a
+ * work whose poster has not been rendered yet answers `404 not_cached` — an
+ * ordinary state, because the key is written by the catalogue import and the
+ * bytes by a separate pass. An `<img>` with no error handling then draws the
+ * browser's own broken-image glyph. On Home that is a handful of tiles; on a
+ * screenful of covers it is the whole screen reading as broken.
+ *
+ * SO A FAILED LOAD COLLAPSES INTO THE ABSENT-KEY CASE, which already has a
+ * rendering: the bordered tile filled from `--dc`. The two are different facts
+ * about the pipeline and the same fact on screen — there is no art — and giving
+ * them two renderings would put two spellings of "no cover" on one row.
+ *
+ * THE RECORD IS THE CALLER'S, held for the page view. This function is the rule
+ * and holds nothing, so `vitest.config.ts`'s node environment can call it: the
+ * failure is discovered in an `onerror` a component owns, and a rule left in
+ * that handler is a rule nothing can test.
+ *
+ * ⚠️ A KEYED RECORD AND NOT A `SvelteSet`, AND THE REASON IS THE RENDER PATH
+ * RATHER THAN TASTE. In `svelte@5.56.9`'s `src/reactivity/set.js`, `has()` on a
+ * MISS subscribes the reader to the SET-WIDE `#version` signal — the source says
+ * so in as many words: *"If the value doesn't exist, track the version in case
+ * it's added later but don't create sources willy-nilly to track all possible
+ * values"* — and `add()` calls `increment(this.#version)`. Every card whose
+ * cover is fine is a miss, so one broken cover invalidates all of them and
+ * re-runs the tile build for the whole grid: O(K·N) over K failures and N cards,
+ * on a page "Load more" grows without bound. A `$state`-proxied record has
+ * per-key granularity instead — `src/internal/client/proxy.js`'s `get` trap
+ * creates a source for an ABSENT property too (`if (s === undefined && (!exists
+ * || …))`, seeded `UNINITIALIZED` and returned as `undefined`), and the
+ * `version` a new key increments is read only by `ownKeys`, which a card that
+ * reads one id never touches.
+ */
+export function posterArtSrc(
+	tile: PosterTile,
+	failed: Readonly<Record<number, true | undefined>>
+): string | undefined {
+	return tile.src !== undefined && failed[tile.id] === undefined ? tile.src : undefined;
 }
 
 /**

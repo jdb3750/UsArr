@@ -101,7 +101,12 @@
 //
 //   - The write queue. §7.6's verbs have no target in v0.1.
 //
-//   - Any timer. FullImport is called on connect or on demand, by cmd/usarr.
+//   - Any timer. ⚠️ THIS ENTRY READ *"FullImport is called on connect or on
+//     demand, by cmd/usarr"* AND THE LIST OF CALLERS HAS GROWN (ADR-0076):
+//     cmd/usarr now also calls it on a SIX-HOURLY CLOCK, which is §7.4's
+//     schedule. The bullet itself still holds and is the reason it is worth
+//     keeping — the timer is in cmd/usarr, not here, and nothing in this package
+//     knows what hour it is.
 //
 // # Two-phase, and which phase this is
 //

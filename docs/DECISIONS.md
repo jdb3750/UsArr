@@ -101,7 +101,7 @@ because no ADR ever decided it. Annotating leaves that failure mode nowhere to h
 | [0036](#adr-0036) | No catalogue source ships in v0.1; they arrive one at a time after it | **Accepted** — owner-decided 2026-08-16; **amends** §16; **re-sequences [ADR-0032](#adr-0032) and [ADR-0035](#adr-0035)** without rejecting any source; ⚠️ **amended 2026-08-17 by [ADR-0042](#adr-0042)** — its libraries bullet justified the subsystem partly on *"the request destination v0.1's write path routes on"*, and **that write path re-sequences out of v0.1**; the subsystem stays on its other grounds; ⚠️ **amended 2026-08-17 by [ADR-0041](#adr-0041)** — the owner runs neither Sonarr nor Radarr, so this ADR's *"prove the replica thesis on real data"* criterion was unmeetable as scoped: **Kavita ships in v0.1 as the sync core's first adapter** and the \*Arr adapters re-sequence behind it. The rule — one source, proven on real data, before a second adapter — is kept unchanged |
 | [0037](#adr-0037) | TOFU SPKI pin enrolment is removed, not completed; enforcement stays | **Accepted** — 2026-08-16; amends no ADR; reopening conditions stated (a pin field on the update path + the change-acceptance UI) |
 | [0038](#adr-0038) | A list freezes its order while a user is aiming at it | **Accepted** — 2026-08-16; amends no ADR; the argument lives in `design/DESIGN-DIRECTION.md` §9.1a and ARCHITECTURE §17.5, this record holds the rejected alternatives |
-| [0039](#adr-0039) | `write_queue.state` loses its `CHECK`; `work_id` gets its foreign key back | **Accepted** — 2026-08-17; **supersedes** `reference/schema.md` §10 step 1 and the seam in `FUTURE.md` §11 / §11.1; closes `REVIEW-LOG.md` WQ-05; ⚠️ **amended 2026-08-17** — decision 3's ground 1 is **struck**, on a misquotation of `reference/sync.md` §4 that dropped the words *toward the \*Arr*: the decision stands on grounds 2 and 3, which are independent of it; ⚠️ **corrected 2026-08-17** — decision 1 and the first rejected alternative wrote the Go `state` validation as **done**; it is **owed by the first `write_queue` writer** and nothing validates the vocabulary today (`REVIEW-LOG.md` M5-25); ⚠️ **amended 2026-08-19** — the *declaring* half is **discharged in code**: `007e58e` landed `internal/store/writequeue.go`, whose `ValidWriteQueueState` is the vocabulary's **single Go home**, and the tree's only `write_queue` writer — the **bench-tagged** fixture `internal/db/spike/fixture.go`, behind `//go:build bench` — routes through it; **but there is still NO PRODUCTION WRITER**, so at runtime nothing validates anything because nothing writes anything, and *"nothing validates the vocabulary today"* is false about the declaration and still true about the runtime; **the claim worth recording is stronger than either** — an AST guard (`TestWriteQueueWritesValidateTheStateVocabulary`) fails `make check` if anything writes `write_queue` while nothing references the validator, so **the first production writer cannot be written without validating**, and the guard **fired unplanted** against the bench writer the moment it landed |
+| [0039](#adr-0039) | `write_queue.state` loses its `CHECK`; `work_id` gets its foreign key back | **Accepted** — 2026-08-17; **supersedes** `reference/schema.md` §10 step 1 and the seam in `FUTURE.md` §11 / §11.1; closes `REVIEW-LOG.md` WQ-05; ⚠️ **amended 2026-08-17** — decision 3's ground 1 is **struck**, on a misquotation of `reference/sync.md` §4 that dropped the words *toward the \*Arr*: the decision stands on grounds 2 and 3, which are independent of it; ⚠️ **corrected 2026-08-17** — decision 1 and the first rejected alternative wrote the Go `state` validation as **done**; it is **owed by the first `write_queue` writer** and nothing validates the vocabulary today (`REVIEW-LOG.md` M5-25); ⚠️ **amended 2026-08-19** — the *declaring* half is **discharged in code**: `007e58e` landed `internal/store/writequeue.go`, whose `ValidWriteQueueState` is the vocabulary's **single Go home**, and the tree's only `write_queue` writer — the **bench-tagged** fixture `internal/db/spike/fixture.go`, behind `//go:build bench` — routes through it; **but there is still NO PRODUCTION WRITER**, so at runtime nothing validates anything because nothing writes anything, and *"nothing validates the vocabulary today"* is false about the declaration and still true about the runtime; **the claim worth recording is stronger than either** — an AST guard (`TestWriteQueueWritesValidateTheStateVocabulary`) fails `make check` if anything writes `write_queue` while nothing references the validator, so **the first production writer cannot be written without validating**, and the guard **fired unplanted** against the bench writer the moment it landed; ⚠️ **riddered 2026-08-21** — *"the decision stands on **grounds 2 and 3**"* presupposes both a count and that ground 2 bears load, and **neither holds**: **ground 2 is VACUOUS, not false** — its antecedent, a `work` reaching hard delete, never occurs in this tree, and a conditional whose antecedent never occurs is true and supports nothing — while **ground 3 has TWO LIMBS of unequal strength**, and only the unconditional one carries the decision: `CASCADE` is what `write_queue` already gives its other two parents and what SQLite can enforce today. **Decision 3 survives, on that limb**, which answers the question the 2026-08-21 riders routed as open. The weaker limb — *"fails loudly" is aspirational because nothing reads `write_queue`* — is an argument from an absence and now carries a **TRIGGER**: if `write_queue` gains a reader it weakens, and a comment naming the table is a citation of this ADR rather than a reader. **No decision is superseded; the Status line does not move** |
 | [0040](#adr-0040) | The six subtype tables land with the catalogue source that writes each | **Accepted** — 2026-08-17; records as a decision what `00005_library_sync.sql` did; **in tension with** ARCHITECTURE §16's enumerated v0.1 schema line, which is left to the thread that owns §16; ⚠️ **amended 2026-08-17 by [ADR-0044](#adr-0044)** — the RULE is confirmed and **applied**, not overridden, and one table moves under it: `work_credit` lands with **Kavita** rather than Navidrome, because Kavita is the source that writes credits. `work_album` and `work_track` are unaffected and this ADR's decision clause 1 is otherwise untouched |
 | [0041](#adr-0041) | The sync core ships with **Kavita** as its first adapter; Sonarr and Radarr re-sequence behind it | **Accepted** — owner-decided 2026-08-17; **amends [ADR-0036](#adr-0036)** (*"No catalogue source ships in v0.1"*) and **amends** ARCHITECTURE §16, whose replacement text is proposed here and routed to the thread that owns §16; **re-sequences, rejects nothing** — Sonarr and Radarr still arrive; confirms [ADR-0035](#adr-0035) and [ADR-0040](#adr-0040); ⚠️ **amended 2026-08-17 by [ADR-0042](#adr-0042)** — the write-path question this ADR flagged as *"NOT decided here"* is now answered: the minimal write path **re-sequences with the \*Arr adapters**, so its consequence bullet and the ⚠️ clause in its proposed §16 text are both settled · ⚠️ **amended 2026-08-19 by [ADR-0052](#adr-0052)** — clause 1's source is now **BookOrbit**, on the owner's decision to sunset Kavita; clauses 2 and 3 stand, and **clause 4's channel list is reopened**, not re-answered |
 | [0042](#adr-0042) | v0.1's minimal write path re-sequences with the \*Arr adapters; Sonarr and Radarr stay on the roadmap | **Accepted** — owner-decided 2026-08-17; **answers the question [ADR-0041](#adr-0041) flagged and refused**; **amends** ARCHITECTURE §16, [ADR-0041](#adr-0041), [ADR-0036](#adr-0036) and [ADR-0012a](#adr-0012a); **re-sequences, rejects nothing** — [ADR-0012a](#adr-0012a)'s queue design is untouched, the seam costs **no migration**, and Sonarr and Radarr stay on the roadmap at the owner's explicit condition; raises one open question it does not close (neither \*Arr has a milestone); ⚠️ **amended 2026-08-17 by [ADR-0045](#adr-0045)** — that open question is **closed**: the owner delegated the call and **Sonarr, Radarr and this write path all land in v0.2**. The decision, the measurement and the seam are untouched; only *"this ADR does not assign them a milestone"* (clause 5), alternative (e) and the open question itself are overtaken |
@@ -110,7 +110,7 @@ because no ADR ever decided it. Annotating leaves that failure mode nowhere to h
 | [0045](#adr-0045) | The three unslotted commitments land in **v0.2**: Sonarr and Radarr, the minimal write path, and the minimal match-correction UI | **Accepted** — **owner-delegated 2026-08-17** (*"whatever you think is best"*); **closes the open questions [ADR-0042](#adr-0042) and [ADR-0043](#adr-0043) each raised and refused**; **amends** ARCHITECTURE §16 (§16.0, §16.1, and the v0.1, **v0.2** and v0.3 entries) and **amends [ADR-0042](#adr-0042)** and **[ADR-0043](#adr-0043)** at their no-milestone clauses; **assigns milestones and nothing else** — no scope moves, no design reopens, no ADR is reversed; for the two \*Arr items this **writes down a dependency v0.2 already had** (§8.3's `Add` capability filter), for the correction UI it is **by elimination** and the cost is recorded rather than argued away; raises one open question it does not close (whether v0.2 should be split); ⚠️ **amended 2026-08-18** — the order **inside** v0.2 is now fixed, resolving this ADR's own *"correction UI first or last as convenient"*: **minimal match-correction UI first** (gated on nothing), **Navidrome adapter next** (next in §16.1's sequence, provable on the owner's real services), then **Sonarr, Radarr and the write path** (no real \*Arr data exists to prove them against — the owner runs neither). Membership is untouched; only the order is added |
 | [0046](#adr-0046) | Kavita's contract tests pin **TWO** specs: the release the owner runs is the **floor**, `develop` is the **ceiling** | **Accepted** — 2026-08-17; **implements a policy `api/specs/SOURCES.md` already stated and the tree had not acted on** (*"a green contract test here is evidence about `develop`"*); **changes what a green means, not what the code does** — no adapter field, request or migration changes; **renames** `api/specs/kavita.json` → `kavita-develop.json` and **adds** `kavita-v0.9.0.2.json`; every spec-reading test runs against **both**, named per file, with enum coverage **equal** to the ceiling and a **superset** of the floor; `ceilingOnlyProperties` machine-checks the five modelled properties that **decode to nothing on the owner's server**; the `cbr` external_id is **unreachable** on the stable line and now says so; raises three open questions it does not close (Prowlarr has the same gap, `'cbr'` is an unenumerated `external_id.source`, and the floor's re-pin cadence) — **question 2 settled 2026-08-17** by the rename to `comicbookroundup` (`LS-73`); ⚠️ **amended 2026-08-17** — the decision stands unchanged **for Kavita**, but it is **not a template**: it rests on the unstated assumption that **upstream regenerates its spec per release**, which Prowlarr does not — its `openapi.json` is the **same git blob** at tag `v2.5.2.5491` and at `develop`, so open question 1's *"the same shape of gap"* is wrong about the shape and the two-spec structure there would manufacture the false green this ADR abolishes. The remedy is chosen **per upstream** and is [ADR-0047](#adr-0047); and where a spec self-reports a placeholder `info.version`, identity is by **blob SHA** |
 | [0047](#adr-0047) | Prowlarr pins **ONE** spec — floor and ceiling are the same git blob — guarded by an offline blob-identity pin in `check` plus a network drift check outside it | **Accepted** — 2026-08-17; **is the per-upstream remedy [ADR-0046](#adr-0046)'s 2026-08-17 amendment (`LS-53`, `cf5fab5`) points at**, and **answers [ADR-0046](#adr-0046)'s open question 1** (*"`prowlarr.json` has the same shape of gap"*) by **correcting its premise** — measured independently by both threads, `src/Prowlarr.Api.V1/openapi.json` is the **same blob `134d31d7…`** at `v2.5.2.5491` and `develop`, not *"develop, a minor version ahead"*; **the two-spec split is vacuous here, not impossible** — nothing stops two byte-identical copies being vendored, and the second would prove exactly what the first already proves (the Context paragraph's wording, which this row previously overstated); **changes what a green means, not what the code does** — no adapter field, request or migration changes, no file added or renamed; the one file is stale (last regenerated **2025-06-07**, 33 releases ago) and describes **neither ref reliably**; `TestVendoredSpecIsThePinnedBlob` pins the blob **offline, in `check`**, `TestSpecDriftRefsStillShareThePinnedBlob` catches upstream regenerating **on the network, in `make spec-drift`, never in `check`**, and `knownSpecDivergences` machine-checks the `Limit`/`Offset` `int?` gap (PR #2654, `v2.3.6.5351`) as **still live**; `info.version` **`1.0.0`** is Swashbuckle's placeholder and is pinned to by nothing; leaves [ADR-0035](#adr-0035), [ADR-0041](#adr-0041) and [ADR-0046](#adr-0046) untouched; the floor `v2.5.2.5491` is **owner-confirmed 2026-08-17**; raises two open questions it does not close (the floor drifts when the owner's auto-updating box does, and `make spec-drift` is unautomated) |
-| [0048](#adr-0048) | A library **proposal** is not a row in `library`; a row is created only on Accept | **Accepted** — 2026-08-17; **refines [ADR-0026](#adr-0026)** (its binding model, four verbs, single-kind rule and four tables are untouched — what is decided is *when a `library` row comes into existence*, which ADR-0026 did not say); **applies [ADR-0004](#adr-0004)** rather than excepting it — the connect probe is a **setup** action, not a render path; **answers the open decision `web/src/routes/libraries/+page.svelte` records at `78660a4`**, which named three candidates and picked none — this takes the first, *a proposal stops being a row until it is accepted*, and **rejects the other two in writing**; **closes off a third `managed_by` state and any `proposed` flag on `library`**; **costs no migration, no data change and no new state** — ⚠️ **and not for the reason it first appears**: `managed_by` **cannot** express "proposed" and never could, which is a fact *for* this decision rather than against it, because after it the unaccepted state has no persistent representation to record; existing `managed_by = 'auto'` rows are **declared** accepted on upgrade rather than read as accepted, since the column cannot tell an accepted library from one the user has never been shown; states plainly that **it describes unbuilt behaviour on two counts** — `'user'` has never been written by any code path, so §17.8's one-way door is specified and unimplemented, and today's import **creates rows unconditionally**, so implementing Accept **removes** creation from the import path rather than adding a screen to it; **that removal is not done here** — it belongs to the library thread that builds §17.8 |
+| [0048](#adr-0048) | A library **proposal** is not a row in `library`; a row is created only on Accept | **Accepted** — 2026-08-17; **refines [ADR-0026](#adr-0026)** (its binding model, four verbs, single-kind rule and four tables are untouched — what is decided is *when a `library` row comes into existence*, which ADR-0026 did not say); **applies [ADR-0004](#adr-0004)** rather than excepting it — the connect probe is a **setup** action, not a render path; **answers the open decision `web/src/routes/libraries/+page.svelte` records at `78660a4`**, which named three candidates and picked none — this takes the first, *a proposal stops being a row until it is accepted*, and **rejects the other two in writing**; **closes off a third `managed_by` state and any `proposed` flag on `library`**; **costs no migration, no data change and no new state** — ⚠️ **and not for the reason it first appears**: `managed_by` **cannot** express "proposed" and never could, which is a fact *for* this decision rather than against it, because after it the unaccepted state has no persistent representation to record; existing `managed_by = 'auto'` rows are **declared** accepted on upgrade rather than read as accepted, since the column cannot tell an accepted library from one the user has never been shown; states plainly that **it describes unbuilt behaviour on two counts** — `'user'` has never been written by any code path, so §17.8's one-way door is specified and unimplemented, and today's import **creates rows unconditionally**, so implementing Accept **removes** creation from the import path rather than adding a screen to it; **that removal is not done here** — it belongs to the library thread that builds §17.8; ⚠️ **amended 2026-08-21, owner-decided** — **open question 1 is closed**: the first library import runs **BEFORE** Accept, so a proposal is ticked with a real item count beside it rather than accepted blind, and the reserved `Unfiled` library is where the works sit until an Accept files them; **ordering only** — the five decision clauses, both unbuilt facts and open questions 2 and 3 are untouched, and **the removal of unconditional creation from the bootstrap path is still the §17.8 thread's to perform** |
 | [0049](#adr-0049) | Key ids are **derived from the key material**; there is no counter and no settings row | **Accepted** — 2026-08-19; **enables `usarr key rotate`** rather than being asked for by it; `crypto.KeyID(kek)` is the first four bytes big-endian of `sha256("usarr/kek-id/v1" || kek)`, forced nonzero, so **a key file names its own id** and no second artifact has to stay consistent with the key material across a crash — which is exactly the window rotation exists to survive, since the SQLite transaction and the key-file write are not one atomic unit; **closes off a monotonic counter and a `key_id` row in a settings table**, both of which reintroduce that window (and the settings row puts key identity *inside* the thing being rotated); startup registers the live key under both `KeyID(kek)` and the legacy id `1`, so **every existing row keeps opening with no migration** and the first rotation retires `1`; **costs no migration** — `service_instance.kek_id` is already `INTEGER`; **adds no HKDF label** and does not touch `derive.go`'s five frozen ones; ⚠️ **publishes a 32-bit hash of the KEK in every stored row**, accepted in writing because RFC 3394 key-wrap **already** gives an offline attacker an *exact* per-row oracle for the same question, so a 32-bit filter grants no capability the ciphertext did not |
 | [0050](#adr-0050) | The image pipeline's base output format is **stdlib JPEG**; **AVIF is deferred** with its seam kept | **Accepted** — 2026-08-19; **amends** ARCHITECTURE §4.4 and §4.4.1, which named AVIF as the only output codec and named **no base format at all** — a spec missing its base case, which is why this ADR was owed; the reason for stdlib is **zero new dependencies in a static binary** (UsArr has **five** direct dependencies; `image/jpeg` adds none), **not** "JPEG is good enough" — the ADR records the ledger it is traded against, roughly **2–3× larger** than AVIF on photographic content, so a future reader can weigh it; **AVIF is buildable here** (`gen2brain/avif` v0.6.0, MIT, cgo-free, libaom-as-WASM) and is deferred on a **measured trade with a named reopening condition**, not rejected — one MIT dependency plus a **second** WASM runtime, since `wazero` is **verified absent** from this module graph after `ncruces/go-sqlite3` moved to `wasm2go`, and the **binary-size delta is recorded as UNMEASURED rather than estimated**; **reopens when** someone measures the binary delta and the per-width encode cost and decides the bytes are worth it (an ADR amendment plus one map entry, **no migration**), or when an upstream is found serving a format the stdlib cannot decode — ⚠️ **measured, not assumed, and the first draft's assumption was wrong: Kavita is v0.1's catalogue source and its *Save Media As* setting writes covers as PNG (default), WebP or AVIF**, so one admin checkbox on the owner's own server produces input this binary cannot decode (`x/image/webp` is decode-only; there is no pure-Go AVIF decoder in `x/image`), which relocates the likeliest revisit from output size to **input decode**; **one codec per row is an explicit invariant** — clause 1 puts `orig` inside UsArr's encoder rather than leaving it a passthrough, because §4.4 stores **seven widths per asset** and the column is **one per row**, so per-`role` variation stays expressible and per-**width** variation is foreclosed in writing; the seam is **`image_asset.format`** (migration `00008_image_asset_format.sql`) — nullable `TEXT`, no default, **no `CHECK`** on [ADR-0039](#adr-0039)'s reasoning; ⚠️ **unlike ADR-0039 the Go validation SHIPPED WITH THE COLUMN** (`internal/store/images.go`, plus an AST-walk guard that fails `check` if a writer lands without it), because ADR-0039's promised validator was never written and repeating that would be worse than a `CHECK` — ⚠️ **true when written and the contrast still holds; the premise was discharged hours later on 2026-08-19 by `007e58e`**, which gave `write_queue.state` the same treatment (`internal/store/writequeue.go` plus its own AST guard), so **this ADR's reasoning is unchanged and is now the pattern rather than the exception** — the ordering it argues from, validation shipping *with* the column rather than being promised after it, is exactly why ADR-0039 needed a second commit to catch up; see [ADR-0039](#adr-0039)'s 2026-08-19 amendment; ⚠️ **described a pipeline that did not exist** — when this ADR landed nothing wrote `image_asset`, so what shipped was the decision, the column and the guard; 🔻 **`7e5934d` built the pipeline** (`internal/imagepipeline` + `store.PutPosterAsset`) to clause 1, discharging two of the three owed items, leaving the AVIF deferral untouched, and **still never run against a real cover** |
 | [0051](#adr-0051) | The library-scoped grid is a **work-driven `EXISTS`**, not a join to `library_member` | **Accepted** — 2026-08-19; **supersedes [ADR-0026](#adr-0026)'s materialisation as read by ARCHITECTURE §6.5 for the `added_at` order ONLY** — §6.5's denormalised `(library_id, sort_title, work_id, edition_id)` key stands, and `TestLibraryScopedKeysetIsASeek` still pins it, but it serves the **`sort_title`** order and **only** that one: measured on the real schema (`ncruces/go-sqlite3`, SQLite 3.53.4), a library-scoped page ordered by `added_at` gets `USE TEMP B-TREE FOR ORDER BY` in **both** topologies §6.5 names, **with and without `ANALYZE`**; the work-driven `EXISTS` over `ix_libmem_work` keeps `SEARCH w USING INDEX ix_work_added (added_at<?)` in **every** configuration measured, **including the multi-value `?lib=a,b` case** — which was a hypothesis until the plan was read, because an `IN` on the leading key column destroys the ordered index in every *member-driven* shape; it is also **the only shape that cannot return one work twice**, since a work filed in two of the named libraries carries **one membership row per library** and a browse row is work-keyed — ⚠️ per-**library**, not per-edition: `library_member`'s key carries `edition_id`, but the only production writer hardcodes the `0` sentinel, so membership is **not** edition-grained in the tree today (`REVIEW-LOG.md` LS-213), and the ADR body's argument, which is about two libraries over one work, is unaffected; **costs one migration** — `00009_edition_format_index.sql`, `ix_edition_format ON edition(format, work_id)`, for the Audiobooks filter and not for the scope; **`ix_libmem_added` is explicitly NOT owed** and must not be added on this ADR's authority; ⚠️ **reopens on `make bench` over a NARROW library** — the `EXISTS` walks the *global* `added_at` order and discards non-members, which suits a broad library and not a narrow one, so a 1%-selective library over a 25k-row kind is the measurement that would send this back to a member-driven shape with a new index; ⚠️ **amended 2026-08-19** — the *"says nothing about `year`"* non-decision gains the shape of the gap it leaves: `default_sort`'s CHECK admits four orders and this read serves three, `?sort=year` is **refused and never substituted**, the endpoint never reads `default_sort` at all, and nothing in the tree writes the column yet — so the trap arms the day §17.8's DETAIL view offers the choice. The decision is untouched |
@@ -129,12 +129,14 @@ because no ADR ever decided it. Annotating leaves that failure mode nowhere to h
 | [0066](#adr-0066) | A wholly skipped BookOrbit library is **bound with an honest zero**, never declined; and the whole-library sentence says **what happened**, not just how many | **Accepted** — 2026-08-19; **builds on [ADR-0063](#adr-0063)** — the zero-count skip row is what makes an all-skipped library representable, so this ADR is about **what the screen says**, not about the schema — and **amends no ADR's reasoning**, editing no other entry in this file; **it is the ADR `internal/libsync/bookorbit.go` asked for by name**: *"Splitting one container into two libraries is a deviation from §17.8 that needs an ADR, and it is comics' slice to ask for"*; **the case is not hypothetical** — comics are skipped inside the walk today (`StreamItems`: `case bookorbit.MediaKindComic: tally.Comics++; return nil`, on the unit-of-work gap its package doc names, BookOrbit's series having no library to bind a comic's series work to) while **no container is declined at all** (`Containers()`: *"NOTHING IS DECLINED HERE… BookOrbit says nothing, so there is no answer to decline on"*, its `libraries` table carrying no type/kind/mediaType column), and **the owner's own BookOrbit keeps comics and prose in SEPARATE libraries** — his words, 2026-08-19, *"libraries are split up"* — so on the install v0.1 is proven against a comics library **walks, reports and yields nothing**, which is a whole library on his screen rather than an edge case; **the decision**: such a container is **BOUND** with an item count of zero and a sentence, and **no adapter declines one for being wholly skipped** — ratifying what the code already does, precisely because the tempting change is the one that makes the row disappear; ⚠️ **and the whole-library case gets its OWN sentence, because the count is not the message** — *"42 items were read and not mapped"* is a report **on the remainder** and reads as *some of this arrived*, so when the 42 IS the library the identical sentence reads as *this is broken*; the specified pair is *"Nothing in this library is imported yet"* over *"All 412 items were read. UsArr does not import comics yet."*, with **three acceptance criteria rather than taste** — it asserts the read succeeded with the count as evidence, it names the **media type** and the reason, and **it must be impossible to mistake for a connection failure**; **the condition is DERIVED and no wire field is added** — `item_count == 0` ∧ `skipped.state == "left_out"` ∧ `skipped.items > 0`, both fields shipping today, with the **empty upstream library** staying distinct for free since it walks clean to `state: "none"` with `items` absent; 🔍 **`skipEffect`'s remainder clause is measured FALSE on this shape and recorded as false rather than left to be found on a screen** — *"every other book in the library was imported"*, when there is no other book (it travels to `sync_report` and not to the cell, on §9.1's split, which bounds the blast radius and not the wrongness); **the MIXED container is decided too, and it becomes TWO library records** — `library.kind` is *"Exactly one, required"* under a `CHECK` that **already permits `'comic'`**, and `library_source`'s uniqueness is per `(library_id, …, container_ref)`, so two libraries may name one container and **no migration is needed**; until comics import, a mixed container binds exactly as today, one `book` library with its comics counted, which is the partial case and renders the partial sentence; ⚠️ **that half is DESIGNED AND UNTESTED, stated plainly so untested does not read as unsupported** — the owner's split libraries mean **his data will never exercise it**, and the precedent for the distinction is this project's own **synthetic-cassette rule** (`internal/bookorbit/vcr_test.go`: *"A SYNTHETIC CASSETTE PROVES THIS CLIENT'S PARSING, NOT THE SERVER'S BEHAVIOUR"*), where a green is **spec evidence only** and the tests are kept and trusted for exactly what they cover; 🚫 **DECLINING THE LIBRARY IS THE ALTERNATIVE THIS ADR CLOSES**, and it loses on three counts — invisible reads as broken, since §17.8 renders `library` joined to `library_source` and a declined container has neither, leaving a green Services row, a library the owner can see upstream and **no row at all**, which is principle 3's *"empty screen that looks broken"* exactly; the decline lands in `container_declined`, which is **measured to have no reader** in `internal/store`, `internal/httpapi` or `web/`; and it makes the state **unstable across a release**, a library materialising out of nowhere with a full catalogue the day comics import, where binding now turns that day into a zero becoming a number on a row the user has already seen; 🚫 **also rejected**: rendering nothing (`none` is the **measured negative** meaning *nothing was left out*, so using it where **everything** was would make the column's one honest silence say the opposite of the truth), reusing the partial sentence, a `whole_library` wire field or a third `SkipState` member (**"and also"** — derivable from two shipping fields, and a second thing that can be absent or disagree, on ADR-0063's own ground for declining a fourth state), and giving the row `kind = 'comic'` today (it could only be inferred **from the tally**, i.e. from what the walk happened to read, and §6.4's cascade makes a wrong `work.kind` unmergeable); ⚠️ **one residual is recorded rather than closed** — the row's kind is `book` while its contents are comics, mitigated only by `kind` being *"EDITABLE (§6.5 rule 4)"*, and closed when comics get a unit of work; **adds no migration, no column, no DDL and no wire field**, owes the implementing slice exactly **two strings**, and **nothing here is built** — it rules behaviour the §17.8 screen and the comics slice implement → **2026-08-19: decision 5 is built** — the comics import, content `10444a4`, with tonight's rulings on it in `ff13582`; read it off `internal/store/catalogue.go`'s `resolveBinding` and `bindOneContainer`, where a MIXED container's `comic` sibling is minted lazily on the first comic reached and named `Fiction (Comics)` for its kind — ⚠️ **this named `parentBinding` and that pointer is now one hop short**: `parentBinding` is three lines that delegate, and the mint moved to `resolveBinding` when a comics-ONLY container stopped getting a `book` library it never had contents for. **The qualifier is unchanged for the mixed case and is now absent where it was never earned**: a container yielding only comics is ONE library, named for the container, kind `comic`, its row retyped in place rather than minted beside an empty one. ⚠️ **Decision 1 is untouched and is pinned rather than argued** — a container whose every item is skipped is still bound, still eagerly, at the fallback kind, by `cmd/usarr.TestAWhollySkippedBookOrbitContainerIsSTILLBOUND`. **Decision 1 needed nothing built** — it *"ratifies what the code already does"* in its own words, and `bindOneContainer` still binds a wholly skipped container. **Decisions 2–4 measured unbuilt the same day**: the specified word and detail (*"Nothing in this library is imported yet"*) appear nowhere under `web/`, decision 3's derived condition — `item_count == 0` AND `left_out` AND `items > 0` — is written nowhere, and `skipEffect`'s remainder clause still reads *"every other book in the library was imported"* at `cmd/usarr/import.go`. ⚠️ **No status mark, because no decision changed.** The text above stands unreworded and this is a dated pointer at the tree, not a fresher status claim — and the tree, not this row, is what is authoritative for any of it. |
 | [0067](#adr-0067) | A pasted BookOrbit **magic link is accepted and reduced to its token**; the refusal becomes the fallback | **Accepted** — 2026-08-19; **reverses a ruling taken the same morning and records both**, because the first one was correct reasoning on a premise that turned out to be false — `ab9e0f3` refused a pasted magic-link URL on the belief that BookOrbit's copy button *"yields a URL, while POST /api/v1/auth/magic-links/login wants the bare token"*, read as *an artefact its own API cannot consume*; **reading the consumer falsified it** — `client/src/router/index.ts` declares a public `/magic` route, `MagicLinkLoginView.vue` takes `route.query.token` and strips it from history, and `useAuth.loginWithMagicLink` POSTs `{"token": raw}`, so **URL in / bare token out is an adapter BookOrbit already implements**, and `MagicLinksSettings.vue` offers the operator nothing else (the table renders the label, the account, the expiry and the use count, never the raw value); **measured at `73b7877d2fede2221b0ca360af9bfced7c3797f3`, cited as a commit because the tag `v2.6.0` was NOT verified to point at it**; **found by a live failure on the owner's install**, not by review; **leaves [ADR-0060](#adr-0060) standing and unreworded**; the price is named rather than buried — the accept rule is a **whitelist**, so an upstream token-format change would have UsArr refuse a valid credential |
 | [0068](#adr-0068) | A BookOrbit comic is an **issue**, and issues are **minted under series works**; `seriesId` null synthesizes a one-shot series, extra memberships are **recorded, not resolved** | **Accepted** — 2026-08-19; **this is the "unit of work" [ADR-0066](#adr-0066) decision 5 was waiting for** — *"The kind stays `book` until comics have a unit of work"* — so it activates that decision's two-library split rather than reopening it; **[ADR-0030](#adr-0030)'s model is applied, not amended**: `comic` is the series, `comic_issue` the issue, verified at migration `00005_library_sync.sql:256` (*"'comic' is the SERIES, 'comic_issue' the issue or chapter"*) and `00006_kavita_subtypes.sql`'s header; **the parent binding is MEASURED, not inferred** — `BookCard.seriesId` is not an arbitrary `memberships[0]` and is not null under multi-membership, it is BookOrbit's own maintained **primary** (`series-membership.service.ts`, `displayOrder = 0`, round-tripped by `syncPrimaryMetadata` and `syncPrimaryFromMetadata`, at commit `73b7877d2fede2221b0ca360af9bfced7c3797f3`); **`seriesMemberships[]` beyond the primary is RECORDED and not acted on**, on [ADR-0063](#adr-0063)'s precedent, the fuzzy tier that would resolve it staying v0.3 via `work_relation`; **`is_oneshot` is WRITTEN rather than merely tolerated** — *"a column with a DEFAULT 0 and no writer is a deaf column"*; **both residue defaults emit a `sync_report` row**, so sizing comes from instrumentation rather than from estimates; **no migration, no column, no DDL and no new wire field** — `sync_report.kind` carries no `CHECK` by design and `library.kind` already permits `'comic'`; ⚠️ **the done-check FAILS if series count equals issue count**, because that is the per-row shape [ADR-0066](#adr-0066) already pre-emptively refused |
-| [0069](#adr-0069) | The library-skips payload carries a **per-container breakdown** beside the library total; **apportioning** a library's total across its containers is refused | **Accepted** — 2026-08-20; **does not reverse [ADR-0063](#adr-0063)'s decisions** — that is a write rule and nothing in the writer, the schema or `SkipState` is touched — ⚠️ **but it DOES invalidate one of ADR-0063's recorded consequences**, *"no SQL and no plan changes"*, whose first half is now false and which carries a dated supersession in its own text; **the breakdown is keyed on the `(service_instance_id, container_kind, container_ref)` triple `sources[]` already publishes**, and the authoritative wire contract is [`reference/http-api.md`](./reference/http-api.md) §2.6a, **already amended** to a five-row field table saying the count breaks down by **container, never by reason**; **the shared statement is WIDENED, not forked** — `containerReportSQL` selects the three identity columns for both callers and the completeness caller scans and discards them, chosen on the plan guard rather than on the wasted scan, and **both guards were fired deliberately** (a fork reddens the skips plan assertion while the completeness one stays green); **`containers` is absent under `none`** and a **zero-count entry is dropped** even under `left_out`, on `items`'s own reasoning, so the entries always sum to `items`; ⚠️ **`skipMarks`' `alsoReporting` has the SAME defect on the per-row axis and is recorded OPEN, not fixed**; the measured pair is ground truth **2** / `main` **4** / the fix **2**, with the topology that produces it stated so the numbers are hand-checkable |
+| [0069](#adr-0069) | The library-skips payload carries a **per-container breakdown** beside the library total; **apportioning** a library's total across its containers is refused | **Accepted** — 2026-08-20; **does not reverse [ADR-0063](#adr-0063)'s decisions** — that is a write rule and nothing in the writer, the schema or `SkipState` is touched — ⚠️ **but it DOES invalidate one of ADR-0063's recorded consequences**, *"no SQL and no plan changes"*, whose first half is now false and which carries a dated supersession in its own text; **the breakdown is keyed on the `(service_instance_id, container_kind, container_ref)` triple `sources[]` already publishes**, and the authoritative wire contract is [`reference/http-api.md`](./reference/http-api.md) §2.6a, **already amended** to a five-row field table saying the count breaks down by **container, never by reason**; **the shared statement is WIDENED, not forked** — `containerReportSQL` selects the three identity columns for both callers and the completeness caller scans and discards them, chosen on the plan guard rather than on the wasted scan, and **both guards were fired deliberately** (a fork reddens the skips plan assertion while the completeness one stays green); **`containers` is absent under `none`** and a **zero-count entry is dropped** even under `left_out`, on `items`'s own reasoning, so the entries always sum to `items`; ⚠️ **`skipMarks`' `alsoReporting` has the SAME defect on the per-row axis and is recorded OPEN, not fixed**; the measured pair is ground truth **2** / `main` **4** / the fix **2**, with the topology that produces it stated so the numbers are hand-checkable; ⚠️ **amended 2026-08-20, ADDITIVELY** — the per-container `reason` joins the per-container count on the wire, so the sentence the fold used to drop is dropped no longer; **which sentence survived was decided by `library_source.id`**, the bind order, and it is reachable **today** via `1c35d18` changing the `skipReason` constant rather than only via a second adapter; **the per-reason TALLY vocabulary stays off the wire and [ADR-0063](#adr-0063)'s refusal is untouched**; ⚠️ **the LIBRARY-LEVEL field is NOT decided by that amendment** — withholding it when containers disagree is **subtractive** where this ADR is additive, and is allocated **ADR-0071**, not yet written, so the implementing commit **must not land ahead of it** |
 | [0070](#adr-0070) | BookOrbit's **channel 3b carries arrivals only**, server-side filtered on `addedAt`; **edits and deletions are channel 4's** | **Accepted** — 2026-08-20; **scoped to BookOrbit's 3b** — [ADR-0035](#adr-0035) §2a's Kavita result is untouched and no other 3b source is re-answered, and what a later adapter inherits is the **method, not the field**: *build the delta on the field the source can actually serve, and assign what it cannot see to channel 4*; **the `updatedAt` client-side-stop shape is REFUSED**, not merely unused; **channel 4 is the same milestone**, so the reassignment defers nothing; **no migration, no column, no wire field and no code**; ⚠️ **the hand-off to channel 4 is an ASSIGNMENT, not a discharge, and is recorded OPEN** — `remote_hash` hashes nine values and credits are not among them, so the sweep as built is deaf to the same credits-only edit 3b is deaf to; ⚠️ **[`ARCHITECTURE.md`](./ARCHITECTURE.md) §7.1a is amended in the SAME MOTION, as conformance** — two sites, the client-side-stop paragraph's unstated boundary and the Watermark row's second load — and landing either without the other is not permitted; **§16.1's amendment is owed separately**; ⚠️ **every measurement is against the pinned commit `73b7877d`, read from server source this repo does not vendor**, so **nothing here is a claim about the owner's running instance**; ⚠️ **AMENDED 2026-08-20 by the slice that implements it, and the coupling is a DEPENDENCY rather than convenience batching** — Decision 1 names `after` and **excludes `between`** with its reason, the capability claim is **bounded to `73b7877d` and `v2.6.0`** with the owner's version unrecorded, and **Decisions 8-13 are added**: the **representation dependency** (sub-second precision must survive to the boundary; `internal/store/store.go`'s `timeLayout`, a second-resolution layout, would make `>` redeliver forever), §7.1a's **overlap formula RETIRED** for this source with the surviving **5 minutes recorded as a NEW, UNMEASURED constant safe in the large direction**, the **page-walk guard replaced** with its count-blind compensating-pair residual named and the phrase *"strictly better"* **banned** as an unchecked containment, ***assignment is not resolution*** stated at **every** channel-4 hand-off because **channel 4 is unbuilt**, the **wedge drill** required as a measurement rather than an intention, and the **measured-empty deviation** defended by its safe direction; the keyset verdict **keeps its conclusion and replaces its reason** — one missing filter field, `id`, not a grammar gap — and its **do-not-revisit clause is STRUCK** ; ⚠️ **AMENDED 2026-08-21 by [ADR-0074](#adr-0074)** — nothing decided here moves: *What this does NOT decide* §1's *"both mandatory … §7.4's, unchanged"* becomes **guard 1 wired, guard 2 deferred for this source**, and the *Consequences* reassurance about `remote_updated_at`'s field is narrowed because **`remote_hash` has no production reader either and this slice did not close it**; **the open credits residual this ADR handed to channel 4 is CLOSED by unconditional re-apply**, not by widening the hash |
 | 0071 | allocated 2026-08-20, text intentionally withheld by the coordinator pending its subject | this numbering gap is deliberate — do not reuse or renumber |
 | [0072](#adr-0072) | The project-manager thread **ratifies** the arm64 RSS spike's re-scope: the `make bench-rss` run gates **claiming arm64 support**, not v0.1 | **Accepted** — 2026-08-20; **ratifies a re-scope that [ADR-0001](#adr-0001) states in an agentless passive** — *"the requirement is re-scoped"*, no agent, no limit clause, no application line — and whose only record was a review-log disposition that names no ruler either, under *"Round 2 — the first code drop"*, *"6. A documented prerequisite was re-scoped, not dropped"* (⚠️ **the round qualifier is load-bearing**: that file opens a second *"6."* under Round 6); **the venue follows from the argument and not from who made it** — a review-log entry records a **disposition** and an ADR records a **decision**, so recording the ratification as a disposition would reproduce the defect one level up, a second entry asserting a thing is settled and containing nothing that settles it; ⚠️ **it quotes the ruling NARROWLY on purpose** — the limit clause drifted by two words in one relay on the day of the ruling (*"nothing **about** it"* for *"nothing **in** it"*), so the entry carries the arguments and quotes only what it verified; **the decision**: the arm64 `make bench-rss` run is *"a prerequisite to claiming arm64 support, not a prerequisite to v0.1"*, and ⚠️ **the limit clause is not optional** — *"the arm64 run remains owed before any claim of arm64 support. This moves the gate; it does not discharge the obligation, and nothing in it says arm64 works or that the x86-64 figures transfer"*, page size and core count both moving these numbers, so an arm64 result is a **second row** in ADR-0001 and never a replacement; 🚫 **the live alternative it closes** is *"the re-scope was never ratified, so the original gate stands"*, read at roughly **70/30** on 2026-08-20 and **right about the record, wrong about what to do with it** — v0.1 deploys to x86-64, the original clause gated the schema and *"the gate had already been passed unmet"* with eleven migrations since landed, and the project has operated on the re-scoped reading since 2026-08-16; **rejecting it costs no rigour** because *"the measurement stays owed against the claim it actually supports"*; **the reach is bounded by the ruling itself** — *"it covers sites carrying the pre-re-scope framing of the arm64 spike, wherever they are, and nothing else. A lane editing a sentence that is not about that has left the chain"*; ⚠️ **it states its reach and NOT which sites conform**, per `DEVELOPMENT.md` §11 *"A ruling states its reach, not the tree's current state"*, the rule this very ruling produced — **two statements the ruling as issued made about the tree failed verification** and the ADR carries neither, a corrected count being the same kind of claim; **supersedes nothing** — ADR-0001's text stands unreworded, its `Status:` line gains no mark, and this ADR supplies the author that sentence never had; **ships no code, no migration, no column, no configuration key and no wire field** |
 | [0073](#adr-0073) | Channel 3b's wire surface is a **sub-route**, `POST /api/v1/services/{id}/sync/delta`, answering **`202 Accepted`** and naming **no `libsync` type** | **Accepted** — 2026-08-21; **it takes the decision [ADR-0070](#adr-0070) explicitly did not** — that ADR *"builds nothing, changes no migration, no column and no wire field"* — and **reopens none of its channel scope**: arrivals only, `books.addedAt`, server-side filtered; **the engine was BUILT, TESTED AND UNREACHABLE**, in `internal/libsync/doc.go`'s own words *"NOTHING USER-FACING CAN TRIGGER IT, BECAUSE THERE IS NO HTTP ROUTE"*, with the route named there as the next slice rather than as *"later, which is where a thing goes to be forgotten"*; 🚫 **`?mode=` on the existing sync route is REFUSED, and the precedent only corroborates it** — `(*Server).routes`' `/library` comment splits routes *"over the SHAPE OF THE QUERY"* so that folding them would make *"the simple statement an argument-dependent special case of the filtered one"*, ⚠️ **which transfers as a TEST and not as EVIDENCE** (that pair are reads with different plans and cursor codecs; this pair are writes returning the same started-body), so the rejection rests on **the default and the typo** — an omitted or misspelled mode runs the **full import**, minutes and a whole-catalogue rewrite, returning the same `202`, where a mistyped path is a `404` — plus a **contract** that would otherwise vary by query parameter and an **audit verb** that could no longer tell a cheap poll from a rewrite; 🚫 **`200` with the run's result is REFUSED on principle 1** — `cmd/usarr`'s `deltaSyncLocked` escalates to `fullImportLocked` and [ADR-0070](#adr-0070) Decision 13 makes escalation the **deliberate** answer for every ambiguous state, so the tail is the full import's, and `internal/httpapi/ports.go`'s `CatalogueImports` already rules that *"a handler that waited for it would be principle 1's violation, since an import is minutes"*; 🚫 **naming a `libsync` type on the wire is REFUSED** on `ports.go`'s consumer-declared-port rule (*"Nothing below names an \*Arr type"*), which **forecloses a report body without a port-local struct** and is preserved by a port signature that returns only `error` and this package's sentinels; ⚠️ **THE COST IS NAMED RATHER THAN WAVED OFF** — `Progress` is nil by `delta.go`'s own requirement and a delta never stamps `last_full_sync_at`, so **a walking delta publishes no progress frame and gives no completion signal**, only a liveness re-ask, ⚠️ **with one exception that is the wrong way round** — an ESCALATED walk runs `fullImportLocked` → `runImport` with a non-nil `Progress` and so publishes the ordinary `import.progress` frames, leaving the expensive case observable and the cheap one silent — and the outcome is legible **only** in the `delta_walk` `sync_report` row `recordDeltaWalk` writes, which at `dcf3f55` **no route reads and no screen renders**; a read surface over that journal is recorded as **owed, not scheduled**; **the wire error code is `not_a_delta_source` and NOT the stored `no_delta_channel`** `errorClass` DECLARES for the same condition, per [`DEVELOPMENT.md`](./DEVELOPMENT.md) §11's prohibition on repairing a collision *"by making the values agree"* — ⚠️ **declares, not writes**: `Importer.DeltaSync` returns at its `DeltaSource` assertion ahead of every `recordDeltaWalk`, so no row carries the stored class today and the two are separated **at declaration**, the only moment at which separating them is free — ⚠️ **measured at `dcf3f55`: the two vocabularies share NOTHING** (seven `errorClass` values against thirty-one wire codes, empty intersection), so this would have been the **first** shared value; **`internal/libsync/doc.go`'s UNREACHABLE paragraph is falsified by the route and retires in the SAME MOTION**, [`reference/http-api.md`](./reference/http-api.md) owes a section carrying the observability subsection §4 has no analogue for, and §4's own `import_in_progress` sentence is falsified too — the shared guard means a running DELTA produces it on the full-sync route; **it builds no timer, no channel 4 and no tie drain**, and adds no migration, no column and no configuration key |
 | [0074](#adr-0074) | Channel 4's `remote_hash` drift gate is **DROPPED for BookOrbit**; the hash may gate the **store seam only** and **NEVER the credit re-apply**; **guard 1 ships wired, guard 2 is deferred on a void premise** | **Accepted** — 2026-08-21; **source-conditional, the same shape [ADR-0070](#adr-0070) used to put BookOrbit outside §7.1a's client-side stop** — §7.4's gate stands unchanged for every source whose drift consequence is a refetch, and Kavita's is one (`internal/libsync/credits.go`'s `StreamCredits`, one `GET /api/Series/metadata` per series); **BookOrbit has no refetch to gate** — its credits ride the item payload into an in-memory map (`internal/libsync/bookorbit.go`'s `keepCard`, read back by `internal/libsync/bookorbitcredits.go`'s `StreamCredits`, a file that imports no HTTP client at all); ⚠️ **THE ADR LANDS BEHIND ITS CODE AND SEPARATES WHAT IT AUTHORISES FROM WHAT IT RECORDS** — measured at `d9a3f37`, the deletion pass and guard 1 are in the tree and **the store-seam gate is NOT**, so `remote_hash` still has **no production reader** (no `SELECT` in non-test Go names it; its only reader is a test assertion) and the column this slice actually gave a first reader is its sibling `remote_identity_hash`; ⚠️ **the repurposing is BOUNDED TO ONE SEAM and the boundary is the whole decision** — the hash may gate the local write inside `internal/store/catalogue.go`'s `applyOneItem` and **may never gate the credit re-apply**, because `internal/libsync/importer.go`'s `streamAndApply` builds `imported` unfiltered and a gate there drops the item **before a `CreditRequest` is minted**, so `applyOneCreditSet` never runs and **the deafness this ADR exists to close returns identically** — worse here than for Kavita, since `keepCard` would be holding the corrected authors in memory, unread, while the row on disk stayed stale; **what the gate WOULD SAVE is claimed narrowly and is a claim about SHAPE, not size** — the `work_credit` delete-and-reinsert and its per-credit `personWorkID` lookups (`internal/store/credits.go`'s `applyOneCreditSet`, step 3), **NOT the FTS write**, which is already suppressed by the rendered-name-list compare, as year is by `year IS NOT ?` and status and declared total by the same shape, and **nobody has measured it** — if it is negligible the answer is to drop the gate, never to move it earlier; **guard 1 SHIPPED WIRED** — `applyOneItem`'s step 1a compares the stored `remote_identity_hash` against `CatalogueItem.identityHash` on any upsert that would clear `deleted_at`, hard-deletes the tombstoned link (**forced**: `ux_sil` is a plain UNIQUE index, not partial on `deleted_at`, so a tombstone and a fresh link cannot coexist), emits `store.SyncReportIDReused` and counts it on `BatchResult.IDsReused`, leaving the abandoned **work** tombstoned with its owned corrections; a NULL stored hash is **unknown, not mismatched**; **the sequencing was a ruling condition** — the guard-2 deferral is defensible only because this landed with it; **guard 2 is DEFERRED FOR BOOKORBIT ONLY, on a recorded void premise** — §7.4's "ids are reused after deletion" is a SQLite-rowid fact about the \*Arrs and BookOrbit's `books.id` / `libraries.id` are PostgreSQL `serial` with no `setval(`, no SQL `TRUNCATE`, no `RESTART IDENTITY` in `server/src` at `73b7877d2fed`, **so the premise is void for this source and stays LIVE for the \*Arrs**; ⚠️ **FOUR HAZARDS SURVIVE AS NAMED GAPS WITH NO GUARD** rather than being dropped with the premise — an older `pg_dump` restored; the instance repointed at a rebuilt server; ⚠️ **`identityHash` over an empty external-id list is the hash of an empty list and `bookOrbitExternalIDs` writes exactly one identifier (`hardcover_book`), null for any book the operator has not matched, so EVERY UNIDENTIFIED ITEM SHARES ONE IDENTITY HASH and guard 1 certifies nothing for those items**; and ⚠️ **a full list read returning zero from a source that had thousands tombstones the whole library** — more likely a broken credential than a mass deletion — mitigated only by every absence being a stamped column on a **retained** row that the next good import clears, and **NO REFUSAL THRESHOLD IS SET**, because a number is a ruling this ADR does not have; **the four `service_instance` guard-2 columns stay as an ANNOTATED SEAM** carrying the void-premise measurement at the site, on the form `internal/store/libraries.go`'s `Library.OrphanedAt` carried **at `b90b031`, before `0adfe1f` falsified it** — **its form, not its placement**, since those four are absent from `ServiceInstance` and from `serviceInstanceColumns` and it is their absence being annotated; **the deletion pass moves FOUR columns meaning four things** (`internal/store/reconcile.go`'s `SweepDeletions`, set difference in Go and never in SQL): `service_item_link.deleted_at`, `work.deleted_at` on the last live link **anywhere**, `library_source.missing_since` — **the sweep is its first writer** — and `library.orphaned_at`, set and **cleared** by `sweepOrphans`; all four `IS NULL`-guarded so they are **first-observed-absent** and the counts are transitions; ⚠️ **NO TIMER** — §7.4's every-6-h scheduler **does not exist**, the sweep runs from `FullImport`'s success path only (a partial import never sweeps, `DeltaSync` passes a nil seen-set), **and there is no reaper**: nothing hard-deletes a tombstone after seven days, so reconciliation is **not automatic**; **the drift half of channel 4 is unbuilt for every source**; ⚠️ **the two "mandatory" sentences take a SCOPING RIDER, not a deletion** (ARCHITECTURE §2.2, §7.4's heading, [ADR-0012](#adr-0012), and this file's own ADR-0070 *What this does NOT decide* §1 — **two documents, four sites; three documents specify both guards**), because with guard 2 unbuilt no document may go on saying the sweep has two mandatory guards without saying **for which source**; **no migration and no new index** — the plan guard is a **demand** on the per-item lookup (`USING INDEX ux_sil (` plus all three key columns, EXPLAINing the shipped `linkLookupSQL` constant, with `TestResurrectionPlanGuardFiresWhenRemoteKindIsDropped` as its fired positive control) and a deliberately weaker **acceptance** on the instance sweep, **never a general accept-SCAN**; ⚠️ **[`ARCHITECTURE.md`](./ARCHITECTURE.md) §7.4, §7.1a and [`reference/sync.md`](./reference/sync.md) §4 take the conditional IN THE SAME MOTION**, and `cmd/usarr/import.go`'s channel-4 comment block is a correction site in it — its *"assigning it to channel 4 would be assigning it to nothing"* is falsified by this slice, and the file already flags the credits half of that as "under correction elsewhere"; **two riders ride the landing as their own commit** — [ADR-0070](#adr-0070)'s *"The FIELD does have one"* understates the hole by a layer (`remote_hash` has no production `SELECT` either, **and this slice did not close it**), and `internal/libsync/delta.go`'s `SyncReportDeltaWalk` vocabulary check names `comic_residue`, **a member the tree does not have** — the real literals are `comic_series_synthesized` and `comic_series_memberships_declined` (`cmd/usarr/import.go`), and a vocabulary check naming a non-member is a check that did not run ; ⚠️ **AMENDED 2026-08-21 BY THE REST OF ITS OWN SLICE, WHICH FALSIFIED CLAIMS IN THIS ROW** (`REVIEW-LOG.md` LS-392 carries the re-derivation): **the hazard list is COUNT-FREE and re-derived at the branch tip** — *"FOUR HAZARDS SURVIVE AS NAMED GAPS WITH NO GUARD"* was written five commits before the branch stopped moving; **gap (c) is NARROWED, not closed** — *"EVERY UNIDENTIFIED ITEM SHARES ONE IDENTITY HASH and guard 1 certifies nothing for those items"* stands, but the vacuous equality is gone (a length test precedes the comparison) and the residue is that **a genuine id reuse on an unidentified item is silently MERGED rather than split, chosen and not overlooked**, recorded by `store.SyncReportRevivedWithoutIdentity` — a record, not a guard — and **reopened only by identity coverage improving or by a merge path existing**; **gap (d)'s zero read is REFUSED** — *"a full list read returning zero from a source that had thousands tombstones the whole library … mitigated only by every absence being a stamped column on a retained row"* is superseded: `SweepDeletions` refuses instance-wide (`ErrSweepRefusedEmptyRead`, and the import fails with it) and withholds per container (`SweepScope.Observed`), while **NO REFUSAL THRESHOLD IS SET remains true** and the large-but-nonzero drop is still unguarded; **the freezing rule is NARROWED** — *"written at first sight and never overwritten"* was wrong on the ordinary case, and `remote_identity_hash` now moves for exactly one transition, `empty → present`, with **a wrong first identity frozen too** and its repair v0.2's *"fix this match"*; **the scoping-rider inventory is a LIST, not a count** — *"two documents, four sites; three documents specify both guards"* missed §16.1's v0.1 entry, the site `CLAUDE.md` calls authoritative for scope, whose *"for everything"* takes a dated narrowing rider, and §7.4's heading had *"mandatory"* struck rather than ridden and has it back; ⚠️ **and the closed set names its boundary** — the deletion pass is scoped by NOTHING and runs for **Kavita**, a wired source no measurement here covers, so **guard 2's standing requirement is not deferred for it** |
+| [0075](#adr-0075) | The declared SQLite floor is honoured by **rewriting the trigger body**, not by raising the floor: `RAISE()`'s message must be a **static literal** in any object that reaches the **persisted** schema | **Accepted** — 2026-08-21; **the persisted schema did not honour the floor the documents declare** — [`reference/schema.md`](./reference/schema.md) §1 and [`ARCHITECTURE.md`](./ARCHITECTURE.md) §6 both state **3.43.0**, while `trg_library_unfiled_no_delete` (migration 0005) raised a message built from four fragments joined with `\|\|`, which SQLite accepted as `RAISE()`'s second argument only from **3.47.0** (2024-10-21, *"Allow arbitrary expressions in the second argument to the RAISE function"*); ⚠️ **SQLite stores schema objects as TEXT, so this is a READER defect and it fires at PREPARE on EVERY statement**, not on the delete the trigger guards — verbatim `malformed database schema (trg_library_unfiled_no_delete) - near "\|\|": syntax error (11)`; ⚠️ **the operator-facing form is reachable straight from this repo's own instructions** — [`CONFIGURATION.md`](./CONFIGURATION.md) §6.2's by-hand `sqlite3 … "VACUUM INTO …"` backup answers `Error: stepping, database disk image is malformed (11)`, exits **11** and **writes no backup**, with `PRAGMA integrity_check` failing identically, so a healthy database reports itself corrupt at the moment the operator is trying to protect it; **the repair is migration `00013`, one trigger dropped and re-created**, no table, column, index or row, with the event, the `WHEN OLD.id = 0` condition and the effect carried across unchanged and the message **byte-for-byte** the 316-character string the four fragments concatenate to — proven by running the refused delete at 13 and at 12 and requiring the two error strings equal, not by diffing files; ⚠️ **verified at the DECLARED FLOOR, which is stronger than the defect was routed as** — the slice was scoped to 3.46.1 and the post-0013 database is read by **3.43.0** (built from the official amalgamation with FTS5): `PRAGMA integrity_check` → `ok`, **123 objects**, counts served off the contentless FTS5 tables, a `WITHOUT ROWID` table and `STRICT` tables alike, with 3.45.1 and 3.46.1 the same and **every one of them failing on the pre-0013 control**; **only one persisted object ever carried the construct** — of 123 objects three are triggers, and the other two already raised the literal `'audit_log is append-only'`; 🚫 **the live alternative it closes is raising the floor to 3.47.0 and editing the documents** — the cheaper edit and the worse outcome, spending a real compatibility promise on a **diagnostic string**, excluding the sqlite3 that distributions still in support ship, and excluding them from the one operation an operator performs when already frightened, while the concatenation buys nothing at runtime; 🚫 also refused: shortening the operator-facing message for source tidiness, editing merged migration 0005 (useless — existing databases already store the old trigger), and documenting the requirement instead; **enforced by a test rather than a convention** — `TestPersistedSchemaRaisesOnlyLiterals` blanks literals and comments and fails on `\|\|` inside any `RAISE()` argument, carries a vacuity check, and **both halves were fired deliberately**; ⚠️ **what it does NOT decide, stated so the next grep-driven pass does not reopen it**: the second `RAISE(… \|\| …)`, `trg_wq_rebuild_guard` at `00005_library_sync.sql:961`, **STAYS** — created on the scratch table `write_queue_new`, dropped by 0005 itself at `:984` before the rename at `:986`, **absent from the snapshot and returning 0 from `sqlite_master` on a live migrated database**, so no reader ever prepares it, and its expression message is load-bearing there because it carries the COUNT of rows that would be discarded; ⚠️ **and it does not claim the sqlite3 CLI can BUILD this schema** — it cannot, 0005 is unedited, **building and reading are different claims**, and the two sites recording the build limitation take dated riders rather than deletions |
+| [0076](#adr-0076) | §7.4's sweep gets its **six-hourly schedule** and **no reaper**: the seven-day tombstone is a **restoration window**, and a retention limit is a **joint decision with guard 1** that nobody has taken | **Accepted** — 2026-08-21; **costs no migration, no column, no index and no configuration key** — the interval is a constant; the schedule is a **timer over `FullImport`**, not over `SweepDeletions`, because the sweep's precondition is that the seen-set it is handed is the upstream's WHOLE list and a timer holds no such list — a scheduler reaching for the sweep directly would have to synthesise a set it never observed, and the difference between that set and the truth is tombstoned, which is the whole library on a partial read; §7.4's *"plus on demand"* was **already built** — the Services screen's *"Run full sync now"* — and takes the **identical** `beginImport` claim, so nothing is duplicated, ⚠️ **but the guard is identical and the pass is NOT**, and the shutdown, cancellation and never-synced differences are enumerated in the ADR rather than elided; [REVIEW-LOG](./REVIEW-LOG.md) **C-7's single-writer figures were RE-MEASURED rather than carried forward** (**132 ms** at 1,000 absent links, **2.80 s** at 20,000, **57 ms** for a no-op over 20,000 live links — all ~1.3× C-7 on a different machine, with the ratio between the cells unchanged, which is what makes it a machine and not a regression), and **the material cell is the no-op**, because a six-hourly tick produces the healthy shape and a library-scale absence is an EVENT that costs the same whether the timer discovers it or the operator does; the `write_queue` precondition is **not applicable rather than satisfied** — the sweep has no write-back path and nothing in the production binary creates a `write_queue` row, so a guard added today would be **a check that cannot fail, which this repo counts as no check at all**; ⚠️ **it corrects a doc sentence that promised a deletion nothing has ever performed** (`reference/sync.md` §4, guard 2's clause (b)) — the seven days are a **restoration window** and nothing hard-deletes at their end; **a retention limit is a JOINT decision with guard 1**, because `ux_sil` is plain rather than partial, so a tombstoned link still occupies its `(instance, kind, remote_id)` slot and reaping one **sets guard 1's expiry by accident**; **`ARCHITECTURE.md` §7.4 gains nothing and loses nothing — it was never wrong** |
 
 ---
 
@@ -4235,7 +4237,16 @@ lever.**
 [`FUTURE.md`](./FUTURE.md) §11 and §11.1, all three of which said the `CHECK` would *gain*
 `'awaiting_choice'`. **Closes** `REVIEW-LOG.md` **WQ-05**, recorded there as "a lean, not a
 decision". Both decisions landed in `internal/db/migrations/00005_library_sync.sql`, whose header
-carries the same reasoning next to the SQL. · ⚠️ **amended 2026-08-19** — see the block below:
+carries **the reasoning as it stood when 0005 landed**; **this ADR is authoritative for where that
+reasoning stands now.** · ⚠️ **The pointer used to claim the header carries *the same* reasoning, and
+that claim was stale by construction.** A merged migration is never edited, so 0005's header restates
+all three of decision 3's grounds unqualified — including the one struck 2026-08-17 and the one
+recorded vacuous 2026-08-21 — and it falls further behind each time this ADR gains a rider. **The
+header is therefore cited as PROVENANCE, which is permanently true and needs no maintenance, and
+never as a current summary.** ⚠️ **This Status line is the single home for that explanation.**
+[`reference/schema.md`](./reference/schema.md) §10 and [`FUTURE.md`](./FUTURE.md) §11 point here
+rather than each keeping an account of their own: four copies of an explanation are four things that
+can drift, which is exactly how this pointer came to be wrong. · ⚠️ **amended 2026-08-19** — see the block below:
 decision 1's Go declaration is **discharged** by `007e58e`, its runtime validation is **not**, and
 the obligation on *"whoever writes the first `write_queue` writer"* is **not released but made
 unavoidable**. **No decision changes**; the `CHECK` is still dropped and `work_id` still gains its
@@ -4453,6 +4464,22 @@ and the decision stands on the two that survive.** A 7-day tombstone expiry that
 would silently take a queued command with it, where no foreign key would leave the command to fail
 loudly at the \*Arr.
 
+> ⚠️ **RIDER, 2026-08-21 ([ADR-0076](#adr-0076), REVIEW-LOG LS-394.13). THE ANTECEDENT DOES NOT
+> OCCUR: NOTHING IN THIS TREE HARD-DELETES A `work`, ON AGE OR OTHERWISE.** Measured, single-token and
+> line-oriented, `grep -n "DELETE"` over every tracked `.go` and `.sql` excluding `_test.go` — **no
+> `DELETE FROM work` anywhere**; and `work`'s only cascade parent in the built schema
+> (`internal/db/testdata/schema.sql`) is `work` itself via `parent_work_id`, so no `DELETE` the binary
+> does issue reaches a `work` row either. Positive control: `internal/store/releases.go:178`'s
+> `DELETE FROM release_candidate WHERE expires_at <= ?` is found. ⚠️ **A narrower age-keyed instrument
+> would have missed the near miss and is recorded so nobody re-runs only that one**: guard 1 DOES hard
+> delete, at `internal/store/catalogue.go:1523` — `DELETE FROM service_item_link WHERE
+> service_instance_id = ? AND remote_kind = ? AND remote_id = ?` — and it is not age-keyed. **Measured
+> reach: `service_item_link` only**, cascading solely into `service_item_alias`; it never touches
+> `work`. **The paragraph above stays as written.** It is a conditional and its consequent is what
+> decision 3's `ON DELETE CASCADE` answers; what changes is that the condition is not a state this
+> tree can currently be in, which is what the two riders below turn on. **Nothing here moves the
+> Status line, and no decision is superseded.**
+
 1. ~~`sync.md` §4's write-queue guard is normative and forbids the sweep from acting on a work with a
    row in `pending`, `inflight` or `verifying` — so the collision is one the sweep may not cause, and
    `ix_wq_runnable` is the index that guard uses.~~ 🚩 **STRUCK 2026-08-17, and struck rather than
@@ -4463,18 +4490,77 @@ loudly at the \*Arr.
    step 3 soft-deletes **locally** a row the \*Arr has already dropped, and the hard delete seven days
    later is local too. So the guard does not forbid this collision, and there is no other precondition
    in §4 that does. **The collision is one the sweep may cause**, and this ADR is decided knowing that.
+
+   > ⚠️ **RIDER, 2026-08-21 ([ADR-0076](#adr-0076), REVIEW-LOG LS-394.13).** *"the hard delete seven
+   > days later"* names an event that **has never existed in this tree**. The struck text is kept, as
+   > the strike's own note says, because the error is instructive — but the phrase is a second
+   > instance of the same false far-end premise ADR-0076 Decision 4 corrects in `reference/sync.md`,
+   > and ADR-0076's claim that that was *"the only sentence in the docs promising a far end"* is
+   > corrected there on the strength of this site. **Search scope for the absence:** every tracked
+   > `.go` and `.sql` in this repository, `_test.go` excluded; instrument and positive control are in
+   > the rider above. **This rider changes nothing about the strike**, which stands on its own
+   > quotation error and not on this.
 2. A work reaches hard delete only because the \*Arr itself no longer has it, so a surviving
    *"monitor this"* command can only ever fail. Keeping it produces an alarm in Home's attention
    block that the user cannot act on and cannot distinguish from a real fault. **This ground is
    independent of ground 1 and is unaffected by its withdrawal** — it argues from what the \*Arr holds,
    not from what the sweep is permitted to do, and it is the ground that answers the collision ground 1
    was wrongly said to prevent.
+
+   > ⚠️ **RIDER, 2026-08-21 ([ADR-0076](#adr-0076), REVIEW-LOG LS-394.13). THIS GROUND HOLDS
+   > VACUOUSLY, AND THEREFORE SUPPORTS NOTHING.** It is not false and it is not withdrawn. *"A work
+   > reaches hard delete"* is a conditional whose antecedent never occurs: **nothing in this tree
+   > hard-deletes a `work`**, measured with the instrument and positive control in the rider at the
+   > head of this section, over every tracked `.go` and `.sql` with `_test.go` excluded. A conditional
+   > with an antecedent that never occurs is true and carries no load. **The general form, which is
+   > why this is written down rather than filed as a curiosity: an equality that holds vacuously is
+   > not evidence; a ground that holds vacuously is not support. Count surviving grounds by the ones
+   > that can bear load, not by the ones that are true.**
+   >
+   > ⚠️ **SO THE LEAD-IN SENTENCE *"the decision stands on the two that survive"* IS NO LONGER TRUE AS
+   > A COUNT OF LOAD-BEARING GROUNDS.** Ground 1 is struck; this ground holds vacuously; **ground 3 is
+   > the only one left that can bear load** — and it is a measurement about `write_queue` readers, not
+   > about deletions, so its withdrawal is not implied by anything here.
+   >
+   > ⚠️ **WHETHER DECISION 3 STILL STANDS ON WHAT IS LEFT IS ROUTED AND UNANSWERED, AND IS NOT THIS
+   > SLICE'S CALL.** It is the coordinator's and the PM's. **The Status line is deliberately
+   > untouched: no decision is superseded here, and this rider records a measurement rather than
+   > taking one.** If the answer is that the decision survives, a further dated rider saying so is the
+   > whole remedy; if it is not, that is a correction motion with an ADR of its own.
+   >
+   > ⚠️ **ANSWERED 2026-08-21, in the rider on the summation paragraph below** (*"Does the
+   > decision survive on 2 and 3 alone?"*), which is the *further dated rider* this note asks
+   > for: **the decision survives, on limb (b) of ground 3**, and no ADR of its own is owed.
+   > This paragraph is kept as written because the routing is part of the record.
 3. *"Fails loudly"* is aspirational either way. **Nothing outside `internal/db/spike/` reads
-   `write_queue`** — measured 2026-08-17 on `b8bb500` with
-   `grep -rn "write_queue" --include=*.go internal/ cmd/ | grep -v _test.go`, whose only hits are the
-   standalone RSS-spike binary under `internal/db/spike/` and one comment at
-   `internal/httpapi/grabs.go:58`; roots searched are `internal/` and `cmd/`, and the claim is made
-   about no others. So without the foreign key the dangling row simply sits there and `ix_wq_work`
+   `write_queue`** — measured with
+   `grep -rn "write_queue" --include=*.go internal/ cmd/ | grep -v _test.go`; the roots searched are
+   `internal/` and `cmd/`, and the claim is made about no others.
+
+   ⚠️ **THIS ENUMERATION IS DELIBERATELY COUNT-FREE, AND THE COUNT IT USED TO CARRY IS WHY.** It read
+   *"whose only hits are the standalone RSS-spike binary under `internal/db/spike/` and one comment at
+   `internal/httpapi/grabs.go:58`"*, measured 2026-08-17 on `b8bb500`. Re-measured 2026-08-21 at this
+   tip, the same command returns hits in `internal/store/` as well and the `grabs.go` comment has
+   moved down its own file — **and the substance did not move at all.** A figure that goes stale while
+   the fact it was cited for does not is a maintenance obligation bought for nothing. So the hits are
+   classified rather than counted:
+
+   - **Readers.** The only line in this tree that reads `write_queue` is the
+     `SELECT id, kind FROM write_queue` in the standalone RSS-spike binary under
+     `internal/db/spike/`. That package is behind `//go:build bench`, so it is compiled by **no step
+     of `go build ./...`** — confirmed at this tip by `go list ./...`, which does not name the
+     package, against `go list -tags bench ./...`, which does. The tree's only *writer* is in the
+     same tagged package and inherits the same exclusion; the package's remaining hits are its own
+     prose and one `printf` label.
+   - **Citations.** Every hit outside `internal/db/spike/` is a **comment**, in `internal/httpapi/`
+     and `internal/store/`, and each is discussing this ADR's `CHECK` trade rather than touching the
+     table. ⚠️ **A comment match is a citation of the ADR, not a reader** — the two are
+     indistinguishable in a hit count, which is the second reason this is classified and not counted.
+     `internal/store/writequeue.go` is the case worth naming: it declares and validates
+     `write_queue.state`'s vocabulary and names the table in comments only. **Declaring a vocabulary
+     is not reading a table.**
+
+   So without the foreign key the dangling row simply sits there and `ix_wq_work`
    returns rows for a `work_id` with no referent. `CASCADE` is the answer the table already gives for
    its other two parents, and it is the one SQLite can enforce today.
 
@@ -4484,6 +4570,38 @@ pointing at nothing. Ground 2 says the outliving row could only ever have failed
 nothing would notice it either way. Neither borrows anything from the sweep's permissions. The
 rejected alternatives below — `RESTRICT`, `SET NULL`, no foreign key — are likewise argued without
 ground 1.
+
+> ⚠️ **RIDER, 2026-08-21 ([ADR-0076](#adr-0076), REVIEW-LOG LS-394). THIS PARAGRAPH IS THE ONLY PLACE
+> IN THE ADR WHERE EACH GROUND IS SAID TO CARRY HALF THE DECISION, AND BOTH HALVES NEED CORRECTING.**
+> The conclusion is undisturbed. What the conclusion rests on is not what this sentence says it is.
+>
+> **ON GROUND 2 — *"the outliving row could only ever have failed"*. That ground HOLDS VACUOUSLY AND
+> THEREFORE SUPPORTS NOTHING.** It is not false and it is not withdrawn: its antecedent, a `work`
+> reaching hard delete, never occurs, measured with the instrument and the positive control in the
+> rider at the head of this section. **The general form, which is why this is written down rather
+> than filed as a curiosity: an equality that holds vacuously is not evidence; a ground that holds
+> vacuously is not support.** So *"ground 2 says …"* cites a true sentence that carries no load here.
+>
+> **ON GROUND 3 — *"nothing would notice it either way"*. That is ONE OF GROUND 3'S TWO LIMBS, AND IT
+> IS THE WEAKER ONE.** Ground 3 reads as a single argument and is two, of unequal strength:
+>
+> - **Limb (a), the limb this paragraph leans on** — *"fails loudly" is aspirational, because nothing
+>   outside `internal/db/spike/` reads `write_queue`*. This is an argument from an absence, **and
+>   absences end.** ⚠️ **TRIGGER: if `write_queue` gains a reader, limb (a) weakens and decision 3 is
+>   worth re-examining.** A reader is something that executes SQL against the table; a comment naming
+>   the table is a citation of this ADR, not a reader. An absence with no expiry is a claim carrying a
+>   hidden clock, so the clock is written down here rather than left to be rediscovered.
+> - **Limb (b), which this paragraph never invokes** — `CASCADE` is the answer the table already gives
+>   for its other two parents, and it is the one SQLite can enforce today. **This limb is
+>   unconditional and carries decision 3 by itself**, and it **survives limb (a)'s trigger
+>   unchanged**: a `write_queue` reader appearing does not make `SET NULL` enforceable, does not give
+>   `RESTRICT` a `work` delete to restrict, and does not make a third `ON DELETE CASCADE` inconsistent
+>   with the two this table already carries.
+>
+> **SO THE DECISION SURVIVES, AND IT SURVIVES ON LIMB (b) — not on "2 and 3", and not on the count
+> this paragraph's opening question asks for.** Count grounds by the ones that can bear load, not by
+> the ones that are true. **The Status line does not move**: nothing here supersedes a decision, and
+> this rider records where the load sits rather than moving it.
 
 ### Alternatives rejected
 
@@ -6256,7 +6374,76 @@ which named three candidates and deliberately picked none · **Closes off a thir
 and any `proposed` flag on `library`** · **Costs no migration, no data change and no new state** ·
 **Describes behaviour that is not built**, on two counts named in the Decision, and it says so rather
 than implying it · **Removes nothing from the import path here** — that removal belongs to the
-library thread that builds §17.8.
+library thread that builds §17.8. · ⚠️ **amended 2026-08-21, owner-decided** — see the block
+directly below: **open question 1 is closed** and the first import runs **before** Accept. Nothing
+else in this record moves.
+
+### ⚠️ Amendment, 2026-08-21 — the first import runs before Accept, and that is Joe's answer rather than a default nobody objected to
+
+**What is decided: on connect, the first library import runs BEFORE the user accepts anything.** The
+works land in the reserved `Unfiled` library, and accepting a proposal files them into the library
+that Accept creates. This closes **open question 1** below and closes nothing else: open questions 2
+and 3 stand, the five decision clauses are untouched, and clause 1 survives intact in particular,
+because running the import early persists no proposal.
+
+**Why it had to be decided at all.** Today a connect creates a library for every container the
+service reports, silently and with no screen involved — Fact 2 above measures that path. §17.8
+specifies the opposite: the user is shown a list of proposals, one per container the service itself
+named, to tick, rename or decline before anything is created. Clause 1 above makes creation
+conditional on Accept, and the moment creation is conditional the import must fall on one side of
+Accept or the other. That is the whole of the question, and it went to the owner because the two
+orderings differ in what he is looking at when he says yes.
+
+**The recommendation, and the reason it gave.** This lane recommended **before**, in the project
+thread at **2026-08-21T07:26:14Z** (`cmsg_01S5UQT5yPAMR4PFkxyLGSj98d8bkoPi5yZX1ov5i64ZBf`). What
+follows is **an excerpt** — two paragraphs precede it and one follows it — and it is the part that
+carries the argument:
+
+> What's undecided: on connect, does the first import run before you accept, or after?
+>
+> Run it before, and the catalogue is there immediately — the schema already reserves an "Unfiled"
+> library for works that belong to no library, so there's somewhere for them to sit, and accepting a
+> proposal files them into it. You'd be ticking proposals with real item counts beside them.
+>
+> Run it after, and nothing is written until you say yes, but you're deciding blind: no counts, and
+> a wait once you've accepted.
+>
+> I'd go with before. Say the word if you'd rather nothing touch the database until you've accepted.
+
+**The reason is the middle paragraph, and it is the reason this amendment rests on: ticking a
+proposal that carries a real item count beats deciding blind, and the reserved `Unfiled` library is
+the mechanism that makes importing early safe**, because the works have somewhere to sit that is not
+a library the user has not agreed to.
+
+**Who decided, and how it was put to him.** The recommendation reached Joe as **item 5 of a five-item
+list** posted at **14:35Z** (`cmsg_01S5UQT5yPAMR4PFkxyLGSj9HexPuU85QAxDA1VLX5tULC`), whose item 5
+linked to the message above rather than restating it. He answered the list item by item at
+**2026-08-21T14:47:25Z** (`cmsg_01S5UQT5yPAMR4PFkxyLGSj972dd1nGNhBsPu7V5MB7sih`), and item 5's answer
+was *"proceed as recommended"*. **This is an owner decision, not a default that stood because nobody
+objected.** He was asked a question that named its own alternative in the same breath — *"Say the
+word if you'd rather nothing touch the database until you've accepted"* — and he chose. The
+distinction is not pedantry: a default that stood unopposed and an owner who was asked and said
+proceed survive re-litigation differently, and only the second is what happened. **And *"proceed as
+recommended"* is unresolvable standing alone**, which is why the recommendation and its reason are
+quoted above it rather than merely cited — an answer whose referent is not in the record is a
+quotation pointing at nothing.
+
+**A separate observation, and explicitly NOT the recommendation's reason.** Open question 1 below
+notes that importing into a holding state *"reintroduces exactly the row-that-is-not-yet-a-library
+this ADR rejects, so it is not free."* The shape decided here does not pay that price, because its
+holding place is not a new row: `Unfiled` is already seeded by migration `00005_library_sync.sql`,
+and this ADR's own Consequences already count it as the **one** class of row in `library` that is not
+a library. **So the ADR's own reasoning is consistent with the outcome — and that consistency is
+noticed here, after the fact.** It is **not** what the recommendation argued: the recommendation
+reasoned from item counts and from `Unfiled` as a landing place, never from row classes, and
+attributing the row-class argument to it would be a citation of something nobody said.
+
+**What this amendment does NOT do.** It settles the ordering and nothing else. **It does not perform
+the removal of unconditional creation from the bootstrap path** — Fact 2 and the Consequences above
+both assign that removal to the library thread that builds §17.8, §17.8 assigns it there too, and it
+stays there. What that thread gains is one fewer thing to decide, not one fewer thing to build. This
+amendment changes no clause, no alternative, no schema, no migration and no code, and it settles
+neither of the other two open questions nor `LS-06`.
 
 ### Context
 
@@ -6533,6 +6720,12 @@ rather than a line in a spec.
    thread. Two shapes are live — probe, propose, accept, then import; or import into a holding state
    and confirm afterwards — and the second reintroduces exactly the row-that-is-not-yet-a-library this
    ADR rejects, so it is not free. It needs the owner.
+   ✅ **ANSWERED 2026-08-21 by Joe, owner-decided: BEFORE.** The first import runs before Accept, on
+   the recommendation and the reason quoted in the amendment block under `Status:` above — a proposal
+   ticked with a real item count beats one accepted blind, and the reserved `Unfiled` library is what
+   makes importing early safe. **The question is left standing as it was asked, and is not struck,
+   because it is not wrong — it is discharged**: its framing is what got the call put to the owner,
+   and its *"It needs the owner"* was correct and is now spent. Questions 2 and 3 below are untouched.
 2. **What the probe proposes on an install that already has bound libraries.** §17.8's rule is that a
    later connect *"can only offer to add sources"* for a user-managed library, but every existing row
    is `'auto'` and no code has ever read the column to tell the two apart. The rule is well-specified
@@ -6939,6 +7132,20 @@ two library shapes §6.5 asks for by name.
 > migrations into it is a plan for whatever subset loaded before the error: migration 0005 contains
 > `RAISE(ABORT, 'a' || 'b')` and the CLI rejects it. `internal/store/browse_test.go` carries this
 > note where someone doing plan work will meet it.
+>
+> 🔻 **Rider, 2026-08-21 — the sentence above stands, and half of what a reader takes from it no
+> longer does. BUILDING and READING are different claims and this note only ever measured the
+> first.** Building: unchanged and still true — migration 0005 is not edited, a merged migration
+> never is, and it still contains two expression-valued `RAISE`s, so piping the migrations into an
+> old `sqlite3` still fails. Reading: **fixed**. The advice this note is usually summarised as —
+> *you need a newer SQLite, and no query avoids it* — was true of the whole file and is now false of
+> the second half: the blocker in the **persisted** schema was one trigger body, editable by a
+> migration, and migration `00013` edited it. **Measured**: a database built by running every
+> migration is now read by a real **3.43.0** build — the declared floor — answering
+> `PRAGMA integrity_check` with `ok` across all 123 objects, where before `00013` the same binary
+> answered `malformed database schema (trg_library_unfiled_no_delete) - near "||": syntax error (11)`
+> on every statement. So a **migrated** database is now open to plan work with an external CLI; a
+> **migrations directory** is still not. [ADR-0075](#adr-0075) carries the matrix.
 
 **The member-driven shape, `added_at` order, one library and two libraries over one kind:**
 
@@ -10276,7 +10483,124 @@ travel, and the refusal recorded at `internal/store/skips.go:116-120` and
 `internal/httpapi/libraries.go:215-221` still holds word for word ·
 **Ships no code here**: the change this ADR governs is built on another branch and lands behind it ·
 ⚠️ **The numbers below are MEASURED, not argued** — §3 carries a ground truth, `main`'s answer and
-the fix's answer, all three read off one response body captured from a real two-instance import.
+the fix's answer, all three read off one response body captured from a real two-instance import ·
+⚠️ **Amended 2026-08-20 — item 4 of *What this does NOT decide* is overtaken in part**: the
+amendment directly below puts the **per-container `reason`** on the wire, so the sentence that used
+to be dropped is dropped no longer · ⚠️ **the LIBRARY-LEVEL field is NOT decided there** — that is
+ADR-0071, allocated and **not yet written**, and the implementing commit carries both
+halves, so it **must not land ahead of ADR-0071**.
+
+### ⚠️ Amendment, 2026-08-20 — the per-container `reason` joins the per-container count on the wire; the `Reason` attribution defect stops being unaddressed
+
+**What this amendment decides, and it is ADDITIVE ONLY.** `skipped.containers[]` gains a **`reason`**
+— UsArr's own short sentence from **that container's** row, omitted where that row recorded none.
+Nothing is un-folded, no existing field changes meaning, and the server does everything it did plus
+serialises one more string it already held. A client that reads only `items` and `reason` reads
+exactly what it read before.
+
+**This is decision 1 applied to the field beside the one it was written for.** `reason` is the same
+shape as `items` — same key, same containers, same failure. A skip is a fact about a **container**
+(Context §2), the per-container value is already in the fold loop and discarded (Context §6), and
+the remedy is the one decision 1 already took: **carry the breakdown.** Deciding it the other way
+would settle the identical question the opposite way one field over, and would lose the sentence the
+row actually recorded.
+
+**⚠️ WHICH SENTENCE THE LIBRARY-LEVEL FIELD SHOWED WAS DECIDED BY `library_source.id`, AND THAT IS
+WHY THERE IS A DEFECT HERE AT ALL RATHER THAN AN IMPROVEMENT.** `foldSkips` took `Reason` from the
+**first non-zero container**, and *first* there is the order `librarySkipsSQL` returns rows in —
+`ORDER BY ls.library_id, ls.id`, i.e. the order the **user happened to bind the sources in**. That is
+an implementation fact about a join, not a fact about coverage, recency, or where the items were left
+out. Reversing the bind order reversed the published explanation with no other change anywhere in the
+system — the same objection [ADR-0066](#adr-0066) decision 5's 2026-08-20 amendment made to a name
+that encoded traversal order, and the same objection *Alternatives rejected* 1 below makes to an
+apportioned count.
+
+**⚠️ AND IT IS REACHABLE TODAY, THROUGH THIS REPO'S OWN HISTORY, NOT ONLY THROUGH A SECOND ADAPTER.**
+This is what makes the change due now rather than at the next adapter, and it needs no hypothetical —
+three facts, each read in the tree:
+
+- [ADR-0068](#adr-0068)'s implementation (`1c35d18`) **changed the `skipReason` constant** in
+  `cmd/usarr/import.go`, from *"UsArr maps prose books only; a comic or an unclassified file has no
+  row"* to *"a file BookOrbit itself cannot classify has no row"*. One adapter, two sentences, in the
+  shipped history of one binary.
+- Skip rows are **inserted, never rewritten** — `RecordSyncReport` is a bare `INSERT INTO
+  sync_report`. Every superseded sentence is still on disk.
+- The read takes the **newest row per CONTAINER** — `containerReportSQL`'s correlated
+  `ORDER BY r2.id DESC LIMIT 1`, keyed on `(service_instance_id, remote_id)`.
+
+Compose them and the shape is ordinary. An import that aborts before reaching one of a library's
+containers leaves that container's newest row where it was — [ADR-0063](#adr-0063) records exactly
+this, that a container the walk never reached has **no new row** — while the containers the walk did
+reach get fresh ones. A partial import before `1c35d18` plus any import after it puts **two different
+sentences on one library, one adapter, one instance, today**.
+
+**⚠️ THE VOCABULARY CHECK, BECAUSE THIS ADR DREW THAT BOUNDARY AND THIS AMENDMENT MUST BE SHOWN TO
+STAY INSIDE IT.** *What this does NOT decide* item 2 refuses the **per-reason TALLY vocabulary** on
+the wire — `skipped_comics` and `skipped_unknown`, [ADR-0063](#adr-0063)'s refusal, *"a second
+adapter will decline items for reasons that are neither, and an API field named `comics` would then
+have to be lied to **or left at zero**"*. **That refusal is untouched, word for word**, and the two
+things are different objects:
+
+| | What it is | Does it cross? |
+| --- | --- | --- |
+| `skipped_comics`, `skipped_unknown` | the **adapter's** per-reason **tally** — a count under a name only BookOrbit can mean | **No.** Still `sync_report.detail` only. Unchanged. |
+| `reason` | **UsArr's own prose**, generated by UsArr, one sentence | **Yes — and it already did**, as `skipped.reason`, since the field shipped. |
+
+No vocabulary crosses that was not already crossing. What moves is **where the same string is
+filed**: under the container that recorded it as well as under the library that folded it. The
+breakdown is still broken down by **container and never by reason** — one entry per container,
+whatever it says — which is [`reference/http-api.md`](./reference/http-api.md) §2.6a's rule, and an
+entry-level `reason` does not violate it: it is not a split of `items` by reason, and it adds no
+field to the `skipped` object itself.
+
+### ⚠️ What this amendment does NOT decide — the library-level field is ADR-0071's
+
+**Whether the library-level `skipped.reason` is WITHHELD when a library's containers disagree is NOT
+decided here.** It is a separate decision, allocated **ADR-0071**, and this amendment neither takes it
+nor pre-empts it. ⚠️ **ADR-0071 IS NOT YET WRITTEN**, so at the time of this amendment the question is
+open and the field's behaviour under disagreement is not governed by anything in this file.
+
+**Four reasons it is a separate decision, recorded because the boundary is easy to walk past and the
+test generalises:**
+
+1. **This ADR declares itself ADDITIVE, repeatedly** — nothing un-folded, no field changing meaning,
+   the server doing everything it did plus appending. **Withholding is SUBTRACTIVE**: it changes what
+   an existing client reads off a field that is already shipped. An additive decision does not
+   authorise a subtractive one.
+2. **Decision 1 bounds itself with an explicit "only"**, and *a decision that names its own boundary
+   cannot be read as silently reaching past it.*
+3. **Decision 6 is not counter-precedent.** It looks like one — a decision taken inside this ADR's
+   implementation — but it was **FORCED**: decision 2's key was not in the SELECT, so widen-or-fork
+   had to be answered before anything could ship. Withholding is **declinable**: the breakdown ships
+   perfectly well with the library-level field left exactly as it is. ⚠️ **The line worth keeping is
+   general — a choice you could decline and still deliver the decision is a separate decision.**
+4. **Boundary item 4 below disclaims FIXING the `Reason` defect, not GOVERNING the field.** It is not
+   a grant of authority over what the library-level field does.
+
+**⚠️ A SEQUENCING CONSTRAINT FOLLOWS, AND IT IS LOAD-BEARING.** The implementing commit `1190261`
+contains **both** halves — the additive per-container field this amendment decides, **and** the
+withholding ADR-0071 has not yet decided. **So that commit must not land ahead of ADR-0071**, or the
+tree acquires a behaviour no ADR governs, which is the failure the preamble's `162dca5` note exists
+to prevent.
+
+**What this amendment does not touch.** Decisions 1–6 all stand as taken. `items` still carries the
+library total (decision 3). The breakdown is still keyed on the `sources[]` triple (decision 2).
+Apportioning is still refused (decision 4). There is still no compatibility fallback (decision 5).
+The statement is still widened rather than forked (decision 6) — and **no SQL changes here at all**,
+because `containerReportSQL` already selects `r.detail`, `reason` was always inside that blob and
+always decoded; what changes is only that the fold stops discarding it. ⚠️ **`skipMarks`'
+`alsoReporting` is recorded OPEN by the Consequences below and STAYS open**; nothing here touches it.
+
+**The implementing commit is `1190261`** — the store fold, the wire field, the web client and
+[`reference/http-api.md`](./reference/http-api.md) §2.6a, that document being the authoritative
+contract for this object, as decision 2 already says. The red test is
+`TestFoldSkipsDoesNotAttributeOneContainersReasonToAnother`, **watched failing on the pre-fix tree**
+before a line of the fix was written, on the first container's sentence surviving the fold; the rest
+of the `internal/store` suite was green on the defect, which is why a passing suite was not evidence
+about it.
+
+**No decision text below is rewritten**, per this file's own rule at the top: *What this does NOT
+decide* item 4 stays readable exactly as it stands and carries a dated inline flag.
 
 ### Context
 
@@ -10450,7 +10774,14 @@ exactly what it read before.
 server's real per-container measurements or it is not published. Deriving per-container numbers by
 dividing a library total is not permitted, here or later.
 
-**5 · There is no compatibility fallback, and Consequences ¶3 below is why.**
+**5 · There is no compatibility fallback**, and the reason is the Consequences paragraph below
+opening *"There is NO compatibility fallback for an old server withholding `containers`"*.
+⚠️ **Pointer repaired 2026-08-20 — it read *"Consequences ¶3 below"*, and that was wrong when it was
+written rather than gone stale since.** `cdb7c15` changed it from *"§7 below"* to *"¶3"*, and in that
+same commit's own text the paragraph it means was already the **sixth**; no counting scheme in the
+section yields three (by ⚠️-marked paragraphs it is the fourth), and nothing has been inserted ahead
+of it since. Cited by **opening words** now, which is what this file's positional-reference rule asks
+for and is immune to both readings.
 
 **6 · The shared statement is WIDENED, not forked.** `containerReportSQL` selects the three identity
 columns for **both** its callers, and the completeness caller **scans them and discards them**.
@@ -10542,6 +10873,14 @@ that skipped for *different* reasons silently drops one of them. That is a genui
 **separate** from this one — it is about which sentence is shown, not about which number is
 summed — and it is **explicitly still open**. Nothing here fixes it and nothing here should be read
 as having fixed it.
+
+> ⚠️ **ADDRESSED IN PART 2026-08-20, AND SPLIT IN TWO.** The amendment under the `Status:` line
+> above puts the per-container `reason` on the wire, so **the dropped sentence is no longer dropped**
+> — each container's own explanation now crosses beside its own count, on this ADR's own reasoning.
+> ⚠️ **What the LIBRARY-LEVEL field shows when the containers disagree is NOT decided there**: that
+> is a separate, subtractive decision allocated **ADR-0071**, which is **not yet
+> written**. **This paragraph is left standing rather than rewritten** — it was true when this ADR was
+> taken, and the `foldSkips` citation above records where the defect was.
 
 ### Consequences
 
@@ -13053,3 +13392,467 @@ It never decides whether to re-read the credits.* Anything that gates a BookOrbi
 `ImportedItem.creditRequest` is minted is this ADR's defect wearing an optimisation's clothes, and if
 the credit re-apply is measured too expensive the answer is to argue about the sweep's cadence, not
 to move the gate earlier.
+
+---
+
+<a id="adr-0075"></a>
+## ADR-0075 — The declared SQLite floor is honoured by **rewriting the trigger body**, not by raising the floor: `RAISE()`'s message must be a **static literal** in any object that reaches the persisted schema
+
+**Status:** Accepted — 2026-08-21 ·
+**Costs one migration**, `00013_raise_message_literal.sql`, which drops and re-creates exactly one
+trigger and touches no table, no column, no index and no row ·
+**Closes the alternative** *"the floor moves to 3.47.0"* — see *Alternatives* ·
+⚠️ **It is a decision about READERS, not about this project's engine.** UsArr bundles
+`ncruces/go-sqlite3` (SQLite 3.53.4), which was never affected; every measurement below is about
+some *other* SQLite opening the file UsArr wrote ·
+⚠️ **What it does NOT decide** is in a section of its own: the second `RAISE(… || …)` in migration
+0005 **stays**, and that section is why ·
+**No wire field, no configuration key, no column.**
+
+### Context
+
+#### The floor this project declares
+
+[`reference/schema.md`](./reference/schema.md) §1 states **"Minimum SQLite version: 3.43.0"**, and
+[`ARCHITECTURE.md`](./ARCHITECTURE.md) §6 states it again: `STRICT` needs 3.37, FTS5
+`contentless_delete=1` needs 3.43.0, so 3.43.0 is the floor. That is a claim about what can **read a
+UsArr database**, because the only thing a floor can usefully be about is a reader — UsArr itself
+brings its own engine and does not consult the floor.
+
+#### The persisted schema did not honour it
+
+SQLite allowed an arbitrary expression as `RAISE()`'s second argument only from **3.47.0**
+(2024-10-21). The changelog entry is one line: *"Allow arbitrary expressions in the second argument
+to the RAISE function."* Migration 0005 wrote such an expression — four string fragments joined with
+`||` — into `trg_library_unfiled_no_delete`, and **SQLite stores schema objects as text**. So the
+concatenation is re-parsed by every reader, and the resulting requirement is 3.47.0, four releases
+above the declared floor.
+
+#### The failure is at PREPARE, on every statement, and it reads as data loss
+
+It is not a failure of the delete the trigger guards. SQLite parses the whole stored schema before it
+can prepare anything, so **every** statement fails, verbatim:
+
+```
+Error: in prepare, malformed database schema (trg_library_unfiled_no_delete) - near "||": syntax error (11)
+```
+
+⚠️ **The operator-facing form is worse than the developer-facing one**, and it is reachable straight
+from this repo's own documentation. [`CONFIGURATION.md`](./CONFIGURATION.md) §6.2 gives a by-hand
+backup as `sqlite3 /config/usarr.db "VACUUM INTO '…'"`. Run against a pre-0013 database by any
+sqlite3 below 3.47.0, that command prints
+
+```
+Error: stepping, database disk image is malformed (11)
+```
+
+exits **11**, and **writes no backup file**. `PRAGMA integrity_check`, the first thing anyone reaches
+for next, fails identically. A healthy database reports itself as a corrupt one at the exact moment
+the operator is trying to protect it.
+
+### The measurements
+
+All taken 2026-08-21 on branch `wip/raise-floor-00013` off `f014dc2`. The database under test is
+built by running every migration on this project's own engine and then read by an **external**
+`sqlite3` binary — the shape the defect actually has.
+
+**Reader matrix**, probe `SELECT count(*) FROM library;`:
+
+| Reader | Pre-0013 (schema at 12) | Post-0013 (schema at 13) |
+|---|---|---|
+| **3.43.0** (built from the official amalgamation, `-DSQLITE_ENABLE_FTS5`) | `malformed database schema … near "\|\|"` | ✅ `1` |
+| **3.45.1** (official `sqlite-tools-linux-x64-3450100.zip`) | `malformed database schema … near "\|\|"` | ✅ `1` |
+| **3.46.1** (official `sqlite-tools-linux-x64-3460100.zip`) | `malformed database schema … near "\|\|"` | ✅ `1` |
+| **3.53.4** (`ncruces/go-sqlite3`, this project's engine) | ✅ | ✅ |
+
+⚠️ **The 3.43.0 row is the one that matters and it is stronger than the slice was scoped for.** The
+defect was routed as "3.46.1 cannot read it"; the repair is verified at **the declared floor itself**,
+not merely at some version below 3.47.0. At 3.43.0 the post-0013 database answers
+`PRAGMA integrity_check` with `ok`, reports **123 objects** in `sqlite_master`, and serves counts off
+the contentless FTS5 tables (`search_fts`, `search_trgm`), a `WITHOUT ROWID` table
+(`library_member`) and `STRICT` tables alike. The floor is now a measured property rather than a
+declaration.
+
+**Only one persisted object ever carried the construct.** Of those 123 objects, three are triggers
+and one of them raised a concatenated message. The other two — `trg_audit_no_delete` and
+`trg_audit_no_update` — already raised the literal `'audit_log is append-only'`.
+
+**The repair is confined to the message's spelling.** The trigger's event
+(`BEFORE DELETE ON library`), its condition (`WHEN OLD.id = 0`) and its effect (`RAISE(ABORT, …)`)
+are carried across unchanged, and the message is **byte-for-byte** the 316-character string 0005's
+four fragments concatenate to — asserted by running the refused delete at 13 and again at 12 and
+requiring the two error strings to be equal, not by comparing two files. The regenerated
+`internal/db/testdata/schema.sql` differs from its predecessor in **one hunk, inside one trigger**.
+
+### Decision
+
+1. **Any object that reaches the persisted schema raises a static string literal.** Concatenate the
+   message at authoring time. This is not a style preference: it is what keeps the stored schema
+   parseable by the readers §1 promises.
+2. **The floor stays 3.43.0.** No document's floor number changes as a result of this ADR; the
+   schema changed to meet the number, not the other way round.
+3. **The rule is enforced by a test, not by a convention.**
+   `TestPersistedSchemaRaisesOnlyLiterals` reads every trigger out of `sqlite_master`, blanks its
+   string literals and comments, and fails on a `||` inside any `RAISE()` argument. It carries a
+   vacuity check that fails if it finds no `RAISE()` at all, and both halves were fired deliberately
+   before being trusted.
+
+### Consequences
+
+⚠️ **The most consequential thing this slice found is not the trigger — it is that an operator's
+backup could silently produce nothing.** [`CONFIGURATION.md`](./CONFIGURATION.md) §6.2's by-hand
+procedure is `sqlite3 /config/usarr.db "VACUUM INTO '/config/backups/usarr-$stamp.db'"`. Run against
+a pre-`00013` database with any `sqlite3` below 3.47.0, that command **exits 11, prints
+`Error: stepping, database disk image is malformed (11)`, and writes NO FILE**. Measured, not
+inferred. Three things make it worse than an ordinary failure:
+
+1. **The database is healthy.** Nothing is wrong with it. The message is a parse refusal wearing
+   corruption's clothes.
+2. **The obvious second opinion agrees with the lie.** `PRAGMA integrity_check` fails identically,
+   so the operator's next diagnostic confirms the false diagnosis instead of correcting it.
+3. **The failure is at the worst moment.** Someone taking a manual backup is usually already
+   worried — migrating hosts, or reacting to a scare. The backup they believe they took does not
+   exist.
+
+`00013` removes the cause. §6.2 additionally gains a note naming the symptom and the remedy, because
+**databases written before `00013` still exist**, and the note is the only thing that reaches an
+operator holding one. ⚠️ **Nothing guards this and nothing can** — it is the operator's binary, not
+UsArr's. `usarr backup` does not have the problem, because it uses the bundled engine.
+
+**The floor is now a measurement, and the number did not move.** `3.43.0` stands unchanged in
+[`reference/schema.md`](./reference/schema.md) §1, [`ARCHITECTURE.md`](./ARCHITECTURE.md) §6 and
+[`DEVELOPMENT.md`](./DEVELOPMENT.md); what changed is that it is now true. ⚠️ **Recorded because the
+result is stronger than the defect was routed as**: the slice was scoped to "an old binary, 3.46.1 or
+3.45.1", and verifying only there would have left the three releases between 3.43.0 and 3.46.1
+unexamined — so the acceptance run was extended down to **3.43.0, the declared floor itself**. Every
+future claim about this floor should be made at 3.43.0 for the same reason.
+
+**A standing constraint on every future migration.** `RAISE()`'s message must be a static literal in
+anything that reaches the persisted schema. It is enforced by
+`TestPersistedSchemaRaisesOnlyLiterals` rather than by review, and that test is scoped to
+`sqlite_master` on purpose — see *What this ADR does NOT decide*.
+
+**Rolling back past `00013` reintroduces the defect**, deliberately: the Down block restores 0005's
+body verbatim, because a Down that does not restore what was there is not a rollback.
+
+### Alternatives considered
+
+🚫 **Raise the declared floor to 3.47.0 and change the documents instead.** Rejected. It is the
+cheaper edit and the worse outcome: it would spend the project's compatibility floor — a real
+promise to operators, tooling and backup scripts — on a **diagnostic string**, which is the least
+load-bearing thing in the schema. 3.47.0 is October 2024, so the floor would exclude the sqlite3
+shipped by distributions still in support, and it would exclude them from the one operation an
+operator performs when they are already frightened. The concatenation buys nothing at runtime: the
+message is a constant, and the four fragments existed only to keep the SQL source inside a line
+width.
+
+🚫 **Shorten the message so it fits one line naturally.** Rejected. The abort text is read by a
+person at the moment a delete is refused and it names the consequence and the second thing it blocks;
+trading it for source tidiness is a real loss for a cosmetic gain. The literal is long and that is
+fine — it is stored as text either way.
+
+🚫 **Edit migration 0005.** Refused on the standing rule that a merged migration is never edited, and
+independently useless: every database already in existence has the old trigger stored in it, so only
+a new migration can reach them.
+
+🚫 **Leave it and document the requirement.** Rejected. The failure mode is `database disk image is
+malformed` on a healthy database, produced by following this repo's own backup instructions. That is
+not a documentable footgun.
+
+### What this ADR does NOT decide
+
+⚠️ **The other `RAISE(… || …)` in migration 0005 stays exactly as it is, and this section exists so
+the next grep-driven pass does not reopen it.** `trg_wq_rebuild_guard`
+(`00005_library_sync.sql:961`) is created on the scratch table `write_queue_new` and dropped by
+migration 0005 itself at `:984`, before the rename at `:986`. Verified rather than assumed: it is
+absent from `internal/db/testdata/schema.sql` and `SELECT count(*) FROM sqlite_master WHERE name LIKE
+'%wq_rebuild%'` returns **0** against a live migrated database. It therefore never reaches a persisted
+schema, no reader ever prepares it, and it cannot cause this failure. Its expression message is also
+load-bearing where it is — it carries a `COUNT` of the rows that would be discarded, which is the
+whole reason that guard is a trigger. Decision 1 is scoped to the **persisted** schema for exactly
+this reason, and the guard in Decision 3 reads `sqlite_master`, so it cannot see this trigger and
+must not be widened to.
+
+⚠️ **It does not claim the sqlite3 CLI can BUILD this schema.** It cannot, and 0013 does not change
+that: migration 0005 is unedited and still contains two expression-valued `RAISE`s, so piping the
+migrations into an old `sqlite3` still fails. **Building and reading are different claims** and the
+sites that record the build limitation ([ADR-0051](#adr-0051)'s measurement note and
+`internal/store/browse_test.go`'s plan-work note) take dated riders saying so rather than being
+deleted — they were right about what they measured.
+
+---
+
+<a id="adr-0076"></a>
+## ADR-0076 — §7.4's sweep gets its **six-hourly schedule** and **no reaper**: the seven-day tombstone is a **restoration window**, and a retention limit is a **joint decision with guard 1** that nobody has taken
+
+**Status:** Accepted — 2026-08-21 ·
+**Costs no migration, no column, no index and no configuration key** — the interval is a constant ·
+**Closes the alternative** *"ship the schedule and the reaper together"*, and closes it in the
+direction of NOT reaping — see *Alternatives* ·
+⚠️ **It corrects a doc sentence that promised a deletion nothing has ever performed**
+(`reference/sync.md` §4, guard 2's clause (b)) ·
+⚠️ **What it does NOT decide** is in a section of its own: there is no retention limit and no reaper,
+and the note for whoever ever builds one is there rather than here ·
+**§7.4 in `ARCHITECTURE.md` gains nothing and loses nothing. It was never wrong.**
+
+### Context
+
+Channel 4's deletion pass has been built since [ADR-0074](#adr-0074) and had exactly one non-test
+caller: `internal/libsync/importer.go`'s `FullImport`, on its success path. `ARCHITECTURE.md` §7.4
+specifies the pass as *"Every 6 h plus on demand"*, and nothing in the binary reconciled on a clock —
+`cmd/usarr/import.go`'s header said so in as many words, and `importer.go` said *"§7.4's every-6-h
+scheduler is not built and this is not it."*
+
+Two questions had to be settled by measurement before a timer could be defended, and a third had to
+be settled by reading the docs against the tree.
+
+### Decision 1 — the schedule is a timer over `FullImport`, and it adds ONLY the clock
+
+`cmd/usarr/reconcile.go`'s `startReconciler`, started and stopped in `main.go` beside the candidate
+sweeper. It calls `FullImport` for every instance that is due.
+
+**It calls `FullImport` rather than `SweepDeletions`, and there is no third option.**
+`SweepDeletions`' precondition is that the seen-set it is handed is the upstream's WHOLE list, and
+its own doc comment says the function cannot check that. A timer holds no such list. Satisfying the
+precondition means going and reading the upstream, which is exactly what `FullImport` does — so a
+scheduler that reached for the sweep directly would have to synthesise a set it never observed, and
+the difference between that set and the truth is tombstoned. That is the whole library on a partial
+read, which is the nightmare bug §7.4 exists to prevent.
+
+**§7.4's "plus on demand" was ALREADY BUILT and is not duplicated.** The Services screen's *"Run full
+sync now"* (`POST /api/v1/services/{id}/sync` → `StartImport`) takes **the identical guard**: the same
+`beginImport` claim over the same `importMu`/`importing` map, refusing with the same
+`httpapi.ErrImportInProgress`. Executed and confirmed. So this loop is shaped like
+`startCandidateSweeper` — ticker, `ctx.Done()`, `done` channel — and **not** like `RunProber`, whose
+request channel would have had no caller. An unreachable extra entry in `import.go`'s explicit trigger
+list would have made that list wrong in the direction hardest to notice.
+
+⚠️ **THE GUARD IS IDENTICAL; THE PASS IS NOT, AND THIS DECISION MUST NOT BE READ AS SAYING SO.** The
+differences, in descending order of how much they matter to what this ADR decides:
+
+1. **Shutdown.** The scheduler runs under `reconcilerCtx`, and `main.go` both cancels it and **waits**
+   (`<-reconcilerDone`) before `a.Close()`. `StartImport`'s goroutine is cancelled by `stopProber()`
+   and is **never waited for** before the database closes. ⚠️ **PRE-EXISTING AND EXPLICITLY NOT THIS
+   SLICE'S TO FIX** — recorded because it means the two paths do not stand in the same relation to the
+   hazard `main.go`'s own comment cites, not because anything here repairs it.
+2. **Concurrency.** `StartImport` returns immediately, so N presses across N instances put N upstream
+   walks on the wire at once. Decision 2's *"bounded rate is honoured as serialisation"* therefore
+   holds on the **timer path only**.
+3. **Pre-flight.** `StartImport` synchronously runs `catalogueSource`'s kind check and the
+   `errImportsNotArmed` check and answers its caller. The scheduler runs neither, and relies entirely
+   on `reconcileDue`'s never-synced clause to keep a Prowlarr off the wire — pinned by
+   `TestTheScheduleNeverReadsAServiceThatHasNeverCompletedAFullSync`, which fires when that clause is
+   inverted.
+4. **Authorization.** The route is `csrfProtected` + `authenticated` + `sudo`. The scheduler has no
+   principal at all.
+5. **Error surface.** `StartImport` returns typed errors to the handler; the scheduler logs and
+   discards.
+
+**Due-ness is read off `last_full_sync_at`, not off the ticker.** `reconcileInterval` is 6 h;
+`reconcileTick` is 30 min and only sets the resolution at which the durable column is consulted. A
+bare six-hour ticker measures from process start, so a box that restarts on every update — the
+ordinary life of a self-hosted binary — could go indefinitely without ever reconciling. ⚠️ **An
+instance that has NEVER synced is deliberately NOT due**: that case belongs to `bootstrapImport`,
+which is gated on the same column; the same clause also keeps a permanently-failing bootstrap from
+being retried every half hour, and keeps a Prowlarr — which will never write the column — from being
+permanently overdue and warning on every tick.
+
+**The interval is a constant, not a configuration key**, on the standing ruling
+`cmd/usarr/maintenance.go` states for `candidateSweepInterval`. ⚠️ `reference/sync.md` §4 writes it
+*"every 6 h (configurable)"* and **that parenthesis is not honoured**; the file now says so.
+
+### Decision 2 — the single-writer cost, RE-MEASURED, and the story the schedule owes for it
+
+[REVIEW-LOG](./REVIEW-LOG.md) C-7 accepted `SweepDeletions` holding the single writer for one whole
+transaction, on **atomicity**, and recorded 103 ms at 1,000 absent links, 2.13 s at 20,000 and 37 ms
+for a no-op over 20,000 live links — all at `0316091`, none re-measured after C-2 and C-3 landed.
+C-7 accepted that cost for an **operator-triggered** import. An unattended 03:00 pass is a different
+question, so the figures were taken again.
+
+**Re-measured at tree `f87aef44` + this slice**, x86-64 (Intel Xeon @ 2.80 GHz, 4 cores),
+`go1.25.13`, `ncruces/go-sqlite3` via the ordinary test store with `ANALYZE` run over the corpus —
+the sweep's own deliberate convention (`analyzedSweepCorpus`). Corpus is one instance, one container,
+N+1 links, of which one is still reported:
+
+| corpus | single-writer hold |
+| --- | --- |
+| 1,000 absent links | **132 ms** / 126 ms (C-7: 103 ms) |
+| 20,000 absent links | **2.80 s** (C-7: 2.13 s) |
+| no-op over 20,000 live links | **57 ms** / 50 ms (C-7: 37 ms) |
+
+The harness was temporary and is not in the tree; the numbers are ~1.3× C-7's across all three cells,
+which is the signature of a different machine rather than of a regression — the RATIO between the
+cells is unchanged.
+
+**THE NUMBER IS NOT MATERIAL FOR THIS SCHEDULE, AND THE REASON IS WHICH CELL THE TIMER LANDS IN.**
+The recurring cost of a six-hourly pass is the **no-op** row — the shape a healthy instance produces,
+where the read reports everything the replica already has — at ~50 ms. The deletion-heavy rows
+describe an EVENT: with C-2 and C-3 fixed, a library-scale absence requires a genuine library-scale
+upstream deletion, which is not what a tick produces. And that event costs the same 2.8 s whether the
+timer discovers it or the operator does by pressing the button; **the schedule does not create the
+cost, it changes who is watching when it is paid.**
+
+Two facts keep it clear of principle 1. **Reads do not queue behind it**: `internal/db` runs WAL with
+a read pool and a single writer, so a write transaction blocks other WRITES and never a render path.
+And the import's own writes are already chunked — `ApplyCatalogueBatch` is sized to
+`min(2000 rows, 100 ms)` — so the sweep's single transaction is the ONE unbounded hold in the whole
+pass. That is C-7's trade, re-accepted here for an unattended run rather than assumed to carry over.
+
+⚠️ **THE GAP THIS LEAVES IS NAMED RATHER THAN CLOSED.** §7.4 step 6 says *"run at low priority with a
+bounded rate"*. What ships honours **serialisation only** — instances are reconciled one at a time,
+so N instances never put N library walks on the wire at once. There is no priority class and no
+request-rate limiter; the bound is the adapter's own paging and the six-hour period.
+
+### Decision 3 — the `write_queue` precondition cannot be honoured on a timer, and there is nothing there to honour
+
+`reference/sync.md` §4 states: *"The sweep may correct an item toward the \*Arr only when there is no
+`write_queue` row for that work in `pending`, `inflight` or `verifying`."* Settled from the tree:
+
+- **The sweep has no write-back path at all.** The precondition gates *"correct an item **toward the
+  \*Arr**"*. Every stamp `SweepDeletions` writes is local; nothing in the pass issues an upstream
+  write. There is no operation for the precondition to gate.
+- **Nothing in the production binary ever creates a `write_queue` row.**
+  `internal/store/writequeue.go` holds the state vocabulary and `ValidWriteQueueState` and issues no
+  SQL statement at all. **Scope searched:** every occurrence of `write_queue`/`WriteQueue` in non-test
+  Go under `internal/` and `cmd/`. The only SQL naming the table anywhere in non-test Go is in
+  `internal/db/spike` — `//go:build bench`, `package main`, a benchmark binary that nothing imports.
+
+So a guard added to the timer today would read an always-empty table on behalf of a pass that never
+writes upstream: **a check that cannot fail, which this repo counts as no check at all.** The
+precondition is therefore **not applicable rather than violated**, it stands unchanged for the
+milestone that builds the write-back, and it is **not** to be recorded as "satisfied" by this
+schedule. `reference/sync.md` now carries that at the precondition's own site.
+
+### Decision 4 — NO REAPER. The seven days are a RESTORATION WINDOW
+
+`reference/sync.md` §4, guard 2's clause (b), read: *"find links with no upstream row, tombstone them,
+and after seven days delete the user's tags, requests and playback state."* **It was wrong.**
+
+⚠️ **IT WAS NOT THE ONLY SENTENCE PROMISING A FAR END, AND THIS DECISION SAID IT WAS.** The scope was
+declared correctly — every occurrence of `seven day`/`7-day`/`7 day` in `docs/*.md` and
+`docs/reference/*.md` — and the sweep over it was not performed correctly. Re-run 2026-08-21 with
+`grep -rniE "seven[ -]day|7[ -]day" docs/*.md docs/reference/*.md`, positive control `tombstone`,
+which is found in both `DECISIONS.md` and `reference/sync.md` — stated as a fired control rather than
+as a hit count, since a figure written here and re-read after either file moves is the exact drift
+DEVELOPMENT.md §11 rule 8 names. The sites inside that scope that assert or
+presuppose a far end, rather than describing the window's effect on reads or on guard 1's hazard, are
+all in [ADR-0039](#adr-0039)'s *Why — decision 3*:
+
+- its lead-in — *"A 7-day tombstone expiry that hard-deletes a `work` would silently take a queued
+  command with it"* — conditional, and the antecedent both grounds below discharge;
+- **ground 1**, struck 2026-08-17 but landed prose — *"the hard delete seven days later is local
+  too."*;
+- **ground 2**, live and unstruck and in the present tense — *"A work reaches hard delete only because
+  the \*Arr itself no longer has it, so a surviving *'monitor this'* command can only ever fail."*
+
+Each of those three carries a dated rider at its own site recording the measurement below. **Every
+other mention in scope** — `ARCHITECTURE.md` §7.4, `reference/http-api.md`, `reference/schema.md`'s
+column comments, the §16.1 roadmap-entry quotations, and `ROADMAP.md`'s and
+[ADR-0074](#adr-0074) Decision 10's own statements of the absence — describes reads, guard 1's hazard,
+or correctly states that nothing reaps.
+
+**The measurement, widened.** ⚠️ The first instrument was age-keyed —
+`grep -rnE "deleted_at *<|deleted_at *>|orphaned_at *<|orphaned_at *>|missing_since *<"` over
+non-test tracked `.go`, **empty**, control `expires_at *<=` finds `internal/store/releases.go:178`'s
+`DELETE FROM release_candidate WHERE expires_at <= ?`. That supports *"nothing reaps on AGE"*, which
+is **narrower than "nothing hard-deletes"**, and there is a non-age-keyed hard delete in the tree. So
+it was re-fired single-token and line-oriented: `grep -n "DELETE"` over every tracked `.go` and
+`.sql`, non-test only. **No `DELETE FROM work` exists anywhere in that corpus**, and `work`'s only
+cascade parent in the built schema is `work` itself (`parent_work_id`), so no `DELETE` the binary does
+issue can reach a `work` row either. The near miss the narrow instrument would have hidden is **guard
+1's own hard delete**, `internal/store/catalogue.go:1523`: `DELETE FROM service_item_link WHERE
+service_instance_id = ? AND remote_kind = ? AND remote_id = ?`. Measured, not reasoned — **it reaches
+`service_item_link` only**, cascading solely into `service_item_alias`
+(`internal/db/testdata/schema.sql:684`, the built-schema snapshot `internal/db/migrate_test.go`
+asserts against the migrations); it never reaches `work`, and the row it writes says so:
+*"the previous work keeps its own tombstone and its owned corrections"*. The other non-test `DELETE`
+statements are replace-set writes and scoped cleanups — `work_alt_title`, `library_member`,
+`search_fts`/`search_trgm`/`search_doc`, `work_credit`, `media_file`, `indexer_catalog` — and the
+`release_candidate` reaper.
+
+**The seven days are the promise that a vanished item comes back.** An item that disappeared because
+a share unmounted or a credential lost its scope returns — with its `tag_assignment` rows, its
+`library_member` rows and its `library_override` corrections still attached to the same `work` — the
+moment the backend does; the ordinary write path clears `deleted_at` on the next sight of it. That
+restoration is the only thing the number governs. **Nothing hard-deletes a tombstone at the end of it,
+and nothing is scheduled to.** `ARCHITECTURE.md` §7.4 never claimed otherwise and is untouched.
+
+⚠️ **THE SENTENCE NAMED THREE THINGS TO DELETE AND TWO OF THEM DO NOT EXIST.** Measured against the
+**built** schema at migration 13 — `sqlite_master` enumerated, on LS-394.7's rule that a schema claim
+read out of migration text is a claim about text — there is **no `request` table, no `playback_state`
+table and no `play_history` table**, and no table name contains the substring `play` or `state` at
+all. Positive control: `tag_assignment` is found. They are `schema.md`'s "later tables", v0.2 and
+v1.0. ⚠️ **AND THE SAME FALSE VOCABULARY SURVIVED INTO THE REPLACEMENT SENTENCE** in both this
+decision and `reference/sync.md` — corrected above and there (LS-394.12); a rewrite that fixes the
+deletion clause and re-uses the nouns in the restoration clause has moved the error, not removed it.
+The one named table that does exist, `tag_assignment`, is the one a reaper would get wrong
+(Decision 5).
+
+### Decision 5 — a retention limit is a JOINT decision with guard 1, because the two share a row
+
+This is the reason a reaper is not a small follow-up, and it has to be stated where the next person
+will meet it.
+
+`ux_sil` is a **plain** unique index —
+`CREATE UNIQUE INDEX ux_sil ON service_item_link(service_instance_id, remote_kind, remote_id)`
+(`00005_library_sync.sql:511`), with no partial clause. **So a tombstoned link still occupies its
+`(instance, kind, remote_id)` slot.** That is precisely what makes guard 1 possible: the \*Arrs reuse
+ids after deletion, the tombstone is still matched by the index, and the guard gets to compare
+`remote_identity_hash` before an upsert clears `deleted_at`.
+
+**Guard 1's coverage window and the restoration window are therefore THE SAME ROW.** Reaping a link
+tombstone does not merely shorten the restoration promise — it **sets guard 1's expiry by accident**,
+because after the hard delete there is no stored identity left for a reused id to be compared
+against, and the resurrection the guard exists to catch becomes an ordinary insert. **Any ADR that
+takes a retention limit is taking a decision about BOTH, and it must say so.**
+
+### What this does NOT decide
+
+- **No retention limit.** No rule that eventually removes a tombstone, or anything hanging off one,
+  is decided here in either direction. It is deferred, not refused.
+- **No reaper.** Nothing hard-deletes a tombstone on age. No `work.deleted_at` index, no migration,
+  no reap query ships with this.
+- **No drift step and no guard 2.** §7.4 step 4's `remote_hash` comparison is still built for nobody,
+  and guard 2's status is [ADR-0074](#adr-0074)'s, unchanged.
+- **Nothing about `(configurable)`** beyond declining it for this constant.
+
+### ⚠️ A note for whoever ever builds the reaper: its predicate must name EVERY table referencing `work`, not one
+
+`tag_assignment.work_id` **has no foreign key to `work`**. `00001_initial.sql:264-265` drops it with
+the comment *"FK to work(id) ON DELETE CASCADE dropped: `work` lands with library sync"*, and
+`00005_library_sync.sql:51-65` defers the restore explicitly. So a reaper that hard-deletes a `work`
+row and trusts `ON DELETE CASCADE` **orphans the user's tags rather than deleting them** — rows
+pointing at an id that no longer exists, invisible and uncounted.
+
+**Measured against the BUILT schema at migration 13** (`PRAGMA foreign_key_list` over every table
+carrying a `work_id`, not by reading the SQL — reading it got `write_queue` wrong, which does carry a
+table-level FK and does cascade). Exactly five columns name a work with **no** foreign key:
+
+| column | consequence of a naive reap |
+| --- | --- |
+| `tag_assignment.work_id` | the user's tags are orphaned, not deleted |
+| `release_candidate.work_id` | NULL for the whole Search-and-Grab path; TTL-swept anyway |
+| `sync_report.work_id` | **deliberate** — `00005` says CASCADE "would erase the report of exactly the event that most needs reporting" |
+| `library_override.work_id` | `00005` says a cascade "would orphan it silently"; `target_identity_hash` is the durable key |
+| `library_override.relink_to_work_id` | same table, same reasoning |
+
+⚠️ **`requests` and `playback state` were named in the same doc sentence and were NOT measured**, for
+the sufficient reason that neither table exists yet. When they land they join this list and the
+question has to be asked again — the list is a measurement of a schema at a version, not a property.
+
+### Alternatives
+
+- **Ship the schedule and the reaper together.** Rejected. The reaper is not the schedule's
+  completion; it is a separate decision that Decision 5 shows is entangled with guard 1's correctness
+  and that Decision 4 shows was resting on a doc sentence promising deletions from two tables that do
+  not exist. Shipping them together would have taken the retention decision silently, inside a commit
+  about a timer.
+- **An on-demand channel on the reconciler, mirroring `RunProber`'s `probeReq`.** Rejected: the door
+  exists and is `StartImport`. A second trigger for one behaviour, with no caller, is dead code that
+  also falsifies `import.go`'s trigger list.
+- **A bare six-hour ticker with no due-check.** Rejected: it makes reconciliation a function of
+  uptime, and a binary restarted on every update would reconcile never.
+- **Making the interval a configuration key**, as `sync.md` §4's *"(configurable)"* suggested.
+  Rejected on `maintenance.go`'s standing ruling: an operator asked to pick this number must know how
+  long their upstream takes to walk and how fast their catalogue churns, and §7.4 already chose the
+  honest default for them.

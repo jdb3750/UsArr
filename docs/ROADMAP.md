@@ -9,8 +9,61 @@
 > item below carries **a check you can run**, so the list is re-derived rather than trusted. If a
 > check disagrees with the box beside it, the check is right and the box is stale.
 >
-> **No dates and no estimates appear here, ever**, at the owner's standing instruction. Where a line
-> is inference rather than something read off §16, an ADR or the tree, it is marked 🔍.
+> ~~**No dates and no estimates appear here, ever**, at the owner's standing instruction.~~
+> 🔻 **SCOPED 2026-08-21, by the PM ruling of that date — *"scope it, and don't park it"*, and
+> *"say estimates, not dates"*.** The rule as it now stands: **no delivery dates and no time
+> estimates appear here, ever.** **Historical dates — when a claim was falsified, when a pass ran,
+> when a check was taken — are this file's own convention, and they are required rather than
+> tolerated**, because a correction that does not say when it was made cannot be re-checked against
+> the tree that falsified it. The struck sentence banned both kinds and the file kept writing one of
+> them throughout, which is how it came to be falsified by the page beneath it.
+>
+> ⚠️ **The attribution is deliberately narrow: the PM ruling of 2026-08-21 is the authority for the
+> SCOPING and for nothing else, and no wording is put in the owner's mouth here.** What he actually
+> instructed **is not recorded anywhere in this tree**, and that was searched rather than assumed:
+> the rule appears in exactly two places, this file and the message of
+> [`81e7310`](https://github.com/jdb3750/UsArr/commit/81e7310) (2026-08-18), the commit that created
+> this file, and **neither of them cites a source**; `docs/PROJECT-INSTRUCTIONS.md`, the canonical
+> copy of the instruction text applied to the project's own settings, carries no clause of this kind
+> in **any** version from v1.0 to v1.7. So the underlying instruction is referenced here exactly as
+> the struck sentence referenced it, and no fresher claim about its wording is made.
+>
+> ⚠️ **THE OWNER WAS ASKED, AND REPLIED — RECORDED 2026-08-21 AS A REPLY RATHER THAN AS AN ANSWER,
+> WHICH IS THE WHOLE POINT OF THE ENTRY.** The question put to him was whether to scope the struck
+> sentence above, in this file. His words, in full, from the project chat at 2026-08-21 17:55:04Z
+> (`cmsg_01S5UQT5yPAMR4PFkxyLGSj9CkXqASMQtp6HxUjyJHqZrH`): *"okay i mean i think having dates
+> available is probably a fine thing for maybe future filtering or something. or sorting."*
+> ⚠️ **FILTERING AND SORTING ARE THINGS DONE TO DATA, NOT TO A DOCUMENT CONVENTION, SO THE REPLY AND
+> THE QUESTION MAY NOT SHARE A SUBJECT** — it reads equally as being about dates on library items in
+> the application, which this file does not govern. **The PAIRING is what is recorded; neither
+> reading is resolved and neither is treated as ratification.** He was offered a veto and did not
+> take it, which **means nobody objected when given the chance, and is worth exactly that.**
+>
+> ❗ **SO THE SCOPED RULE ABOVE RESTS ON THIS FILE'S OWN PRACTICE — dated riders throughout, never
+> once treated as a violation — AND NOT ON THIS REPLY.**
+>
+> ⚠️ **AND THE ORIGINAL INSTRUCTION'S PROVENANCE REMAINS UNRECORDED.** He neither confirmed nor
+> denied giving it, and was deliberately not pressed. The ruling's own *"about time estimates"*
+> ground was **withdrawn by its author the same day**, as a requote carrying no address — the same
+> defect one hop further up. **Nothing here upgrades what is known about what he said.**
+>
+> Where a line is inference rather than something read off §16, an ADR or the tree, it is marked 🔍.
+>
+> ~~⚠️ **DATED RIDER, 2026-08-21 — THE SENTENCE ABOVE IS FALSIFIED BY THIS FILE'S OWN PRACTICE, AND
+> THE DIVERGENCE IS RECORDED HERE RATHER THAN RESOLVED.**~~ 🔻 **CLOSED 2026-08-21 by the ruling
+> above, the same day it was raised — the divergence is resolved rather than recorded, and the
+> heading is struck because it now says the opposite of what happened.** What the rider observed is
+> kept below, because it is the finding the ruling acted on. Dates are throughout: every
+> *"Extended 2026-08-…"* paragraph above carries one, every dated rider in §2 carries one, and the
+> 2026-08-21 pass added its own throughout. **The practice reads as scoped to DELIVERY dates and
+> estimates** — no line in this file predicts when anything will land — while **correction dates
+> are load-bearing**, because a rider that does not say when a claim was falsified cannot be
+> re-checked against the tree that falsified it. ~~🔍 **That reading is an inference and it is not a
+> decision.** The sentence is the owner's standing instruction, so **scoping it is the owner's**,
+> and nothing here scopes it, rewrites it or acts on it. **No line above or below is changed on the
+> strength of this rider** — it records a divergence and decides nothing.~~ 🔻 **The struck clauses
+> are spent, every one of them: the reading is a decision now rather than an inference, the PM took
+> it, and the sentence above IS changed on the strength of it.**
 >
 > **Citation policy, applied 2026-08-19 to §2's per-type-grid item and the two items after it —
 > AND TO NOTHING ELSE:** prefer function and symbol names over `file:<n>` line citations for any
@@ -114,16 +167,141 @@
 > shared-action-string rider — was NOT re-read, and no line of it moved.** **No other line moved, no
 > sweep happened, and every other line citation in this file is still unvetted.** This pass cited
 > symbols and distinctive strings throughout and added no `file:<n>` citation of its own.
+>
+> **Extended 2026-08-21 by the `?lib=` / 3b / arm64 / badge / covers / sidebar pass and the
+> adversarial fix round on it, to exactly the places ENUMERATED HERE and to NOTHING ELSE** —
+> **enumerated rather than counted**, because a number maintained by a different act than the thing
+> it counts is what goes stale ([`DEVELOPMENT.md`](./DEVELOPMENT.md) §11): this paragraph · the
+> preamble's **no-dates** rider · the baseline block, advanced and re-fired · §2's opening ⚠️
+> Kavita inventory · §2's **Channel 3b** item · §2's **Channel 4** item · §2's **Home Block A**
+> item · the **per-type `ok` state** item that pass added · §2's **per-series volume and chapter
+> walk** item · §2's **"not identified" badge** item · §2's **image-pipeline fetch-half** item ·
+> §2's closed **per-type grid** item · §2's closed **`?lib=` chip** item · the **de-boxed**
+> vendored-types item · §2's **arm64 RSS spike** item · the **`System` nav entry** item that pass
+> added. ⚠️ **THAT LIST WAS DERIVED FROM THE DIFF RATHER THAN FROM MEMORY** —
+> `git diff -U0 7c8cb1b1 HEAD -- docs/ROADMAP.md`, every hunk resolved to the box that encloses it —
+> **because the first form of this pass's attestation claimed to name every box it edited and did
+> not.** ⚠️ **EDITED IS A LARGER SET THAN FIRED:** the baseline block's *"FIRED at `7c8cb1b`"* list
+> below names what was **re-measured**, and this paragraph names what was **written**. A box in this
+> list but not in that one had prose changed and no check re-fired against it.
+> **No other line moved, no sweep happened, and every other line citation in this file is still
+> unvetted.** ⚠️ **The image-pipeline item's LS-260 paragraphs and its Obligation 2 were NOT
+> re-read** — three prior passes declared them unread, and this pass added lines above them without
+> opening them — and **§3 was not opened at all.**
 
-**Last re-derived against:** `origin/main` `6533f1c` (2026-08-20).
-⚠️ **Advanced from `0a5d66e` by the Block-A / facet-consumer pass, which re-derived THREE things and
-NOTHING ELSE**, and **the range is large and is emphatically not documentation-only** — 41 non-merge
-commits carrying `internal/repofiles` (a package that did not exist at the previous baseline),
-`internal/libsync`, `internal/store`, `internal/httpapi`, `internal/db`, `internal/bookorbit`,
-`cmd/usarr`, `web/src/`, `docs/`, `docs/design/`, `docs/reference/`, `README.md` and `CLAUDE.md` — so
-**read every box this pass does not name as attested at `0a5d66e`**, not at the baseline line above.
+**Last re-derived against:** `origin/main` `7c8cb1b` (2026-08-21).
+⚠️ **`7c8cb1b` IS THE TIP THE GATED TREE IS ACTUALLY BASED ON, NOT WHATEVER `main` WAS WHEN THIS WAS
+WRITTEN.** It is `git rev-parse HEAD~1` of the landing commit — the tree `make check` ran against.
+**A baseline naming a tip nobody verified at is worse than a stale one**, because it launders unread
+commits as attested.
+⚠️ **AND `origin/main` MOVED AGAIN WHILE THE GATE RAN — TO `9694447`, SEVEN NON-MERGE COMMITS — SO
+IT WAS MERGED FORWARD (NOT REBASED) AND THE GATE RE-RUN ON THE MERGED TREE.** Those seven touch
+`docs/DECISIONS.md`, `docs/FUTURE.md`, `docs/REVIEW-LOG.md` and `docs/reference/schema.md` and no
+other file. **Every claim in this pass that cites `docs/DECISIONS.md` or `docs/reference/schema.md`
+was re-fired on the merged tree** — the ADR-0070 / 0052 / 0068 / 0072 / 0074 quotes, ADR-0001
+Correction 3, the two *"nullable column and the badge"* sites, the `GOARCH=arm64` check and its
+`amd64` control, and `reference/schema.md`'s `work` block — and every one still holds.
+⚠️ **THAT SCOPE READ *"one of those two first files"* UNTIL 2026-08-21 AND DID NOT MATCH ITS OWN
+LIST**, which names a `reference/schema.md` claim — the **fourth** file — and no `FUTURE.md` claim
+at all. **Nothing in this pass cites `docs/FUTURE.md` or `docs/REVIEW-LOG.md`**, so those two
+merged in unread and nothing here rests on them. **`7c8cb1b` stays the baseline
+because it is the tip this pass actually READ every box against**; the seven merged commits are
+attested only on the narrow re-fire just named, and **nothing else in them was read.**
+⚠️ **Advanced from `6533f1c` (2026-08-20), which was the Block-A / facet-consumer pass's baseline**,
+and **the range is large and is emphatically not documentation-only** — **114 non-merge commits**
+(172 including merges, 99 files) carrying `web/src/` (37 files), `cmd/usarr` (11), `internal/store`
+(10), `internal/libsync` (9), `internal/httpapi` (7), `docs/` (6), `internal/db` (5),
+`docs/design/` (5), `internal/bookorbit` (4), `docs/reference/` (3), plus `Makefile` and `CLAUDE.md`
+— so **read every box this pass does not name as attested at `6533f1c`**, not at the baseline line
+above. ⚠️ **That figure was measured, not inherited:** `git log --no-merges --oneline
+6533f1c..7c8cb1b | wc -l` → `114`, run on a clone unshallowed for the purpose, because the
+environment the previous pass ran in was shallow and could not resolve `6533f1c` at all.
 
-**FIRED at `6533f1c` by this pass, and this is the whole list:**
+**FIRED at `7c8cb1b` by this pass, and this is the whole list:**
+- **The `?lib=` write census, and its INSTRUMENT re-fired beside it:** every `lib` query-parameter
+  write under `web/src/`, enumerated as six sites and listed rather than counted; then the struck
+  sentence's own recipe — `set('lib'`/`delete('lib')` under `web/src/` — re-fired to show it returns
+  **five** and walks structurally past `libraryScopeHref`'s `new URLSearchParams({ lib: slug })`.
+- **The scope select, wired and GUARDED IN BOTH DIRECTIONS:** the five-symbol `$lib/scopeselect`
+  import, the `$derived` trio and the `<select id="library-scope">` / `<select id="grid-scope">`
+  blocks in both grid routes, read in the files; then `pnpm vitest run scopeselect` fired green
+  (31/31) **and fired failing** with `onchange={onScope}` removed from `/library`'s `<select>`.
+- **Channel 3b's reachability and its negative control, ANCHORED 2026-08-21 SO A COMMENT CANNOT
+  SATISFY IT:** `grep -n 'mux.Handle.*sync/delta' internal/httpapi/server.go` non-empty at this
+  baseline, and the same grep **empty at `5069c91`**, a tree where `DeltaSync` already existed.
+  ⚠️ **The unanchored form was reported as returning ONE line and returns TWO** — line 294 is the
+  comment *"matches path segments, so /sync and /sync/delta are separate patterns"* and line 296 is
+  the registration, **so the bare grep was satisfiable by the comment alone**. Both lines are named
+  here rather than the second being quietly dropped.
+- **Channel 4's own checks, re-fired rather than trusted:** `grep -n 'startReconciler('
+  cmd/usarr/main.go` non-empty here and **empty at `f87aef44`**; `reconcileInterval = 6 * time.Hour`
+  and `reconcileTick = 30 * time.Minute` in `cmd/usarr/reconcile.go`; `FullImport`'s unfiltered
+  `streamAndApplyCredits` and its `StampFullSync`, both read inside `FullImport`'s own span.
+- **The arm64 criterion's replacement and its control:** `grep -n 'GOARCH=arm64' docs/DECISIONS.md`
+  **empty**, against `GOARCH=amd64` returning ADR-0001 Correction 3's hardware line.
+- **The badge's absent column and absent renderer:** all thirteen files in `internal/db/migrations/`
+  searched for an identifier-shaped column on `work` (none; no `ALTER TABLE work` at all),
+  `reference/schema.md`'s `work` block inventoried to its `) STRICT;`, every non-test consumer of
+  `store.BatchResult.Unidentified` traced forward (three log fields plus the merge), and
+  `grep -rniE 'not identified|not_identified|notIdentified|unidentified' web/src/` **empty**.
+- **The cover-art timeline:** `163f608`, `a34d87f`, `7e5934d`, `c4a3277`, `db9b028` and `ad821a06`
+  each resolved to their author date and message locally on the unshallowed clone, plus the
+  `<img>` census at this baseline (one rendered element, `$lib/PosterGrid`).
+- **The `ok` state's withdrawn citation and the home guard, fired both ways:**
+  `grep -n 'that citation is withdrawn' web/src/lib/home.ts` non-empty against the negative control
+  `that citation is restored` (empty); `pnpm vitest run home` green at 64/64 **and failing 2 of 64**
+  with `ok: ''`. Banner SHAs `712db17` / `019775b` re-derived, and the mis-cited `ed3a948` read.
+- **§16's silence on a `System` screen:** the `## 16. Roadmap` → `## 17. Screens` awk range measured
+  at 895 lines, `System` filtered of `System tags` **empty**, `sidebar` zero; against the shell's
+  `NAV_GROUPS`, the `'Settings'` control, and the three design sources that draw `System`. **And the
+  nav guard fired failing** — `/library`'s `NAV_GROUPS` entry deleted, `pnpm vitest run librarygrid
+  libraryscreen` fails 2 of 86; restored, 86/86.
+
+**NOT fired by this pass, and therefore inherited:** no `REVIEW-LOG.md` read · **no Go test was
+fired as EVIDENCE for any claim here** — the pre-commit gate's Go suite ran on this tree, but a
+green gate is not evidence for a box, and the four `web` vitest files named above are the whole of
+what was fired at a claim · **no live service touched**, so every *"on a real instance"* leg in this
+file is untouched · **no §2 box this pass does not name** — ⚠️ **AND THAT CLAUSE IS ABOUT THE FIRED
+LIST ABOVE, NOT ABOUT WHAT THIS PASS WROTE. THE TWO SETS ARE DIFFERENT AND THE FIRST FORM OF THIS
+BLOCK CONFLATED THEM.** Every box this pass **edited** is enumerated in the *"Extended 2026-08-21"*
+paragraph above, and it is the longer list; a box named there but not in the FIRED list above had
+prose changed and **no check re-fired against it**, and is still attested at `6533f1c` for
+everything a check would have established · **no line-citation sweep, again**, and this pass added
+no `file:<n>` citation of its own, citing symbols and distinctive strings instead.
+⚠️ **THAT LAST CLAUSE WAS FALSE WHEN FIRST WRITTEN AND IS TRUE NOW** — the pass added
+`web/src/lib/home.ts:638` inside the `ok` state's leg 1, which is exactly the invisible-failure
+shape the citation policy above names. **It was replaced with the symbol** (`SUMMARY_STATE`'s `ok`
+member) rather than the clause being softened. **Re-derived at the tip rather than asserted:**
+`git diff 7c8cb1b1 HEAD -- docs/ROADMAP.md | grep '^+' | grep -oE '[^ ]+\.(go|ts|svelte|sql):[0-9]+'`
+returns **exactly one hit, and it is the sentence you are reading** — the retracted citation quoted
+inside the rider that retracts it, which is history rather than a citation
+([`DEVELOPMENT.md`](./DEVELOPMENT.md) §11). **No box in this file cites it as evidence for
+anything.** ⚠️ **That self-match is named rather than dodged**, because a criterion that matches its
+own record-keeping is the defect this pass repaired in the arm64 box, and stating it is cheaper than
+a grep contorted to avoid itself.
+⚠️ **THIS PASS TICKED ~~ONE BOX~~ TWO BOXES AND DE-BOXED ONE, AND ~~DECLINED TO TICK A THIRD WHOSE
+WRITTEN LEGS ARE BOTH MET~~ — ~~channel 3b, held open on §1's *"proves the replica thesis on real
+data"*, marked so a reviewer can overturn it~~.** ⚠️ **STRUCK IN PLACE 2026-08-21: THE REVIEWER
+OVERTURNED IT AND CHANNEL 3b IS TICKED.** The refusal was marked for overturning and was overturned
+on this file's own Done-when carve-out; **the real-data residual it was protecting is not
+discharged**, and is written beneath 3b's box and owed to §4. **The struck sentence is kept because
+it is why the box reads as it does.**
+⚠️ **AND IT REFUSED HALF OF ONE FINDING IT WAS HANDED:** the credits-only drift gap
+was briefed as having an *invisible remedy*, and the tree falsifies that — ADR-0076's reconciler
+calls `FullImport`, which re-applies credits unfiltered, so `Last successful sync` is a truthful
+marker of it. Only the narrow residual was written.
+
+**INHERITED from the `6533f1c` baseline. Its own attestation follows, unchanged and NOT re-fired:**
+⚠️ **That baseline advanced from `0a5d66e` by the Block-A / facet-consumer pass, which re-derived
+THREE things and NOTHING ELSE**, and **the range is large and is emphatically not
+documentation-only** — 41 non-merge commits carrying `internal/repofiles` (a package that did not
+exist at the previous baseline), `internal/libsync`, `internal/store`, `internal/httpapi`,
+`internal/db`, `internal/bookorbit`, `cmd/usarr`, `web/src/`, `docs/`, `docs/design/`,
+`docs/reference/`, `README.md` and `CLAUDE.md` — so **read every box THAT pass does not name as
+attested at `0a5d66e`**, not at its baseline line.
+
+**FIRED at `6533f1c` by THAT pass — inherited verbatim, and *"this pass"* below means the Block-A /
+facet-consumer pass, not the one that advanced the baseline:**
 - **Home's block map and its facet call:** the ADR-0028 block map in `web/src/routes/+page.svelte`,
   read in the file; the `fetchLibraryFacets` import and its call site; `librarySummary(facets,
   health)` feeding `summaryRows`. Content commits `51a9e68` and `da33aa7`, attributed by `git log -S`
@@ -441,8 +619,19 @@ read directly for what §2's obligation 3 says about them.
 Ordered roughly by what the rest depends on, not by size.
 
 ⚠️ **EVERY ITEM BELOW THAT NAMES KAVITA IS WRITTEN AGAINST A SOURCE v0.1 NO LONGER TAKES (§1)** —
-channel 3b, the per-series volume/chapter walk, the *"not identified"* badge, and the
-zero-external-providers evidence clause. **The work each names is real and source-shaped**, and what
+**the per-series volume/chapter walk** and the **zero-external-providers evidence clause**. ⚠️ **THAT
+INVENTORY WAS RE-DERIVED 2026-08-21, NOT HAND-EDITED, AND IT SHRANK BY TWO.** It read *"~~channel
+3b, the per-series volume/chapter walk, the "not identified" badge, and the zero-external-providers
+evidence clause~~"*. **Channel 3b and the badge now meet this paragraph's own retirement
+criterion**, which this same paragraph states as *"the only Kavita left in it is inside a dated
+rider quoting what it used to say, which is history rather than staleness"* — so they are dropped
+**exactly as channel 4 was**, on the same rule and by the same act. Re-derived by reading every
+Kavita hit under §2 rather than by trusting the list: 3b's are a **struck title**, a dated ADR-0070
+rider, and a correct forward reference to Kavita as a **v1.0** source that still owes a 3b; the
+badge's are a **struck clause** and its dated 2026-08-20 rider. **The walk's leg 2 is live Kavita
+prose and stays**, and the evidence clause stays on the separate ground the ⚠️ headed *"THE
+ZERO-EXTERNAL-PROVIDERS EVIDENCE CLAUSE IS RE-POINTED"* records.
+**The work each names is real and source-shaped**, and what
 each owes is that same work pointed at BookOrbit. **None of them is re-pointed line by line here**,
 and the reason has changed: this used to say *"~~re-pointing them is the unwritten ADR's job~~"*, and
 the ADR landed — [ADR-0052](./DECISIONS.md#adr-0052) **deliberately declined to re-answer** ADR-0041
@@ -458,32 +647,191 @@ it is inside a dated rider quoting what it used to say, which is history rather 
 ([`DEVELOPMENT.md`](./DEVELOPMENT.md) §11). It is dropped from the list rather than the list
 re-numbered, because a count maintained by a different act than the thing it counts is what went
 stale here. So the per-item rewrite is owed by whoever writes the adapter, against §16's narrower
-channel sentence (§1), and **channel 3b's item in particular cannot simply be re-pointed** — for
-`work_comic` there is nothing at the far end to point it at (§3).
+channel sentence (§1), and ~~**channel 3b's item in particular cannot simply be re-pointed** — for
+`work_comic` there is nothing at the far end to point it at (§3)~~.
+⚠️ **DATED RIDER, 2026-08-21 — THAT CLAUSE IS STRUCK BECAUSE IT WAS FALSIFIED TWENTY-FIVE LINES
+BELOW IT, IN THIS SAME SECTION.** [ADR-0070](./DECISIONS.md#adr-0070) **did** re-point channel 3b,
+and its box's title now reads *"~~for Kavita~~ for BookOrbit's `work_book`"*. **What survives the
+strike is the residual, not the claim** — 3b is re-pointed **for `work_book` only**, which is the
+shape §16's v0.1 entry states (§1), and for **`work_comic`** there is still nothing at the far end
+to point it at: comics and manga run on §7.1a's documented **reconciliation-only** fallback. **The
+box was re-pointed; the `work_comic` gap was not closed.** ⚠️ **This is the "a box contradicted
+itself thirty lines from itself" defect the 2026-08-21 pass was convened to repair, reproduced
+against that pass's own edit and caught in adversarial review.**
 Items marked 🛑 **STOPPED** are the different case: those are stopped by the decision itself.
 
-- [ ] **Channel 3b — the ordered page-walk delta, for Kavita.** The watermark walk with an overlap
-      window and a client-side stop, so an import is not the only way the replica moves.
-      *Authority:* §7.1a, §16 v0.1 entry, [ADR-0041](./DECISIONS.md#adr-0041).
-      *Done when:* `internal/libsync` has a delta path and `internal/libsync/doc.go` stops listing
-      channel 3b under "NOT HERE".
+⚠️ **AND THIS SECTION NOW CARRIES ITEMS §16 HAS NOT ASSIGNED TO v0.1 — RECORDED 2026-08-21 BECAUSE
+THE HEADING INFERS A MILESTONE THE ITEMS THEMSELVES DISCLAIM.** `## 2. v0.1 remaining work` is a
+milestone assignment by placement, and **three items below say in their own prose that §16 has not
+made it**: the **arm64 RSS spike** (*"this box is not v0.1 work and is not cut either"* — it gates
+the arm64 support claim, [ADR-0072](./DECISIONS.md#adr-0072)); the **`System` nav entry**
+(*"§16 IS SILENT"*, and the box *"infers none"*); and the **per-type `ok` state** (*"§17 owns
+whether a third one exists, and §16 is silent"* — a design decision rather than a milestone
+question). **They are named here rather than moved**, because §16 is scope authority and a
+re-section is a bigger act than this record: moving a box changes which milestone this file appears
+to claim, and **this file may not claim one**. 🔍 **Inference, labelled, and NOT decided here:** §3
+(*Blocked and sequenced*) is the shape those three probably want. **Nothing above or below is
+re-sectioned on the strength of this note**, and none of the three is thereby placed in v0.1.
+
+- [x] **Channel 3b — the ordered page-walk delta, ~~for Kavita~~ for BookOrbit's `work_book`.**
+      ~~The watermark walk with an overlap window and a client-side stop, so an import is not the
+      only way the replica moves.~~
+      ⚠️ **TITLE AND DESCRIPTION BOTH CORRECTED 2026-08-21, AND THEY ARE A DECISION MARK RATHER
+      THAN A REFRESH — [ADR-0070](./DECISIONS.md#adr-0070) DECIDED AGAINST BOTH MECHANISMS THIS
+      BOX NAMED.** The source moved off Kavita ([ADR-0052](./DECISIONS.md#adr-0052)), and the two
+      mechanisms in the struck description are not merely unused: ADR-0070 records **the
+      `updatedAt` client-side-stop shape is *"REFUSED, not merely unused"*** and §7.1a's **overlap
+      formula *"RETIRED"* for this source**, leaving *"the surviving **5 minutes** recorded as a
+      NEW, UNMEASURED constant safe in the large direction"*. **What shipped is arrivals only,
+      server-side filtered on `books.addedAt`** — the code says the same at
+      `internal/libsync/doc.go`, which scopes §7.1a's client-side stop to *"a source that CANNOT
+      express a since-filter, and BookOrbit can (ADR-0070)"*. **Correcting this box's criterion
+      while leaving a false title in the same box is not defensible, so both move together.**
+      ⚠️ **AND THE CORRECTED TITLE ITSELF OVER-SCOPED UNTIL IT WAS NARROWED UNDER REVIEW,
+      2026-08-21.** It read *"~~for BookOrbit~~"* flat, which is broader than the shape §16's v0.1
+      entry states and §1 quotes — channels **1 and 4** for everything, **3b for `work_book`
+      only**, with comics and manga on §7.1a's documented **reconciliation-only** fallback. **This
+      box's own ADR-0070 quote says the same in code terms** — *"arrivals only, server-side
+      filtered on `books.addedAt`"*, and `books` is `work_book`. **The `work_comic` residual is what
+      §2's opening names**, and a flat *"for BookOrbit"* reads as though 3b covered it.
+      *Authority:* §7.1a **as amended by ADR-0070 for this source**, §16 v0.1 entry,
+      [ADR-0041](./DECISIONS.md#adr-0041), [ADR-0070](./DECISIONS.md#adr-0070),
+      [ADR-0073](./DECISIONS.md#adr-0073).
+      *Was done when:* ⚠️ **THE SECOND LEG IS STRUCK 2026-08-21, AND IT WAS A PADLOCK RATHER THAN A
+      CRITERION.** It read *"~~`internal/libsync/doc.go` stops listing channel 3b under "NOT
+      HERE"~~"*, written when 3b was one thing. ADR-0070 **scoped 3b to BookOrbit** and left every
+      other source's 3b unanswered, so `doc.go` now says both at once — *"ALSO HERE, AND
+      REACHABLE: channel 3b for BookOrbit"* beside *"Channel 3b for every source that is NOT
+      BookOrbit"* under `NOT HERE`. **A grep over the NOT-HERE list still hits**, and goes on
+      hitting until Navidrome (v0.4), Audiobookshelf, Kavita and Komga (v1.0) all ship one — **so
+      the leg could not come out TRUE inside v0.1 however completely 3b shipped**, while on the
+      charitable reading it came out true the moment a comment was edited. It discriminated in
+      neither direction, and `doc.go` is a doc comment besides.
+      1. ✅ **`internal/libsync` has a delta path.** `internal/libsync/delta.go`'s
+         `func (im *Importer) DeltaSync`, declared *"DeltaSync is channel 3b"* in the same file.
+      2. ✅ **THE REPLACEMENT, AND IT ASSERTS 3b IS REACHABLE RATHER THAN MERELY BUILT — WHICH IS
+         THE STATE THE OLD LEG EXISTED TO CATCH:**
+         `grep -n 'mux.Handle.*sync/delta' internal/httpapi/server.go` must be NON-EMPTY. **Fired
+         2026-08-21 at this file's baseline:** it returns
+         `296:	mux.Handle("POST /api/v1/services/{id}/sync/delta", …)`, one line.
+         ⚠️ **THE GREP IS ANCHORED ON `mux.Handle` BECAUSE THE UNANCHORED FORM WAS NON-DISCRIMINATING
+         AND ITS OUTPUT WAS UNDER-REPORTED — CORRECTED 2026-08-21.** The leg read
+         *"~~`grep -n 'sync/delta' internal/httpapi/server.go`~~"* and its result was written up as
+         the one registration line. It returns **two**: line 294 is the comment *"matches path
+         segments, so /sync and /sync/delta are separate patterns"*, **so the criterion was
+         satisfiable by a comment alone** — a route deleted and its comment left behind would have
+         read as reachable. **Negative control fired rather than assumed:**
+         `git show 5069c91:internal/httpapi/server.go | grep -n 'mux.Handle.*sync/delta'`
+         is **EMPTY, exit 1** — and at `5069c91` `DeltaSync` already existed, so that tree is leg 1
+         true and leg 2 false, which is [ADR-0073](./DECISIONS.md#adr-0073)'s *"BUILT, TESTED AND
+         UNREACHABLE"* exactly.
+         ⚠️ **AND HTTP REGISTRATION IS THE BAR THIS LEG ASSERTS, WHICH IS NOT A PRODUCT PATH.**
+         `POST /api/v1/services/{id}/sync/delta` has **no `web/src` caller** — channel 4's rider
+         below measures it, its only mention under `web/src` being a comment — so nothing a user
+         can press reaches 3b. The stronger form, which presses the route and asserts the walk ran
+         and was journalled, is `cmd/usarr/delta_route_e2e_test.go`'s
+         `TestPressingTheDeltaRouteRunsAnArrivalsWalkAndRecordsIt`, and **whether a product path is
+         the right bar for this leg is left open rather than answered here.**
+      ❗ **THE UNFIRED OBLIGATION, STATED BENEATH THE BOX BECAUSE THE TICK IS NOT A CLAIM THAT THIS
+      WORKS. NO DELTA HAS EVER WALKED A REAL BookOrbit.** Every check above is over **fixtures** —
+      recorded cassettes and Go tests — and §1's first objective is *"v0.1 proves the replica thesis
+      **on real data**, and its catalogue source is BookOrbit"*, with §3's gate spelling out the same
+      rule: **one source, proven on real data, before a second adapter** (§16.0, §16.1,
+      [ADR-0036](./DECISIONS.md#adr-0036)). **A delta path that has only ever walked a recorded
+      fixture has proven nothing on real data.** **The missing prerequisite is a live BookOrbit
+      instance**, which is §4's and which no test in this repo can stand in for. **The running
+      criterion this box now owes, and which nothing here can take:** a delta walk against a real
+      BookOrbit returns arrivals since the stored watermark and journals what it applied.
+      ⚠️ **THIS BOX WAS HELD OPEN ON 2026-08-21 AND THE JUDGEMENT WAS REVERSED THE SAME DAY UNDER
+      ADVERSARIAL REVIEW — RECORDED SO THE REVERSAL IS NOT MISTAKEN FOR AN OVERSIGHT.** The earlier
+      pass met both written legs, marked the refusal *"so a reviewer can overturn it"*, and a
+      reviewer overturned it. **The ground is this file's own Done-when rule**, whose carve-out
+      covers exactly this shape — *"a live upstream this environment has no access to"* — on **two**
+      conditions, **both of which are met verbatim above**: the unfired obligation is recorded
+      immediately beneath the box, and the specific missing prerequisite is named. **The
+      structurally identical comics-import box below is ticked under that same carve-out**, on the
+      same missing prerequisite, and two boxes in one section reading the rule opposite ways is
+      itself the defect. **And the preamble settles the tie-break:** *"If a check disagrees with the
+      box beside it, the check is right and the box is stale"* — here **both** checks said tick,
+      which made the box authoritative over its own passing checks and inverted the rule. **The
+      real-data proof is not discharged by this tick; it is carried above and owed to §4.**
 
 - [ ] **Channel 4 — reconciliation. The DELETION HALF and GUARD 1 have landed; the drift step, guard
-      2, the scheduler and the tombstone reaper have not.** It carries more weight for a catalogue
+      2, ~~the scheduler~~ and the tombstone reaper have not.** ⚠️ **THE SCHEDULER HAS SINCE LANDED
+      (2026-08-21, [ADR-0076](./DECISIONS.md#adr-0076)) and this opening no longer describes the
+      tree.** `cmd/usarr/reconcile.go`'s `startReconciler` is the six-hourly timer and `main.go`
+      starts, cancels and waits on it. What is still missing is the drift step, guard 2 for the
+      \*Arrs, and the tombstone reaper — and the reaper is **decided absent**, not merely unbuilt:
+      ADR-0076 Decision 4 rules the seven days a restoration window, and a retention limit is a joint
+      decision with guard 1 that nobody has taken. It carries more weight for a catalogue
       source than for an \*Arr: a page walk cannot observe a deletion, and BookOrbit's arrivals filter
       sees no edit at all. ⚠️ **This item read *"with both sweep guards and 7-day tombstones"* and
       framed the weight in terms of Kavita**; [ADR-0074](./DECISIONS.md#adr-0074) ships guard 1
       **wired** and **defers guard 2 for BookOrbit** on a measured void premise, leaving named gaps
       with no guard. Guard 2 for the \*Arrs is unbuilt and re-sequenced with their adapters, not cut.
-      *Authority:* §7.4, §16 v0.1 entry, [ADR-0074](./DECISIONS.md#adr-0074).
+      ⚠️ **AND THE DRIFT STEP COULD NOT HAVE CAUGHT THE CLASS IT IS MOST OFTEN WANTED FOR —
+      RECORDED 2026-08-21, POINTING AT THE ADR RATHER THAN RE-DECIDING IT.**
+      `internal/store/catalogue.go`'s `remoteHash` hashes **nine** values and `store.CatalogueItem`
+      carries **no credit field of any kind**, so a credits-only upstream edit — an author or a
+      narrator corrected and nothing else — moves no hash.
+      [ADR-0074](./DECISIONS.md#adr-0074) is the argument and it closes the obvious fix: widening
+      the hash is refused, because a gate that cannot see credits, *"placed anywhere upstream of
+      the credit pass … **actively suppresses the one pass that could have corrected the row**"*.
+      **The residual is CLOSED by unconditional re-apply, not by the hash**, and this rider
+      restates none of that — read the ADR.
+      ⚠️ **AND THE OBVIOUS READING OF THAT — *"so the class goes unrepaired"* — IS FALSE, WHICH IS
+      WHY IT IS MEASURED HERE RATHER THAN INFERRED.** Channel 3b cannot see it:
+      `internal/libsync/delta.go`'s `streamAndApplyCredits` runs over the **arrivals** set, and an
+      already-imported row is not in it. **Channel 4 CAN**: `internal/libsync/importer.go`'s
+      `FullImport` calls `streamAndApplyCredits` over every non-child item with **no filter on the
+      chain**, and since [ADR-0076](./DECISIONS.md#adr-0076) `cmd/usarr/reconcile.go`'s
+      `startReconciler` calls `FullImport` on `reconcileInterval = 6 * time.Hour`, asked at
+      `reconcileTick = 30 * time.Minute`. **So the class is repaired unattended, bounded at 6 h
+      30 m** — provided the process is up and `reconcileDue` finds `last_full_sync_at` set, which
+      it does not for an instance that has never completed one.
+      ⚠️ **AND THE REMEDY IS NOT INVISIBLE. THAT WAS CHECKED, NOT ASSUMED.** The Services screen's
+      `Last successful sync` column renders `last_full_sync_at` (`web/src/lib/services.ts`'s
+      `syncCell`), and `StampFullSync` writes that field **inside the same pass that re-applies the
+      credits** — so the column is a truthful marker of when they were last re-applied, and it
+      advances on its own **once one full sync has completed**. ⚠️ **THAT LAST CONDITION IS NOT
+      DECORATION AND IS CARRIED HERE RATHER THAN ONLY IN THE PARAGRAPH ABOVE**, which is where it
+      was stated and where a reader quoting this bolded sentence would not meet it: `reconcileDue`
+      finds nothing to do while `last_full_sync_at` is unset, so **for an instance that has never
+      completed a full sync the column is blank and advances never**, and the unattended repair
+      above does not start. **What is genuinely unstated is narrower, and is all this rider
+      claims:** nothing user-facing names the six-hourly clock — `grep -rniE 'six.hour|every 6
+      hour|6 hours' web/src/ docs/CONFIGURATION.md` is **EMPTY, exit 1**, and the interval is a
+      constant with no configuration key — and **no screen carries a per-channel freshness at
+      all**: `describeSync()` in `$lib/services` has **no caller** outside its own tests, and
+      `POST /api/v1/services/{id}/sync/delta` has **no `web/src` caller** either, its only mention
+      under `web/src` being a comment. **Both against the control that the full-sync route IS
+      called** — `$lib/api`'s `syncService` is imported and invoked by
+      `web/src/routes/services/+page.svelte` — so the emptiness is these two surfaces' absence and
+      not a grep that cannot see a caller.
+      *Authority:* §7.4, §16 v0.1 entry, [ADR-0074](./DECISIONS.md#adr-0074),
+      [ADR-0076](./DECISIONS.md#adr-0076).
       *Done when:* ⚠️ **THE OLD CHECK NOW PASSES AND PROVES ALMOST NOTHING** — it was
       `grep -rn 'missing_since\|orphaned_at' --include=*.go internal/` showing a statement that
       **sets** a non-NULL value, on the premise that *"today every one clears it"*, and
       `internal/store/reconcile.go`'s `sweepContainers` and `sweepOrphans` now set **both**. What is
-      left is three greps that still come back empty: a `SELECT` in non-test Go naming `remote_hash`
-      (the drift step — there is none, for any source); a reader of `identity_fingerprint` or
-      `max_remote_id_seen` (guard 2); and any caller of `SweepDeletions` other than `FullImport`
-      (there is no scheduler, and nothing hard-deletes a tombstone after seven days).
+      left is the greps that still come back empty: a `SELECT` in non-test Go naming `remote_hash`
+      (the drift step — there is none, for any source); and a reader of `identity_fingerprint` or
+      `max_remote_id_seen` (guard 2).
+      ⚠️ **A THIRD CHECK IS STRUCK 2026-08-21 RATHER THAN DELETED, BECAUSE IT IS A FALSE NEGATIVE BY
+      CONSTRUCTION:** ~~and any caller of `SweepDeletions` other than `FullImport` (there is no
+      scheduler, and nothing hard-deletes a tombstone after seven days)~~. **The scheduler that
+      shipped calls `FullImport`** — deliberately, because `SweepDeletions`' precondition is
+      satisfiable only by a real upstream read — so that grep stays empty *while a scheduler exists*.
+      Measured at both ends: at `f87aef44` and at this branch's tip the only non-test call of
+      `SweepDeletions` is `internal/libsync/importer.go`'s, inside `FullImport`. **The second half of
+      the struck parenthetical is still TRUE** — nothing hard-deletes a tombstone after seven days
+      (ADR-0076 Decision 4) — and it is carried in the opening above rather than in a check that
+      cannot see it.
+      **The check that replaces it, and it asserts the loop is WIRED rather than merely defined:**
+      `grep -n 'startReconciler(' cmd/usarr/main.go` must be NON-EMPTY. Verified to discriminate:
+      empty at `f87aef44`, and `204:	reconcilerDone := a.registry.startReconciler(reconcilerCtx)` at
+      this branch's tip. The stronger form of the same assertion, which also pins the shutdown wait,
+      is `cmd/usarr/reconcile_loop_test.go`'s `TestTheReconcilerIsStartedFromRun`.
 
 - [x] **Search over your own library — the read path AND the SCREEN.** Both landed 2026-08-18.
       `GET /api/v1/search` answers a flat ranked list off the local corpus at `04a28a4` — the handler
@@ -511,7 +859,25 @@ Items marked 🛑 **STOPPED** are the different case: those are stopped by the d
       block map now reads *"Block A · media-type summary · ≤6 rows · DRAWN in `library` mode"*,
       beside Block B's *"DRAWN"* and Block C's *"DRAWN in `library` mode"*; the screen imports
       `fetchLibraryFacets`, calls it, and feeds `librarySummary(facets, health)` into `summaryRows`.
-      The six rows are drawn and each carries one of §17.7's states. Content commits `51a9e68`
+      The six rows are drawn and ~~each carries one of §17.7's states~~ each carries a state.
+      ⚠️ **"ONE OF §17.7's STATES" IS FALSE SINCE 2026-08-20, STRUCK 2026-08-21, RATHER THAN
+      QUIETLY DROPPED.** Two of the three ARE specified and **neither is §17.7's**: `unconfigured`
+      and `importing` are **§17.2's**. The third, `ok`, has **no design source located in the files
+      that were searched** — `docs/ARCHITECTURE.md` §17.7 and §17.2, and
+      `docs/design/DESIGN-DIRECTION.md` §10's required-state table — because
+      `web/src/lib/home.ts`'s `SUMMARY_STATE` note **withdrew** the §17.7 citation rather than
+      re-pointing it, *"because no replacement was located"*. ⚠️ **THAT CLAUSE READ *"~~no located
+      design source at all~~"* UNTIL 2026-08-21, AND THE SAME PASS QUALIFIED IT ELSEWHERE**, which
+      is why it is bounded here rather than left absolute: **DESIGN-DIRECTION §3.2 does define a
+      status colour role named `ok`**, and neither the note nor this box rules it in or out as the
+      origin. **An unbounded absence claim that the same commit contradicts is the shape
+      [`DEVELOPMENT.md`](./DEVELOPMENT.md) §11's absence rule forbids** — report an absence as *"not
+      under X, Y or Z"* and never as *"nowhere"*. **The `*Authority:*` line's `§17.7` below is stale
+      in the same way, and is left standing because §17.7 does govern the rest of this box.**
+      **See the entry headed *"A per-type `ok` STATE SHIPS ON HOME AND NO DESIGN DOCUMENT SPECIFIES
+      IT"*, which is where that gap is carried** — named by its own wording rather than by where it
+      sits, because a positional pointer is falsified silently by the next insertion.
+      Content commits `51a9e68`
       (*"feat(home): Block A draws the six media types off the facet read"*) and `da33aa7`
       (*"fix(home): Block A's counts and its reach are read off the install, not the build"*),
       attributed by `git log -S` on `fetchLibraryFacets` and on the block-map string
@@ -544,6 +910,71 @@ Items marked 🛑 **STOPPED** are the different case: those are stopped by the d
       can take:** Home in `library` mode draws six rows whose counts equal
       `GET /api/v1/library/facets` on a real install.
 
+- [ ] **A per-type `ok` STATE SHIPS ON HOME AND NO DESIGN DOCUMENT SPECIFIES IT. This is a DECISION
+      owed by §17's owner, not code owed by a builder** — nothing here says the state is wrong, and
+      **the box must not be read as asking for it to be removed.** Block A gives every media-type
+      row a `Status` word, because a `Status` column that is blank on a healthy row reads as
+      *status unknown* rather than *status fine* — and the word for the healthy row is
+      `catalogued`, keyed `ok` in `web/src/lib/home.ts`'s `SUMMARY_STATE`. **Its two neighbours are
+      sourced:** `unconfigured` and `importing` are both **§17.2's**. `ok` is not.
+      ⚠️ **THE TREE WITHDREW THE CITATION RATHER THAN RE-POINTING IT, AND THE SEARCH BEHIND THE
+      WITHDRAWAL IS BOUNDED — QUOTE THE BOUND WITH THE CLAIM.** `home.ts`'s `SUMMARY_STATE` note
+      records that `docs/ARCHITECTURE.md` (§17.7 **and** §17.2) and
+      `docs/design/DESIGN-DIRECTION.md` were searched, that §10's required-state table carries
+      `empty`, `filtered-empty`, `scope-empty`, `partial`, `stale`, `error` and `unconfigured` and
+      **no `ok` row**, and — in its own words — *"Nothing here says the state is invented,
+      unspecified or wrong — only that a source for it was not found in those two files."*
+      DESIGN-DIRECTION §3.2 does define a status **colour role** named `ok`; the note neither rules
+      it in nor out as the origin, and **neither does this box.**
+      ⚠️ **`catalogued` IS DELIBERATELY NOT `Up to date`, AND THAT REASON HAS ITSELF EXPIRED —
+      FLAGGED, NOT RE-DECIDED.** `home.ts` gives as its reason *"There is no periodic re-sync in
+      this build — `cmd/usarr/import.go` runs at most one import per instance per database, on
+      connect, with no timer behind it"*. **That sentence is FALSE since
+      [ADR-0076](./DECISIONS.md#adr-0076)**: `cmd/usarr/reconcile.go`'s `startReconciler` is a
+      six-hourly timer over `FullImport`. Whether a freshness word is now measurable is part of
+      what §17's owner is being asked, and **nothing is chosen here.** ⚠️ The stale sentence is in
+      the tree, not in this file, and **fixing it is not this box's** — it is named so the next
+      reader of `home.ts` is not misled by it.
+      ⚠️ **NOT A BANNER GAP AND NOT AN EMPTY-STATE GAP — both were checked and both are clean**, so
+      do not widen this box into them. §17.7's degraded banner IS on `/library` and on the per-type
+      grids, landed at content commit `712db17` (*"feat: show §17.7's degraded-backend banner on the
+      catalogue screens"*) and guarded at `019775b` (*"test: guard the degraded banner in both
+      directions"*); and the per-type empties are fully differentiated by `browseEmptyState` over
+      `recentEmptyState`'s four cases. **Both SHAs were re-derived rather than inherited: an earlier
+      relay of this finding cited `ed3a948` for the banner, and that commit is *"test: the
+      corpus-floor figures re-measured on the tree they describe"* and touches
+      `web/src/lib/designrules.test.ts` only.**
+      *Authority:* §17.2 as amended by [ADR-0028](./DECISIONS.md#adr-0028) for the two sourced
+      states; **§17 owns whether a third one exists, and §16 is silent** — this is a design
+      decision, not a milestone question.
+      *Done when:* **two legs, and leg 1 can be satisfied in either direction.**
+      ⚠️ **LEG 1 WAS REWRITTEN 2026-08-21 UNDER ADVERSARIAL REVIEW, AND THE FORM IT REPLACED IS THE
+      WORST CASE OF THE DEFECT THIS PASS EXISTED TO REPAIR.** It read *"~~either way `grep -n 'that
+      citation is withdrawn' web/src/lib/home.ts` comes back **EMPTY**~~"* — **a criterion
+      discharged by DELETING the code comment that records the gap.** Anyone tidying that TSDoc
+      sentence, a plausible and well-intentioned edit, would have closed this box **with no decision
+      taken by anyone**, and [`DEVELOPMENT.md`](./DEVELOPMENT.md) §11 names the failure exactly:
+      *"establishing that a warning is stale is not licence to make it go away. A silenced warning
+      and a fixed problem read identically a day later."* **The replacement asserts, in the
+      positive, the artefact a decision would actually have to move.**
+      1. **Either arm, and each names a file a ruling would have to change.**
+         **FIRST ARM — the state gets specified.** DESIGN-DIRECTION §10's required-state table gains
+         an `ok` row: `awk '/^## 10\. The required state set/,/^## 11\. /'
+         docs/design/DESIGN-DIRECTION.md | grep -n '^| \*\*ok\*\*'` must be **NON-EMPTY**. **Fired
+         2026-08-21: EMPTY, exit 1.** ⚠️ **And the range and the shape were both proved rather than
+         assumed** — the same `awk` emits **44** lines bounded by `## 10.` and `## 11.`, and the
+         same `grep` for `^| \*\*stale\*\*` returns that table's `stale` row, so an empty result is
+         the missing `ok` row and not an `awk` range that selected nothing.
+         **SECOND ARM — the state is retired.** `grep -n 'ok:' web/src/lib/home.ts` comes back
+         **EMPTY**. **Fired 2026-08-21: NON-EMPTY** — one hit, `SUMMARY_STATE`'s `ok` member, which
+         maps the healthy row to the word `catalogued`. **Neither arm holds, so leg 1 is open**, and
+         **no arm of it can be satisfied by editing a comment.**
+      2. **The running leg, and it is a guard that has been TRIGGERED rather than inferred from its
+         presence:** `cd web && pnpm vitest run home` stays green on whatever word the row then
+         carries, and **FAILS** when that word is blanked — the blank-`Status` regression the state
+         exists to prevent. **Fired in both directions 2026-08-21: 64 passed; with `ok: ''`, 2 of
+         64 fail.**
+
 - [ ] **Libraries — the auto-proposal flow and its Accept step.** The row view over
       `GET /api/v1/libraries` is drawn; the proposal step is not, and its storage question is now
       answered: a proposal is **not** a `library` row, and a row is created only on Accept.
@@ -574,6 +1005,28 @@ Items marked 🛑 **STOPPED** are the different case: those are stopped by the d
          the leg at BookOrbit is not a rename** — BookOrbit has no volume/chapter level to walk, so
          what this leg owes against the current source is **undecided**, and §2's opening ⚠️ already
          says whoever writes that decision owns it. **Nothing here decides it.**
+         ⚠️ **DATED 2026-08-21, AND THE UNDECIDED VERDICT IS NOW CITED RATHER THAN ASSERTED —
+         NOTHING BELOW DECIDES ANYTHING EITHER.** The paragraph above was true when written and
+         carried no date, so a later reader cannot tell whether it predates
+         [ADR-0068](./DECISIONS.md#adr-0068). It does not. **Re-pointing has no target, on two
+         measurements that meet:** ADR-0052 records *"The series half is not an open question.
+         There is no series-level ordered read in BookOrbit at all"*, measured against the clone
+         at `73b7877d` and re-checked at `4a420a04`, identical at both; and ADR-0068 rules **a
+         BookOrbit comic is an issue** — *"issues are **minted under series works**"* — so a comic
+         **is** one file and there is no volume or chapter level beneath it to walk.
+         ⚠️ **THAT SECOND HALF IS LOAD-BEARING, BECAUSE ADR-0052's OWN TABLE NAMES A ROUTE THAT
+         LOOKS LIKE THE RE-POINT TARGET AND IS NOT:** `GET /series/:seriesId/books` exists — the
+         series controller exposes *"Exactly two"* routes and that is one of them. It is not the
+         walk. `internal/bookorbit`'s catalogue doc excludes the series endpoints **on a
+         measurement rather than on a budget** — *"there is no series watermark to walk, and every
+         fact they carry rides the book stream already"* — and the BookOrbit analogue of the walk,
+         `internal/libsync/bookorbitfiles.go`'s `StreamFiles`, **issues no GET at all** and reads
+         the card `bookorbit.go`'s `keepCard` already holds. **So what this leg owes is not a
+         rename and not a new endpoint: it is a decision about whether anything remains owed once
+         channel 1 delivers the issue and its parent in one pass, and NOTHING HERE TAKES IT.**
+         ⚠️ **`internal/libsync/kavita.go` IS NOT A DANGLING PATH** — ADR-0052 keeps it
+         deliberately, *""sunset" explicitly does NOT mean delete"*, so it still exists and still
+         builds; what went stale is the source slot, not the file.
 
 - [x] **Comics import as ISSUES under series works — LANDED, AND UNVERIFIED AGAINST REAL DATA.**
       `internal/libsync/bookorbit.go` **no longer early-returns on `MediaKindComic`**: the
@@ -613,7 +1066,8 @@ Items marked 🛑 **STOPPED** are the different case: those are stopped by the d
       Only check 2 can tell the accepted shape from the refused one. **Until the import runs, this
       box records that the code exists and is gated — not that a comic has ever reached a screen.**
 
-- [ ] **The "not identified" badge and the column under it.** ~~Free Kavita returns null identifier
+- [ ] **The "not identified" badge and ~~the column under it~~ THE DERIVATION under it.**
+      ~~Free Kavita returns null identifier
       fields, so this is v0.1's ordinary case, not an edge one.~~ The badge is v0.1; **the remedy is
       not** — see §3.
       ⚠️ **STRUCK 2026-08-20: THE ARGUMENT, NOT THE ITEM.** That clause reasons from **Kavita** as
@@ -626,14 +1080,83 @@ Items marked 🛑 **STOPPED** are the different case: those are stopped by the d
       strike as *"the ordinary case is now identified"*** — it says only that the sentence's
       evidence is about a sunset source. **The badge is owed either way**, which is why the box is
       untouched.
-      *Authority:* §6.4, §16 v0.1 entry, [ADR-0035](./DECISIONS.md#adr-0035) §1.
-      *Done when:* a work whose identifier column is null **renders the badge in the browser**, off a
-      column that exists in `internal/db/migrations`, on a library imported from a real instance.
+      *Authority:* §6.4, §16 v0.1 entry, [ADR-0035](./DECISIONS.md#adr-0035) §1. ⚠️ **`§6.4` ON
+      THIS LINE IS STALE IN THE SAME WAY THE `§17.7` ON HOME BLOCK A's IS, AND IS LEFT STANDING FOR
+      THE SAME REASON** — §6.4 still specifies a nullable column the tree did not build (the rider
+      at the foot of this box measures it), but §6.4 remains the authority that owns the badge, so
+      the citation stays and the divergence is flagged rather than the pointer being re-aimed at
+      something no ADR has decided.
+      *Done when:* ~~a work whose identifier column is null renders the badge in the browser, off a
+      column that exists in `internal/db/migrations`, on a library imported from a real instance.~~
+      ⚠️ **STRUCK AS ONE SPAN 2026-08-21. IT WAS STRUCK MID-CLAUSE FIRST, AND THAT LEFT THE MOST
+      QUOTABLE LINE IN THIS BOX UNGRAMMATICAL** — with the strikes rendered it read *"a work whose
+      renders the badge in the browser, on a library imported from a real instance"*, a relative
+      pronoun with no predicate, while the repair sat far enough down the box that a reader
+      arriving at *Done when:* would never meet it. **Rule 3 is satisfied by striking, not by
+      surgery inside a clause**, and the restatement now sits immediately beneath.
+      ***Done when*, RESTATED — AND IT IS A POINTER, NOT A SHAPE:** a work for which UsArr holds
+      **no external identifier** renders the badge in the browser, **off whatever derivation §6.4
+      names once §6.4 is corrected**, on a library imported from a real instance.
+      **The migration-column clause is RETIRED, not weakened** — this is still a criterion only a
+      running system can satisfy, and the run it names has still not been taken.
+      ⚠️ **THIS RESTATEMENT WAS ITSELF OVER-REACH ON ITS FIRST WRITING AND IS NARROWED HERE.** It
+      read *"~~off a state a read path publishes~~"* and *"~~a work with **no `external_id` row**~~"*
+      — **a design answer, written into a criterion, against this box's own cited authority and with
+      no ADR behind it.** §6.4 says *"the nullable column belongs on `work` from the migration that
+      creates it"*; the `external_id`-derived shape exists only in a **code comment**
+      (`internal/store/catalogue.go`), and the rider at the foot of this box says in terms that **no
+      ADR decides the derived shape**. **A criterion that picks the winner of an open design
+      question makes this file the specification**, which the header forbids — *"NOT authoritative
+      for scope"* — and `CLAUDE.md` answers the same way: *"Status is read off the tree, not off a
+      document … write the pointer."* **This follows the model this same pass set in the closed
+      per-type grid item**, which struck a stale endpoint name and **deliberately refused to write a
+      replacement** — *"a fresher endpoint name is exactly the kind of status this file must not
+      carry"*. 🔍 **Labelled inference, and NOT decided here:** the `external_id` derivation
+      is the likelier resolution, because it is what the tree does. **Nothing here rules on it, and
+      no ADR number is allocated or guessed.**
       ⚠️ **The clause used to read *"~~the state is rendered in `web/src/routes` off a column that
       exists in `internal/db/migrations`~~"*, which a text editor alone can satisfy** — a `.svelte`
       file and a migration both being present is true of a tree nothing has run. **Strengthened
       under this file's own Done-when rule**, and deliberately **not** ticked: the run it now names
       has not been taken.
+      ⚠️ **DATED RIDER 2026-08-21 — THERE IS NO SUCH COLUMN, AND THE TWO CLAUSES THAT ASSERT ONE
+      ARE STRUCK IN PLACE ABOVE RATHER THAN DELETED.** **`work` has no identifier column and no
+      migration creates one.** Measured across all **thirteen** files in `internal/db/migrations/`:
+      `work`'s DDL in `00005_library_sync.sql` names none, **no migration ALTERs `work` at all**,
+      and the schema's only identifier-shaped column is `service_instance.needs_reidentification`
+      (`00001_initial.sql`) — a column about re-identifying a **service**, named here so it is not
+      mistaken for this one twice. `reference/schema.md`'s own `work` block agrees.
+      ⚠️ **AND THIS BOX NAMES NO COLUMN, SO NONE IS SUPPLIED HERE.** It asserts a column's
+      **existence and shape** — *"a work whose identifier column is null"*, *"a column that exists
+      in `internal/db/migrations`"* — and never a name. Its authority, ARCHITECTURE §6.4, names none
+      either: it says *"the nullable column belongs on `work` from the migration that creates it"*
+      and *"It costs one nullable column and one badge"*. **Inventing a name for a column nobody
+      specified is how a second wrong claim gets written to repair the first, so the clauses are
+      retired rather than corrected.**
+      🛑 **DO NOT READ THAT AS *"THE DONE-WHEN IS NEARLY MET"*. NOTHING RENDERS THIS STATE.** The
+      tree does compute an identity state — `internal/store/catalogue.go` reads
+      `SELECT EXISTS (SELECT 1 FROM external_id WHERE work_id = ?)` and the code says of itself that
+      *"§6.4 describes it as costing 'one nullable column', and migration 0005 shipped no such
+      column"* — **but that `EXISTS` is not the badge's source and must not be written down as
+      though it were.** It feeds exactly one field, `store.BatchResult.Unidentified`, whose only
+      consumers are **three structured-log fields** on the **WRITE** path (`cmd/usarr/import.go`
+      twice and `internal/libsync/importer.go` once) plus the merge that sums them. **No read path
+      publishes the state, no response field carries it, and `web/src` contains no "not identified"
+      badge at all** — `grep -rniE 'not identified|not_identified|notIdentified|unidentified'
+      web/src/` is **EMPTY, exit 1**, and the only `badge` hits under `web/src` belong to the
+      **severity** badge. **It is an import-report counter, not a rendering. The item stays open;
+      what changed is only what would discharge it.**
+      ⚠️ **THE *Done when*, RESTATED CLAUSE STOOD HERE UNTIL 2026-08-21 AND WAS MOVED, NOT
+      DELETED** — it now sits immediately beneath this box's `*Done when:*` line, where a reader
+      arriving at the criterion meets it, and it was narrowed to a pointer on the way. **Nothing was
+      dropped in the move**; the paragraph below is what it was always pointing at.
+      ⚠️ **AND THE DESIGN HAS NOT MOVED TO MATCH. THAT DIVERGENCE IS RECORDED, NOT CLOSED, AND IT
+      IS NOT THIS FILE'S TO CLOSE.** ARCHITECTURE §6.4 still reads *"the nullable column belongs on
+      `work` from the migration that creates it"*, and `DECISIONS.md` still repeats *"The nullable
+      column and the badge"* in two places. **No ADR decides the derived shape**; the tree took it
+      in a code comment. §16 is scope authority and the tree is status authority, so this rider
+      records the divergence, **allocates no ADR number and guesses none** —
+      [`DECISIONS.md`](./DECISIONS.md) is authoritative for the next free one.
 
 - [ ] **The image pipeline's FETCH HALF — NARROWER AGAIN. The writer, the renderer and the import
       call site all landed; what is left is §4.4.1's cold-start plan and a first run against a real
@@ -688,6 +1211,72 @@ Items marked 🛑 **STOPPED** are the different case: those are stopped by the d
       `dominant_color`, `etag`, `last_modified`, `expires_at` still have no writer — `PutPosterAsset`'s
       INSERT names none of the five), and `coverGate` has never been known to be contended.
       `internal/imagepipeline`'s package doc carries the same correction and is the site of record.
+      ⚠️ **DATED RIDER 2026-08-21 — THE REPORT STANDS; THE FALSIFICATION DRAWN FROM IT DOES NOT.**
+      The mark above is struck in place and kept legible — *"~~🔻 FALSIFIED 2026-08-19 by the
+      owner's report that the library grid shows cover art~~"* — and with it the finding beneath
+      it: *"~~The report establishes only that the path ran **once**, end to end, against BookOrbit:
+      fetch, decode, `renderAll`, `PutPosterAsset`, `/img` serving from cache~~"*. **That chain
+      needs the library grid to have been drawing `/img`'s output on 2026-08-19, and the dates say
+      it was not.**
+      **THE DATES ARE THE LOAD-BEARING FACT, AND THEY DO NOT DEPEND ON WHICH TREE YOU READ THIS
+      AT.** The report is dated **2026-08-19**. **The first cover rendered ANYWHERE in this
+      repository is `163f608`, 2026-08-21 08:02 UTC** — *"draw covers on Home's Block C behind a
+      Posters view toggle"* — whose own message opens *"`posterUrl` has had no caller since it was
+      written. **This is the first one**"*. **The first cover in the LIBRARY GRID is `a34d87f`,
+      2026-08-21 13:59 UTC** — *"a posters view on /library and the per-type grids"*. **Both are
+      two days AFTER the report.** And on the day itself the catalogue screen said it about
+      itself: at `db9b028` (2026-08-19 20:31 UTC, the last commit of that day to touch it),
+      `web/src/routes/library/+page.svelte`'s header read *"COVERS ARE ABSENT FROM THIS SCREEN …
+      what is missing is the poster **VIEW** — this screen draws rows and no artwork"*; and
+      `ad821a06` (2026-08-19 04:44 UTC), the commit that built the per-type grid, says *"the
+      poster view is unbuilt and the route header says so."*
+      ⚠️ **THE GRID DOES DRAW COVERS NOW, AND THAT IS NOT A REBUTTAL — IT IS WHY THE DATES ARE
+      QUOTED INSTEAD OF A CENSUS.** As of this file's baseline the web tree has **exactly one
+      rendered `<img>`** — `web/src/lib/PosterGrid.svelte` — reached from Home, `/library` and
+      `/library/[type]`. **A reader measuring today finds covers on the grid and could mistake that
+      for confirmation of a 2026-08-19 report.** It is not: the element arrived after the report,
+      so a census of the current tree cannot corroborate it and the timeline is the only evidence
+      that bears.
+      ⚠️ **WHAT IS *NOT* RETRACTED, because the narrow claim is the whole point.** The backend links
+      were there: `7e5934d` (2026-08-19 15:22 UTC), the pipeline writer, and `c4a3277`
+      (2026-08-19 16:49 UTC), the import call site, both predate the report. **Nothing here says
+      the pipeline could not have run.** It says only that **the screen the report names could not
+      have shown its output on that date**, so the report cannot be the evidence that it did. The
+      inference fails at the rendering, not at the pipeline.
+      ❓ **WHAT THE OWNER ACTUALLY SAW IS OPEN, AND IT IS JOE'S TO ANSWER. NO HYPOTHESIS IS
+      SUBSTITUTED HERE** — a second guess dressed as a finding is precisely how the first one came
+      to be written, and one is not repaired by another. **The question, addressed to him and left
+      for him:** on which screen, at what address, and on which build was the cover art seen?
+      Until he answers, the two own-voice claims above are **restored rather than struck**, **with
+      no repository falsifier** — which is exactly what the struck mark itself conceded when it
+      said *"it is an install fact with no falsifier in this repository."*
+      ⚠️ **`internal/imagepipeline`'s PACKAGE DOC IS THE SITE OF RECORD AND CARRIED THE SAME
+      UNSOUND STEP, SO A COMPANION CORRECTION WAS OWED THERE.** The sentence immediately above
+      calls that doc the site of record, so correcting only this file would have left the falsified
+      claim standing where the next reader meets it. `internal/imagepipeline/pipeline.go`
+      **retired** the *"NEVER AGAINST A REAL COVER"* admission on this inference, stated the step
+      verbatim — *"A grid rendering covers is not reachable with any of those links broken, which
+      is the entire strength of the evidence"* — and drew *"AND THAT CALLER HAS NOW RUN"* from it.
+      ✅ **DISCHARGED 2026-08-21 by the CONTENT commit `8ecb77e1efd5`** — *"docs: imagepipeline's
+      package doc restores the admission its own inference retired"* — a single-parent commit whose
+      diff touches `internal/imagepipeline/pipeline.go` and nothing else. **ALL THREE sites this
+      rider named are in that diff**, which is what makes the discharge checkable instead of taken
+      on trust: the retired admission (*"the admission is retired rather than hedged"*), the
+      evidence step (*"which is the entire strength of the evidence"*) and the caller paragraph
+      (*"AND THAT CALLER HAS NOW RUN"*) are each removed or rewritten there.
+      🚩 **STRUCK 2026-08-21, with the bar it set kept legible rather than deleted:** this read
+      *"~~SO A COMPANION CORRECTION IS OWED THERE — AND IS NOT DONE~~"* and closed *"~~This pass is
+      docs-only and changed no Go file. This is a pointer to work that is OWED, not a claim that it
+      is done.~~"* Both were true when written. The pointer's whole value was that it distinguished
+      **owed** from **done**, so it is struck in place with its discharge named beside it rather
+      than quietly removed.
+      ⚠️ **WHAT THAT FILE SAYS NOW IS NOT RESTATED HERE.** It is the site of record and the tree is
+      status authority, so it is read there and not off this line, which would go stale the next
+      time it moves — this box has already been rewritten twice for exactly that reason.
+      ⚠️ **THE THREE GAPS ARE UNAFFECTED EITHER WAY**, and the struck paragraph scoped them
+      correctly: coverage unmeasured, §4.4.1's cold start untouched, `coverGate` never known to be
+      contended. **The box stays open on those alone**, and would have stayed open on them under
+      either reading.
       ⚠️ **§16 puts this and the library grid in ONE line item** — the sentence in **§16's v0.1
       entry** reading *"Library grid with "Load more" + `content-visibility` on grid rows carrying
       explicit ARIA roles (§4.5), keyset pagination, image pipeline **including the §4.4.1
@@ -1060,9 +1649,21 @@ Items marked 🛑 **STOPPED** are the different case: those are stopped by the d
       ⚠️ **THE FOURTH FALSIFIED CLAIM, and it is this item's own: *"~~What is still missing is the
       FRONTEND … there is no `/library/{type}` route and no grid~~"*.** There is:
       `web/src/routes/library/[type]/` exists, and `web/src/routes/library/+page.svelte` — the
-      unified newest-first table over `/api/v1/library/recent` — is **kept beside it rather than
-      replaced**, because §17.2 keeps both and `reference/http-api.md` §7 calls the browse read *"a
-      different endpoint from §1, not a superset of it"*.
+      unified all-types table — is **kept beside it rather than replaced**, because §17.2 keeps both
+      and `reference/http-api.md` §7 calls the browse read *"a different endpoint from §1, not a
+      superset of it"*.
+      ⚠️ **THAT CLAUSE NAMED AN ENDPOINT UNTIL 2026-08-21 — it read *"~~the unified newest-first
+      table over `/api/v1/library/recent`~~"* — AND THE BOX ALREADY CONTRADICTED ITSELF FURTHER
+      DOWN, IN THIS SAME ITEM**, where it records that the screen *"moved **off**
+      `GET /api/v1/library/recent` **onto** `GET /api/v1/library`"*. **No replacement endpoint is
+      written here, deliberately: a fresher endpoint name is exactly the kind of status this file
+      must not carry, and this one has moved once already inside this single item.** **Read
+      `web/src/routes/library/+page.svelte`'s own header for what the screen reads, and
+      `internal/httpapi/server.go`'s `mux.Handle` route table for what is registered.**
+      ⚠️ **AND `GET /api/v1/library/recent` WAS NOT RETIRED — do not read this correction as saying
+      so.** It is a live route with a live consumer: it is registered in
+      `internal/httpapi/server.go` and Home reads it through `$lib/library`'s `fetchRecentPage`.
+      **The fact that changed is which screen calls it, not whether it exists.**
       ⚠️ **THE `sort_title` (A–Z) DEFERRAL NOW HAS TWO BLOCKED CONSUMERS, NOT ONE, AND ITS
       SINGLE-CONSUMER PREMISE HAS EXPIRED — FLAGGED HERE, NOT RE-DECIDED.**
       [ADR-0051](./DECISIONS.md#adr-0051)'s amendment defers the index behind `sort_title` over more
@@ -1103,6 +1704,13 @@ Items marked 🛑 **STOPPED** are the different case: those are stopped by the d
       false: `GET /img/{key}` is routed and `poster_key` is on this response; what is missing is the
       bytes** — the **all-types scoped view** a Libraries row should open, the **link** from a
       Libraries row into it, and the **`?lib=` chip** that writes scope.
+      ⚠️ **RE-POINTED 2026-08-21: THAT LAST POINTER NOW LANDS ON A TICKED BOX, AND THE CHIP IT NAMES
+      IS STILL UNBUILT.** The `?lib=` item closed on the **re-measure**, not on the chip. **Read the
+      paragraph headed *"THE §8.1 RESIDUAL, WHICH THIS BOX DOES NOT DISCHARGE AND WHICH SURVIVES ITS
+      CLOSING"*** — named by its own wording rather than by where it sits — **which is where the
+      unbuilt shell-level chip is itemised.** A pointer that resolves to a `- [x]` is exactly how
+      *"a box that closes on a subset"* lets a specification go quietly missing, which is the
+      warning that box carries about itself.
 
 - [ ] **The facet read SHIPPED. What is owed is a CONSUMER — and a sidebar predicate these counts
       CANNOT supply.**
@@ -1282,8 +1890,26 @@ Items marked 🛑 **STOPPED** are the different case: those are stopped by the d
       *Authority:* §17.8, `reference/http-api.md` §7.3.
       *Was done when:* a Libraries row is a link whose target carries `?lib=<slug>`. **It is.**
 
-- [ ] **The `?lib=` chip — RE-MEASURE WHAT IT STILL OWES, AND REPORT BEFORE BUILDING. This is the
-      CURRENT state of this item, and it is a measurement rather than a build.**
+- [x] **RE-MEASURE WRITTEN DOWN 2026-08-21 — AND DESIGN-DIRECTION §8.1's SCOPE CHIP IS STILL
+      UNBUILT.** ~~The `?lib=` chip — RE-MEASURE WHAT IT STILL OWES, AND REPORT BEFORE BUILDING.
+      This is the CURRENT state of this item, and it is a measurement rather than a build.~~ **THE
+      RE-MEASURE IS WRITTEN DOWN, AND LEG 1 OF THIS BOX'S OWN *Done when* IS DISCHARGED IN CODE.**
+      ⚠️ **THE HEADLINE WAS RE-WRITTEN 2026-08-21 UNDER REVIEW, BECAUSE ITS FIRST FORM READ AS THE
+      OPPOSITE OF THE BOX.** It opened *"SHIPPED 2026-08-21 — ~~The `?lib=` chip~~"*, and in this
+      file `SHIPPED <date>` followed by a struck title is the established form for **the thing named
+      having shipped**.
+      The struck text here is the **item name**, not a falsified premise, so the most quotable line
+      in the box said *"the `?lib=` chip shipped"* while the sixty lines under it say it did not.
+      **The limit now sits inside the quotable sentence**, which is where
+      [`DEVELOPMENT.md`](./DEVELOPMENT.md) §11 puts a disclosure.
+      ⚠️ **AND THE SECOND SENTENCE OF THE ORIGINAL TITLE WAS DELETED RATHER THAN STRUCK, AND IS
+      RESTORED ABOVE INSIDE `~~…~~`.** It read *"This is the CURRENT state of this item, and it is a
+      measurement rather than a build."* **This pass falsified it** — the scope select is a build,
+      and it shipped — which is precisely the case this file reserves `~~…~~` for. Removing it also
+      made the *"TWO REMAINING own-voice paragraphs"* claim below true only by subtraction.
+      ⚠️ **CLOSING THIS BOX BUILDS NOTHING OF §8.1's CHIP, AND THE CHIP IS STILL UNBUILT.** The
+      residual is written out below rather than left to close with the box, because a box that
+      closes on a subset is exactly how a specification goes quietly missing.
       `design/DESIGN-DIRECTION.md` §8.1 pins it **above the nav** — *"a library is a **scope**, not a
       place — a multi-select chip pinned above the nav"* — has it render nothing at 0 or 1 library,
       and hoists it into the top bar at narrow widths because the drawer must never be the only
@@ -1296,22 +1922,87 @@ Items marked 🛑 **STOPPED** are the different case: those are stopped by the d
       ⚠️ **THIS ITEM'S OWN PREMISE IS FALSIFIED.** It read *"~~the control that WRITES scope …
       **The write end is empty:** nothing in `web/src/routes` puts a slug into `?lib=`~~"*. Something
       does: `libraryScopeHref` in `web/src/routes/libraries/+page.svelte` (the item above) authors a
-      scope on every row. **What ships is *arriving* at a scope and *clearing* one** — fired at the
-      baseline above, the only `lib` writes under `web/src/` are `browseParams`'
+      scope on every row.
+      ⚠️ **AND ITS OWN MEASUREMENT WAS FALSIFIED IN TURN — STRUCK IN PLACE 2026-08-21, NOT
+      OVERWRITTEN.** It read *"~~**What ships is *arriving* at a scope and *clearing* one** — fired
+      at the baseline above, the only `lib` writes under `web/src/` are `browseParams`'
       `params.set('lib', …)` in `$lib/librarygrid`, which serialises a scope the screen already
       holds, and the two `params.delete('lib')` calls in `/library` and `/library/[type]`. **So a
-      grid can drop a scope and cannot change one.**
-      **WHAT IS OWED IS THEREFORE A RE-MEASURE OF §8.1, NOT A CHIP:** subtract *arrive* and *clear*
-      from what §8.1 specifies, and **report the remainder before building any of it.**
-      🔍 Inference, labelled: what looks left is **changing** a scope without returning to Libraries,
-      plus §8.1's **multi-select** across more than one slug, which no link can express. **If that
-      remainder mostly dissolves, the honest outcome is a narrower item or an amendment to §8.1** —
-      not a chip built to a specification written before the entry point existed. Which of those it
-      is, is the measurement's answer and is not pre-empted here.
+      grid can drop a scope and cannot change one.**~~"* **The `lib` write sites under `web/src/` are
+      LISTED here rather than tallied, so the number is never the thing you re-check** — six at this
+      baseline, and the list is what a later pass re-fires one by one:
+      `$lib/librarygrid`'s `browseParams` — `params.set('lib', …)` ·
+      `$lib/scopeselect`'s `scopeSelectSearch` — `params.set('lib', …)` · the same function's
+      `params.delete('lib')` · `/library`'s `params.delete('lib')` · `/library/[type]`'s
+      `params.delete('lib')` · and `web/src/routes/libraries/+page.svelte`'s `libraryScopeHref` —
+      `new URLSearchParams({ lib: slug })`. The sentence fails three separate ways: **(1)**
+      `scopeSelectSearch` is a **second** `set('lib', …)`, so the write is not `browseParams`'
+      alone; **(2)** the same function's delete is a **third** delete, not one of two; and **(3)**
+      ⚠️ **THE ONE THAT WAS NEVER TRUE:** `libraryScopeHref` writes the parameter as an object key,
+      and **the sentence immediately above names that function as a writer while this one denied
+      it, in the same paragraph.** (3) is error and needs no history.
+      **THE INSTRUMENT IS THE DURABLE FINDING, AND IT IS WHY (3) HAPPENED.** The baseline block
+      fired *"every `set('lib'` and `delete('lib')` under `web/src/`"* — and **no grep of that
+      shape can structurally see a parameter written as an object key.** Re-fired 2026-08-21: that
+      shape returns the five call-form sites and walks straight past `libraryScopeHref`. A
+      two-shape grep was reported as an exhaustive census. **A census of a query parameter needs
+      the constructor shapes too**, `new URLSearchParams({ … })` above all.
+      🔍 Inference, labelled: whether **(1)** and **(2)** existed at the baseline the struck
+      sentence was fired at is not established here, so those two may be staleness rather than
+      error. **Only (3) is claimed as error.**
+      **WHAT THE SCOPE SELECT IS: `$lib/scopeselect` plus a `<select>` in BOTH browse toolbars.**
+      `scopeSelectSearch` writes the parameter and **deletes rather than empties** it; the two grid
+      routes — `web/src/routes/library/+page.svelte` and `web/src/routes/library/[type]/+page.svelte`
+      — each import the same five symbols, derive `scopeOptions` / `scopeValue` / `showScopeSelect`,
+      and navigate with `pushState` from `onScope`. `scopeSelectWorthShowing` keeps a control that
+      can do nothing off the screen at zero libraries. **A grid can now CHANGE a scope, which is
+      exactly what the struck sentence said it could not do.**
+      ⚠️ **AND IT IS A STRICT SUBSET OF §8.1, WHICH THE CODE SAYS ABOUT ITSELF IN THREE PLACES.**
+      `$lib/scopeselect`'s header opens *"THIS IS NOT DESIGN-DIRECTION §8.1's SCOPE CHIP, AND §8.1's
+      CHIP REMAINS UNBUILT"*; `web/src/routes/+layout.svelte`'s header says **THE SCOPE CHIP IS
+      STILL NOT HERE**; and `scopeselect.test.ts` fails if either route's `{#if showScopeSelect}`
+      block stops carrying the literal **§8.1**, *"so a reader can mistake this subset for the
+      control that is still unbuilt"*. The name is `scopeSelect` throughout **precisely so a search
+      for the chip does not find it**.
+      **THE §8.1 RESIDUAL, WHICH THIS BOX DOES NOT DISCHARGE AND WHICH SURVIVES ITS CLOSING —
+      SHELL-LEVEL, EVERY ITEM OF IT:** the chip **above the nav** · the **top-bar hoist** at narrow
+      widths · **MULTI-select** across more than one slug, which neither a link nor a single-select
+      can express · the popover with its keyboard behaviours and live region · scope **propagated
+      across navigation** so the sidebar and every screen agree · the `scope-empty` state · and
+      §8.1's unmet wire precondition, **DESIGN-DIRECTION §9.7**. **What dissolved is `arrive` and
+      `clear`, and now `change` on the two browse screens. What did not dissolve is the shell.**
+      🔍 Inference, labelled, and NOT decided here: the residual is now **smaller and entirely
+      shell-shaped**, which is the condition §8.1 was written before. **Whether that is a narrower
+      item or an amendment to §8.1 is a decision for a pass that reads §8.1 whole** — this box
+      measured, and measuring is all it claims.
+      ⚠️ **THE BOX'S ~~TWO~~ REMAINING OWN-VOICE PARAGRAPHS ARE STRUCK RATHER THAN DELETED,
+      2026-08-21, BECAUSE ONE IS DISCHARGED AND THE OTHER IS FALSIFIED.** ⚠️ **THE NUMBER IS STRUCK
+      RATHER THAN CORRECTED:** it was *"TWO"* only because a **third** own-voice claim — the
+      title's *"a measurement rather than a build"* sentence — had been silently removed in the same
+      edit, so the count certified the very deletion it was written to rule out. **It is now
+      restored struck in the heading above, and the paragraphs are enumerated rather than tallied.**
+      They read: *"~~**WHAT IS OWED IS
+      THEREFORE A RE-MEASURE OF §8.1, NOT A CHIP:** subtract *arrive* and *clear* from what §8.1
+      specifies, and **report the remainder before building any of it.**~~"* — **DISCHARGED**; the
+      remainder is the shell-level list above, and it was reported before anything was built. And:
+      *"~~🔍 Inference, labelled: what looks left is **changing** a scope without returning to
+      Libraries, plus §8.1's **multi-select** across more than one slug, which no link can express.
+      **If that remainder mostly dissolves, the honest outcome is a narrower item or an amendment to
+      §8.1** — not a chip built to a specification written before the entry point existed. Which of
+      those it is, is the measurement's answer and is not pre-empted here.~~"* — **half FALSIFIED**:
+      *changing* has shipped and is no longer left, while **multi-select survives untouched** and the
+      narrower-item-or-amendment question is re-asked, undecided, in the paragraph above.
       *Authority:* `design/DESIGN-DIRECTION.md` §8.1, §17.2, `reference/http-api.md` §7.3.
-      *Done when:* the re-measure is written down — **either** a control in `web/src/routes` that
-      sets `?lib=` to a slug the screen did not arrive with, **or** a recorded finding that §8.1's
-      remainder is smaller than the chip it specifies.
+      *Was done when:* the re-measure is written down — **either** a control in `web/src/routes`
+      that sets `?lib=` to a slug the screen did not arrive with, **or** a recorded finding that
+      §8.1's remainder is smaller than the chip it specifies. **Leg 1 holds:** `<select
+      id="library-scope">` and `<select id="grid-scope">`, with their shared `onScope` handler, are
+      in the two route files, and `scopeSelectSearch` sets `?lib=` to any library in the list.
+      **Leg 2 is the residual paragraph above.** ✅ **AND THE GUARD WAS FIRED, IN BOTH DIRECTIONS,
+      2026-08-21:** `cd web && pnpm vitest run scopeselect` is **31 passed**; with `onchange={onScope}`
+      deleted from `/library`'s `<select>` it fails **1 of 31**, *"routes/library/+page.svelte's
+      select does not write the address"*. **This tick rests on a guard that was made to fail, not
+      on one inferred from its presence.**
 
 - [x] **The COVERS / POSTER half of §16's grid line — the SERVING half.**
       **Landed 2026-08-19.** `GET /img/{key}` is registered in `internal/httpapi/server.go`
@@ -1443,9 +2134,27 @@ Items marked 🛑 **STOPPED** are the different case: those are stopped by the d
       schedule. What none of it covers is listed under *What this does NOT cover* in
       `api/specs/SOURCES.md`. **Original item kept below for its reasoning.**
 
-- [ ] ~~**NEW OBLIGATION — VENDOR BookOrbit's `packages/types` UNDER `docs/reference/`, WITH A DRIFT
-      CHECK. Rated ABOVE ordinary hygiene, and the reason is the item.**~~ (superseded by the row
-      above)
+- ~~**NEW OBLIGATION — VENDOR BookOrbit's `packages/types` UNDER `docs/reference/`, WITH A DRIFT
+  CHECK. Rated ABOVE ordinary hygiene, and the reason is the item.**~~ **(SUPERSEDED by the row
+  above, and DE-BOXED 2026-08-21.)** ⚠️ **IT WAS A STRUCK HEADING ON AN OPEN `- [ ]`, so it counted
+  as outstanding work while its own text said it was discharged** — the only such box in this file,
+  **over `grep -n '^- \[ \] ~~' docs/ROADMAP.md`, which returned exactly this one hit at the
+  `7c8cb1b` baseline and returns none at the tip.** ⚠️ **The bound is named because an unbounded
+  *"only"* claims a search nobody ran** — that shape sees a `- [ ]` whose heading is struck **from
+  the first character**, and boxes whose headings carry `~~` further in are outside what this claim
+  covers and were never counted by it.
+  **Both legs of its *Done when* are met**: the vendored copy is `api/specs/bookorbit-types/` at a
+  named upstream commit, and `internal/bookorbit/vendoredtypes_test.go` plus
+  `TestSpecDriftBookOrbitTypesStillMatchUpstream` are the offline pin and the network drift check.
+  **The checkbox is gone; the reasoning below is kept deliberately and is why this is de-boxed
+  rather than deleted.** ⚠️ **NO COUNT IS ADDED AND NONE IS STRUCK** — this file states no open
+  tally anywhere, and the miscount this repairs is the one a reader forms from `- [ ]` markers.
+  ⚠️ **THE RETAINED BODY BELOW KEEPS ITS 6-SPACE INDENT, WHICH IS THE OLD `- [ ] ` MARKER'S AND NOT
+  THIS `- ` MARKER'S.** It is left as it was **because it is the original item preserved verbatim**,
+  and re-indenting forty lines of struck history to match a marker that changed is churn that would
+  obscure what actually moved. **It renders as one unit** — there is no blank line inside the item,
+  so the body lazily continues the same paragraph. **Cosmetic, named so the next reader does not
+  read it as a structural defect.**
       **Why it is not hygiene: BookOrbit is now v0.1's ONLY catalogue source (§1), so upstream drift
       is a single point of failure for the WHOLE library** — not the degradation of one source among
       several, which is what the same bug would have been while more than one adapter was in play. A
@@ -1560,8 +2269,67 @@ Items marked 🛑 **STOPPED** are the different case: those are stopped by the d
 
 - [ ] **The arm64 RSS spike.** §16 calls it a day-one spike. `internal/db/spike/` exists; whether the
       arm64 measurement was taken is not readable from the tree.
-      *Authority:* §13, §16 v0.1 entry.
-      *Done when:* a recorded measurement exists in `docs/`.
+      ⚠️ **DATED RIDER, 2026-08-21 — THE FIRST SENTENCE CITES A DEADLINE §16 HAS ITSELF STRUCK, AND
+      §16 NAMES THIS BOX WHILE DOING IT.** ⚠️ **THIS RIDER OVERSTATED THE STRIKE UNTIL IT WAS
+      CORRECTED UNDER REVIEW.** It said §16 had struck the *"day-one spike"* **framing**; it has
+      not. §16's v0.1 entry still **opens** *"One day-one spike, and its deadline passed unmet"*, so
+      **this box's first sentence — *"§16 calls it a day-one spike"* — is TRUE and is not
+      falsified.** What §16 struck is the narrower clause *"before the schema is written"*, which
+      **this box never carried**: §16 records that its entry *"used to"* read *"One day-one spike,
+      before the schema is written: the arm64 RSS spike (§13)"*, and that eleven migrations landed
+      while the arm64 run did not, **so the deadline expired unmet rather than anyone waiving it**.
+      §16 rules: *"an arm64 `make bench-rss` gates **claiming arm64 support**, not
+      v0.1. v0.1 therefore owes no arm64 measurement, and this entry no longer holds one over the
+      schema"* — ratified by [ADR-0072](./DECISIONS.md#adr-0072), 2026-08-20. §16 then names this
+      very box: *"It is blind to every other document — `docs/ROADMAP.md`'s arm64 item still cites
+      this entry for the old deadline, and is not rewritten here."* **This rider is that rewrite.**
+      ⚠️ **THE GATE MOVED; THE OBLIGATION DID NOT** — ADR-0072's limit clause is *"not optional"*:
+      *"the arm64 run remains owed before any claim of arm64 support. This moves the gate; it does
+      not discharge the obligation, and nothing in it says arm64 works or that the x86-64 figures
+      transfer."* Page size and core count both move these numbers, so an arm64 result is a **second
+      row** in ADR-0001 and never a replacement. **So this box is not v0.1 work and is not cut
+      either** — it gates the arm64 support claim.
+      *Authority:* §13, §16 v0.1 entry **as re-scoped by [ADR-0072](./DECISIONS.md#adr-0072)**.
+      ⚠️ **THAT READ *"~~as corrected above~~"* UNTIL 2026-08-21, AND IT WAS WRONG TWICE** — it
+      made **this file** the corrector of §16, which inverts the authority the header states, and it
+      pointed **positionally**, which the next insertion falsifies silently. §16 corrected itself;
+      ADR-0072 ratified it.
+      *Done when:* ⚠️ **THE OLD CRITERION IS ALREADY TRUE TODAY AND THEREFORE PROVES NOTHING —
+      STRUCK IN PLACE 2026-08-21.** It read *"~~a recorded measurement exists in `docs/`~~"*, and
+      one does: `docs/DECISIONS.md`'s **ADR-0001, Correction, revision 3**, headed *"the memory
+      numbers are measured now **(x86-64 only)**"*, carrying a nine-cell pragma table and the
+      hardware line `GOOS=linux GOARCH=amd64`. **A criterion an x86-64 run already satisfies cannot
+      record whether an arm64 run happened**, which is the same non-discriminating defect this file
+      repairs elsewhere, in the permanently-true direction. **The replacement names the tool, the
+      architecture and the destination:** `make bench-rss` has been run **on arm64 hardware** and
+      its output is recorded as a **second row** beside the x86-64 row in ADR-0001 Correction 3.
+      🛑 **AND THIS IS A RECORD-KEEPING CHECK, NOT A RUN CHECK. SAYING SO IS THE POINT, BECAUSE THE
+      LIMIT CANNOT BE ENGINEERED AWAY HERE.** There is **no CI** and **no arm64 hardware in this
+      environment**, so an arm64 result can only ever land in this repo **as prose somebody typed**.
+      No in-repo criterion can witness the run itself; the strongest available form asserts that a
+      **measured figure** was written down, and **a text editor can still satisfy it.** This file's
+      Done-when rule is therefore **not** met by this leg, and the leg says so rather than dressing
+      a document-presence check as a running one. **The run stays owed to whoever has the hardware.**
+      **The check, and it demands a FIGURE rather than a hardware string:**
+      `grep -rn -i arm64 docs/ --include=*.md --exclude=ROADMAP.md | grep -iE 'MiB|GiB'` must be
+      **NON-EMPTY**. **Fired 2026-08-21: EMPTY, exit 1.** ⚠️ **The `MiB|GiB` half is what makes it
+      discriminate** — the earlier form checked `grep -n 'GOARCH=arm64' docs/DECISIONS.md`, which
+      **the string `GOARCH=arm64` alone satisfies**, so a hardware line typed with no benchmark
+      behind it would have closed this leg. **A measured memory figure is the thing the spike
+      produces**, and it is now what the grep requires.
+      ⚠️ **And the shape was proved to find such a row rather than assumed to** — the same shape over
+      `amd64` returns Correction 3's `GOARCH=amd64` … `15.7 GiB RAM` hardware line, so the emptiness
+      is the arm64 run's absence and not a grep that cannot see a measured hardware row.
+      ⚠️ **THE RANGE IS ALL OF `docs/` MINUS THIS FILE, AND IT WAS WIDENED 2026-08-21.** It read
+      *"~~`docs/DECISIONS.md docs/ARCHITECTURE.md docs/DEVELOPMENT.md docs/REVIEW-LOG.md` — the four
+      documents that could carry the figure~~"*, and **that four-file boundary was asserted rather
+      than argued**: `grep -rln -i arm64 docs/` also returns `docs/RESEARCH.md` and
+      `docs/reference/sync.md`, so two files that do discuss arm64 sat outside the search with no
+      reason given. **`--exclude=ROADMAP.md` is what buys self-match immunity**, and it buys it
+      **by construction** rather than by luck: the four-file form was immune only because this
+      box's own sentence happens to wrap `arm64` and `GiB` onto different physical lines, and a
+      re-wrap would have made the criterion match itself and stop discriminating — **the exact
+      defect this box repairs.**
 
 - [ ] **The zero-external-providers evidence clause for BookOrbit.** §16 says v0.1 needs no TMDB
       account because the source carries its own metadata. That claim was evidenced against Radarr's
@@ -1580,6 +2348,90 @@ Items marked 🛑 **STOPPED** are the different case: those are stopped by the d
       `grep -n -i kavita docs/RESEARCH.md` returns 9 lines — the API surface, the auth scheme, the
       `sortByLastModified` finding, and *"identifier matching is a paid subscription feature"* — and
       **none of them evidences this clause** the way `MovieResource` and `SeriesResource` did.
+
+- [ ] **THE SHELL RENDERS NO `System` ENTRY AND EVERY DESIGN SOURCE SPECIFIES ONE — AND §16 ASSIGNS
+      THE SCREEN TO NO MILESTONE. The §16 read is the finding; the sidebar is only how it was
+      noticed.** ⚠️ **This is NOT a claim that a `System` screen is owed in v0.1.** It is the claim
+      that nothing in the repo says **which milestone owns it**, while three documents draw it.
+      **What the shell renders**, read as an expression in `web/src/routes/+layout.svelte`'s
+      `NAV_GROUPS` and mirrored in its `TITLES` map: `Home` · the six `TYPE_NAV` types · `Library` ·
+      `Search` · `Requests` · `Services` · `Libraries` · `Settings`. **Seven fixed entries, and
+      `System` is not among them** — `grep -rn "'System'" web/src/` is **EMPTY, exit 1**, against
+      the control that `grep -n "'Settings'" web/src/routes/+layout.svelte` returns **two** hits in
+      that same file, so the shape can find a nav label and the emptiness is `System`'s absence.
+      ⚠️ **AND THE TWO SEVENS ARE NOT THE SAME SEVEN — THIS IS THE STRONGEST LINE THIS BOX
+      CARRIES, AND ITS FIRST FORM QUOTED THEM AS THOUGH THEY CORROBORATED.** Both sets have seven
+      fixed entries, **and the shell has `Library` where the mockup has `System`**. Enumerated on
+      each surface rather than compared as totals: the shell's are Home · **Library** · Search ·
+      Requests · Services · Libraries · Settings; the mockup's are Home · Search · Requests ·
+      Services · Libraries · Settings · **System**. **The totals balance only because one entry was
+      swapped for the other**, which is this box's whole subject — and the `Library` / `Libraries`
+      deviation flagged below is the other half of that same swap, not a separate observation.
+      🛑 **Two correct counts taken on different surfaces cannot be compared or checked against one
+      another's budget** ([`DEVELOPMENT.md`](./DEVELOPMENT.md) §11), so the sets are what this box
+      reasons from and the number is not.
+      **What the design sources say**, all three: `docs/design/mockups/index.html` carries a
+      `System` row and calls the set *"Seven fixed entries, against a stated budget of eight"*;
+      `docs/design/DESIGN-DIRECTION.md` §8.1 writes *"`Settings` and `System` always the last two
+      entries, in that order"*, draws `System` in its ASCII sidebar and counts it in its row budget;
+      and `ARCHITECTURE.md` §17 says the sidebar *"is already committed to Home · Search · Requests
+      · Services · Settings · System"*.
+      ⚠️ **THE `Library` / `Libraries` HALF IS A DIFFERENT CASE AND IS NOT AN OPEN DEFECT** —
+      checked, so this box is not read as covering it. `Library` is the all-types route;
+      `+layout.svelte` records the collision with `Libraries` **and accepts it** — *"It is accepted
+      rather than resolved"* — and `routes/library/+page.svelte` records that *"§17 NAMES NO
+      `/library` ROUTE … a gap in §17's coverage rather than a verdict against the screen:"* **Two
+      documented deviations. `System` is the undocumented one.**
+      ⚠️ **AND §17's OWN INVENTORY DISAGREES WITH ITSELF — FLAGGED, NOT RE-DECIDED HERE.** The
+      committed-list sentence omits `Libraries`, while §17.3 rules *"Services and Libraries are
+      top-level screens and are not also items inside a Settings navigation"*. Whoever answers §16
+      answers that too.
+      ⚠️ **NO GATE CAN SEE THIS.** `docs/design/check.mjs` reads `tokens.css`, the mockup assets and
+      §17's copy corpus; **nothing under `web/src` is in its file list** — the one mention of that
+      path is a comment describing what would change *"When this check is later pointed at
+      web/src/\*\* the import arm carries the rule instead"*, a plan and not a read. And
+      `make design` is required by no document.
+      *Authority:* ⚠️ **§16 IS SILENT, AND THAT SILENCE IS THE ENTRY.** §16 runs from
+      `## 16. Roadmap` to `## 17. Screens`, and a `grep` for `System` across those 895 lines returns
+      **one** hit — *"System tags `type:`, `format:`, `source:`, `quality:`, `indexer:`"*, the
+      **search tag vocabulary, not a screen**; `sidebar` returns none. So the screen is
+      **unassigned in §16**, which by §16's own rule — *"A milestone label is scope, not status: it
+      says which milestone owns a thing, never that the thing exists"* — means **nobody may infer a
+      milestone for it** from this file or from the design documents, and **this box infers none.**
+      *Done when:* **two legs, and leg 1 is the decision this box actually asks for.**
+      1. §16 names the milestone that owns a `System` screen — **or** the design sources stop
+         drawing one. Runnable, and it discriminates:
+         `awk '/^## 16\. Roadmap/,/^## 17\./' docs/ARCHITECTURE.md | grep -n 'System' |
+         grep -v 'System tags'` must be **NON-EMPTY** for the first arm. **Fired 2026-08-21:
+         EMPTY, exit 1.** ⚠️ **And the range and the shape were both proved rather than assumed** —
+         the same `awk` emits **895** lines bounded by `## 16. Roadmap` and `## 17. Screens`, and
+         the same `grep` **without** the `System tags` filter returns a hit, so an empty result is
+         §16's silence and not an awk range that selected nothing. For the second arm,
+         `grep -n 'data-route=.*>System<' docs/design/mockups/index.html` comes back **EMPTY** and
+         DESIGN-DIRECTION §8.1's budget line drops to zero; **fired 2026-08-21: the mockup grep
+         returns one hit, the `services.html#system` nav link, and §8.1's budget line still reads
+         *"Home, Search, Requests, Services, Settings, System = 6"*.**
+         ⚠️ **THAT GREP WAS ANCHORED ON THE NAV ELEMENT 2026-08-21, BECAUSE THE FORM IT REPLACES
+         COULD NEVER REACH ZERO.** It read *"~~`grep -c 'System' docs/design/mockups/index.html`
+         … drops to zero~~"*, an **unfiltered count of an ordinary English word**, and its three
+         hits are the nav link plus **two lines of prose** about Backup and Settings sub-rows —
+         so deleting the drawn `System` entry would still have left the count at 2 and the arm
+         unsatisfiable. ⚠️ **The inconsistency was in this same leg:** the arm directly above needed
+         `| grep -v 'System tags'` to discriminate, and this one was written unfiltered. **Negative
+         control fired rather than assumed:** the same anchored shape for `>Settings<` returns the
+         `services.html#settings` link, so it can find a drawn nav entry and the emptiness it now
+         demands would be `System`'s removal rather than a grep that cannot see one.
+      2. **The running leg, and it applies ONLY if §16 assigns the screen to v0.1 and the entry is
+         built:** the shell's nav guard covers it the way it already covers `/library` —
+         `librarygrid.test.ts` and `libraryscreen.test.ts` read `routes/+layout.svelte?raw` and fail
+         by name when an entry goes missing, so a `/system` entry gets the same guard.
+         ⚠️ **THAT MECHANISM WAS FIRED RATHER THAN ASSERTED, 2026-08-21:** with
+         `{ id: '/library', label: 'Library', … }` deleted from `NAV_GROUPS`,
+         `cd web && pnpm vitest run librarygrid libraryscreen` fails **2 of 86**, on
+         *"application links to the screen"* / `toContain("id: '/library'")`; restored, it is 86/86.
+         **So the guard exists and bites — what it does not yet cover is `System`, because there is
+         no entry to guard.** **If §16 assigns it past v0.1, leg 2 does not apply and this box
+         closes on leg 1 alone** — say which, on the tick.
 
 **Already discharged, listed so nobody re-opens them:** the Kavita `LastChapterAdded` watermark probe
 (ran 2026-08-17 against the owner's live instance and passed — [ADR-0035](./DECISIONS.md#adr-0035)

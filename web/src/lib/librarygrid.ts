@@ -1,8 +1,11 @@
 /**
  * THE PER-TYPE LIBRARY GRID, CLIENT SIDE — `GET /api/v1/library`.
  *
- * ARCHITECTURE.md §17.2's per-type grid and §17.8's library scope, over the one
- * endpoint that serves both. `docs/reference/http-api.md` §7 is the contract and
+ * ARCHITECTURE.md §17.2's per-type grid and its library scope, over the one
+ * endpoint that serves both. ⚠️ THE SCOPE WAS CITED AS §17.8's: that section
+ * CONFIGURES a library, while the chip that scopes a view to one is §17.2's —
+ * its axes table files a library under `scope` rather than navigation and
+ * specifies the multi-select above the nav. `docs/reference/http-api.md` §7 is the contract and
  * this module is written against it rather than against a memory of it.
  *
  * TWO SCREENS, ONE CLIENT. `routes/library/[type]` is one media type at a time
@@ -107,6 +110,146 @@ import { recentEmptyState, type RecentEmptyState } from './libraryscreen';
 /** The endpoint, as `internal/httpapi/server.go` routes it. It is NOT a
  * superset of `/library/recent` and shares no cursor with it (§7 preamble). */
 export const LIBRARY_BROWSE_URL = '/api/v1/library';
+
+/* ── 0. the view toggle, and the key it is remembered under ───────────────── */
+
+/**
+ * THE TWO VIEWS THE CATALOGUE SCREENS DRAW, and they are Home's two by design
+ * rather than by copying.
+ *
+ * DESIGN-DIRECTION §9.1's last bullet is the specification: *"View toggle in the
+ * toolbar, persisted client-side per media type"*, and it names the pair —
+ * Sonarr and Radarr define posters / overview / table, Navidrome offers grid and
+ * table, and *"UsArr ships table and posters in v0.1"*. `overview` is the wide
+ * row with a thumbnail beside a synopsis; that shape would put a cover inside a
+ * table row, and the same bullet says it is not required to ship first. So there
+ * is no third value here.
+ */
+export const LIBRARY_VIEWS = ['table', 'posters'] as const;
+
+export type LibraryView = (typeof LIBRARY_VIEWS)[number];
+
+/**
+ * TABLE, AND THE DEFAULT IS THE HALF OF THIS THAT IS A RULE RATHER THAN A
+ * PREFERENCE. DESIGN-DIRECTION §5.4: *"Rows and tables are the default
+ * container; a card is the exception, justified only when the item's primary
+ * content is cover art."* A grid of art is the exception a reader chooses, not
+ * the thing a catalogue opens as — and it is also the honest default while
+ * `image_asset` is written by one adapter's import pass alone, because a poster
+ * grid over a mostly keyless catalogue is mostly empty tiles.
+ */
+export const LIBRARY_VIEW_DEFAULT: LibraryView = 'table';
+
+/**
+ * ⚠️ ONE KEY PER MEDIA TYPE, WHICH IS WHAT §9.1 ASKS FOR AND WHAT HOME COULD NOT
+ * DO. `$lib/home`'s `HOME_VIEW_KEY` is a single key and says so: Home is the
+ * all-types view and there is no type to key it on. These screens are where that
+ * sentence applies — a reader who browses films as art and audiobooks as rows is
+ * expressing two settings, not changing their mind twice.
+ *
+ * THE ALL-TYPES SCREEN TAKES ITS OWN MEMBER RATHER THAN HOME'S KEY. `/library`
+ * has no media type either, but it is a different screen from Home with a
+ * different toolbar, and sharing one key would make a choice made on Home change
+ * a screen the reader was not looking at. `all` is not a `MediaType`, so it
+ * cannot collide with one.
+ *
+ * KEYS ARE CONTRACT. Renaming one silently resets every browser that has already
+ * stored a choice, exactly as `$lib/prefs.svelte` says of its three.
+ */
+export const LIBRARY_VIEW_KEY_PREFIX = 'usarr.library.view.';
+
+export function libraryViewKey(mediaType: MediaType | undefined): string {
+	return `${LIBRARY_VIEW_KEY_PREFIX}${mediaType ?? 'all'}`;
+}
+
+/**
+ * A stored view, or the default for anything that is not one of the two.
+ *
+ * ANYTHING UNRECOGNISED FALLS BACK RATHER THAN THROWING. localStorage is
+ * writable by anything running on this origin and survives a version that spelt
+ * the value differently, so an unparseable preference must not be able to take
+ * the screen down.
+ */
+export function parseLibraryView(raw: string | null): LibraryView {
+	return LIBRARY_VIEWS.includes(raw as LibraryView) ? (raw as LibraryView) : LIBRARY_VIEW_DEFAULT;
+}
+
+/**
+ * WHAT THE SCREEN'S TOGGLE HAS BEEN SET TO IN *THIS* PAGE VIEW, AND THE KEY IT
+ * WAS SET UNDER.
+ *
+ * The key is carried WITH the value and not implied by it, because that pairing
+ * is the whole rule: a choice made on `/library/movies` answers for `movies` and
+ * for nothing else. `$lib/libraryview.svelte` holds one of these in `$state`.
+ */
+export interface LibraryViewChoice {
+	key: string | undefined;
+	view: LibraryView | undefined;
+}
+
+/**
+ * localStorage, narrowed to the two calls this needs.
+ *
+ * A PORT RATHER THAN A DIRECT CALL, so the rules below are plain functions that
+ * `vitest.config.ts`'s node environment can run. `window.localStorage` is not
+ * the interesting part of any of this — which key is read and which key is
+ * written is.
+ */
+export interface LibraryViewStorage {
+	read(key: string): string | null;
+	write(key: string, value: string): void;
+}
+
+/**
+ * THE VIEW A CATALOGUE SCREEN SHOULD DRAW, AND ⚠️ THE KEY IS A GETTER FOR A
+ * REASON THAT NOTHING USED TO ENFORCE.
+ *
+ * SvelteKit REUSES `routes/library/[type]/+page.svelte` across
+ * `/library/movies` → `/library/ebooks` rather than remounting it, so the key
+ * moves under a live component. A key resolved once at construction would then
+ * serve — and, through `chooseLibraryView`, WRITE — under the media type the
+ * reader has just left. The getter is called on every access so that cannot
+ * happen.
+ *
+ * ⚠️ THIS LIVES HERE, IN A PLAIN MODULE, BECAUSE THAT IS WHAT MAKES IT
+ * TESTABLE. It used to sit inside `$lib/libraryview.svelte.ts`, which carries
+ * runes and therefore cannot be imported by the node-environment suite at all —
+ * so the rule its own comment marked MUST was held by nothing, and replacing the
+ * getter with a closure over a captured value left the whole gate green. What is
+ * left in that file is the `$state` holder and the two `window.localStorage`
+ * calls.
+ *
+ * THE CHOICE WINS ONLY UNDER ITS OWN KEY. Storage answers for every other one,
+ * so a reader who switches media type sees what they last chose *there* rather
+ * than what they chose here.
+ */
+export function readLibraryView(
+	key: () => string,
+	chosen: LibraryViewChoice,
+	storage: LibraryViewStorage
+): LibraryView {
+	const k = key();
+	if (k === chosen.key && chosen.view !== undefined) return chosen.view;
+	return parseLibraryView(storage.read(k));
+}
+
+/**
+ * REMEMBER A CHOICE, UNDER THE KEY THAT IS CURRENT AT THE MOMENT OF THE CLICK.
+ *
+ * Both the in-memory pairing and the stored value take the SAME resolution of
+ * the getter, so the two cannot disagree about which media type was on screen.
+ */
+export function chooseLibraryView(
+	value: LibraryView,
+	key: () => string,
+	chosen: LibraryViewChoice,
+	storage: LibraryViewStorage
+): void {
+	const k = key();
+	chosen.key = k;
+	chosen.view = value;
+	storage.write(k, value);
+}
 
 /* ── 1. the three orders, and the fourth that is refused ──────────────────── */
 

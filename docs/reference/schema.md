@@ -19,6 +19,16 @@ reasoning; this file carries the DDL and the invariant behind each index.
 SQLite dialect, `STRICT` tables throughout. **Minimum SQLite version: 3.43.0** — `STRICT` needs
 3.37, but FTS5 `contentless_delete=1` (§7 below) arrived in 3.43.0 and is mandatory.
 
+⚠️ **2026-08-21 — this number is now a measurement, and it was not one before.** The floor is a claim
+about **readers**: UsArr bundles its own engine and never consults it. From migration 0005 until
+migration `00013`, `trg_library_unfiled_no_delete` raised a `||`-concatenated message — legal as
+`RAISE()`'s second argument only from **3.47.0** — and because SQLite stores schema objects as text,
+every reader below 3.47.0 failed at PREPARE on **every** statement with `malformed database schema`.
+`00013` rewrote that message as a static literal and a real 3.43.0 build now answers
+`PRAGMA integrity_check` with `ok` over the whole schema, contentless FTS5 and all.
+**`RAISE()`'s message must be a static literal in anything that reaches the persisted schema** —
+[ADR-0075](../DECISIONS.md#adr-0075), enforced by `TestPersistedSchemaRaisesOnlyLiterals`.
+
 **Timestamps are SQLite `datetime()` text — `YYYY-MM-DD HH:MM:SS`, UTC, no `T` and no `Z`.** This is
 *not* ISO-8601, which this document previously claimed while every column default in it reads
 `DEFAULT (datetime('now'))`. The SQLite format is the correct one and the code implements it
@@ -1308,8 +1318,11 @@ worth it while nothing is released. **`00001_initial.sql` is not to be edited fo
 ⚠️ **The rebuild that instruction was written for has since been decided, and not as step 1
 specified.** [ADR-0039](../DECISIONS.md#adr-0039) supersedes step 1 and carries the argument, the
 rejected alternatives and the two things the list did not name;
-`internal/db/migrations/00005_library_sync.sql`'s header carries the same reasoning beside the SQL,
-and `internal/db/testdata/schema.sql` is the current shape. Read those, not a summary here — this
+`internal/db/migrations/00005_library_sync.sql`'s header carries that reasoning **as it stood when
+0005 landed** — provenance rather than a current summary, since a merged migration is never edited and
+the ADR has gained riders since — and `internal/db/testdata/schema.sql` is the current shape. **ADR-0039
+is authoritative for where the reasoning stands now, and its Status line is where the divergence is
+explained**; this file does not keep a second account of it. Read those, not a summary here — this
 file does not own what a migration did.
 
 ⚠️ **Still owed, and not by 0005.** 0001 also drops `tag_assignment.work_id` / `.edition_id` /

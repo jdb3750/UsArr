@@ -437,9 +437,14 @@ describe('Block A’s rows', () => {
 
 	it('gives every sourceless row a service and a milestone, and no number', () => {
 		// §17.2's per-type `unconfigured` state (`docs/ARCHITECTURE.md`),
-		// which is what makes these rows legal beside §17.1's "never render a
-		// section with no content" rule (DESIGN-DIRECTION rule 13): a state, a
-		// cause and an action.
+		// which is what makes these rows legal beside the "never render a
+		// section with no content" rule: a state, a cause and an action.
+		//
+		// ⚠️ THAT RULE WAS CITED AS §17.1's AND IT IS NOT THERE. §17.1's bullets
+		// are no animation, standard controls, density, the phone and no
+		// skeleton shimmer. It is rule 13 of `design/DESIGN-DIRECTION.md` §13,
+		// and §17.2 is where the §17.1 attribution comes from — it writes the
+		// rule's source as `(§17.1, and design/DESIGN-DIRECTION.md rule 13)`.
 		//
 		// ⚠️ CITED §17.7 UNTIL 2026-08-20. §17.7 does not contain the word
 		// `unconfigured` anywhere; it specifies install-level screens, and the

@@ -1032,8 +1032,13 @@
 	records the one-way prompt as a finding.
 
 	⚠️ AND THE SAFE BRANCH IS THE ONE THIS BUILD CANNOT PERFORM. There is no
-	re-link endpoint: the HTTP surface is create, list, health, test, update and
-	delete. `needs_reidentification` is written by §7.4 guard 2, which belongs to
+	re-link endpoint — nothing under `/api/v1/services` re-links an instance, and
+	`internal/httpapi/server.go`'s route table is where to check that rather than
+	an inventory here. ⚠️ THIS CARRIED SUCH AN INVENTORY AND IT HAD GONE SHORT,
+	naming neither the per-instance read nor either sync trigger; the re-link
+	claim it was offered in support of was true throughout. A list of another
+	file's routes is a copy that rots without this screen changing, so the
+	pointer replaces it. `needs_reidentification` is written by §7.4 guard 2, which belongs to
 	the reconciliation sweep — channel 4, and `internal/libsync/doc.go` names it
 	as NOT here, so nothing sets the state today either. Do not read that as "the
 	sync engine has not shipped": channel 1 imports a catalogue and Home renders
@@ -1487,12 +1492,19 @@
 {/if}
 
 <!--
-	THE ADD AND EDIT FORM. §17.7's "three fields" is corrected to four — kind,
-	name, base URL, API key — plus `URL base` as an optional fifth which is
+	THE ADD AND EDIT FORM. §17.3 corrects the wizard's *"three fields"* to four —
+	kind, name, base URL, API key — plus `URL base` as an optional fifth which is
 	NOT behind a Show advanced toggle (§17.3.1): a reverse-proxy sub-path is how
 	a large share of this audience reaches its *Arrs and it is the single most
 	likely reason a first connection test fails, so hiding it would mean not
 	having it.
+
+	⚠️ THE QUOTED STRING WAS ATTRIBUTED TO §17.7 AND §17.7 NO LONGER CONTAINS IT.
+	§17.3 is where the sentence lives, and it is the one doing the correcting: it
+	quotes the older three-field wizard in order to overturn it, adds `name` as
+	the field the whole table is keyed on, and hands the optional fifth to
+	§17.3.1. Cite the section that holds the text, not the one it was written
+	about.
 -->
 <dialog
 	bind:this={dialogEl}
