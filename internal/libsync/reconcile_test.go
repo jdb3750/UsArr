@@ -5,6 +5,7 @@ import (
 	"errors"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/jdb3750/UsArr/internal/bookorbit"
 	"github.com/jdb3750/UsArr/internal/store"
@@ -181,6 +182,81 @@ func TestAPartialImportNeverSweeps(t *testing.T) {
 	for _, id := range []string{"0", "1", "2"} {
 		if linkDeletedAt(t, s, inst, "series", id).Valid {
 			t.Errorf("item %s was tombstoned by an import that never finished reading", id)
+		}
+	}
+}
+
+// TestARefusedSweepFailsTheImportRatherThanCompletingIt is
+// ErrSweepRefusedEmptyRead's THIRD observability, and it is the one that had no
+// guard: the doc claims the refusal is visible three ways — a sync_report row,
+// the error reaching the importer, and *"the import that would have swept fails
+// rather than reporting a completed run that quietly skipped its deletion pass"*
+// — and only the first was asserted anywhere. Replacing this call site's
+// `if err != nil` arm with `_ = err` survived the whole suite, so an importer
+// change that swallowed the refusal would have shipped green and the refusal
+// would have become a silent no-op at exactly the layer that is supposed to
+// surface it.
+//
+// ⚠️ IT IS ASSERTED BY EFFECT, NOT BY THE ERROR ALONE. `rep.Completed` and
+// `last_full_sync_at` are what a swallowed refusal actually produces: a run that
+// tells the Services screen the replica is current, having skipped the pass that
+// was going to make it current. Both are read here, and the freshness stamp is
+// read against a DIFFERENT clock instant so "did not move" is a real question.
+func TestARefusedSweepFailsTheImportRatherThanCompletingIt(t *testing.T) {
+	s := newTestStore(t)
+	inst := fixtureInstance(t, s)
+	containers := []store.CatalogueContainer{{RemoteID: "1", Name: "Comics", Kind: "comic"}}
+
+	seed, err := newImporter(t, s, &fakeSource{
+		containers: containers, items: genItems(3, "1", "comic"),
+	}).FullImport(t.Context(), inst)
+	if err != nil {
+		t.Fatalf("seeding FullImport: %v", err)
+	}
+	if !seed.Completed {
+		t.Fatal("the seeding import did not complete, so there are no live links to refuse over")
+	}
+	seeded, err := s.LastFullSyncAt(t.Context(), inst)
+	if err != nil {
+		t.Fatalf("LastFullSyncAt: %v", err)
+	}
+	if !seeded.Valid {
+		t.Fatal("the seeding import stamped no freshness; the assertion below would be vacuous")
+	}
+
+	// THE READ COMES BACK EMPTY while the instance still has live links — a lost
+	// credential scope, an unmounted share, a renamed container. A LATER clock, so
+	// a stamp written by this run is distinguishable from the seeding run's.
+	later := testNow.Add(24 * time.Hour)
+	im := &Importer{
+		Store: s, Source: &fakeSource{containers: containers}, UserID: store.SystemUserID,
+		Now: func() time.Time { return later },
+	}
+	rep, err := im.FullImport(t.Context(), inst)
+
+	if rep.Completed {
+		t.Error("the import reported itself COMPLETE over a refused deletion pass: it claims to " +
+			"have replaced what the replica knows about this source, having skipped the half " +
+			"that removes what the source stopped reporting")
+	}
+	if !errors.Is(err, store.ErrSweepRefusedEmptyRead) {
+		t.Errorf("FullImport err = %v, want ErrSweepRefusedEmptyRead; the refusal did not "+
+			"reach the caller", err)
+	}
+	after, err := s.LastFullSyncAt(t.Context(), inst)
+	if err != nil {
+		t.Fatalf("LastFullSyncAt: %v", err)
+	}
+	if after.String != seeded.String {
+		t.Errorf("last_full_sync_at moved from %q to %q: the Services screen now renders a "+
+			"freshness this run did not earn", seeded.String, after.String)
+	}
+	// AND NOTHING WAS TOMBSTONED, which is the refusal doing its own job — the
+	// assertions above would also pass for a sweep that ran and emptied the
+	// library before failing.
+	for _, id := range []string{"0", "1", "2"} {
+		if linkDeletedAt(t, s, inst, "series", id).Valid {
+			t.Errorf("item %s was tombstoned by the read the sweep refused to act on", id)
 		}
 	}
 }
