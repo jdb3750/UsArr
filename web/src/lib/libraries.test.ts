@@ -444,9 +444,15 @@ describe('the State column, and every arm of it is an observation', () => {
 	 *     vacuous-green failure this file exists to prevent.
 	 *
 	 * WHAT DID NOT CHANGE IS THE INVARIANT: no `ok`, on any shape, under any
-	 * read. The join measures a SERVICE and this column describes a LIBRARY, and
-	 * the two columns that would let a library be pronounced fine —
-	 * `missing_since` and `orphaned_at` — still have no writer (http-api.md §2.4).
+	 * read. The join measures a SERVICE and this column describes a LIBRARY.
+	 *
+	 * ⚠️ THE SECOND HALF OF THAT REASON READ *"the two columns that would let a
+	 * library be pronounced fine — `missing_since` and `orphaned_at` — still have
+	 * no writer"*, AND CHANNEL 4 WRITES BOTH. The invariant stands on a different
+	 * leg now: both columns record an ABSENCE, so an unset one says nothing was
+	 * observed rather than that something was observed and passed. The shape list
+	 * below gained the orphaned row for the same reason the eleven health shapes
+	 * were added — an arm nothing exercises is an arm this pin does not cover.
 	 */
 	it('never emits an ok tone at all, under either read', () => {
 		const everyShape: Partial<Library>[] = [
@@ -457,7 +463,12 @@ describe('the State column, and every arm of it is an observation', () => {
 			{ includeInSearch: false },
 			{ sources: [source({ missingSince: '2026-08-17T09:30:00Z' })] },
 			{ sources: [source({ serviceInstanceId: 99 })] },
-			{ sources: [source({ id: 1 }), source({ id: 2, serviceInstanceId: 2 })] }
+			{ sources: [source({ id: 1 }), source({ id: 2, serviceInstanceId: 2 })] },
+			{ orphanedAt: '2026-08-17T08:00:00Z' },
+			{
+				orphanedAt: '2026-08-17T08:00:00Z',
+				sources: [source({ missingSince: '2026-08-17T08:00:00Z' })]
+			}
 		];
 		const everyRead: HealthRead[] = [
 			HEALTH_UNREAD,
@@ -495,20 +506,57 @@ describe('the State column, and every arm of it is an observation', () => {
 	});
 
 	it('reports a library with no sources, from the ARRAY and not from orphaned_at', () => {
-		// `sources: []` is served unconditionally and is an observation;
-		// `orphaned_at` has no writer. So the state renders without it.
+		// `sources: []` is an observation of its own — this row has nothing
+		// attached to it — and it is a DIFFERENT one from the orphaned state
+		// below, which keeps every source it ever had.
 		const marks = libraryStates(library({ sources: [], itemCount: 0 }), HEALTH_UNREAD);
 		expect(marks.map((m) => m.word)).toEqual(['No sources']);
 		expect(marks[0].tone).toBe('warn');
 		expect(marks[0].at).toBeUndefined();
 	});
 
-	it('qualifies that state with orphaned_at the day something writes it', () => {
+	it('qualifies that state with orphaned_at when a row carries both', () => {
 		const marks = libraryStates(
 			library({ sources: [], itemCount: 0, orphanedAt: '2026-08-17T08:00:00Z' }),
 			HEALTH_UNREAD
 		);
 		expect(marks[0].at).toBe('2026-08-17T08:00:00Z');
+	});
+
+	/**
+	 * THE ORPHANED STATE AS THE SWEEP ACTUALLY PRODUCES IT, which is the shape
+	 * the screen could not render at all.
+	 *
+	 * ⚠️ THE ONLY ARM THAT READ `orphaned_at` REQUIRED `sources.length === 0`,
+	 * AND THE SWEEP NEVER PRODUCES THAT. It RETAINS every `library_source` row
+	 * and stamps `missing_since` on it — `internal/store/libraries.go` puts it in
+	 * terms: *"WHAT IT MEANS IS NARROWER THAN 'zero sources': the row count never
+	 * changes"* — so the one state §6.5 rule 5 defines rendered no library-level
+	 * mark, on a column that had just acquired its first writer.
+	 */
+	it('reports an orphaned library that still has all of its sources', () => {
+		const marks = libraryStates(
+			library({
+				orphanedAt: '2026-08-17T08:00:00Z',
+				sources: [source({ missingSince: '2026-08-17T08:00:00Z' })]
+			}),
+			HEALTH_UNREAD
+		);
+		const orphaned = marks.find((m) => m.key === 'orphaned');
+		expect(orphaned).toBeDefined();
+		expect(orphaned?.at).toBe('2026-08-17T08:00:00Z');
+		expect(orphaned?.tone).toBe('warn');
+		// NOT the empty-array arm: this library has its sources, and saying it has
+		// none would be a different and false claim.
+		expect(marks.map((m) => m.key)).not.toContain('no-sources');
+	});
+
+	it('says nothing about orphaning for a library nothing has orphaned', () => {
+		const marks = libraryStates(
+			library({ sources: [source({ missingSince: '2026-08-17T08:00:00Z' })] }),
+			HEALTH_UNREAD
+		);
+		expect(marks.map((m) => m.key)).not.toContain('orphaned');
 	});
 
 	it('reports a missing source, with the earliest stamp', () => {

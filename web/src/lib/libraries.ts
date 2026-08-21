@@ -6,7 +6,9 @@
  * The row view is *"name · kind · item count · source chips with per-source
  * health · … · state"*, and per-source health is not in `library`,
  * `library_source` or `library_member`: the one column in reach that speaks to
- * it is `missing_since`, which nothing writes. The measurement is on the health
+ * it is `missing_since`, and that column answers a different question — whether
+ * the UPSTREAM still reports the container, which channel 4's deletion pass now
+ * writes, not whether the SERVICE is reachable. The measurement is on the health
  * endpoint, keyed by service instance, and §4 below carries the proof that the
  * two keys are the same column of the same table rather than the assertion.
  * BOTH ARE TIER 0 LOCAL READS, so the join blocks nothing upstream and neither
@@ -28,28 +30,36 @@
  * is "show nothing at all — no skeleton, no spinner, no fade-in", so this module
  * publishes no loading model for the screen to render.
  *
- * ⚠️ THREE FIELDS ON THIS WIRE DESCRIBE STATES NOTHING IN THE TREE CAN REACH,
- * AND THE RENDERING RULES BELOW ARE BUILT AROUND THAT RATHER THAN AROUND THE
- * FIELDS' NAMES. `http-api.md` §2.4 measures all three:
+ * ⚠️ THIS BLOCK LISTED THREE FIELDS AS *"STATES NOTHING IN THE TREE CAN
+ * REACH"*. TWO OF THE THREE ARE NOW REACHED, and the superseded claims are
+ * quoted at each one rather than deleted, because the rendering rules below were
+ * built on them:
  *
- *   · `sources[].missing_since` — the two statements in non-test Go that touch
- *     the column both CLEAR it, so no code path sets a non-NULL value. ABSENCE
- *     IS THEREFORE "UNKNOWN", NEVER "HEALTHY", and `libraryStates` below emits
- *     nothing positive from it. A screen that rendered "all sources present"
- *     would be reporting the writer's silence as an observation. ⚠️ THE HEALTH
- *     JOIN DOES NOT CHANGE THIS. It measures a SERVICE, and this column is about
- *     a CONTAINER the service reports: a Kavita in perfect health can stop
+ *   · `sources[].missing_since` — ⚠️ IT READ *"the two statements in non-test Go
+ *     that touch the column both CLEAR it, so no code path sets a non-NULL
+ *     value"*, and that is measured false: channel 4's deletion pass stamps it
+ *     for every container the upstream has stopped reporting. ABSENCE IS STILL
+ *     "UNKNOWN", NEVER "HEALTHY" — a library nothing has imported yet has never
+ *     been looked at — so `libraryStates` below still emits nothing positive
+ *     from it, and that rule survives the writer arriving. ⚠️ THE HEALTH JOIN
+ *     DOES NOT CHANGE THIS EITHER. It measures a SERVICE, and this column is
+ *     about a CONTAINER the service reports: a Kavita in perfect health can stop
  *     serving a library, so a `connected` verdict is not evidence about
  *     `missing_since` and the two render as the separate facts they are.
- *   · `items[].orphaned_at` — no writer and no reader in non-test Go. A library
- *     with no sources is still visible as `sources: []`, which is an observation
- *     rather than an inference, so the state renders from the array and the
- *     timestamp is used only to QUALIFY it when it is present.
+ *   · `items[].orphaned_at` — ⚠️ IT READ *"no writer and no reader in non-test
+ *     Go … the state renders from the array and the timestamp is used only to
+ *     QUALIFY it when it is present"*. The writer is the same sweep, and the
+ *     rest of that sentence was the actual defect: a swept-orphaned library is
+ *     NEVER `sources: []`, because the sweep retains every `library_source` row
+ *     and stamps it. The state now renders from the column, in `libraryStates`'
+ *     own `orphaned` arm; the empty array keeps its own separate arm, for the
+ *     separate observation it is.
  *   · `items[].formats` — no writer: the column is NULL on every row, so the
- *     Ebooks/Audiobooks split it exists for is not reachable in v0.1. It is
- *     parsed here so the screen stays truthful the day something writes it, and
- *     it is not rendered as a column, because a column identical on every row is
- *     not data (DESIGN-DIRECTION §9.1).
+ *     Ebooks/Audiobooks split it exists for is not reachable in v0.1. This one
+ *     is still true — `internal/store/libraries.go` says there is no `UPDATE
+ *     library` anywhere. It is parsed here so the screen stays truthful the day
+ *     something writes it, and it is not rendered as a column, because a column
+ *     identical on every row is not data (DESIGN-DIRECTION §9.1).
  *
  * ⚠️ AND ONE FIELD DESCRIBES A STATE THAT IS REACHABLE AND WHOSE ABSENCE IS
  * STILL NOT A PASS. `items[].completeness` (§2.6) carries what the last import
@@ -148,7 +158,10 @@ export interface Library {
 	enabled: boolean;
 	includeInSearch: boolean;
 	itemCount: number;
-	/** ⚠️ NOTHING WRITES IT. See the file header. */
+	/** §6.5 rule 5's retained-with-a-reason state: no source of this library is
+	 * still being reported by anyone. ⚠️ THIS READ *"NOTHING WRITES IT"* and the
+	 * sweep does; see the file header, and `libraryStates`' `orphaned` arm for
+	 * why it is NOT the same observation as an empty `sources`. */
 	orphanedAt?: string;
 	/** Always an array. `[]` is §17.8's orphaned state, never "unknown". */
 	sources: LibrarySource[];
@@ -603,7 +616,9 @@ export function itemCountText(library: Library): string {
  *
  * `GET /api/v1/libraries` carries no health at all: it reads `library`,
  * `library_source` and `library_member`, and the only column in reach that
- * speaks to a source's condition is `missing_since`, which nothing writes.
+ * speaks to a source's condition is `missing_since` — which the deletion pass
+ * writes, and which says the UPSTREAM stopped reporting a container rather than
+ * that the service is unreachable. Neither read carries the second fact.
  * `GET /api/v1/services/health` carries the measurement, keyed by service
  * instance, and both are Tier 0 local reads, so joining them blocks nothing
  * upstream (principle 1).
@@ -1050,13 +1065,19 @@ export function sourceChips(
 
 /** The status roles `app.css` exposes as `.st--err`, `.st--warn` and `.st--none`.
  *
- * ⚠️ THERE IS STILL NO `ok` ARM, AND THE HEALTH JOIN DID NOT EARN ONE. `.st--ok`
- * on this screen would be a claim that THIS LIBRARY was measured and passed, and
- * what the join measures is a SERVICE: a healthy Kavita says nothing about
- * whether this library's membership is current, and the two columns that would
- * say so — `missing_since` and `orphaned_at` — still have no writer anywhere in
- * the tree (http-api.md §2.4). A green tick would also fire on nearly every row,
- * which is §17.4 rule 5 twice over.
+ * ⚠️ THERE IS STILL NO `ok` ARM, AND NEITHER THE HEALTH JOIN NOR THE DELETION
+ * PASS EARNED ONE. `.st--ok` on this screen would be a claim that THIS LIBRARY
+ * was measured and passed, and what the join measures is a SERVICE: a healthy
+ * Kavita says nothing about whether this library's membership is current.
+ *
+ * ⚠️ THE REASON GIVEN USED TO BE THAT *"the two columns that would say so —
+ * `missing_since` and `orphaned_at` — still have no writer anywhere in the
+ * tree"*, AND THAT PREMISE IS FALSE NOW: channel 4 writes both. The conclusion
+ * is unchanged and the argument is now the ordinary one — both columns are
+ * NEGATIVE observations, so their absence is "nothing has been observed", never
+ * "observed and fine", and no positive claim can be built out of a silence. A
+ * green tick would also fire on nearly every row, which is §17.4 rule 5 twice
+ * over.
  *
  * ⚠️ `err` IS NEW AND IS NOT A WEAKENING OF THAT. It arrived with the join,
  * because the join brought states that ARE errors — an instance that is not
@@ -1126,8 +1147,11 @@ function plural(n: number, one: string, many: string): string {
  *
  * ⚠️ AND IT STILL NEVER EMITS A POSITIVE ONE. A row with nothing to say returns
  * `[]`, which the screen renders as §9.1's `—`. The tempting bug is the tick:
- * health measures a service, this column describes a library, and the columns
- * that would let a library be pronounced fine have no writer.
+ * health measures a service and this column describes a library. ⚠️ THE SECOND
+ * HALF OF THAT SENTENCE READ *"the columns that would let a library be
+ * pronounced fine have no writer"* — they have one now, and they still do not
+ * let a library be pronounced fine, because both of them record an ABSENCE and
+ * an unset absence is not a measurement.
  *
  * The array is ordered worst-first, so a truncating cell keeps the actionable
  * mark. Nothing is dropped: a row can carry several and all of them render.
@@ -1147,16 +1171,51 @@ export function libraryStates(
 	const marks: LibraryStateMark[] = [];
 
 	if (library.sources.length === 0) {
-		// §17.8's orphaned state, and it renders from the ARRAY rather than from
-		// `orphaned_at`: `sources: []` is served unconditionally and is an
-		// observation, while the timestamp has no writer. When something does
-		// start writing it, it arrives here as the qualifier it was always meant
-		// to be — §6.5 rule 5's *"shown with its reason"* — without this arm
-		// changing. Until then the row says what is true and does not say when.
+		// A library the wire shows with NO sources at all. It is a different
+		// observation from the one below and keeps its own arm and its own word:
+		// this row has nothing attached to it, rather than things attached to it
+		// that nobody is reporting.
+		//
+		// ⚠️ THE COMMENT HERE SAID `orphaned_at` HAD NO WRITER — *"`sources: []`
+		// is served unconditionally and is an observation, while the timestamp has
+		// no writer. When something does start writing it, it arrives here as the
+		// qualifier it was always meant to be"* — AND THE PREMISE IS NOW FALSE.
+		// The sweep writes it, and it does NOT arrive as a qualifier on this arm:
+		// the sweep RETAINS the `library_source` row and stamps `missing_since` on
+		// it, so a swept-orphaned library reaches this function with
+		// `sources.length > 0` and never enters this branch at all. The timestamp
+		// still qualifies THIS word when it is present, because a library can be
+		// both, but the state it was written for is the arm below.
 		const mark: LibraryStateMark = { key: 'no-sources', word: 'No sources', tone: 'warn' };
 		if (library.orphanedAt !== undefined) mark.at = library.orphanedAt;
 		marks.push(mark);
 		return withVisibility(library, marks);
+	}
+
+	if (library.orphanedAt !== undefined) {
+		// §17.8's ORPHANED state as the sweep actually produces it: the sources
+		// are all still listed, and not one of them is being reported by anybody
+		// any more (§6.5 rule 5's retained-with-a-reason row).
+		//
+		// ⚠️ IT IS ITS OWN ARM RATHER THAN A QUALIFIER ON `sources.length === 0`,
+		// and that is the whole fix. The condition above CANNOT be true for a
+		// swept library — `internal/store/libraries.go` states the sweep's rule in
+		// terms: *"WHAT IT MEANS IS NARROWER THAN 'zero sources': the row count
+		// never changes"* — so attaching the timestamp there rendered a state
+		// nothing can reach, while the state something DOES reach rendered no
+		// library-level mark at all. The per-source *no longer reported* chip was
+		// the only trace of it on the screen.
+		//
+		// It does not return early: an orphaned library's sources still carry
+		// health, and a source that is both unreported AND on an instance that is
+		// down is two facts, not one.
+		marks.push({
+			key: 'orphaned',
+			word: 'No source is reporting this library',
+			tone: 'warn',
+			detail: 'the sources are kept, with anything you changed here',
+			at: library.orphanedAt
+		});
 	}
 
 	const verdicts = library.sources.map((source) => ({

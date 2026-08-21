@@ -49,12 +49,16 @@
 	 * read alone; a failed health read renders the table exactly as it rendered
 	 * before this join existed, plus one sentence above it saying so.
 	 *
-	 * ⚠️ NOTHING ON THIS SCREEN CLAIMS A LIBRARY IS HEALTHY, AND THE JOIN DID NOT
-	 * CHANGE THAT. The health read measures a SERVICE; this screen describes a
-	 * LIBRARY, and the two columns that would let a library be pronounced fine —
-	 * `missing_since` and `orphaned_at` — still have no writer anywhere in the
-	 * tree (`http-api.md` §2.4). So there is no green tick in the State column and
-	 * no `.st--ok` anywhere below. What DID arrive with the join is `.st--err`,
+	 * ⚠️ NOTHING ON THIS SCREEN CLAIMS A LIBRARY IS HEALTHY, AND NEITHER THE JOIN
+	 * NOR THE DELETION PASS CHANGED THAT. The health read measures a SERVICE; this
+	 * screen describes a LIBRARY. ⚠️ THE REASON HERE READ *"the two columns that
+	 * would let a library be pronounced fine — `missing_since` and `orphaned_at` —
+	 * still have no writer anywhere in the tree"*, AND BOTH HAVE ONE NOW: channel
+	 * 4 stamps them. They still cannot pronounce a library fine, because each one
+	 * records an ABSENCE and an unset absence is "nothing was observed", never
+	 * "observed and healthy". So there is no green tick in the State column and no
+	 * `.st--ok` anywhere below; what the writer DID earn is a library-level
+	 * orphaned mark, which is a negative one (`libraryStates`). What DID arrive with the join is `.st--err`,
 	 * for the states that are errors on the Services screen too; see
 	 * `libraryStates` for both halves of the argument.
 	 */

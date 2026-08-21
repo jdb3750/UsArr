@@ -7,6 +7,7 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/jdb3750/UsArr/internal/db"
 )
@@ -72,18 +73,25 @@ func seedLibrariesCorpus(t *testing.T, s *Store) {
 	// Works, their links and their membership. Work n lives on the instance its
 	// library's first source names, so the scope has something consistent to
 	// filter.
+	//
+	// ⚠️ EACH LINK CARRIES ITS CONTAINER, and that is load-bearing rather than
+	// decorative: the deletion pass only treats a missing link as an absence
+	// inside a container the read observed (store.SweepScope), so a corpus whose
+	// links named no container could not be swept at all and every test that
+	// swept it would pass over a no-op.
 	members := []struct {
-		work int
-		kind string
-		lib  int
-		inst int
+		work      int
+		kind      string
+		lib       int
+		inst      int
+		container string
 	}{
-		{1, "comic", 1, 1},
-		{2, "comic", 1, 1},
-		{3, "book", 2, 1},
-		{4, "book", 2, 1},
-		{5, "book", 2, 2},
-		{6, "movie", 3, 2},
+		{1, "comic", 1, 1, "11"},
+		{2, "comic", 1, 1, "11"},
+		{3, "book", 2, 1, "12"},
+		{4, "book", 2, 1, "12"},
+		{5, "book", 2, 2, "21"},
+		{6, "movie", 3, 2, "22"},
 	}
 	for _, m := range members {
 		stmts = append(stmts, fmt.Sprintf(`INSERT INTO work
@@ -92,8 +100,9 @@ func seedLibrariesCorpus(t *testing.T, s *Store) {
 			m.work, m.kind, m.work, m.work, m.work))
 		stmts = append(stmts, fmt.Sprintf(
 			`INSERT INTO service_item_link
-			   (service_instance_id, work_id, remote_id, remote_kind, synced_at)
-			 VALUES (%d, %d, 'r%d', 'series', '2026-08-16 12:00:00')`, m.inst, m.work, m.work))
+			   (service_instance_id, work_id, remote_id, remote_kind, remote_library_id, synced_at)
+			 VALUES (%d, %d, 'r%d', 'series', '%s', '2026-08-16 12:00:00')`,
+			m.inst, m.work, m.work, m.container))
 		stmts = append(stmts, fmt.Sprintf(
 			`INSERT INTO library_member (library_id, sort_title, work_id) VALUES (%d, 'w%02d', %d)`,
 			m.lib, m.work, m.work))
@@ -134,6 +143,79 @@ func libraryByName(t *testing.T, ls []Library, name string) Library {
 	}
 	t.Fatalf("library %q is not in %v", name, libraryNames(ls))
 	return Library{}
+}
+
+// TestListLibrariesItemCountExcludesTombstonedWorks is §17.8's item count
+// against the column channel 4 made reachable.
+//
+// ⚠️ THIS READ WAS THE ONE THE TOMBSTONE'S READER LIST MISSED, and it missed it
+// for a structural reason worth keeping written down: every other user-facing
+// read of a work goes THROUGH the work row and filters `deleted_at` there, while
+// this one counts `library_member` rows, which the sweep does not touch. So the
+// Libraries screen told the owner a library still held two items after both of
+// them had been deleted upstream — and told a SCOPED user the truth, 0, because
+// the scope path's EXISTS carries `sil.deleted_at IS NULL`. The one caller who
+// can see everything got the only wrong number.
+//
+// It runs the REAL sweep rather than an UPDATE, so what it measures is the
+// composition of the two: tombstone through the shipped pass, count through the
+// shipped statement.
+func TestListLibrariesItemCountExcludesTombstonedWorks(t *testing.T) {
+	s := newTestStore(t)
+	seedLibrariesCorpus(t, s)
+
+	before, err := s.ListLibraries(t.Context(), OwnerScope(0))
+	if err != nil {
+		t.Fatalf("ListLibraries: %v", err)
+	}
+	if n := libraryByName(t, before, "Manga").ItemCount; n != 2 {
+		t.Fatalf("Manga starts at %d items, not 2; this test's premise does not hold", n)
+	}
+
+	// Instance 1's read observed both of its containers and reported neither of
+	// Manga's two works: they are gone upstream.
+	res, err := s.SweepDeletions(t.Context(), 1,
+		[]LinkRef{{RemoteKind: "series", RemoteID: "r3"}, {RemoteKind: "series", RemoteID: "r4"}},
+		SweepScope{Reported: []string{"11", "12"}, Observed: []string{"11", "12"}},
+		testNow.Add(72*time.Hour))
+	if err != nil {
+		t.Fatalf("SweepDeletions: %v", err)
+	}
+	if res.WorksTombstoned != 2 {
+		t.Fatalf("the sweep tombstoned %d works, want 2; the count below would measure nothing (%+v)",
+			res.WorksTombstoned, res)
+	}
+
+	after, err := s.ListLibraries(t.Context(), OwnerScope(0))
+	if err != nil {
+		t.Fatalf("ListLibraries after: %v", err)
+	}
+	if n := libraryByName(t, after, "Manga").ItemCount; n != 0 {
+		t.Errorf("Manga counts %d items after both of them were deleted upstream, want 0: "+
+			"the owner is being told a library still holds works that are gone", n)
+	}
+	// AND THE LIVE ONES STILL COUNT. A filter that took the whole count with it
+	// would satisfy the assertion above and be worse than the bug.
+	if n := libraryByName(t, after, "Books").ItemCount; n != 3 {
+		t.Errorf("Books counts %d, want its 3 live works: the filter reached rows it should not", n)
+	}
+
+	// ⚠️ THE TWO SCOPES AGREE ON THE TOMBSTONE AND DISAGREE ON VISIBILITY, and
+	// that second difference is correct rather than a leak. A user who can see
+	// only instance 1 counts two of Books' three works, because the third is
+	// replicated from an instance they cannot see — that is principle 4, and a
+	// count that included it would be the existence oracle store.go rule 2 names.
+	scoped, err := s.ListLibraries(t.Context(), Scope{UserID: 0, InstanceIDs: []int64{1}})
+	if err != nil {
+		t.Fatalf("ListLibraries scoped: %v", err)
+	}
+	if n := libraryByName(t, scoped, "Manga").ItemCount; n != 0 {
+		t.Errorf("the scoped Manga count is %d, want 0", n)
+	}
+	if n := libraryByName(t, scoped, "Books").ItemCount; n != 2 {
+		t.Errorf("the scoped Books count is %d, want 2: the scope stopped filtering, or "+
+			"the tombstone filter reached a work the scope already admits", n)
+	}
 }
 
 // The list itself: what §17.8's row view needs, in sort_order.
@@ -482,14 +564,21 @@ func TestListLibrariesScopeGuardFires(t *testing.T) {
 
 		scope := Scope{UserID: 0, InstanceIDs: []int64{1}}
 		query, args := listLibrariesSQL(scope)
-		// The count's EXISTS is the first scope fragment in the statement.
-		const countExists = `WHERE m.library_id = l.id AND EXISTS`
+		// The count's EXISTS is the first scope fragment in the statement. The
+		// needle carries the tombstone filter that now sits between the count's
+		// own predicate and its scope: an arm that matched only `AND EXISTS`
+		// would go on firing after the scope moved somewhere else in the
+		// statement, and an arm that stopped at `m.library_id = l.id` would stop
+		// matching the day any other predicate joined it — which it just did.
+		const countExists = `AND w_count.deleted_at IS NULL
+		           AND EXISTS`
 		if !strings.Contains(query, countExists) {
 			t.Fatalf("the shipped statement no longer scopes the count the way this arm "+
 				"rewrites, so it asserts nothing:\n%s", query)
 		}
 		broken := strings.Replace(query, countExists,
-			`WHERE m.library_id = l.id AND 1=1 AND NOT EXISTS`, 1)
+			`AND w_count.deleted_at IS NULL
+		           AND 1=1 AND NOT EXISTS`, 1)
 		if broken == query {
 			t.Fatal("the break was a no-op: the statement is unchanged")
 		}
@@ -606,6 +695,15 @@ func listLibrariesPlanFaults(plan string) []string {
 	}
 	if strings.Contains(plan, "SCAN m") {
 		faults = append(faults, "the item count degraded to a scan of library_member")
+	}
+	// THE TOMBSTONE JOIN'S OWN LEG. It is one rowid seek per member row, which is
+	// what makes the filter affordable at all; a scan of `work` here would walk
+	// the whole catalogue once per library and is the regression this arm exists
+	// for. The needle names the seek and the table, not the index, because the
+	// index in question IS the rowid.
+	if !strings.Contains(plan, "SEARCH w_count USING INTEGER PRIMARY KEY (rowid=?)") {
+		faults = append(faults,
+			"the item count's work-tombstone join is not a rowid seek, so it walks work")
 	}
 	return faults
 }

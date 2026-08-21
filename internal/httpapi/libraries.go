@@ -168,13 +168,26 @@ type libraryResponse struct {
 	IncludeInSearch bool `json:"include_in_search"`
 
 	// ItemCount is §17.8's item-count column: `library_member` rows in this
-	// library that the caller's scope admits. It is edition-grained by the
-	// table's key, and equals a count of distinct works today because the only
-	// writer files every work under the `edition_id = 0` sentinel.
+	// library whose work is live and whose work the caller's scope admits. It is
+	// edition-grained by the table's key, and equals a count of distinct works
+	// today because the only writer files every work under the `edition_id = 0`
+	// sentinel.
+	//
+	// ⚠️ TWO CALLERS AT DIFFERENT SCOPES LEGITIMATELY GET DIFFERENT NUMBERS, and
+	// a client must not treat the larger as the true one. The count is over the
+	// works the caller can see; that is principle 4, not an inconsistency.
 	ItemCount int64 `json:"item_count"`
 
-	// OrphanedAt is §6.5 rule 5's retained-with-a-reason state, absent when the
-	// library has its sources. ⚠️ NOTHING WRITES IT — see store.Library.
+	// OrphanedAt is §6.5 rule 5's retained-with-a-reason state: no source of this
+	// library is still being reported by anyone.
+	//
+	// ⚠️ THIS COMMENT READ *"absent when the library has its sources. ⚠️ NOTHING
+	// WRITES IT — see store.Library"*, AND BOTH HALVES WERE FALSE BY THE TIME
+	// THEY WERE READ. The pointed-at comment now says the opposite: channel 4's
+	// sweepOrphans writes the column and clears it again. And "has its sources"
+	// is the wrong test — the sweep RETAINS the library_source row and stamps
+	// missing_since on it, so an orphaned library still has its sources listed
+	// under `sources`. Orphaned means none of them is still being reported.
 	OrphanedAt *time.Time `json:"orphaned_at,omitempty"`
 
 	// Sources is always present, and it is `[]` rather than absent for an

@@ -124,9 +124,10 @@ type Library struct {
 	// for a deleted instance and that path is not channel 4's.
 	OrphanedAt sql.NullString
 
-	// ItemCount is the number of library_member rows in this library that the
-	// scope admits. See listLibrariesSQL for the grain and for why this is the
-	// cheap count rather than a distinct one.
+	// ItemCount is the number of library_member rows in this library whose work
+	// is LIVE and whose work the scope admits. See listLibrariesSQL for the
+	// grain, for why this is the cheap count rather than a distinct one, and for
+	// why the tombstone filter is a join.
 	ItemCount int64
 
 	// Sources is §17.8's source chips, ordered deterministically. It is empty
@@ -459,9 +460,33 @@ func librarySourceAlias(column string) string {
 //
 // which is what makes this cheap enough to ship once per row. The guard
 // (TestListLibrariesPlanIsSeeks) pins the SEEK and the index name and does NOT
-// pin COVERING, per schema.md §1's rule — although here the SELECT list is
-// COUNT(*) and selects no column at all, so covering is structural rather than
-// lucky.
+// pin COVERING, per schema.md §1's rule.
+//
+// # AND IT FILTERS THE WORK TOMBSTONE, THROUGH A JOIN IT DID NOT USED TO HAVE
+//
+// ⚠️ THIS COUNT WAS THE ONE USER-FACING READ THAT `work.deleted_at` NEVER
+// REACHED. Every other read of a work goes through the `work` row and filters
+// the column there; this one counts `library_member` rows, which channel 4's
+// deletion pass does not touch, so it counted tombstoned works as members —
+// telling the owner a library still held two items after a sweep had deleted
+// both. The column was correct-by-vacuity until that sweep landed: nothing wrote
+// a non-NULL `work.deleted_at` before it, so the miss cost nothing and showed
+// nothing, right up until it cost the number on §17.8's screen.
+//
+// The join is what the filter costs, and it is one rowid seek per member row
+// (`SEARCH w_count USING INTEGER PRIMARY KEY (rowid=?)`), taken deliberately:
+// `library_member` carries no copy of the tombstone and inventing one would be a
+// denormalisation to maintain in two writers. The plan guard pins BOTH legs, so
+// a later edit that drops the seek is loud.
+//
+// ⚠️ THE SCOPE AND THE TOMBSTONE ARE DIFFERENT QUESTIONS AND BOTH ARE ASKED. A
+// scoped user's EXISTS already carried `sil.deleted_at IS NULL`, so the scoped
+// count was right and the OWNER'S was wrong — the one caller who can see
+// everything got the only wrong number. That the two answers legitimately DIFFER
+// is not a leak and must not be "fixed" by dropping the scope: a smaller number
+// under a narrower scope is what principle 4 asks for, and it is the count over
+// instances the caller cannot see that would be the existence oracle (store.go
+// rule 2). What was wrong was that neither answer filtered the tombstone.
 //
 // It counts MEMBER ROWS, which are EDITION-GRAINED (§17.8's flagship
 // Ebooks/Audiobooks split is why the key carries edition_id at all). Today that
@@ -513,7 +538,9 @@ func listLibrariesSQL(scope Scope) (string, []any) {
 		SELECT l.id, l.name, l.slug, l.kind, l.formats, l.sort_order, l.enabled,
 		       l.include_in_search, l.orphaned_at,
 		       (SELECT COUNT(*) FROM library_member m
-		         WHERE m.library_id = l.id AND ` + countPred + `)
+		          JOIN work w_count ON w_count.id = m.work_id
+		         WHERE m.library_id = l.id AND w_count.deleted_at IS NULL
+		           AND ` + countPred + `)
 		  FROM library l
 		 WHERE l.id <> ?
 		   AND ` + userPred + `
