@@ -129,7 +129,7 @@ because no ADR ever decided it. Annotating leaves that failure mode nowhere to h
 | [0066](#adr-0066) | A wholly skipped BookOrbit library is **bound with an honest zero**, never declined; and the whole-library sentence says **what happened**, not just how many | **Accepted** — 2026-08-19; **builds on [ADR-0063](#adr-0063)** — the zero-count skip row is what makes an all-skipped library representable, so this ADR is about **what the screen says**, not about the schema — and **amends no ADR's reasoning**, editing no other entry in this file; **it is the ADR `internal/libsync/bookorbit.go` asked for by name**: *"Splitting one container into two libraries is a deviation from §17.8 that needs an ADR, and it is comics' slice to ask for"*; **the case is not hypothetical** — comics are skipped inside the walk today (`StreamItems`: `case bookorbit.MediaKindComic: tally.Comics++; return nil`, on the unit-of-work gap its package doc names, BookOrbit's series having no library to bind a comic's series work to) while **no container is declined at all** (`Containers()`: *"NOTHING IS DECLINED HERE… BookOrbit says nothing, so there is no answer to decline on"*, its `libraries` table carrying no type/kind/mediaType column), and **the owner's own BookOrbit keeps comics and prose in SEPARATE libraries** — his words, 2026-08-19, *"libraries are split up"* — so on the install v0.1 is proven against a comics library **walks, reports and yields nothing**, which is a whole library on his screen rather than an edge case; **the decision**: such a container is **BOUND** with an item count of zero and a sentence, and **no adapter declines one for being wholly skipped** — ratifying what the code already does, precisely because the tempting change is the one that makes the row disappear; ⚠️ **and the whole-library case gets its OWN sentence, because the count is not the message** — *"42 items were read and not mapped"* is a report **on the remainder** and reads as *some of this arrived*, so when the 42 IS the library the identical sentence reads as *this is broken*; the specified pair is *"Nothing in this library is imported yet"* over *"All 412 items were read. UsArr does not import comics yet."*, with **three acceptance criteria rather than taste** — it asserts the read succeeded with the count as evidence, it names the **media type** and the reason, and **it must be impossible to mistake for a connection failure**; **the condition is DERIVED and no wire field is added** — `item_count == 0` ∧ `skipped.state == "left_out"` ∧ `skipped.items > 0`, both fields shipping today, with the **empty upstream library** staying distinct for free since it walks clean to `state: "none"` with `items` absent; 🔍 **`skipEffect`'s remainder clause is measured FALSE on this shape and recorded as false rather than left to be found on a screen** — *"every other book in the library was imported"*, when there is no other book (it travels to `sync_report` and not to the cell, on §9.1's split, which bounds the blast radius and not the wrongness); **the MIXED container is decided too, and it becomes TWO library records** — `library.kind` is *"Exactly one, required"* under a `CHECK` that **already permits `'comic'`**, and `library_source`'s uniqueness is per `(library_id, …, container_ref)`, so two libraries may name one container and **no migration is needed**; until comics import, a mixed container binds exactly as today, one `book` library with its comics counted, which is the partial case and renders the partial sentence; ⚠️ **that half is DESIGNED AND UNTESTED, stated plainly so untested does not read as unsupported** — the owner's split libraries mean **his data will never exercise it**, and the precedent for the distinction is this project's own **synthetic-cassette rule** (`internal/bookorbit/vcr_test.go`: *"A SYNTHETIC CASSETTE PROVES THIS CLIENT'S PARSING, NOT THE SERVER'S BEHAVIOUR"*), where a green is **spec evidence only** and the tests are kept and trusted for exactly what they cover; 🚫 **DECLINING THE LIBRARY IS THE ALTERNATIVE THIS ADR CLOSES**, and it loses on three counts — invisible reads as broken, since §17.8 renders `library` joined to `library_source` and a declined container has neither, leaving a green Services row, a library the owner can see upstream and **no row at all**, which is principle 3's *"empty screen that looks broken"* exactly; the decline lands in `container_declined`, which is **measured to have no reader** in `internal/store`, `internal/httpapi` or `web/`; and it makes the state **unstable across a release**, a library materialising out of nowhere with a full catalogue the day comics import, where binding now turns that day into a zero becoming a number on a row the user has already seen; 🚫 **also rejected**: rendering nothing (`none` is the **measured negative** meaning *nothing was left out*, so using it where **everything** was would make the column's one honest silence say the opposite of the truth), reusing the partial sentence, a `whole_library` wire field or a third `SkipState` member (**"and also"** — derivable from two shipping fields, and a second thing that can be absent or disagree, on ADR-0063's own ground for declining a fourth state), and giving the row `kind = 'comic'` today (it could only be inferred **from the tally**, i.e. from what the walk happened to read, and §6.4's cascade makes a wrong `work.kind` unmergeable); ⚠️ **one residual is recorded rather than closed** — the row's kind is `book` while its contents are comics, mitigated only by `kind` being *"EDITABLE (§6.5 rule 4)"*, and closed when comics get a unit of work; **adds no migration, no column, no DDL and no wire field**, owes the implementing slice exactly **two strings**, and **nothing here is built** — it rules behaviour the §17.8 screen and the comics slice implement → **2026-08-19: decision 5 is built** — the comics import, content `10444a4`, with tonight's rulings on it in `ff13582`; read it off `internal/store/catalogue.go`'s `resolveBinding` and `bindOneContainer`, where a MIXED container's `comic` sibling is minted lazily on the first comic reached and named `Fiction (Comics)` for its kind — ⚠️ **this named `parentBinding` and that pointer is now one hop short**: `parentBinding` is three lines that delegate, and the mint moved to `resolveBinding` when a comics-ONLY container stopped getting a `book` library it never had contents for. **The qualifier is unchanged for the mixed case and is now absent where it was never earned**: a container yielding only comics is ONE library, named for the container, kind `comic`, its row retyped in place rather than minted beside an empty one. ⚠️ **Decision 1 is untouched and is pinned rather than argued** — a container whose every item is skipped is still bound, still eagerly, at the fallback kind, by `cmd/usarr.TestAWhollySkippedBookOrbitContainerIsSTILLBOUND`. **Decision 1 needed nothing built** — it *"ratifies what the code already does"* in its own words, and `bindOneContainer` still binds a wholly skipped container. **Decisions 2–4 measured unbuilt the same day**: the specified word and detail (*"Nothing in this library is imported yet"*) appear nowhere under `web/`, decision 3's derived condition — `item_count == 0` AND `left_out` AND `items > 0` — is written nowhere, and `skipEffect`'s remainder clause still reads *"every other book in the library was imported"* at `cmd/usarr/import.go`. ⚠️ **No status mark, because no decision changed.** The text above stands unreworded and this is a dated pointer at the tree, not a fresher status claim — and the tree, not this row, is what is authoritative for any of it. |
 | [0067](#adr-0067) | A pasted BookOrbit **magic link is accepted and reduced to its token**; the refusal becomes the fallback | **Accepted** — 2026-08-19; **reverses a ruling taken the same morning and records both**, because the first one was correct reasoning on a premise that turned out to be false — `ab9e0f3` refused a pasted magic-link URL on the belief that BookOrbit's copy button *"yields a URL, while POST /api/v1/auth/magic-links/login wants the bare token"*, read as *an artefact its own API cannot consume*; **reading the consumer falsified it** — `client/src/router/index.ts` declares a public `/magic` route, `MagicLinkLoginView.vue` takes `route.query.token` and strips it from history, and `useAuth.loginWithMagicLink` POSTs `{"token": raw}`, so **URL in / bare token out is an adapter BookOrbit already implements**, and `MagicLinksSettings.vue` offers the operator nothing else (the table renders the label, the account, the expiry and the use count, never the raw value); **measured at `73b7877d2fede2221b0ca360af9bfced7c3797f3`, cited as a commit because the tag `v2.6.0` was NOT verified to point at it**; **found by a live failure on the owner's install**, not by review; **leaves [ADR-0060](#adr-0060) standing and unreworded**; the price is named rather than buried — the accept rule is a **whitelist**, so an upstream token-format change would have UsArr refuse a valid credential |
 | [0068](#adr-0068) | A BookOrbit comic is an **issue**, and issues are **minted under series works**; `seriesId` null synthesizes a one-shot series, extra memberships are **recorded, not resolved** | **Accepted** — 2026-08-19; **this is the "unit of work" [ADR-0066](#adr-0066) decision 5 was waiting for** — *"The kind stays `book` until comics have a unit of work"* — so it activates that decision's two-library split rather than reopening it; **[ADR-0030](#adr-0030)'s model is applied, not amended**: `comic` is the series, `comic_issue` the issue, verified at migration `00005_library_sync.sql:256` (*"'comic' is the SERIES, 'comic_issue' the issue or chapter"*) and `00006_kavita_subtypes.sql`'s header; **the parent binding is MEASURED, not inferred** — `BookCard.seriesId` is not an arbitrary `memberships[0]` and is not null under multi-membership, it is BookOrbit's own maintained **primary** (`series-membership.service.ts`, `displayOrder = 0`, round-tripped by `syncPrimaryMetadata` and `syncPrimaryFromMetadata`, at commit `73b7877d2fede2221b0ca360af9bfced7c3797f3`); **`seriesMemberships[]` beyond the primary is RECORDED and not acted on**, on [ADR-0063](#adr-0063)'s precedent, the fuzzy tier that would resolve it staying v0.3 via `work_relation`; **`is_oneshot` is WRITTEN rather than merely tolerated** — *"a column with a DEFAULT 0 and no writer is a deaf column"*; **both residue defaults emit a `sync_report` row**, so sizing comes from instrumentation rather than from estimates; **no migration, no column, no DDL and no new wire field** — `sync_report.kind` carries no `CHECK` by design and `library.kind` already permits `'comic'`; ⚠️ **the done-check FAILS if series count equals issue count**, because that is the per-row shape [ADR-0066](#adr-0066) already pre-emptively refused |
-| [0069](#adr-0069) | The library-skips payload carries a **per-container breakdown** beside the library total; **apportioning** a library's total across its containers is refused | **Accepted** — 2026-08-20; **does not reverse [ADR-0063](#adr-0063)'s decisions** — that is a write rule and nothing in the writer, the schema or `SkipState` is touched — ⚠️ **but it DOES invalidate one of ADR-0063's recorded consequences**, *"no SQL and no plan changes"*, whose first half is now false and which carries a dated supersession in its own text; **the breakdown is keyed on the `(service_instance_id, container_kind, container_ref)` triple `sources[]` already publishes**, and the authoritative wire contract is [`reference/http-api.md`](./reference/http-api.md) §2.6a, **already amended** to a five-row field table saying the count breaks down by **container, never by reason**; **the shared statement is WIDENED, not forked** — `containerReportSQL` selects the three identity columns for both callers and the completeness caller scans and discards them, chosen on the plan guard rather than on the wasted scan, and **both guards were fired deliberately** (a fork reddens the skips plan assertion while the completeness one stays green); **`containers` is absent under `none`** and a **zero-count entry is dropped** even under `left_out`, on `items`'s own reasoning, so the entries always sum to `items`; ⚠️ **`skipMarks`' `alsoReporting` has the SAME defect on the per-row axis and is recorded OPEN, not fixed**; the measured pair is ground truth **2** / `main` **4** / the fix **2**, with the topology that produces it stated so the numbers are hand-checkable |
+| [0069](#adr-0069) | The library-skips payload carries a **per-container breakdown** beside the library total; **apportioning** a library's total across its containers is refused | **Accepted** — 2026-08-20; **does not reverse [ADR-0063](#adr-0063)'s decisions** — that is a write rule and nothing in the writer, the schema or `SkipState` is touched — ⚠️ **but it DOES invalidate one of ADR-0063's recorded consequences**, *"no SQL and no plan changes"*, whose first half is now false and which carries a dated supersession in its own text; **the breakdown is keyed on the `(service_instance_id, container_kind, container_ref)` triple `sources[]` already publishes**, and the authoritative wire contract is [`reference/http-api.md`](./reference/http-api.md) §2.6a, **already amended** to a five-row field table saying the count breaks down by **container, never by reason**; **the shared statement is WIDENED, not forked** — `containerReportSQL` selects the three identity columns for both callers and the completeness caller scans and discards them, chosen on the plan guard rather than on the wasted scan, and **both guards were fired deliberately** (a fork reddens the skips plan assertion while the completeness one stays green); **`containers` is absent under `none`** and a **zero-count entry is dropped** even under `left_out`, on `items`'s own reasoning, so the entries always sum to `items`; ⚠️ **`skipMarks`' `alsoReporting` has the SAME defect on the per-row axis and is recorded OPEN, not fixed**; the measured pair is ground truth **2** / `main` **4** / the fix **2**, with the topology that produces it stated so the numbers are hand-checkable; ⚠️ **amended 2026-08-20, ADDITIVELY** — the per-container `reason` joins the per-container count on the wire, so the sentence the fold used to drop is dropped no longer; **which sentence survived was decided by `library_source.id`**, the bind order, and it is reachable **today** via `1c35d18` changing the `skipReason` constant rather than only via a second adapter; **the per-reason TALLY vocabulary stays off the wire and [ADR-0063](#adr-0063)'s refusal is untouched**; ⚠️ **the LIBRARY-LEVEL field is NOT decided by that amendment** — withholding it when containers disagree is **subtractive** where this ADR is additive, and is allocated **ADR-0071**, not yet written, so the implementing commit **must not land ahead of it** |
 | [0070](#adr-0070) | BookOrbit's **channel 3b carries arrivals only**, server-side filtered on `addedAt`; **edits and deletions are channel 4's** | **Accepted** — 2026-08-20; **scoped to BookOrbit's 3b** — [ADR-0035](#adr-0035) §2a's Kavita result is untouched and no other 3b source is re-answered, and what a later adapter inherits is the **method, not the field**: *build the delta on the field the source can actually serve, and assign what it cannot see to channel 4*; **the `updatedAt` client-side-stop shape is REFUSED**, not merely unused; **channel 4 is the same milestone**, so the reassignment defers nothing; **no migration, no column, no wire field and no code**; ⚠️ **the hand-off to channel 4 is an ASSIGNMENT, not a discharge, and is recorded OPEN** — `remote_hash` hashes nine values and credits are not among them, so the sweep as built is deaf to the same credits-only edit 3b is deaf to; ⚠️ **[`ARCHITECTURE.md`](./ARCHITECTURE.md) §7.1a is amended in the SAME MOTION, as conformance** — two sites, the client-side-stop paragraph's unstated boundary and the Watermark row's second load — and landing either without the other is not permitted; **§16.1's amendment is owed separately**; ⚠️ **every measurement is against the pinned commit `73b7877d`, read from server source this repo does not vendor**, so **nothing here is a claim about the owner's running instance**; ⚠️ **AMENDED 2026-08-20 by the slice that implements it, and the coupling is a DEPENDENCY rather than convenience batching** — Decision 1 names `after` and **excludes `between`** with its reason, the capability claim is **bounded to `73b7877d` and `v2.6.0`** with the owner's version unrecorded, and **Decisions 8-13 are added**: the **representation dependency** (sub-second precision must survive to the boundary; `internal/store/store.go`'s `timeLayout`, a second-resolution layout, would make `>` redeliver forever), §7.1a's **overlap formula RETIRED** for this source with the surviving **5 minutes recorded as a NEW, UNMEASURED constant safe in the large direction**, the **page-walk guard replaced** with its count-blind compensating-pair residual named and the phrase *"strictly better"* **banned** as an unchecked containment, ***assignment is not resolution*** stated at **every** channel-4 hand-off because **channel 4 is unbuilt**, the **wedge drill** required as a measurement rather than an intention, and the **measured-empty deviation** defended by its safe direction; the keyset verdict **keeps its conclusion and replaces its reason** — one missing filter field, `id`, not a grammar gap — and its **do-not-revisit clause is STRUCK** ; ⚠️ **AMENDED 2026-08-21 by [ADR-0074](#adr-0074)** — nothing decided here moves: *What this does NOT decide* §1's *"both mandatory … §7.4's, unchanged"* becomes **guard 1 wired, guard 2 deferred for this source**, and the *Consequences* reassurance about `remote_updated_at`'s field is narrowed because **`remote_hash` has no production reader either and this slice did not close it**; **the open credits residual this ADR handed to channel 4 is CLOSED by unconditional re-apply**, not by widening the hash |
 | 0071 | allocated 2026-08-20, text intentionally withheld by the coordinator pending its subject | this numbering gap is deliberate — do not reuse or renumber |
 | [0072](#adr-0072) | The project-manager thread **ratifies** the arm64 RSS spike's re-scope: the `make bench-rss` run gates **claiming arm64 support**, not v0.1 | **Accepted** — 2026-08-20; **ratifies a re-scope that [ADR-0001](#adr-0001) states in an agentless passive** — *"the requirement is re-scoped"*, no agent, no limit clause, no application line — and whose only record was a review-log disposition that names no ruler either, under *"Round 2 — the first code drop"*, *"6. A documented prerequisite was re-scoped, not dropped"* (⚠️ **the round qualifier is load-bearing**: that file opens a second *"6."* under Round 6); **the venue follows from the argument and not from who made it** — a review-log entry records a **disposition** and an ADR records a **decision**, so recording the ratification as a disposition would reproduce the defect one level up, a second entry asserting a thing is settled and containing nothing that settles it; ⚠️ **it quotes the ruling NARROWLY on purpose** — the limit clause drifted by two words in one relay on the day of the ruling (*"nothing **about** it"* for *"nothing **in** it"*), so the entry carries the arguments and quotes only what it verified; **the decision**: the arm64 `make bench-rss` run is *"a prerequisite to claiming arm64 support, not a prerequisite to v0.1"*, and ⚠️ **the limit clause is not optional** — *"the arm64 run remains owed before any claim of arm64 support. This moves the gate; it does not discharge the obligation, and nothing in it says arm64 works or that the x86-64 figures transfer"*, page size and core count both moving these numbers, so an arm64 result is a **second row** in ADR-0001 and never a replacement; 🚫 **the live alternative it closes** is *"the re-scope was never ratified, so the original gate stands"*, read at roughly **70/30** on 2026-08-20 and **right about the record, wrong about what to do with it** — v0.1 deploys to x86-64, the original clause gated the schema and *"the gate had already been passed unmet"* with eleven migrations since landed, and the project has operated on the re-scoped reading since 2026-08-16; **rejecting it costs no rigour** because *"the measurement stays owed against the claim it actually supports"*; **the reach is bounded by the ruling itself** — *"it covers sites carrying the pre-re-scope framing of the arm64 spike, wherever they are, and nothing else. A lane editing a sentence that is not about that has left the chain"*; ⚠️ **it states its reach and NOT which sites conform**, per `DEVELOPMENT.md` §11 *"A ruling states its reach, not the tree's current state"*, the rule this very ruling produced — **two statements the ruling as issued made about the tree failed verification** and the ADR carries neither, a corrected count being the same kind of claim; **supersedes nothing** — ADR-0001's text stands unreworded, its `Status:` line gains no mark, and this ADR supplies the author that sentence never had; **ships no code, no migration, no column, no configuration key and no wire field** |
@@ -10291,7 +10291,124 @@ travel, and the refusal recorded at `internal/store/skips.go:116-120` and
 `internal/httpapi/libraries.go:215-221` still holds word for word ·
 **Ships no code here**: the change this ADR governs is built on another branch and lands behind it ·
 ⚠️ **The numbers below are MEASURED, not argued** — §3 carries a ground truth, `main`'s answer and
-the fix's answer, all three read off one response body captured from a real two-instance import.
+the fix's answer, all three read off one response body captured from a real two-instance import ·
+⚠️ **Amended 2026-08-20 — item 4 of *What this does NOT decide* is overtaken in part**: the
+amendment directly below puts the **per-container `reason`** on the wire, so the sentence that used
+to be dropped is dropped no longer · ⚠️ **the LIBRARY-LEVEL field is NOT decided there** — that is
+ADR-0071, allocated and **not yet written**, and the implementing commit carries both
+halves, so it **must not land ahead of ADR-0071**.
+
+### ⚠️ Amendment, 2026-08-20 — the per-container `reason` joins the per-container count on the wire; the `Reason` attribution defect stops being unaddressed
+
+**What this amendment decides, and it is ADDITIVE ONLY.** `skipped.containers[]` gains a **`reason`**
+— UsArr's own short sentence from **that container's** row, omitted where that row recorded none.
+Nothing is un-folded, no existing field changes meaning, and the server does everything it did plus
+serialises one more string it already held. A client that reads only `items` and `reason` reads
+exactly what it read before.
+
+**This is decision 1 applied to the field beside the one it was written for.** `reason` is the same
+shape as `items` — same key, same containers, same failure. A skip is a fact about a **container**
+(Context §2), the per-container value is already in the fold loop and discarded (Context §6), and
+the remedy is the one decision 1 already took: **carry the breakdown.** Deciding it the other way
+would settle the identical question the opposite way one field over, and would lose the sentence the
+row actually recorded.
+
+**⚠️ WHICH SENTENCE THE LIBRARY-LEVEL FIELD SHOWED WAS DECIDED BY `library_source.id`, AND THAT IS
+WHY THERE IS A DEFECT HERE AT ALL RATHER THAN AN IMPROVEMENT.** `foldSkips` took `Reason` from the
+**first non-zero container**, and *first* there is the order `librarySkipsSQL` returns rows in —
+`ORDER BY ls.library_id, ls.id`, i.e. the order the **user happened to bind the sources in**. That is
+an implementation fact about a join, not a fact about coverage, recency, or where the items were left
+out. Reversing the bind order reversed the published explanation with no other change anywhere in the
+system — the same objection [ADR-0066](#adr-0066) decision 5's 2026-08-20 amendment made to a name
+that encoded traversal order, and the same objection *Alternatives rejected* 1 below makes to an
+apportioned count.
+
+**⚠️ AND IT IS REACHABLE TODAY, THROUGH THIS REPO'S OWN HISTORY, NOT ONLY THROUGH A SECOND ADAPTER.**
+This is what makes the change due now rather than at the next adapter, and it needs no hypothetical —
+three facts, each read in the tree:
+
+- [ADR-0068](#adr-0068)'s implementation (`1c35d18`) **changed the `skipReason` constant** in
+  `cmd/usarr/import.go`, from *"UsArr maps prose books only; a comic or an unclassified file has no
+  row"* to *"a file BookOrbit itself cannot classify has no row"*. One adapter, two sentences, in the
+  shipped history of one binary.
+- Skip rows are **inserted, never rewritten** — `RecordSyncReport` is a bare `INSERT INTO
+  sync_report`. Every superseded sentence is still on disk.
+- The read takes the **newest row per CONTAINER** — `containerReportSQL`'s correlated
+  `ORDER BY r2.id DESC LIMIT 1`, keyed on `(service_instance_id, remote_id)`.
+
+Compose them and the shape is ordinary. An import that aborts before reaching one of a library's
+containers leaves that container's newest row where it was — [ADR-0063](#adr-0063) records exactly
+this, that a container the walk never reached has **no new row** — while the containers the walk did
+reach get fresh ones. A partial import before `1c35d18` plus any import after it puts **two different
+sentences on one library, one adapter, one instance, today**.
+
+**⚠️ THE VOCABULARY CHECK, BECAUSE THIS ADR DREW THAT BOUNDARY AND THIS AMENDMENT MUST BE SHOWN TO
+STAY INSIDE IT.** *What this does NOT decide* item 2 refuses the **per-reason TALLY vocabulary** on
+the wire — `skipped_comics` and `skipped_unknown`, [ADR-0063](#adr-0063)'s refusal, *"a second
+adapter will decline items for reasons that are neither, and an API field named `comics` would then
+have to be lied to **or left at zero**"*. **That refusal is untouched, word for word**, and the two
+things are different objects:
+
+| | What it is | Does it cross? |
+| --- | --- | --- |
+| `skipped_comics`, `skipped_unknown` | the **adapter's** per-reason **tally** — a count under a name only BookOrbit can mean | **No.** Still `sync_report.detail` only. Unchanged. |
+| `reason` | **UsArr's own prose**, generated by UsArr, one sentence | **Yes — and it already did**, as `skipped.reason`, since the field shipped. |
+
+No vocabulary crosses that was not already crossing. What moves is **where the same string is
+filed**: under the container that recorded it as well as under the library that folded it. The
+breakdown is still broken down by **container and never by reason** — one entry per container,
+whatever it says — which is [`reference/http-api.md`](./reference/http-api.md) §2.6a's rule, and an
+entry-level `reason` does not violate it: it is not a split of `items` by reason, and it adds no
+field to the `skipped` object itself.
+
+### ⚠️ What this amendment does NOT decide — the library-level field is ADR-0071's
+
+**Whether the library-level `skipped.reason` is WITHHELD when a library's containers disagree is NOT
+decided here.** It is a separate decision, allocated **ADR-0071**, and this amendment neither takes it
+nor pre-empts it. ⚠️ **ADR-0071 IS NOT YET WRITTEN**, so at the time of this amendment the question is
+open and the field's behaviour under disagreement is not governed by anything in this file.
+
+**Four reasons it is a separate decision, recorded because the boundary is easy to walk past and the
+test generalises:**
+
+1. **This ADR declares itself ADDITIVE, repeatedly** — nothing un-folded, no field changing meaning,
+   the server doing everything it did plus appending. **Withholding is SUBTRACTIVE**: it changes what
+   an existing client reads off a field that is already shipped. An additive decision does not
+   authorise a subtractive one.
+2. **Decision 1 bounds itself with an explicit "only"**, and *a decision that names its own boundary
+   cannot be read as silently reaching past it.*
+3. **Decision 6 is not counter-precedent.** It looks like one — a decision taken inside this ADR's
+   implementation — but it was **FORCED**: decision 2's key was not in the SELECT, so widen-or-fork
+   had to be answered before anything could ship. Withholding is **declinable**: the breakdown ships
+   perfectly well with the library-level field left exactly as it is. ⚠️ **The line worth keeping is
+   general — a choice you could decline and still deliver the decision is a separate decision.**
+4. **Boundary item 4 below disclaims FIXING the `Reason` defect, not GOVERNING the field.** It is not
+   a grant of authority over what the library-level field does.
+
+**⚠️ A SEQUENCING CONSTRAINT FOLLOWS, AND IT IS LOAD-BEARING.** The implementing commit `1190261`
+contains **both** halves — the additive per-container field this amendment decides, **and** the
+withholding ADR-0071 has not yet decided. **So that commit must not land ahead of ADR-0071**, or the
+tree acquires a behaviour no ADR governs, which is the failure the preamble's `162dca5` note exists
+to prevent.
+
+**What this amendment does not touch.** Decisions 1–6 all stand as taken. `items` still carries the
+library total (decision 3). The breakdown is still keyed on the `sources[]` triple (decision 2).
+Apportioning is still refused (decision 4). There is still no compatibility fallback (decision 5).
+The statement is still widened rather than forked (decision 6) — and **no SQL changes here at all**,
+because `containerReportSQL` already selects `r.detail`, `reason` was always inside that blob and
+always decoded; what changes is only that the fold stops discarding it. ⚠️ **`skipMarks`'
+`alsoReporting` is recorded OPEN by the Consequences below and STAYS open**; nothing here touches it.
+
+**The implementing commit is `1190261`** — the store fold, the wire field, the web client and
+[`reference/http-api.md`](./reference/http-api.md) §2.6a, that document being the authoritative
+contract for this object, as decision 2 already says. The red test is
+`TestFoldSkipsDoesNotAttributeOneContainersReasonToAnother`, **watched failing on the pre-fix tree**
+before a line of the fix was written, on the first container's sentence surviving the fold; the rest
+of the `internal/store` suite was green on the defect, which is why a passing suite was not evidence
+about it.
+
+**No decision text below is rewritten**, per this file's own rule at the top: *What this does NOT
+decide* item 4 stays readable exactly as it stands and carries a dated inline flag.
 
 ### Context
 
@@ -10465,7 +10582,14 @@ exactly what it read before.
 server's real per-container measurements or it is not published. Deriving per-container numbers by
 dividing a library total is not permitted, here or later.
 
-**5 · There is no compatibility fallback, and Consequences ¶3 below is why.**
+**5 · There is no compatibility fallback**, and the reason is the Consequences paragraph below
+opening *"There is NO compatibility fallback for an old server withholding `containers`"*.
+⚠️ **Pointer repaired 2026-08-20 — it read *"Consequences ¶3 below"*, and that was wrong when it was
+written rather than gone stale since.** `cdb7c15` changed it from *"§7 below"* to *"¶3"*, and in that
+same commit's own text the paragraph it means was already the **sixth**; no counting scheme in the
+section yields three (by ⚠️-marked paragraphs it is the fourth), and nothing has been inserted ahead
+of it since. Cited by **opening words** now, which is what this file's positional-reference rule asks
+for and is immune to both readings.
 
 **6 · The shared statement is WIDENED, not forked.** `containerReportSQL` selects the three identity
 columns for **both** its callers, and the completeness caller **scans them and discards them**.
@@ -10557,6 +10681,14 @@ that skipped for *different* reasons silently drops one of them. That is a genui
 **separate** from this one — it is about which sentence is shown, not about which number is
 summed — and it is **explicitly still open**. Nothing here fixes it and nothing here should be read
 as having fixed it.
+
+> ⚠️ **ADDRESSED IN PART 2026-08-20, AND SPLIT IN TWO.** The amendment under the `Status:` line
+> above puts the per-container `reason` on the wire, so **the dropped sentence is no longer dropped**
+> — each container's own explanation now crosses beside its own count, on this ADR's own reasoning.
+> ⚠️ **What the LIBRARY-LEVEL field shows when the containers disagree is NOT decided there**: that
+> is a separate, subtractive decision allocated **ADR-0071**, which is **not yet
+> written**. **This paragraph is left standing rather than rewritten** — it was true when this ADR was
+> taken, and the `foldSkips` citation above records where the defect was.
 
 ### Consequences
 
