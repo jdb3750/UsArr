@@ -430,6 +430,32 @@ export function posterTile(item: RecentItem): PosterTile {
 }
 
 /**
+ * THE URL A CARD SHOULD ACTUALLY PUT IN ITS `<img>`, OR `undefined` FOR THE
+ * EMPTY TILE.
+ *
+ * ⚠️ A KEY IS NOT A PROMISE THAT BYTES EXIST, AND THAT IS THE DEFECT THIS
+ * ANSWERS. `GET /img/{key}` is a cache read and never fetches upstream, so a
+ * work whose poster has not been rendered yet answers `404 not_cached` — an
+ * ordinary state, because the key is written by the catalogue import and the
+ * bytes by a separate pass. An `<img>` with no error handling then draws the
+ * browser's own broken-image glyph. On Home that is a handful of tiles; on a
+ * screenful of covers it is the whole screen reading as broken.
+ *
+ * SO A FAILED LOAD COLLAPSES INTO THE ABSENT-KEY CASE, which already has a
+ * rendering: the bordered tile filled from `--dc`. The two are different facts
+ * about the pipeline and the same fact on screen — there is no art — and giving
+ * them two renderings would put two spellings of "no cover" on one row.
+ *
+ * THE SET IS THE CALLER'S, held for the page view. This function is the rule and
+ * holds nothing, so `vitest.config.ts`'s node environment can call it: the
+ * failure is discovered in an `onerror` a component owns, and a rule left in
+ * that handler is a rule nothing can test.
+ */
+export function posterArtSrc(tile: PosterTile, failed: ReadonlySet<number>): string | undefined {
+	return tile.src !== undefined && !failed.has(tile.id) ? tile.src : undefined;
+}
+
+/**
  * One row, or `undefined` for a frame this screen cannot draw.
  *
  * The id is the only required field: it is the row key and the item route, and

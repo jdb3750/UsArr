@@ -219,6 +219,7 @@
 	import HaveCell from '$lib/HaveCell.svelte';
 	import Icon from '$lib/Icon.svelte';
 	import List from '$lib/List.svelte';
+	import PosterGrid from '$lib/PosterGrid.svelte';
 	import RecentGrabs from '$lib/RecentGrabs.svelte';
 	import { LOAD_MORE_PAGE_SIZE, NOTHING, type ListColumn } from '$lib/list';
 	import {
@@ -232,7 +233,6 @@
 		mediaTypeLabel,
 		nextRequest,
 		NO_MEDIA_TYPE_COUNTS,
-		posterTile,
 		type MediaTypeCounts,
 		type RecentFeed,
 		type RecentItem
@@ -1537,7 +1537,9 @@
 				THE VIEW TOGGLE, AND IT IS `.segment` FROM app.css RATHER THAN A NEW
 				CONTROL. That class was ported from the mockups with its
 				`[aria-pressed='true']` state already styled and had no consumer; this
-				is the consumer. The markup is the mockup's own
+				was the first, and the two catalogue screens' toolbars are now the
+				second and third, drawing the same markup for the same choice. The
+				markup is the mockup's own
 				(docs/design/mockups/index.html): a `role="group"` wrapper with an
 				accessible name, and two real `<button type="button">`s.
 
@@ -1659,80 +1661,14 @@
 					per card after each image decodes, which is the render-path cost
 					Principle 1 rules out.
 
-					NO ANIMATION, NO TRANSITION, NO FADE-IN, and nothing here is
-					deferred to an intersection observer. §17.1 bans animation on any
-					list, grid or navigation transition, and an image that fades in is
-					the same effect spelt as a load handler.
+					⚠️ THE GRID AND THE CARD ARE `$lib/PosterGrid` NOW, AND THIS FILE NO
+					LONGER SPELLS EITHER. The CSS comment that used to sit beside the
+					route-scoped `.postergrid` named the condition for lifting it — a
+					second consumer — and the catalogue screens are the second and third.
+					Read that component for the card's rules; nothing about Block C's
+					rendered output changed when they moved.
 				-->
-				<div class="postergrid">
-					{#each recent.items as item (item.id)}
-						{@const tile = posterTile(item)}
-						<div class="postercard">
-							<!--
-								THE PLACEHOLDER IS A `dominant_color` FILL AND NEVER A GREY
-								BOX, NEVER A SHIMMER — §4.4.1 rule 3, and §17.1 and
-								DESIGN-DIRECTION §13 both ban the shimmer by name ("it never
-								pulses"). `aspect-ratio` on a `display: block` box reserves the
-								space before anything arrives, so a decoded image shifts
-								nothing.
-
-								⚠️ WHAT ACTUALLY RENDERS TODAY IS THE FALLBACK, AND THAT IS
-								WORTH SAYING RATHER THAN LEAVING TO BE DISCOVERED.
-								`image_asset.dominant_color` is declared in migration 00005
-								and HAS NO WRITER — `docs/ROADMAP.md` says so, and
-								`PutPosterAsset`'s INSERT names it nowhere — so `--dc` is set
-								by nothing and every empty tile draws `var(--bg-raised)`. The
-								`var(--dc, …)` is the seam the column will hang off when
-								something writes it; it is not a live feature. A fill sourced
-								from a column with no writer is a live-looking thing that
-								never fires, which is the defect class this repo already
-								names for guards that cannot trigger.
-							-->
-							{#if tile.src}
-								<!--
-									`alt=""` IS DELIBERATE AND IS NOT A GAP. The title is
-									rendered as text immediately below, in the same card, so a
-									descriptive alt would make a screen reader announce the same
-									work twice. The art is presentation here; the title is the
-									content.
-								-->
-								<img
-									class="postercard__art"
-									src={tile.src}
-									alt=""
-									title={tile.tooltip}
-									loading="lazy"
-									decoding="async"
-								/>
-							{:else}
-								<span class="postercard__art" title={tile.tooltip}></span>
-							{/if}
-							<!--
-								THE TITLE AND YEAR SIT BELOW THE TILE, ON THE CHROME'S OWN
-								GROUND, NEVER OVER THE ART (DESIGN-DIRECTION §9.2). Set over
-								the art they would need the OKLCh contrast solver §4.4.1
-								specified, and that solver cannot be made safe: it constrains
-								against a SINGLE AVERAGED colour, and real cover art is not one
-								colour. Below the tile these are ordinary tokens on a known
-								ground.
-
-								ONE LINE, ELLIPSISED, WITH THE FULL STRING IN `title` — on the
-								art and on the title line both. Card height became a function
-								of title length the moment the text moved out of the tile, and
-								a wrapped title stands a row of cards ragged. Measuring each
-								card to decide whether a tooltip is needed would be a layout
-								read per card on the render path, so the attribute is
-								unconditional wherever there is a title at all.
-							-->
-							<div class="postercard__title trunc" title={tile.tooltip}>
-								{#if tile.title}{tile.title}{:else}<span class="muted">{NOTHING.empty}</span>{/if}
-							</div>
-							{#if tile.year !== undefined}
-								<div class="postercard__year num">{tile.year}</div>
-							{/if}
-						</div>
-					{/each}
-				</div>
+				<PosterGrid items={recent.items} />
 
 				{#if recentMore}
 					<!--
@@ -2426,77 +2362,5 @@
 		margin: 0 var(--space-6) var(--space-7);
 		border: 0;
 		border-top: 1px solid var(--border);
-	}
-
-	/*
-	 * BLOCK C'S POSTERS VIEW.
-	 *
-	 * SCOPED TO THIS ROUTE RATHER THAN ADDED TO app.css, and that is a choice
-	 * about where a shared class earns its place: Home's Block C is the only
-	 * grid of art in the tree today, and `web/src/app.css` is a hand-port of
-	 * `docs/design/tokens.css` that `tokenparity.test.ts` holds to it. The
-	 * per-type grids under `routes/library/[type]` are the second consumer this
-	 * would need before it is a component, and lifting it then is cheap.
-	 *
-	 * `auto-fill` AND NOT `auto-fit`. `auto-fit` collapses the empty tracks and
-	 * stretches the last row's cards across the full width, so a page whose
-	 * final page holds two items draws two enormous posters. `auto-fill` keeps
-	 * the track width and leaves the row short, which is what a grid of fixed
-	 * artwork should do.
-	 */
-	.postergrid {
-		display: grid;
-		grid-template-columns: repeat(auto-fill, minmax(132px, 1fr));
-		gap: var(--space-6) var(--space-5);
-		align-items: start;
-		padding: 0 var(--row-pad-x) var(--space-5);
-	}
-
-	.postercard {
-		min-width: 0;
-	}
-
-	/*
-	 * ONE SHAPE FOR EVERY CARD IN THIS GRID (DESIGN-DIRECTION §9.7). 2:3 is the
-	 * portrait cover, and a 1:1 album sleeve is FITTED inside it rather than
-	 * cropped to it — `contain`, not `cover`, because cropping a square sleeve
-	 * to portrait cuts art off both ends.
-	 *
-	 * THE RATIO IS A LITERAL AND NOT A TOKEN, on purpose. There is no
-	 * aspect-ratio token in `docs/design/tokens.css`, app.css is a hand-port of
-	 * that file rather than a place to invent one, and a single-use value is not
-	 * what the token vocabulary is for. The mockups write the same literal.
-	 *
-	 * `display: block` IS LOAD-BEARING ON THE PLACEHOLDER, not tidiness: the
-	 * empty arm is a <span>, `aspect-ratio` does not apply to an inline box, and
-	 * the tile collapses to nothing without it.
-	 */
-	.postercard__art {
-		display: block;
-		width: 100%;
-		height: auto;
-		aspect-ratio: 2 / 3;
-		object-fit: contain;
-		background: var(--dc, var(--bg-raised));
-		border: 1px solid var(--border);
-	}
-
-	.postercard__title {
-		margin-top: var(--space-3);
-		font-size: var(--text-base);
-		line-height: var(--leading-base);
-		color: var(--fg);
-	}
-
-	/*
-	 * NO `opacity` ON EITHER LINE, and it is a rule rather than a preference
-	 * (§4.4.1): a composited opacity changes the effective contrast ratio by a
-	 * mechanism no contrast check can see, so the year takes a real colour
-	 * token.
-	 */
-	.postercard__year {
-		font-size: var(--text-sm);
-		line-height: var(--leading-sm);
-		color: var(--fg-muted);
 	}
 </style>

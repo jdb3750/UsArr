@@ -34,17 +34,49 @@
  * `sectionsMarkup` fails rather than returning an empty corpus, because an
  * empty string satisfies every `not.toContain` there is and a renamed section
  * id would otherwise turn this file green instead of red.
+ *
+ * ⚠️ THE CARD'S MARKUP MOVED OUT OF HOME AND SO DID THE ASSERTIONS OVER IT, AND
+ * THAT SPLIT IS THE POINT RATHER THAN AN INCONVENIENCE. `$lib/PosterGrid.svelte`
+ * now holds the grid, the card and their CSS, because the catalogue screens are
+ * the second and third consumers the old route-scoped CSS comment said were the
+ * condition for lifting it. So there are two corpora here and each rule is
+ * asserted over the file that can actually violate it: what the CARD draws is
+ * read off the component, and what BLOCK C does — swapping one panel for the
+ * other, off Home's own preference — is read off Home, which is the only file
+ * that still spells it. Leaving the card rules pointed at Home would have been
+ * the weakening, not the split: `BLOCK_C` no longer contains `<img` at all, so
+ * every one of them would have gone green over a corpus that cannot fail them.
  */
 
 import { describe, expect, it } from 'vitest';
-import { IMAGE_WIDTHS, POSTER_GRID_WIDTH, posterTile, posterUrl, type RecentItem } from './library';
+import {
+	IMAGE_WIDTHS,
+	POSTER_GRID_WIDTH,
+	posterArtSrc,
+	posterTile,
+	posterUrl,
+	type RecentItem
+} from './library';
 import { HOME_VIEWS, HOME_VIEW_DEFAULT, HOME_VIEW_KEY, parseHomeView } from './home';
+import { MEDIA_TYPES } from './library';
+import {
+	libraryViewKey,
+	LIBRARY_VIEWS,
+	LIBRARY_VIEW_DEFAULT,
+	parseLibraryView
+} from './librarygrid';
 import { sectionsMarkup, userFacingMarkup } from './copyguard';
 // Home AS TEXT. The `{#if}` that swaps the two panels is markup, and markup is
 // the one thing this suite cannot execute.
 import HOME_SOURCE from '../routes/+page.svelte?raw';
+// The card AS TEXT, for the same reason and off the file that now draws it.
+import GRID_SOURCE from './PosterGrid.svelte?raw';
 
 const HOME = 'routes/+page.svelte';
+const GRID = 'lib/PosterGrid.svelte';
+
+/** The component's markup, with its script, style and comments stripped. */
+const GRID_MARKUP = userFacingMarkup(GRID_SOURCE);
 
 /** Block C, sliced to its own `</section>`. Throws when the id moves. */
 const BLOCK_C = sectionsMarkup(userFacingMarkup(HOME_SOURCE), 'id="home-recent"').join('\n');
@@ -118,6 +150,115 @@ describe('posterTile', () => {
 	});
 });
 
+describe('posterArtSrc — the tile a broken image falls back to', () => {
+	/*
+	 * ⚠️ THE FIXTURE FOR THIS ONE IS THE WORK THAT HAS A KEY, and it has to be:
+	 * the whole defect is a work whose key is present and whose bytes are not, so
+	 * running it over the keyless work would assert nothing — that tile is already
+	 * empty for the other reason. Asserted before the rest, so a fixture that lost
+	 * its key cannot make the rest of this block vacuous.
+	 */
+	it('has something to be wrong about', () => {
+		expect(
+			posterTile(ITEMS[0]!).src,
+			'the fixture work carries no artwork, so nothing below can fail to load'
+		).toBeDefined();
+	});
+
+	it('draws the art while nothing has failed', () => {
+		const tile = posterTile(ITEMS[0]!);
+		expect(posterArtSrc(tile, new Set())).toBe(tile.src);
+	});
+
+	/*
+	 * The defect: `GET /img/{key}` is a cache read and answers `404 not_cached`
+	 * for a key whose bytes have not been rendered yet, which is ordinary rather
+	 * than a fault. Without this the browser draws its own broken-image glyph.
+	 */
+	it('falls back to the empty tile once the image has failed', () => {
+		const tile = posterTile(ITEMS[0]!);
+		expect(
+			posterArtSrc(tile, new Set([tile.id])),
+			'a cover that 404d is still being handed to the <img>, so the browser draws its ' +
+				'own broken-image glyph rather than the tile the absent-key case draws'
+		).toBeUndefined();
+	});
+
+	/*
+	 * One failure is one card. A set keyed by anything coarser would blank the
+	 * whole grid the first time any single cover was missing.
+	 *
+	 * The second work takes the FIXTURE'S key rather than a fresh literal: what
+	 * distinguishes the two cards here is the work id, which is what the set holds,
+	 * and a second sixteen-hex string in a test file is a secret scanner's finding
+	 * waiting to happen.
+	 */
+	it('blanks only the work that failed', () => {
+		const failed = new Set([ITEMS[0]!.id]);
+		const other = posterTile(item({ id: 99, posterKey: ITEMS[0]!.posterKey! }));
+		expect(posterArtSrc(other, failed)).toBe(other.src);
+	});
+
+	/* The absent-key case is unchanged and still absent: a failure set that does
+	 * not name it must not turn `undefined` into anything else. */
+	it('leaves a work with no artwork absent either way', () => {
+		const tile = posterTile(ITEMS[1]!);
+		expect(posterArtSrc(tile, new Set())).toBeUndefined();
+		expect(posterArtSrc(tile, new Set([tile.id]))).toBeUndefined();
+	});
+});
+
+describe("the catalogue screens' view preference", () => {
+	/* The same two modes as Home, and for the same reason: DESIGN-DIRECTION §9.1
+	 * names table and posters and defers "overview". A third value here would be
+	 * a view one screen has and the other does not. */
+	it('ships table and posters, and no third mode', () => {
+		expect([...LIBRARY_VIEWS]).toEqual(['table', 'posters']);
+	});
+
+	/*
+	 * ⚠️ TABLE IS THE DEFAULT AND IT IS A RULE. DESIGN-DIRECTION §5.4: rows and
+	 * tables are the default container, a card is the exception. Flipping this
+	 * would be a design change, not a preference change.
+	 */
+	it('opens as a table, never as a grid of art', () => {
+		expect(LIBRARY_VIEW_DEFAULT).toBe('table');
+		expect(parseLibraryView(null)).toBe('table');
+	});
+
+	it('falls back rather than throwing on anything it did not write', () => {
+		expect(parseLibraryView('posters')).toBe('posters');
+		expect(parseLibraryView('table')).toBe('table');
+		expect(parseLibraryView('overview')).toBe(LIBRARY_VIEW_DEFAULT);
+		expect(parseLibraryView('')).toBe(LIBRARY_VIEW_DEFAULT);
+	});
+
+	/*
+	 * ⚠️ ONE KEY PER MEDIA TYPE, which is the sentence Home could not satisfy —
+	 * §9.1 persists the toggle *"per media type"* and Home is the all-types view.
+	 * Six distinct keys plus the all-types one, and none of them is Home's.
+	 */
+	it("keys the choice on the media type, and never on Home's key", () => {
+		const keys = MEDIA_TYPES.map(libraryViewKey);
+		expect(new Set(keys).size, 'two media types share one stored view').toBe(MEDIA_TYPES.length);
+		expect(libraryViewKey('movies')).toBe('usarr.library.view.movies');
+		expect(
+			keys.includes(HOME_VIEW_KEY),
+			"a catalogue screen writes Home's stored view, so choosing posters on one changes the " +
+				'other'
+		).toBe(false);
+	});
+
+	/* The all-types screen has no media type and still needs somewhere to store a
+	 * choice. `all` is not a MediaType, so it cannot collide with one. */
+	it('gives the all-types screen its own key, distinct from every type and from Home', () => {
+		const all = libraryViewKey(undefined);
+		expect(all).toBe('usarr.library.view.all');
+		expect(all).not.toBe(HOME_VIEW_KEY);
+		expect(MEDIA_TYPES.map(libraryViewKey).includes(all)).toBe(false);
+	});
+});
+
 describe('the Home view preference', () => {
 	/*
 	 * Two modes ship and only two: DESIGN-DIRECTION §9.1 names table and
@@ -150,27 +291,6 @@ describe("Block C's posters panel", () => {
 	});
 
 	/*
-	 * The whole point of the view: an <img> in the grid, whose src is the tile
-	 * built by `posterTile`. A hand-rolled `/img/` string here would pass a test
-	 * that only looked for `<img`, so both halves are asserted.
-	 */
-	it('renders an image whose src comes from posterTile', () => {
-		expect(BLOCK_C, `${HOME}'s Block C draws no <img> at all`).toContain('<img');
-		expect(
-			BLOCK_C,
-			`${HOME} builds a poster src by hand. posterUrl owns the width allowlist and the ` +
-				'key check, and a second copy of either is a second thing to get wrong'
-		).toContain('src={tile.src}');
-		expect(BLOCK_C, `${HOME} no longer builds its tiles with posterTile`).toContain(
-			'posterTile(item)'
-		);
-		expect(
-			BLOCK_C,
-			`${HOME} spells an /img path in its own markup rather than taking posterUrl's`
-		).not.toContain('/img/');
-	});
-
-	/*
 	 * §17.2 as amended by ADR-0028: Block C is ONE region. The two views are the
 	 * two arms of one `{#if}`, so exactly one is in the DOM — a grid drawn
 	 * beside the table is the second region the section exists to avoid.
@@ -182,7 +302,7 @@ describe("Block C's posters panel", () => {
 				'are drawn at once or neither is'
 		).toContain("{#if homeView.current === 'table'}");
 		const table = BLOCK_C.indexOf('<List');
-		const grid = BLOCK_C.indexOf('class="postergrid"');
+		const grid = BLOCK_C.indexOf('<PosterGrid');
 		expect(table, `${HOME} draws no table arm`).toBeGreaterThanOrEqual(0);
 		expect(grid, `${HOME} draws no posters arm`).toBeGreaterThanOrEqual(0);
 		expect(
@@ -215,6 +335,64 @@ describe("Block C's posters panel", () => {
 			'the toggle is no longer made of real buttons, so it has lost Tab, Space and Enter'
 		).toContain('<button');
 	});
+});
+
+describe('the poster card', () => {
+	it('has a corpus', () => {
+		expect(GRID_MARKUP.length, `${GRID} stripped to nothing`).toBeGreaterThan(0);
+	});
+
+	/*
+	 * The whole point of the view: an <img> in the grid, whose src is the tile
+	 * built by `posterTile`. A hand-rolled `/img/` string here would pass a test
+	 * that only looked for `<img`, so both halves are asserted.
+	 */
+	it('renders an image whose src comes from posterTile', () => {
+		expect(GRID_MARKUP, `${GRID} draws no <img> at all`).toContain('<img');
+		expect(
+			GRID_MARKUP,
+			`${GRID} builds a poster src by hand. posterUrl owns the width allowlist and the ` +
+				'key check, and a second copy of either is a second thing to get wrong'
+		).toContain('{src}');
+		expect(GRID_MARKUP, `${GRID} no longer builds its tiles with posterTile`).toContain(
+			'posterTile(item)'
+		);
+		expect(
+			GRID_MARKUP,
+			`${GRID} spells an /img path in its own markup rather than taking posterUrl's`
+		).not.toContain('/img/');
+	});
+
+	/*
+	 * ⚠️ THE `<img>` MUST HAVE AN ERROR HANDLER, AND IT IS THE MARKUP HALF OF THE
+	 * RULE `posterArtSrc` HOLDS. A key is not a promise that bytes exist —
+	 * `GET /img/{key}` is a cache read that answers `404 not_cached` — so without
+	 * this the browser draws its own broken-image glyph on every such tile. The
+	 * function decides what to draw AFTER a failure; nothing but this attribute
+	 * can tell it one happened.
+	 */
+	it('reports a failed image rather than leaving the browser to draw one', () => {
+		expect(
+			GRID_MARKUP,
+			`${GRID}'s <img> has no onerror, so a key whose bytes are not cached renders the ` +
+				"browser's own broken-image glyph instead of the empty tile"
+		).toContain('onerror=');
+		expect(GRID_MARKUP, `${GRID} no longer routes its src through posterArtSrc`).toContain(
+			'posterArtSrc(tile,'
+		);
+	});
+
+	/*
+	 * The browser's own deferral, which costs no script and no observer. §17.1
+	 * bans animation on a grid, and an image faded in by a load handler is that
+	 * effect under another name.
+	 */
+	it('defers decode and load to the browser', () => {
+		expect(GRID_MARKUP, `${GRID} stopped lazy-loading its art`).toContain('loading="lazy"');
+		expect(GRID_MARKUP, `${GRID} stopped decoding its art off the main thread`).toContain(
+			'decoding="async"'
+		);
+	});
 
 	/*
 	 * §4.4.1 rule 3 and §17.1: the empty tile is a `dominant_color` fill, never
@@ -222,10 +400,10 @@ describe("Block C's posters panel", () => {
 	 * decoded image shifts nothing. DESIGN-DIRECTION §13 adds "it never pulses".
 	 */
 	it('reserves the tile and never animates it', () => {
-		const style = /<style>([\s\S]*)<\/style>/.exec(HOME_SOURCE)?.[1] ?? '';
-		expect(style.length, `${HOME} has no <style> block to read`).toBeGreaterThan(0);
+		const style = /<style>([\s\S]*)<\/style>/.exec(GRID_SOURCE)?.[1] ?? '';
+		expect(style.length, `${GRID} has no <style> block to read`).toBeGreaterThan(0);
 		const art = style.slice(style.indexOf('.postercard__art'));
-		expect(art.length, `${HOME} no longer styles .postercard__art`).toBeGreaterThan(0);
+		expect(art.length, `${GRID} no longer styles .postercard__art`).toBeGreaterThan(0);
 		expect(art, 'the tile reserves no box, so a decoded image shifts the grid').toContain(
 			'aspect-ratio'
 		);
@@ -233,7 +411,7 @@ describe("Block C's posters panel", () => {
 		for (const banned of ['animation', 'transition', '@keyframes']) {
 			expect(
 				style.slice(style.indexOf('.postergrid')),
-				`${HOME}'s poster grid carries ${banned}. §17.1 bans animation on any list, grid ` +
+				`${GRID}'s poster grid carries ${banned}. §17.1 bans animation on any list, grid ` +
 					'or navigation transition, and a placeholder that pulses is a shimmer'
 			).not.toContain(banned);
 		}
@@ -246,8 +424,8 @@ describe("Block C's posters panel", () => {
 	 * is the subsystem that section deleted rather than improved.
 	 */
 	it('sets the title below the tile and not over the art', () => {
-		const art = BLOCK_C.indexOf('postercard__art');
-		const title = BLOCK_C.indexOf('postercard__title');
+		const art = GRID_MARKUP.indexOf('postercard__art');
+		const title = GRID_MARKUP.indexOf('postercard__title');
 		expect(art, 'the card no longer draws a tile').toBeGreaterThanOrEqual(0);
 		expect(title, 'the card no longer draws a title line').toBeGreaterThanOrEqual(0);
 		expect(
@@ -255,8 +433,30 @@ describe("Block C's posters panel", () => {
 			'the title moved above or inside the tile. §9.2 puts it below, on the chrome, ' +
 				'because no contrast solve over an averaged colour can make text on cover art safe'
 		).toBeGreaterThan(art);
-		expect(BLOCK_C, 'the title line is no longer ellipsised to one line').toContain(
+		expect(GRID_MARKUP, 'the title line is no longer ellipsised to one line').toContain(
 			'postercard__title trunc'
 		);
+	});
+
+	/*
+	 * ⚠️ THE CARDS ARE INERT AND THAT IS THE CORRECT STATE TODAY, so it is
+	 * asserted rather than left to be noticed. §17.1 requires anything that
+	 * navigates to be a real `<a href>` that middle-clicks; the item route
+	 * `/library/{type}/{id}` does not exist in `routes/`, so a card wrapped in a
+	 * link would be a link to nowhere and a card wrapped in a click handler would
+	 * be the `<div>` that rule bans. When that route lands, this expectation is
+	 * what has to be rewritten, which is the point of writing it down.
+	 */
+	it('navigates nowhere, because there is nowhere to navigate to', () => {
+		expect(
+			GRID_MARKUP,
+			`${GRID} made its cards clickable without a real href. §17.1: navigation is an <a>, ` +
+				'never a click handler on a div'
+		).not.toContain('onclick=');
+		expect(
+			GRID_MARKUP,
+			`${GRID} grew a link — if /library/{type}/{id} now exists, this ` +
+				'expectation is the thing to update rather than delete'
+		).not.toContain('<a ');
 	});
 });
