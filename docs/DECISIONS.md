@@ -13255,3 +13255,210 @@ migrations into an old `sqlite3` still fails. **Building and reading are differe
 sites that record the build limitation ([ADR-0051](#adr-0051)'s measurement note and
 `internal/store/browse_test.go`'s plan-work note) take dated riders saying so rather than being
 deleted — they were right about what they measured.
+
+## ADR-0076 — §7.4's sweep gets its **six-hourly schedule** and **no reaper**: the seven-day tombstone is a **restoration window**, and a retention limit is a **joint decision with guard 1** that nobody has taken
+
+**Status:** Accepted — 2026-08-21 ·
+**Costs no migration, no column, no index and no configuration key** — the interval is a constant ·
+**Closes the alternative** *"ship the schedule and the reaper together"*, and closes it in the
+direction of NOT reaping — see *Alternatives* ·
+⚠️ **It corrects a doc sentence that promised a deletion nothing has ever performed**
+(`reference/sync.md` §4, guard 2's clause (b)) ·
+⚠️ **What it does NOT decide** is in a section of its own: there is no retention limit and no reaper,
+and the note for whoever ever builds one is there rather than here ·
+**§7.4 in `ARCHITECTURE.md` gains nothing and loses nothing. It was never wrong.**
+
+### Context
+
+Channel 4's deletion pass has been built since [ADR-0074](#adr-0074) and had exactly one non-test
+caller: `internal/libsync/importer.go`'s `FullImport`, on its success path. `ARCHITECTURE.md` §7.4
+specifies the pass as *"Every 6 h plus on demand"*, and nothing in the binary reconciled on a clock —
+`cmd/usarr/import.go`'s header said so in as many words, and `importer.go` said *"§7.4's every-6-h
+scheduler is not built and this is not it."*
+
+Two questions had to be settled by measurement before a timer could be defended, and a third had to
+be settled by reading the docs against the tree.
+
+### Decision 1 — the schedule is a timer over `FullImport`, and it adds ONLY the clock
+
+`cmd/usarr/reconcile.go`'s `startReconciler`, started and stopped in `main.go` beside the candidate
+sweeper. It calls `FullImport` for every instance that is due.
+
+**It calls `FullImport` rather than `SweepDeletions`, and there is no third option.**
+`SweepDeletions`' precondition is that the seen-set it is handed is the upstream's WHOLE list, and
+its own doc comment says the function cannot check that. A timer holds no such list. Satisfying the
+precondition means going and reading the upstream, which is exactly what `FullImport` does — so a
+scheduler that reached for the sweep directly would have to synthesise a set it never observed, and
+the difference between that set and the truth is tombstoned. That is the whole library on a partial
+read, which is the nightmare bug §7.4 exists to prevent.
+
+**§7.4's "plus on demand" was ALREADY BUILT and is not duplicated.** The Services screen's *"Run full
+sync now"* (`POST /api/v1/services/{id}/sync` → `StartImport`) runs the identical pass through the
+identical guard. So this loop is shaped like `startCandidateSweeper` — ticker, `ctx.Done()`, `done`
+channel — and **not** like `RunProber`, whose request channel would have had no caller. An
+unreachable fourth entry in `import.go`'s explicit trigger list would have made that list wrong in
+the direction hardest to notice.
+
+**Due-ness is read off `last_full_sync_at`, not off the ticker.** `reconcileInterval` is 6 h;
+`reconcileTick` is 30 min and only sets the resolution at which the durable column is consulted. A
+bare six-hour ticker measures from process start, so a box that restarts on every update — the
+ordinary life of a self-hosted binary — could go indefinitely without ever reconciling. ⚠️ **An
+instance that has NEVER synced is deliberately NOT due**: that case belongs to `bootstrapImport`,
+which is gated on the same column; the same clause also keeps a permanently-failing bootstrap from
+being retried every half hour, and keeps a Prowlarr — which will never write the column — from being
+permanently overdue and warning on every tick.
+
+**The interval is a constant, not a configuration key**, on the standing ruling
+`cmd/usarr/maintenance.go` states for `candidateSweepInterval`. ⚠️ `reference/sync.md` §4 writes it
+*"every 6 h (configurable)"* and **that parenthesis is not honoured**; the file now says so.
+
+### Decision 2 — the single-writer cost, RE-MEASURED, and the story the schedule owes for it
+
+[REVIEW-LOG](./REVIEW-LOG.md) C-7 accepted `SweepDeletions` holding the single writer for one whole
+transaction, on **atomicity**, and recorded 103 ms at 1,000 absent links, 2.13 s at 20,000 and 37 ms
+for a no-op over 20,000 live links — all at `0316091`, none re-measured after C-2 and C-3 landed.
+C-7 accepted that cost for an **operator-triggered** import. An unattended 03:00 pass is a different
+question, so the figures were taken again.
+
+**Re-measured at tree `f87aef44` + this slice**, x86-64 (Intel Xeon @ 2.80 GHz, 4 cores),
+`go1.25.13`, `ncruces/go-sqlite3` via the ordinary test store with `ANALYZE` run over the corpus —
+the sweep's own deliberate convention (`analyzedSweepCorpus`). Corpus is one instance, one container,
+N+1 links, of which one is still reported:
+
+| corpus | single-writer hold |
+| --- | --- |
+| 1,000 absent links | **132 ms** / 126 ms (C-7: 103 ms) |
+| 20,000 absent links | **2.80 s** (C-7: 2.13 s) |
+| no-op over 20,000 live links | **57 ms** / 50 ms (C-7: 37 ms) |
+
+The harness was temporary and is not in the tree; the numbers are ~1.3× C-7's across all three cells,
+which is the signature of a different machine rather than of a regression — the RATIO between the
+cells is unchanged.
+
+**THE NUMBER IS NOT MATERIAL FOR THIS SCHEDULE, AND THE REASON IS WHICH CELL THE TIMER LANDS IN.**
+The recurring cost of a six-hourly pass is the **no-op** row — the shape a healthy instance produces,
+where the read reports everything the replica already has — at ~50 ms. The deletion-heavy rows
+describe an EVENT: with C-2 and C-3 fixed, a library-scale absence requires a genuine library-scale
+upstream deletion, which is not what a tick produces. And that event costs the same 2.8 s whether the
+timer discovers it or the operator does by pressing the button; **the schedule does not create the
+cost, it changes who is watching when it is paid.**
+
+Two facts keep it clear of principle 1. **Reads do not queue behind it**: `internal/db` runs WAL with
+a read pool and a single writer, so a write transaction blocks other WRITES and never a render path.
+And the import's own writes are already chunked — `ApplyCatalogueBatch` is sized to
+`min(2000 rows, 100 ms)` — so the sweep's single transaction is the ONE unbounded hold in the whole
+pass. That is C-7's trade, re-accepted here for an unattended run rather than assumed to carry over.
+
+⚠️ **THE GAP THIS LEAVES IS NAMED RATHER THAN CLOSED.** §7.4 step 6 says *"run at low priority with a
+bounded rate"*. What ships honours **serialisation only** — instances are reconciled one at a time,
+so N instances never put N library walks on the wire at once. There is no priority class and no
+request-rate limiter; the bound is the adapter's own paging and the six-hour period.
+
+### Decision 3 — the `write_queue` precondition cannot be honoured on a timer, and there is nothing there to honour
+
+`reference/sync.md` §4 states: *"The sweep may correct an item toward the \*Arr only when there is no
+`write_queue` row for that work in `pending`, `inflight` or `verifying`."* Settled from the tree:
+
+- **The sweep has no write-back path at all.** The precondition gates *"correct an item **toward the
+  \*Arr**"*. Every stamp `SweepDeletions` writes is local; nothing in the pass issues an upstream
+  write. There is no operation for the precondition to gate.
+- **Nothing in the production binary ever creates a `write_queue` row.**
+  `internal/store/writequeue.go` holds the state vocabulary and `ValidWriteQueueState` and issues no
+  SQL statement at all. **Scope searched:** every occurrence of `write_queue`/`WriteQueue` in non-test
+  Go under `internal/` and `cmd/`. The only SQL naming the table anywhere in non-test Go is in
+  `internal/db/spike` — `//go:build bench`, `package main`, a benchmark binary that nothing imports.
+
+So a guard added to the timer today would read an always-empty table on behalf of a pass that never
+writes upstream: **a check that cannot fail, which this repo counts as no check at all.** The
+precondition is therefore **not applicable rather than violated**, it stands unchanged for the
+milestone that builds the write-back, and it is **not** to be recorded as "satisfied" by this
+schedule. `reference/sync.md` now carries that at the precondition's own site.
+
+### Decision 4 — NO REAPER. The seven days are a RESTORATION WINDOW
+
+`reference/sync.md` §4, guard 2's clause (b), read: *"find links with no upstream row, tombstone them,
+and after seven days delete the user's tags, requests and playback state."* **It was wrong, and it was
+the only sentence in the docs promising a far end.** Scope searched: every occurrence of
+`seven day`/`7-day`/`7 day` in `docs/*.md` and `docs/reference/*.md`; every other mention describes
+the window's effect on reads or on guard 1's hazard, and `ROADMAP.md` correctly states the absence.
+
+**The seven days are the promise that a vanished item comes back.** An item that disappeared because
+a share unmounted or a credential lost its scope returns — with its tags, its requests and its
+playback state intact — the moment the backend does; the ordinary write path clears `deleted_at` on
+the next sight of it. That restoration is the only thing the number governs. **Nothing hard-deletes a
+tombstone at the end of it, and nothing is scheduled to.** `ARCHITECTURE.md` §7.4 never claimed
+otherwise and is untouched.
+
+⚠️ **THE SENTENCE NAMED THREE THINGS TO DELETE AND TWO OF THEM DO NOT EXIST.** Measured against the
+migrations: there is **no `request` table, no `playback_state` table and no `play_history` table** in
+any migration — they are `schema.md`'s "later tables", v0.2 and v1.0. The one named table that does
+exist, `tag_assignment`, is the one a reaper would get wrong (Decision 5).
+
+### Decision 5 — a retention limit is a JOINT decision with guard 1, because the two share a row
+
+This is the reason a reaper is not a small follow-up, and it has to be stated where the next person
+will meet it.
+
+`ux_sil` is a **plain** unique index —
+`CREATE UNIQUE INDEX ux_sil ON service_item_link(service_instance_id, remote_kind, remote_id)`
+(`00005_library_sync.sql:511`), with no partial clause. **So a tombstoned link still occupies its
+`(instance, kind, remote_id)` slot.** That is precisely what makes guard 1 possible: the \*Arrs reuse
+ids after deletion, the tombstone is still matched by the index, and the guard gets to compare
+`remote_identity_hash` before an upsert clears `deleted_at`.
+
+**Guard 1's coverage window and the restoration window are therefore THE SAME ROW.** Reaping a link
+tombstone does not merely shorten the restoration promise — it **sets guard 1's expiry by accident**,
+because after the hard delete there is no stored identity left for a reused id to be compared
+against, and the resurrection the guard exists to catch becomes an ordinary insert. **Any ADR that
+takes a retention limit is taking a decision about BOTH, and it must say so.**
+
+### What this does NOT decide
+
+- **No retention limit.** No rule that eventually removes a tombstone, or anything hanging off one,
+  is decided here in either direction. It is deferred, not refused.
+- **No reaper.** Nothing hard-deletes a tombstone on age. No `work.deleted_at` index, no migration,
+  no reap query ships with this.
+- **No drift step and no guard 2.** §7.4 step 4's `remote_hash` comparison is still built for nobody,
+  and guard 2's status is [ADR-0074](#adr-0074)'s, unchanged.
+- **Nothing about `(configurable)`** beyond declining it for this constant.
+
+### ⚠️ A note for whoever ever builds the reaper: its predicate must name EVERY table referencing `work`, not one
+
+`tag_assignment.work_id` **has no foreign key to `work`**. `00001_initial.sql:264-265` drops it with
+the comment *"FK to work(id) ON DELETE CASCADE dropped: `work` lands with library sync"*, and
+`00005_library_sync.sql:51-65` defers the restore explicitly. So a reaper that hard-deletes a `work`
+row and trusts `ON DELETE CASCADE` **orphans the user's tags rather than deleting them** — rows
+pointing at an id that no longer exists, invisible and uncounted.
+
+**Measured against the BUILT schema at migration 13** (`PRAGMA foreign_key_list` over every table
+carrying a `work_id`, not by reading the SQL — reading it got `write_queue` wrong, which does carry a
+table-level FK and does cascade). Exactly five columns name a work with **no** foreign key:
+
+| column | consequence of a naive reap |
+| --- | --- |
+| `tag_assignment.work_id` | the user's tags are orphaned, not deleted |
+| `release_candidate.work_id` | NULL for the whole Search-and-Grab path; TTL-swept anyway |
+| `sync_report.work_id` | **deliberate** — `00005` says CASCADE "would erase the report of exactly the event that most needs reporting" |
+| `library_override.work_id` | `00005` says a cascade "would orphan it silently"; `target_identity_hash` is the durable key |
+| `library_override.relink_to_work_id` | same table, same reasoning |
+
+⚠️ **`requests` and `playback state` were named in the same doc sentence and were NOT measured**, for
+the sufficient reason that neither table exists yet. When they land they join this list and the
+question has to be asked again — the list is a measurement of a schema at a version, not a property.
+
+### Alternatives
+
+- **Ship the schedule and the reaper together.** Rejected. The reaper is not the schedule's
+  completion; it is a separate decision that Decision 5 shows is entangled with guard 1's correctness
+  and that Decision 4 shows was resting on a doc sentence promising deletions from two tables that do
+  not exist. Shipping them together would have taken the retention decision silently, inside a commit
+  about a timer.
+- **An on-demand channel on the reconciler, mirroring `RunProber`'s `probeReq`.** Rejected: the door
+  exists and is `StartImport`. A second trigger for one behaviour, with no caller, is dead code that
+  also falsifies `import.go`'s trigger list.
+- **A bare six-hour ticker with no due-check.** Rejected: it makes reconciliation a function of
+  uptime, and a binary restarted on every update would reconcile never.
+- **Making the interval a configuration key**, as `sync.md` §4's *"(configurable)"* suggested.
+  Rejected on `maintenance.go`'s standing ruling: an operator asked to pick this number must know how
+  long their upstream takes to walk and how fast their catalogue churns, and §7.4 already chose the
+  honest default for them.
