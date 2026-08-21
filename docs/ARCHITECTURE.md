@@ -213,8 +213,17 @@ organisation axis.
 1. **No HTTP handler serving the browser may hold an outbound HTTP client.** Enforced by package
    boundary: `api` imports `store`, never `provider`. Unowned search (§8.6) obeys this literally —
    the handler writes to a channel; a worker owns the client.
-2. **Degraded ≠ blocked.** With a breaker open, rows return `"stale": true, "degraded_services":
-   [...]` behind a small non-modal banner. No grey-out, no spinner.
+2. **Degraded ≠ blocked.** With a breaker open, the rows still render, behind a small non-modal
+   banner naming the instance (§17.7). No grey-out, no spinner. ⚠️ **The wire shape this rule used
+   to name was never built and is deliberately not replaced.** It read `rows return "stale": true,
+   "degraded_services": [...]`, and both halves were wrong rather than merely unimplemented:
+   `degraded_services` appeared exactly once in the whole repository — on this line — so the rule
+   specified a field nothing sends and nothing reads; and `stale` is a real wire field with the
+   OPPOSITE meaning, "no probe has been taken yet" rather than "these rows are old"
+   (`internal/httpapi/services.go`, on the Services health row). Whether a per-row degraded marker
+   is wanted at all is a design decision and not a documentation fix, so no replacement shape is
+   invented here. **The rule itself is unchanged and is what this clause is for**: a degraded
+   backend never blocks a read.
 
 ---
 
