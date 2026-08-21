@@ -20,24 +20,32 @@
 // HERE: channel 1. FullImport reads a catalogue source end to end, maps it onto
 // the schema, and writes it in batched transactions through internal/store.
 //
-// ALSO HERE, AND ⚠️ UNREACHABLE: channel 3b for BookOrbit. DeltaSync (delta.go,
-// bookorbitarrivals.go) is BUILT AND TESTED — the arrivals-only walk on
-// books.addedAt that ADR-0070 decided, asked for with a server-side after-filter
-// rather than by ordering the collection and stopping client-side, carrying
-// internal/bookorbit/arrivals.go's tie mitigation and its wedge stop.
+// ALSO HERE, AND REACHABLE: channel 3b for BookOrbit. DeltaSync (delta.go,
+// bookorbitarrivals.go) is the arrivals-only walk on books.addedAt that ADR-0070
+// decided, asked for with a server-side after-filter rather than by ordering the
+// collection and stopping client-side, carrying internal/bookorbit/arrivals.go's
+// tie mitigation and its wedge stop.
 //
-// ⚠️ NOTHING USER-FACING CAN TRIGGER IT, BECAUSE THERE IS NO HTTP ROUTE.
-// Measured over the tree: internal/httpapi never names DeltaSync, no timer calls
-// it (see "Any timer" below, which is unchanged), and cmd/usarr's registry
-// method is reached only from tests. The engine exists; the wire surface does
-// not. This paragraph is here because the person who would otherwise write
-// "delta sync ships" is reading THIS DOC and not the git log, and a commit
-// message alone would not have reached them.
+// A USER CAN NOW TRIGGER IT: POST /api/v1/services/{id}/sync/delta, handled by
+// internal/httpapi's handleDeltaSyncService and implemented by cmd/usarr's
+// registry.StartDeltaSync. The route answers 202 without waiting, on the full
+// sync's argument and one more — a delta may escalate to a full import, so its
+// tail is a full import's tail. Its refusals are decided SYNCHRONOUSLY inside
+// StartDeltaSync, including the one this package owns: a source that does not
+// implement DeltaSource is refused before anything is launched, so
+// ErrNoDeltaChannel reaches a caller rather than a log line. What a walk actually
+// did is the delta_walk sync_report row recordDeltaWalk writes, never the
+// response body.
 //
-// THE ROUTE IS THE NAMED NEXT SLICE — not "later", which is where a thing goes
-// to be forgotten. Until it lands, an engine nobody can reach is worth what an
-// engine nobody wrote is worth, and any done-when phrased as "DeltaSync exists"
-// is satisfied by exactly the state described here.
+// ⚠️ THIS PARAGRAPH READ *"NOTHING USER-FACING CAN TRIGGER IT, BECAUSE THERE
+// IS NO HTTP ROUTE … internal/httpapi never names DeltaSync … THE ROUTE IS THE
+// NAMED NEXT SLICE"*, AND THE NAMED NEXT SLICE LANDED. Both measurements in it
+// are now false and are corrected above rather than deleted, because the reason
+// they were written has not expired: the person who would otherwise write "delta
+// sync ships" is reading THIS DOC and not the git log. What survives unchanged is
+// the other half of that measurement — NO TIMER CALLS IT (see "Any timer" below).
+// Channel 3b is on-demand and nothing else; a done-when phrased as "delta sync is
+// automatic" is satisfied by nothing in this tree.
 //
 // NOT HERE, and each one is a named channel with its own milestone rather than
 // an omission:
