@@ -1428,11 +1428,22 @@ byte-exact** — verified against this ADR's own text at `2e7c8f7`, where it ref
 character for character. The narrowing this ADR records has two endpoints, both his: that thread's
 opening message at **00:09:09Z** — *"we need to be able to stream content from it."* — and this reply
 twenty-six minutes later. ⚠️ **It was prompted, and he exceeded the prompt.** An agent in the thread
-recommended delegating video playback to Jellyfin at **00:26:22Z**, citing its FFmpeg CVE history; a
-coordinator post at **00:27:24Z** invited him to object *"before it writes the architecture docs"*; he
-did not object, and **went further than the recommendation** — *"or do anything else"* is broader than
-video playback, and is what closes off the music and book player too. **The scope of the narrowing is
-his, not the recommendation's.** ⚠️ **This is a citation, not an amendment. Nothing in this ADR moves**,
+recommended delegating video playback to Jellyfin at **00:26:22Z** —
+`cmsg_01S5UQT5yPAMR4PFkxyLGSj99DU68pDLpWRo5VyXgRpsyL`, author **agent** — citing its FFmpeg CVE
+history: *"Jellyfin already ships clients for Roku, Android TV, Tizen, webOS and more, and its own CVE
+history shows what owning a transcoder costs (an FFmpeg argument-injection RCE last year that was
+itself a bypass of an earlier fix)."*, and closing *"The recommendation is to delegate video playback
+to Jellyfin and own the hub, the unified library, and identity."* A coordinator post at **00:27:24Z**
+invited him to object *"before it writes the architecture docs"*. ⚠️ **What follows is stated from
+what he did say, not from a silence over a gap:** his next two messages in that thread are
+`cmsg_01S5UQT5yPAMR4PFkxyLGSj92Dqyabew65JDg6cs9i4ZA8` at **00:31:11Z**, opening *"honestly streaming is
+the least of my worries here."*, and `cmsg_01S5UQT5yPAMR4PFkxyLGSj9V6REyb72SabqnJajSc3NUB` at
+**00:35:12Z**, the sentence this ADR quotes. **Neither objects, and the second goes further than the
+recommendation** — *"or do anything else"* is broader than video playback, and is what closes off the
+music and book player too. **The scope of the narrowing is his, not the recommendation's.** ⚠️ **Those
+two replies were read at source on 2026-08-21 by a lane holding project-chat access, in a
+`has_more: false` fetch of the whole thread; no lane can re-run that read from the repository**, and
+nothing here is independently confirmed by the tree. ⚠️ **This is a citation, not an amendment. Nothing in this ADR moves**,
 Revision 2 is untouched, and *How an ADR is amended when the world moves under it* owes nothing
 here — neither the three marks always owed nor the fourth where it is needed — so none is taken.
 
@@ -1815,7 +1826,10 @@ styling layer. Full rationale, with citations, in
 2026-08-16, quoted complete and with his orthography: *"honestly if custom css is what it wants
 thats probably fine. i only suggested tailwind for speed, but it doesn't super matter that much"*
 (`cmsg_01S5UQT5yPAMR4PFkxyLGSj94bkQrhhPJ4dPNrpWctD3DU`, 2026-08-16T16:41:41Z, the sole reply in its
-thread and the message's entire body).
+thread and the message's entire body). Decision points **1** and **5** above are replaced by this;
+**2** (Bits UI), **3** (Tabler) and **4** (IBM Plex) are untouched, and **6** (serving) was always
+about `embed.FS` rather than about the CSS engine.
+
 **[Corrected 2026-08-21; the quotation is restored to the source and this Amendment's conclusion is
 untouched.]** ⚠️ **The words this Amendment attributed to the owner were not the words he wrote.**
 Until this correction the sentence presented, as a quotation of him: *"if custom css is what it
@@ -1833,13 +1847,20 @@ cut. **No intent is alleged; the direction is recorded because it is the same di
 point, and a reader can weigh that.** **The normalisation is the milder half and is still a
 defect**: silently tidying a quoted person's spelling and punctuation is how a quotation stops being
 one, and here it was not even applied consistently — the leading lowercase *"if"* was preserved
-while the lowercase *"i"* a few words later was capitalised. ✅ **Nothing here disturbs this
+while the lowercase *"i"* a few words later was capitalised.
+
+📌 **Why the quotation was substituted rather than `~~`-struck, since every other correction in this
+pass used a strike.** A struck line still reads as a string, and a struck line that still *looks* like
+a quotation of a named person is exactly the artefact that gets re-copied. **The instrument rule this
+pass followed: strike a claim, replace a misquotation** — a claim survives being read through the
+strike, a misattributed quotation does not. The withdrawn rendering is preserved above under its own
+label, so nothing is hidden either way.
+
+✅ **Nothing here disturbs this
 Amendment's conclusion.** He approved custom CSS, as plainly in the restored words as in the trimmed
 ones; decision points **1** and **5** are still replaced by this Amendment, the shipped hand-written
 layer stands, and the rider in *Alternatives considered* still rests on it. **A quotation fix is not
-a reopening of the route taken.** Decision points **1** and **5** above are replaced by this; **2** (Bits UI), **3** (Tabler)
-and **4** (IBM Plex) are untouched, and **6** (serving) was always about `embed.FS` rather than about
-the CSS engine.
+a reopening of the route taken.**
 
 **What is lost, stated as a loss.** Tailwind was never wanted for utility classes — the Decision
 above is explicit that `@theme { --*: initial; }` is *"mandatory and load-bearing"*, and the
@@ -1894,17 +1915,36 @@ that the result not look like generic generated output**, and a **qualified pref
 means to speed, for an established framework over hand-rolled CSS**.
 **[Corrected 2026-08-21; the two asks are real, their relationship and their ranking were not, and
 the Decision below is untouched.]** Source: Joe, project chat
-`cmsg_01S5UQT5yPAMR4PFkxyLGSj97tLfzeUxKQNyk7iG9NtNSa`, 2026-08-16T03:39:04Z. **Three corrections.**
-**(1) *"Separately"* is false.** Both asks sit in one paragraph of one message, and the framework
-sentence follows the anti-slop sentence with **no contrastive marker** — the paragraph's only
-*"however"* sits inside the anti-slop sentence and contrasts with an aside about older UI being
-charming, not with the framework ask. The tension this paragraph was built on is the repository's,
-not his. ⚠️ **And the author of this sentence had read that paragraph closely.** *Alternatives
-considered* below gives **Hugo its own bullet**, written in this same commit — so the clause *"could
-even be Hugo or something like that honestly"* was parsed out of the framework sentence and promoted
-to a named alternative by the same hand that then called the paragraph two separate asks. **That
-makes *"separately"* a misreading of a clear sentence, not a defensible reading of an ambiguous
-one.** **(2) The ranking is inverted.** His one superlative: *"the absolute UTMOST importance,
+`cmsg_01S5UQT5yPAMR4PFkxyLGSj97tLfzeUxKQNyk7iG9NtNSa`, 2026-08-16T03:39:04Z. **The corrections,
+numbered so each can be cited.**
+
+**(0) The paragraph itself, reproduced so the claims below are checkable rather than asserted.** It is
+the second paragraph of that message, verbatim, orthography intact, and **no emphasis is added**:
+
+> the second, and i think maybe pretty important at this phase, is to put together a UI with our goal
+> in mind + future projects. the agent in charge of UI should be a master of design. it should do deep
+> research for understanding what makes UX/UI easy and fluid to use, but also look nice enough to where
+> it doesn't feel like archaic and discombobulating (although i do think some older ui design is very
+> charming and highly functional). the absolute UTMOST importance, however, is to NOT make this look
+> like AI slop. i would literally almost take a black background with comics sans font than something
+> that looked like a normal AI style. Please use a web design framework that makes sense - be it
+> tailwind or anything that is fast and easy. I'd almost prefer framework to custom css (or whatever
+> language you wanna use to build the website. could even be Hugo or something like that honestly). i
+> want the end usarr to not dread having to come to the website, click on something and wait 5 minutes
+> for it load, or whatever.
+
+**(1) *"Separately"* is false.** Both asks sit in that one paragraph, and the framework sentence
+follows the anti-slop sentence with **no contrastive marker**; the paragraph's only *"however"* sits
+inside the anti-slop sentence and contrasts with the aside about older UI being charming, not with the
+framework ask. **Both of those are now claims a reader can check against the block above rather than
+take on trust.** The tension this paragraph was built on is the repository's, not his. 📌 **A circumstance, recorded as inference and not as a finding.** *Alternatives considered*
+below gives **Hugo its own bullet**, written in the same commit — so the clause *"could even be Hugo or
+something like that honestly"* was parsed out of the framework sentence and promoted to a named
+alternative by the same commit that then called the paragraph two separate asks. ⚠️ **What that commit's
+author read, and how closely, is not measurable from here — no transcript of that lane was read** — so
+this is offered as circumstance a reader can weigh and **not as a basis for calling *"separately"* a
+misreading rather than a reading.** The correction stands on the paragraph reproduced above, which is
+measurement, and needs no verdict about anyone's attention. **(2) The ranking is inverted.** His one superlative: *"the absolute UTMOST importance,
 however, is to NOT make this look like AI slop."* The framework ask is the qualified one — *"I'd
 almost prefer framework to custom css"* — and he widens it in the same sentence, to *"whatever
 language you wanna use to build the website"* and to Hugo, a static site generator. Firm about the
@@ -2144,7 +2184,7 @@ enforcement is the reason Tailwind is chosen — so this is a fallback, not a pr
   2026-08-16T03:39:04Z, quoted with his orthography: *"Please use a web design framework that makes
   sense - be it tailwind or anything that is fast and easy. I'd almost prefer framework to custom
   css (or whatever language you wanna use to build the website. could even be Hugo or something like
-  that honestly)."* Three things in that sentence the struck clause loses. **It is qualified** —
+  that honestly)."* What the struck clause loses, item by item. **It is qualified** —
   *"almost prefer"*, not a requirement. **It gives its reason inline** — *"anything that is fast and
   easy"* — so it is a preference about an outcome, not about a technology. **And he widens it in the
   same breath**, to *"whatever language you wanna use"* and to Hugo, which is a static site
@@ -2158,15 +2198,21 @@ enforcement is the reason Tailwind is chosen — so this is a fallback, not a pr
   mind.** *"i only suggested tailwind for speed"* restates *"I'd almost prefer … fast and easy"*
   accurately; what changed was the rendering, not the position. **And this alternative was not
   rejected — it shipped, and it meets the criterion he actually gave.** The Amendment names this
-  bullet by its own title — *"the route taken is the \"Hand-rolled CSS with a custom token layer\"
-  alternative rather than Open Props"* — and the tree agrees, read at `2e7c8f7`: `web/src/app.css`
+  bullet by its own title, and its sentence — with **the source's own quotation markers kept** rather
+  than flattened into straight quotes — reads: *"the route taken is the* ***"Hand-rolled CSS with
+  a custom token layer"*** *alternative rather than Open Props"* — the inner `*"…"*` is this repo's
+  quotation marker in the source, signalling that the Amendment was itself quoting this bullet's title.
+  And the tree agrees, read at `2e7c8f7`: `web/src/app.css`
   is **2,905 lines** of hand-written CSS ported from `tokens.css` and `mockups/usarr.css`, ten of
   `web/src`'s sixteen `.svelte` files carry scoped `<style>` blocks, and neither `web/package.json`
   nor `web/pnpm-lock.yaml` contains a `tailwindcss`, `@tailwindcss/vite`, `bits-ui`,
   `unplugin-icons` or `@tabler` entry, with no `tailwind.config.*` or `postcss.config.*` anywhere
   under `web/`. **The surviving reason is the one the Amendment concedes** and is kept unsoftened:
-  discipline now rests on `design/check.mjs`'s ban list, recorded there as *"a **weaker guarantee
-  than \"the class does not exist\"**"*. ⚠️ **He did not move; the record hardened him.** The same
+  discipline now rests on `design/check.mjs`'s §13 ban list, which **this ADR's own Amendment**
+  describes — under *What is lost, stated as a loss* — as *"a **weaker guarantee than "the class does
+  not exist"**"* (bold as the Amendment writes it). ⚠️ **The phrase is written in this file, not in
+  `check.mjs`:** `git grep -l "weaker guarantee"` returns only `docs/DECISIONS.md`, at `2e7c8f7` and
+  again at `b93f117`. ⚠️ **He did not move; the record hardened him.** The same
   shrug sits at both ends of that day — *"I'd almost prefer"* at 2026-08-16T03:39:04Z and *"but it
   doesn't super matter that much"* at 2026-08-16T16:41:41Z — and this ADR firmed it at each point it
   touched it: the Context's *"asked for"*, this bullet's *"said he did not want"*, and the
@@ -2215,19 +2261,22 @@ below, in writing, rather than quietly reinterpreted. · ⚠️ **Amended 2026-0
 
 The owner's scope moved to six media types, and with it came a requirement that does not fit the
 existing model: **user-defined libraries, configured separately from services.** ~~His stated
-motivation is not storage control — he does not want UsArr reading a filesystem~~ — it is that
-**LazyLibrarian's own idea of a library is poor, and UsArr's organisation must be able to be better
-than a service's.**
+motivation is not storage control — he does not want UsArr reading a filesystem — it is that~~ **His
+stated motivation is that LazyLibrarian's own idea of a library is poor, and UsArr's organisation must
+be able to be better than a service's.**
 
 🚩 **STRUCK 2026-08-21 — the span above only, and struck rather than annotated because it was wrong
 when written, not overtaken by a later decision.** The two halves are **one claim stated twice**: the
 em-dashes make *"he does not want UsArr reading a filesystem"* a gloss on *"his stated motivation is
 not storage control"*, so striking the gloss and leaving the claim it glosses would leave a false
-sentence standing on the same evidence. **His own words contradict both halves at once, in the very
+sentence standing on the same evidence. **The strike runs to the end of the clause it governs, so what
+stands is a whole sentence rather than a fragment**: the trailing *"— it is that"* went with it and the
+subject was restated, which is the smallest edit that leaves readable text and the reason the struck
+span is longer than the false claim. **His own words contradict both halves at once, in the very
 message this paragraph is characterising** — `cmsg_01S5UQT5yPAMR4PFkxyLGSj94vVxJJmQ6zrGdsDmn7CrdT`,
-**2026-08-16T05:23:03Z**, orthography intact: *"like you can set a library for "ebooks" and **choose
-your storage folder**. same for tvs and movies."* **That is storage control by any reading, and it is a
-request for it.** What he later said, in full — `cmsg_01S5UQT5yPAMR4PFkxyLGSj9T3ZNTJxcTm5htH1prf5Tbd`,
+**2026-08-16T05:23:03Z**, orthography intact and **emphasis this document's**: *"like you can set a
+library for "ebooks" and **choose your storage folder**. same for tvs and movies."* **That is storage
+control by any reading, and it is a request for it.** What he later said, in full — `cmsg_01S5UQT5yPAMR4PFkxyLGSj9T3ZNTJxcTm5htH1prf5Tbd`,
 **05:29:37Z** — is *"I mean it doesn't have to read the library. I was just thinking about my own
 experience with lazy librarian. it's not really good at correctly understanding a library in my
 personal experience."* **He released a request. He did not state the motivation this clause attributes
@@ -2242,8 +2291,8 @@ demolished — it loses a false premise and keeps a true one**, and the paragrap
 argues the same complaint from LazyLibrarian's own source, **corroborates him rather than standing in
 for him.**
 
-❗ **This strike closes off two misreadings, and both are stated because either would be worse than the
-defect.** **First, the refusal is untouched and is not reopened.** *"UsArr never touches a filesystem"*
+❗ **This strike closes off the misreadings below, and each is stated because either would be worse
+than the defect.** **First, the refusal is untouched and is not reopened.** *"UsArr never touches a filesystem"*
 stands, on the grounds enumerated under *Alternatives rejected* and in this section's three-options
 list — a scanner, path access, file watching, permissions handling, a new trust surface, the
 media-server line [ADR-0023](#adr-0023) and [ADR-0018](#adr-0018) hold, and `content_key` — **which
@@ -2257,18 +2306,21 @@ filesystem directly and I'll cost that out properly instead"*
 have to"*. **Nobody is holding an open ask here. Correcting what the record says he wanted is not
 reinstating what he stopped wanting.**
 
-📌 **How the overstatement travelled, recorded once because the mechanism recurs.** Between his words
-and this clause sits an agent's paraphrase — *"✓ Owner clarified: UsArr never reads the filesystem"* —
-which **recurs through that thread's status blocks, and this ADR is downstream of the paraphrase rather
-than of him.** Requoted authority firms up at every hop and nothing in the tree records the hop.
+📌 **How the overstatement travelled.** Between his words and this clause sits an agent's paraphrase —
+*"✓ Owner clarified: UsArr never reads the filesystem"* — which **recurs through that thread's status
+blocks, and this ADR is downstream of the paraphrase rather than of him.** 📎 **The mechanism, the roots
+searched for the hop and the positive control are written out once**, in [`DEVELOPMENT.md`](./DEVELOPMENT.md)'s *An attribution to the owner carries a locator* section, under *Coverage*'s parent section,
+and pointed at from here and from the `(C)` bullet below rather than told three times.
 
-**Coverage.** Swept 2026-08-21 across the project's opening thread end to end, the UI-design,
-frontend-build and code threads, and two pages of the top-level timeline; raw tool output read off disk
-and quoted independently by two workers. ⚠️ **Several fetches returned `has_more: true`, so the sweep is
-bounded and not exhaustive**, and nothing here is a claim about what the owner never said. ⚠️ **Not an
-amendment** — no later decision falsified this clause and no scope moves, so **nothing under *How an
-ADR is amended when the world moves under it* is owed — neither the three marks always owed nor the
-fourth where it is needed — and none is taken.** The full citation for this paragraph, including the
+**Coverage.** Two corpora, stated in full once in [`DEVELOPMENT.md`](./DEVELOPMENT.md)'s *An attribution to the owner carries a locator* section, under *Coverage*: **the project's opening thread read end to
+end at source, `has_more: false`**, and **five dumps of tool output read off disk, all five
+`has_more: true` and none of them containing that thread's replies**. ⚠️ **The complete read and the
+bounded read are different reads and are never covered by one sentence here.** ⚠️ **The opening-thread
+read was made by a lane holding project-chat access; no lane can re-run it from the repository**, so it
+is first-hand rather than tree-confirmed. Nothing here is a claim about what the owner never said. ⚠️
+**Not an amendment** — no later decision falsified this clause and no scope moves, so **nothing under
+*How an ADR is amended when the world moves under it* is owed — neither the three marks always owed nor
+the fourth where it is needed — and none is taken.** The full citation for this paragraph, including the
 six-type split, is in the provenance rider below.
 
 📌 **PROVENANCE RIDER, 2026-08-21 — the paragraph above is his, and this is the citation it was written
@@ -2304,18 +2356,18 @@ above carries the correction, the quotation and its address**, and the riders in
 three-options list and on the (C) bullet under *Alternatives rejected* carry the same correction where
 the refusal is decided.
 
-**D. Coverage.** Swept 2026-08-21 across the project's opening thread end to end, the UI-design,
-frontend-build and code threads, and two pages of the top-level timeline; raw tool output read off disk
-and quoted by two workers independently. ⚠️ **Several fetches returned `has_more: true`, so the sweep is
-bounded and not exhaustive**, and any absence recorded on its strength is a measurement of that corpus
-and not a claim about what the owner said. ⚠️ **Not an amendment** — no claim below is falsified by a
-later decision and no scope moves, so nothing under *How an ADR is amended when the world moves under
-it* is owed — neither the three marks always owed nor the fourth where it is needed — and none is
-taken.
+**D. Coverage.** As above and as stated in full in [`DEVELOPMENT.md`](./DEVELOPMENT.md)'s *An attribution to the owner carries a locator* section, under *Coverage*: the opening thread **read end to end at
+source** (`has_more: false`), plus **five bounded dumps** (`has_more: true` on every one). ⚠️ **Any
+absence recorded on the dumps' strength is a measurement of those five files, not a claim about what
+the owner said**; and the opening-thread read is first-hand by a lane with project-chat access rather
+than something the repository confirms. ⚠️ **Not an amendment** — no claim below is falsified by a later
+decision and no scope moves, so nothing under *How an ADR is amended when the world moves under it* is
+owed — neither the three marks always owed nor the fourth where it is needed — and none is taken.
 
 📎 **The sibling in [ADR-0032](#adr-0032)'s *Context*** — *"The owner's scope moved from two media types
-to six"* — carries the same welded claim and the same split verdict. **Recorded, not corrected here**;
-it belongs to the sweep.
+to six"* — carries the same welded claim and the same split verdict. **Recorded, not corrected here**,
+and **registered with a trigger** in [`REVIEW-LOG.md`](./REVIEW-LOG.md)'s `LS-394.26` — ⚠️ *"it belongs
+to the sweep"* was the original disposition and it was circular, since this pass **was** the sweep.
 
 That is a substantiated complaint, not a taste. From LazyLibrarian's source: a file its matcher
 cannot bind to a metadata-provider record has **no row written at all** — the failure lands in a
@@ -2337,8 +2389,8 @@ return).
 
 Three options were considered: **(A)** libraries as pure UI groupings over instances; **(B)**
 libraries as bindings to containers the upstream already computed; **(C)** UsArr scanning a
-filesystem. **(C) was ruled out by the owner and was also the wrong answer** — it would make UsArr a
-media server (ADR-0023, ADR-0018) and would require a *scanner*, the exact component whose
+filesystem. **~~(C) was ruled out by the owner and~~ (C) was also the wrong answer** — it would make
+UsArr a media server (ADR-0023, ADR-0018) and would require a *scanner*, the exact component whose
 misidentification failures fill this ADR's citations.
 ✅ **PROVENANCE RIDER, 2026-08-21 — (C) is refused on this sentence's own grounds, which is what its
 *"and was **also** the wrong answer"* asserts: scanning would make UsArr a media server, refused
@@ -2459,14 +2511,14 @@ catalogue comics with no sink at all beyond Prowlarr free-text.
   that motivated the feature: a subset of one instance (a root folder, a tag), and two libraries over
   one upstream library — the Ebooks/Audiobooks split that Audiobookshelf itself cannot do, because
   its `mediaType` is only `book|podcast` and the distinction lives at item level.
-- **(C) Scanning a filesystem.** Refused by the owner and independently wrong: it needs a scanner,
-  path access, file watching, permissions handling and a new trust surface, and it would make UsArr a
-  media server. What it would genuinely buy is *files no service knows about*, and the honest answer
+- **(C) Scanning a filesystem.** ~~Refused by the owner and~~ **Independently wrong**: it needs a
+  scanner, path access, file watching, permissions handling and a new trust surface, and it would make
+  UsArr a media server. What it would genuinely buy is *files no service knows about*, and the honest answer
   is "import them into a service that owns bytes; UsArr is not that." Content-hash file identity — the
   other thing it would buy — is already answered better by the deferred `content_key`.
 
   ✅ **PROVENANCE RIDER, 2026-08-21 — the refusal stands, and this rider strengthens its footing rather
-  than weakening it. The attribution in the first four words is corrected.**
+  than weakening it. The attribution that opened this bullet is struck above and corrected here.**
 
   **A. What carries the refusal — and what always did.** Scanning needs a scanner, path access, file
   watching, permissions handling and a new trust surface; it would make UsArr a media server, which
@@ -2476,7 +2528,9 @@ catalogue comics with no sink at all beyond Prowlarr free-text.
   own word *independently* said so before anyone checked, and the check has now vindicated it: these
   grounds are not a fallback for a missing attribution — they are the real basis, and the only basis.**
 
-  **B. 🚩 What is corrected: *"Refused by the owner"* is false as written, and it inverts him.** He did
+  **B. 🚩 What is corrected: *"Refused by the owner"* is false as written, and it inverts him — so it is
+  struck above rather than left standing under a rider, on the same ground the Context strike gives:
+  it was wrong when written, not overtaken by a later decision.** He did
   not refuse filesystem scanning. **He asked for it** — *"like you can set a library for "ebooks" and
   **choose your storage folder**"* (`cmsg_01S5UQT5yPAMR4PFkxyLGSj94vVxJJmQ6zrGdsDmn7CrdT`,
   **2026-08-16T05:23:03Z**) — and then **released the ask** when an agent proposed upstream root folders
@@ -2491,10 +2545,12 @@ catalogue comics with no sink at all beyond Prowlarr free-text.
   rendering is: refused on the grounds in A, with the owner's original request released rather than
   pressed.**
 
-  **C. How the overstatement travelled, recorded once because the mechanism recurs.** The agent's own
-  paraphrase — *"✓ Owner clarified: UsArr never reads the filesystem"* — recurs through that thread's
-  status blocks, and **this ADR is downstream of the paraphrase rather than of him.** Requoted authority
-  firms up at every hop, and nothing in the tree records the hop.
+  **C. How the overstatement travelled.** Between his words and this bullet sits an agent's paraphrase —
+  *"✓ Owner clarified: UsArr never reads the filesystem"* — which recurs through that thread's status
+  blocks, and **this ADR is downstream of the paraphrase rather than of him.** 📎 **The mechanism is
+  written out once, in [`DEVELOPMENT.md`](./DEVELOPMENT.md)'s *An attribution to the owner carries a locator* section, under *Coverage*'s parent section**, with the roots that search for the hop was run
+  over and its positive control; it is pointed at rather than retold here, because copies of an
+  explanation drift.
 
   ❗ **D. Nothing here is an argument for building a filesystem scanner, and it must not be read as
   one.** **The refusal stands, unchanged, on the grounds in A**, and so does the Decision's *"UsArr never
@@ -2507,10 +2563,15 @@ catalogue comics with no sink at all beyond Prowlarr free-text.
   himself when explicitly invited to insist, so no live ask is being restored.** ⚠️ **A correction to an
   attribution is not a reopening of a decision**, and the two must never be read together.
 
-  **E. Coverage.** Swept 2026-08-21 across the opening thread end to end, the UI-design, frontend-build
-  and code threads, and two pages of the top-level timeline. ⚠️ **Several fetches returned
-  `has_more: true`; the sweep is bounded and not exhaustive.** ⚠️ **Not an amendment; none of the four
-  marks is owed or taken.**
+  **E. Coverage.** Two corpora, and the coverage statement of record for this pass is in [`DEVELOPMENT.md`](./DEVELOPMENT.md)'s *An attribution to the owner carries a locator* section, under *Coverage* —
+  **the project's opening thread read end to end at source (`has_more: false`)**, and **five dumps of
+  tool output read off disk, every one of them `has_more: true`**. ⚠️ **The two are not interchangeable:
+  the opening-thread read is complete; the five dumps are bounded and do not contain that thread's
+  replies.** ⚠️ **The opening-thread read was made by a lane holding project-chat access and cannot be
+  re-run from the repository**, so it is recorded as a first-hand read rather than as something the tree
+  independently confirms. ⚠️ **Not an amendment** — *How an ADR is amended when the world moves under it*
+  owes nothing here, neither the three marks always owed nor the fourth where it is needed, and none is
+  taken.
 
   📌 **An observation, not a route to reopening anything:** the Decision states the refusal absolutely
   while [`ARCHITECTURE.md`](./ARCHITECTURE.md) §1.4 *Permanent refusals* does not list it — §1.4's entries

@@ -9811,7 +9811,9 @@ ADR-0025 was amended, the amendment is recorded in the ADR body, no later ADR su
 independent tree checks below still hold. What is corrected is the attribution of those words to the
 owner, and the phrase *"the quoted words"* above should be read as *"the words the ADR quoted"*. The
 correction of record is the dated rider at ADR-0025's Amendment in
-[`DECISIONS.md`](./DECISIONS.md), under *"⚠️ Amendment, 2026-08-16 — Tailwind is not used"*.
+[`DECISIONS.md`](./DECISIONS.md), under *"⚠️ Amendment, 2026-08-16 — Tailwind is not used, and
+the enforcement it was chosen for is gone with it"* — quoted whole, as this file already quotes that
+heading whole above and below.
 **No existing text in this entry is changed.**
 
 **Verified independently of the ADR, because an amendment is a claim too.** `web/package.json` lists
@@ -26160,18 +26162,32 @@ the three sets now agree: 74 headings, 74 anchors, 74 rows, none of them orphane
 * **§18's `StartImport` shutdown asymmetry is unchanged and still registered**, with its trigger
   unchanged. Nothing in this round touched `run()`'s shutdown ordering.
 
-**Two more, added 2026-08-21 by the owner-attribution slice, which is a different lane and takes no
-LS number of its own.** They are recorded here rather than in a new register because a second
-register is a second thing to forget to read.
+**Added 2026-08-21 by the owner-attribution slice, which is a different lane and takes no LS number of
+its own — and extended the same day by the two adversarial reviews of that slice.** They are recorded
+here rather than in a new register because a second register is a second thing to forget to read. ⚠️
+**No count opens this list**, because a register is an append surface and a preamble that counts its
+own contents is a thing that goes stale the next time anyone adds to it — which is `LS-394.24`'s rule,
+and which this preamble originally broke by opening *"Two more"* over exactly two bullets.
 
 * ⚠️ **The *"none of the four marks"* rephrasing reached only the sites its own diff added.** That
   phrasing misstates [`DECISIONS.md`](./DECISIONS.md)'s rule — its *How an ADR is amended when the
   world moves under it* section reads *"**Three marks are always owed**, and a fourth where it is
   needed"*. That is the correction **SD-04**'s *"Second amendment, 2026-08-19 — the marks rule is
   restated as a rule rather than a count"* already made in this file, against people who *"look for
-  four marks on an ADR that only ever owed three"*. The four sites the slice introduced now take
-  the rule's own framing. **Three sites it did not introduce still read as a count of four and are
-  deliberately untouched**, being outside the slice: `DECISIONS.md`'s *"[ADR-0026](./DECISIONS.md#adr-0026)
+  four marks on an ADR that only ever owed three"*. ⚠️ **AMENDED 2026-08-21 — this bullet's own count
+  was wrong, and both adversarial reviewers of the slice found it independently.** It said *"the four
+  sites the slice introduced now take the rule's own framing"*. **The slice introduced five.** The
+  fifth — `DECISIONS.md`, ADR-0026, the `(C) Scanning a filesystem` bullet, section **E. Coverage** —
+  still read *"Not an amendment; none of the four marks is owed or taken."* and has now been rephrased
+  to the preamble's framing along with the other four. 📌 **How the miscount survived, because the
+  mechanism is the finding:** the phrase wraps across a line break in that bullet, so a line-oriented
+  `git grep "four marks"` never sees `four\nmarks`. **The recount was done on whitespace-flattened
+  text** — `re.findall(r'four\s+marks', open(path).read())` over the whole file, not `git grep` — and
+  returns **3** in `docs/DECISIONS.md` at the corrected tree, all three of them the pre-existing sites
+  below. This is `LS-394.24`'s own warning (*"one line … is invisible to it because the sentence wraps
+  mid-phrase, which is itself a reason not to hand a census to a grep total"*) reproduced by the entry
+  that exists to record such things. **Three sites the slice did not introduce still read as a count of
+  four and are deliberately untouched**, being outside the slice: `DECISIONS.md`'s *"[ADR-0026](./DECISIONS.md#adr-0026)
   gains all four marks the preamble requires"*, *"ADR-0042 and ADR-0043 each gain the four marks the
   preamble requires"*, and *"[ADR-0041](./DECISIONS.md#adr-0041) is annotated per the preamble's four
   marks"* — near `:5793`, `:6247` and `:8047` at the time of writing, and **named by their text
@@ -26181,21 +26197,200 @@ register is a second thing to forget to read.
   annotation blocks for another reason rephrases it in passing** — *"the marks the preamble
   requires"* costs nothing and carries no count. A grep-driven sweep for the phrase alone does
   **not** fire this: this file's own hits are history and stay.
-* ⚠️ **The `CLAUDE.md` requote is fixed in `CLAUDE.md` ONLY, because that is the whole of what the
-  owner signed off.** His sign-off (`cmsg_01S5UQT5yPAMR4PFkxyLGSj92mKCuvky88RRwSk9jLq8vE`,
-  2026-08-21T19:44:07Z) answered a question naming that file, and **an approval is not widened by
-  the convenience of doing the rest in the same motion** — which is the shape **SD-08**'s
-  withheld-`CLAUDE.md`-changes register exists to hold. So *"the owner's number-one requirement"* and
-  *"Adversarial review is mandatory"* still stand, unridden, in three other places:
-  `docs/PROJECT-INSTRUCTIONS.md`, where **every archived version carries both** and which is a
-  **dated archive of superseded texts that should not be edited at all** — recorded so nobody reads
-  its hits as unfixed copies; `docs/design/DESIGN-DIRECTION.md`, whose *"owner's number-one
-  requirement, and it is a named tell besides"* is a live claim; and `docs/design/tokens.css`, whose
-  comment carries the same phrase. Located with
-  `git grep -n -e "number-one requirement" -e "Adversarial review is mandatory"` and **listed by file
-  rather than by a total**, per §11 rule 8. `docs/DEVELOPMENT.md`'s two hits are **not** in this list
+* ⚠️ **The `CLAUDE.md` requote is addressed in `CLAUDE.md` ONLY, because that is the whole of what the
+  owner signed off.** ⚠️ **AMENDED 2026-08-21 — *"fixed"* overstated it and is withdrawn.** The two
+  sentences got different instruments: the speed sentence was **struck and reworded**, and the
+  adversarial sentence **kept its wording and gained a rider**, because the sign-off covered a specific
+  pair of changes and rewording the lead was not among them. **Neither is "fixed" in the sense of the
+  wording now being the owner's** — see the residual entry below. His sign-off
+  (`cmsg_01S5UQT5yPAMR4PFkxyLGSj92mKCuvky88RRwSk9jLq8vE`, 2026-08-21T19:44:07Z) answered a question
+  naming that file, and **an approval is not widened by the convenience of doing the rest in the same
+  motion** — which is the shape **SD-08**'s withheld-`CLAUDE.md`-changes register exists to hold.
+
+  **What still stands elsewhere, per file rather than as one sentence covering all of them** — ⚠️
+  **AMENDED 2026-08-21: the lead previously read as though both phrases stood in all three files, and
+  they do not.** `docs/PROJECT-INSTRUCTIONS.md` carries **both**, eight occurrences of each;
+  `docs/design/DESIGN-DIRECTION.md` carries **only** the speed phrase, at `:737`, in *"owner's
+  number-one requirement, and it is a named tell besides"*, which is a live claim; and
+  `docs/design/tokens.css` carries **only** the speed phrase, at `:435`, and even there attributes it
+  to **the project** rather than to the owner — *"the project's number-one requirement"* — so it is a
+  weaker instance of the same defect, not the same sentence. ⚠️ **AMENDED 2026-08-21: the command named here could not produce the
+  count named here.** It was
+  `git grep -n -e "number-one requirement" -e "Adversarial review is mandatory"`, and that pattern
+  misses `Adversarial review is **mandatory**` — bold markers inside the phrase — so it returns **one**
+  hit in `docs/DEVELOPMENT.md`, not the two this bullet reports. The command of record is now
+  `git grep -nE -e "number-one requirement" -e "Adversarial review is (\*\*)?mandatory"`, which
+  returns, at `b93f117`, **CLAUDE.md 2 · docs/DEVELOPMENT.md 2 · docs/PROJECT-INSTRUCTIONS.md 16 ·
+  docs/REVIEW-LOG.md 3 · docs/design/DESIGN-DIRECTION.md 1 · docs/design/tokens.css 1** — **listed by
+  file rather than by a total**, per §11 rule 8. `docs/DEVELOPMENT.md`'s two hits are **not** in this
+  list
   and are correct as they stand: they quote `CLAUDE.md`'s wording *as the overstatement being
-  analysed*, which is the one context where the old phrasing is the subject. **TRIGGER: a further
-  owner sign-off naming the design documents, or `DESIGN-DIRECTION.md` being edited on that sentence
-  for another reason.** Nothing here fires on `PROJECT-INSTRUCTIONS.md`, which is closed by
-  construction.
+  analysed*, which is the one context where the old phrasing is the subject. **TRIGGER (design documents): a further owner sign-off naming the design
+  documents, or `DESIGN-DIRECTION.md` being edited on that sentence for another reason.** ⚠️ **AMENDED
+  2026-08-21: that trigger named `DESIGN-DIRECTION.md` and left `tokens.css` with no limb covering it.
+  TRIGGER (`tokens.css`): the same sign-off, or the next edit to `tokens.css`'s shadow-budget comment
+  block for any reason** — its copy says *"the project's number-one requirement"* and the cheap repair
+  is to drop the ranking word entirely, which costs the comment nothing.
+
+  🚩 **AMENDED 2026-08-21 — the ground this bullet gave for leaving `docs/PROJECT-INSTRUCTIONS.md`
+  alone was false, and both adversarial reviewers reached it.** It said the file is a *"dated archive
+  of superseded texts that should not be edited at all"* and *"closed by construction"*. **Seven of its
+  eight version blocks are headed `superseded`. The eighth is headed `## v1.7 — as applied`, and its
+  body says *"This is the live settings text."*** — the text every agent session receives before it
+  reads anything in this repo, carrying both uncorrected sentences at `:69` and `:77`. **It is not an
+  archive of superseded texts; it is an archive plus the live text.** ⚠️ **A lane running in this
+  project on 2026-08-21 confirmed from its own running configuration that the project instructions in
+  force still carry *"Perceived speed is the owner's number-one requirement"*** — that is an
+  observation of the running environment by that lane, **not a repository measurement and not
+  reproducible from the tree.**
+
+  ✅ **v1.7's text is still not edited, and the reason is a better one than the old ground.** The block
+  is a **verbatim copy of what is applied to the settings**, gated on a byte count, a character count
+  and an md5 (`eb03cc348585d2e7c55c47fb289bea62` over 7926 bytes), and the apply was closed by `cmp`
+  against that copy. **Editing it would make it stop being a copy** and would break the gate that makes
+  it checkable. Agents cannot edit project settings, so the wording can only change when a new version
+  is drafted and applied by hand.
+
+  ⚠️ **What that means, recorded rather than left implicit: the corrected `CLAUDE.md` and the live
+  settings text now knowingly disagree** on both sentences, and every agent session reads the settings
+  text first. **TRIGGER (`PROJECT-INSTRUCTIONS.md`): the next settings revision — v1.8, whenever it is
+  drafted — carries the corrected wording**, and its changelog cites this entry as what forced it.
+  Nothing else fires on this file, and **no grep-driven sweep may edit v1.7**.
+
+* ⚠️ **[ADR-0032](./DECISIONS.md#adr-0032)'s *Context* carries the same welded claim as ADR-0026's and
+  is not corrected.** *"The owner's scope moved from two media types to six"* welds a scope move that
+  **is** his to a count that is **not**: he named audiobooks, ebooks, comics, manga and music alongside
+  movies and TV — **seven categories** — and six is a downstream modelling decision recorded in that
+  thread's status text as *"Manga stays one kind with comics."* ⚠️ **Registered here rather than left
+  in an ADR rider**, which is where the owner-attribution slice first recorded it and which gave it no
+  trigger and no expiry; *"it belongs to the sweep"* was circular, since that slice **was** the sweep.
+  **The decision is sound and is not in question** — ADR-0030 owns `work.kind` and settles
+  no-manga-kind on its own reasoning — so what is owed is a split of the attribution, not a
+  correction of the number. **TRIGGER: the next pass that edits ADR-0032's *Context* for any reason
+  splits the clause**, as ADR-0026's rider **B** already does, in one sentence: the coverage is his,
+  the count is a modelling decision. A grep sweep for the phrase alone does not fire this.
+* ⚠️ **`CLAUDE.md`'s *"Adversarial review is mandatory. The owner asked for this explicitly."* keeps
+  its wording, and the residual is here rather than nowhere.** The rider under it now says precisely
+  what is exact — **he explicitly asked for adversarial review, unprompted and twice** — and precisely
+  what is not: **the scope in that paragraph (all substantive design, research and synthesis) is wider
+  than the *feedback to other workers* he named**, and *"mandatory"* hardens *"we should have"*. **The
+  lead sentence is deliberately not reworded**: the owner's 2026-08-21 sign-off
+  (`cmsg_01S5UQT5yPAMR4PFkxyLGSj92mKCuvky88RRwSk9jLq8vE`, 19:44:07Z) covered a specific pair of
+  changes and a rewrite of that sentence was not among them, and **an approval is not widened by
+  convenience**. **TRIGGER: the next owner sign-off that reaches this sentence, or the next `CLAUDE.md`
+  pass that edits the *Working practice* lead for another reason** — at which point the honest wording
+  is scoped (*"strong default"*, as the rider already instructs readers to treat it) rather than
+  absolute.
+
+### LS-394.27 The two adversarial reviews of the owner-attribution slice, and where each finding landed
+
+**Reviewed 2026-08-21**, two independent lenses over `2e7c8f7..b93f117` — one on **provenance** (every
+quotation, citation and attribution; 11 findings, cited below as **P1–P11**) and one on **claims and
+conventions** (24 findings, **C1–C24**). Both were read in full before anything was edited, and every
+finding is applied or rebutted here. **Nothing is dropped silently**, which is `CLAUDE.md`'s rule and
+the reason this entry exists rather than a commit message.
+
+⚠️ **One class of evidence in this round cannot be checked from the repository, and every sentence
+resting on it says so.** The project's opening thread was fetched **end to end at source** on
+2026-08-21 — 38 messages, 2026-08-16T00:09:09Z → 06:07:35Z, **`has_more: false`** — by the lane
+holding project-chat access. **Neither reviewer could reach it**, and the five raw dumps on disk do not
+contain it (checked by id). **That read is first-hand and is recorded as such**: a later lane without
+chat access may neither extend it nor contradict it, per this file's own division-of-labour rule in
+[`DEVELOPMENT.md`](./DEVELOPMENT.md)'s *An attribution to the owner carries a locator*.
+
+**Both reviewers found the same blocking defect independently (P1 = C1).** The register bullet in
+`LS-394.26` claimed the slice's *"none of the four marks"* rephrasing reached all four sites it
+introduced; **it introduced five**, and the fifth was still uncorrected inside the slice's own diff.
+That is amended in place above, with the mechanism that hid it — the phrase wraps a line, so a
+line-oriented grep misses it — and the flattened recount that found it.
+
+**Applied, with where each landed.** P1/C1, the fifth marks site, and the register's count and method:
+`DECISIONS.md` ADR-0026 §E and `LS-394.26` above. **C2**, three tellings of *"recorded once because the
+mechanism recurs"*: one account of record now lives in `DEVELOPMENT.md`, and ADR-0026's two copies are
+pointers with the self-refuting phrase removed. **C3**, the contradiction over whether the opening
+thread's replies were read: resolved by the source read above — the thread **was** read end to end and
+the five dumps do **not** contain it — and all four sites now name the two corpora separately.
+**P3/C13**, the ratification's missing address: `cmsg_…92mKCuvky88RRwSk9jLq8vE`, 2026-08-21T19:44:07Z,
+now in `CLAUDE.md` where the practice rests on it. **C4**, *"the only explicit superlative"*: bounded,
+and the counterexample (*"number one priority"*, about an agent's priority) is named in the rider a
+reader actually meets. **P4/C10**, the locator command that could not produce its own count: command
+and per-file counts corrected above. **P5**, *"recorded there"* pointing at `check.mjs`: repointed to
+ADR-0025's own Amendment, with the grep that shows the string has never been in `check.mjs`. **P6**,
+the truncated heading: quoted whole. **C6**, two *"false as written"* attributions left bolded and
+unstruck: both struck, on the ground the Context strike already gave. **C7**, *"nothing in the tree
+records the hop"*: replaced by the roots searched, the terms, the tree and a positive control. **C8**,
+the coverage paragraph naming its corpus by count: both corpora now named individually with ids,
+ranges, counts and `has_more`, with a positive **and** a negative control fired. **C9/C17**, the
+ADR-0032 sibling and `tokens.css`: both now carry register entries with real triggers, above. **C11**,
+`ROADMAP.md` named in scope and untouched: the scope sentence now separates files swept from files
+changed and says what was found in each. **C12**, three unbounded uniqueness claims in the
+rule-setting section: each bounded or withdrawn — notably *"the one class this repo has been writing
+without a source"*, falsified by `make check`'s own *"exactly one network call"*. **C14**, the
+self-contradicting adversarial rider: the rider now separates what is exact (the ask) from what is
+wider (the scope), the lead sentence is left as the owner's sign-off left it, and the residual is
+registered with a trigger. **C15**, an inference about another lane's reading used to escalate a
+verdict: marked as inference, the escalation dropped, and the correction rested on the reproduced
+paragraph instead. **C16**, closed-set claims about a paragraph never reproduced: **the paragraph is
+now reproduced verbatim** in ADR-0025's Context, so *"no contrastive marker"* and *"the only
+'however'"* are checkable. **P8**, editorial bold inside quotations: labelled as this document's
+emphasis where it is ours, and left unlabelled where the bold is the source's own. **P9**, flattened
+quotation markers: the source's `*"…"*` restored. **P10**, *"the first thing Joe names"*: narrowed to
+*"the first item in the sentence that introduces what the product must do"*, with the unification
+sentence that precedes it quoted. **P11/C18**, the splice artifact and the counting preambles:
+*"Decision points 1 and 5"* restored to one place, and the self-counting preambles made count-free.
+**C20**, a strike leaving a fragment: the struck span extended to the clause boundary and the subject
+restated. **C21**, an exemplar demonstrating two of the three things it demands: ADR-0048's quotation
+and address supplied, so it shows all three. **C22**, one id used for both *"the opening message"* and
+*"the thread"*: disambiguated in place, with the reason the collision exists. **C23/C24**, *"fixed"*
+and the register lead overstating their own bodies: both amended above, per file.
+
+**Applied, and found by this lane rather than by either reviewer.** ⚠️ **`DESIGN-DIRECTION.md`'s OQ-7
+strike — which both reviewers named as the best-formed absence claim in the diff — overstated its own
+corpus in two places, and both are corrected.** Its method sentence said the project's opening thread
+was *"read end to end from raw tool output on disk"*; **the opening thread is not among the five dumps
+on disk at all**, checked by id. And its positive control listed *"the custom-CSS approval quoted in
+ADR-0025's Amendment"* as one of the statements the instrument surfaced; **that message
+(`cmsg_…94bkQrhhPJ4dPNrpWctD3DU`) and its text (`/super matter/i`) appear in none of the five dumps**,
+so it was never a control this instrument fired — it was resolved by a lane reading at source. Both
+sentences are corrected at the site, the two surviving controls are named with the exact patterns that
+return them, and a **negative** control is now recorded alongside them.
+
+**Rebutted, and the reason recorded (C5).** The reviewer argues that `CLAUDE.md`'s replacement wording,
+*"a top-rank owner requirement"*, is **still an unsourced ranking attributed to the owner**, in a sweep
+whose subject is unsourced owner rankings. ⚠️ **The finding is correct on its merits and the wording
+stays anyway.** That exact phrase is what the owner was shown and what he approved on 2026-08-21;
+**substituting a synonym would land wording he did not sign off on**, which is the same defect this
+register's neighbouring bullet exists to prevent, one step down. Applying the finding would fix a
+weaker problem by committing a stronger one. ✅ **What the finding legitimately exposes is applied**:
+the rider claiming *"What is corrected is the ranking, not the importance"* was inconsistent with a
+replacement that is still a ranking, and it now says what actually changed — **the wording of the
+ranking, not its presence** — and states plainly that the replacement is **the owner's approved text
+rather than a measurement**, so speed's standing rests on his sign-off of this phrasing and not on a
+phrase of his that ranks it.
+
+**Recorded as a finding of this round, because it changes what the sweep was about.** ⚠️ **Both
+contested sentences were agent-drafted and owner-adopted, which is a more precise account than
+"unsourced" and a kinder one than "nobody sourced this."**
+`cmsg_01S5UQT5yPAMR4PFkxyLGSj9WqPaxikQH9VLRWriKmb3Hj`, **2026-08-16T02:31:23Z**, author **agent**, is a
+post handing the owner a drafted project-instructions text to paste into the Project's settings, and
+that draft carries both sentences verbatim — *"Perceived speed is the owner's number-one requirement,
+so anything that puts a synchronous upstream call on a render path is wrong by default and needs an
+explicit argument to survive."* and *"Adversarial review is mandatory, and the owner asked for it
+explicitly."* **He then applied that text.** So neither sentence is his phrasing and neither is
+anonymous: **a rendering the owner adopted into his own settings is a different object from one nobody
+ever showed him**, and the tree now says so wherever it characterised them. ⚠️ **This rests on the
+source read named at the top of this entry and is not independently confirmable from the repository.**
+
+**Noted, not actioned, with the reason (P7, C19).** **P7** reports two citations it could not verify:
+`cmsg_…94bkQrhhPJ4dPNrpWctD3DU` (16:41:41Z, the custom-CSS approval) and
+`cmsg_…92mKCuvky88RRwSk9jLq8vE` (2026-08-21T19:44:07Z), both outside the five dumps — the second
+outside their time window entirely. **It filed neither as a defect and neither is one**: they were
+resolved by lanes that reached the source, which is exactly the division of labour
+[`DEVELOPMENT.md`](./DEVELOPMENT.md) sets out. What P7 does establish is a real limit on the dumps, and
+that limit is now written into the coverage statement as a **negative control**. **C19** observes that
+ADR-0025's Amendment quotation was **substituted** rather than `~~`-struck while five other corrections
+in the same diff used `~~`, with no rule stated for which instrument when. ⚠️ **The gap was real and is
+closed by stating the rule rather than by changing the instrument**: *strike a claim, replace a
+misquotation* — a claim survives being read through a strike, a misattributed quotation does not, and a
+struck line that still looks like a quotation of a named person is the artefact that gets re-copied.
+The withdrawn rendering is preserved under its own label, so nothing is hidden either way.

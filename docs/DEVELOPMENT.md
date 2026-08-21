@@ -1621,19 +1621,25 @@ RSS re-scope, and ADR-0001 gains a rider"*.
 
 ### An attribution to the owner carries a locator, and a refusal carries one absolutely
 
-**This is `CLAUDE.md`'s *"verify, don't assert"* applied to the one claim class it does not name.** That
-rule makes every claim about an external API, a port, a rate limit or a field name cite a primary
-source. *"The owner asked for this"* is a claim of exactly that kind — it asserts something outside the
-tree, it is load-bearing, and it is the one class this repo has been writing without a source. **A
-locator is a date, a verbatim quotation, and an address.** The form is already in the file: ADR-0043's
-*"The owner was asked and answered. His words, verbatim, 2026-08-17:"* followed by the quotation, and
-ADR-0048's *"answered … at **2026-08-21T14:47:25Z** (`cmsg_…`)"* — a timestamp and an address, not a
-recollection.
+**This is `CLAUDE.md`'s *"verify, don't assert"* applied to a claim class its own list does not
+enumerate.** That rule makes every claim about an external API, a rate limit, a licensing term, a port,
+an endpoint or a field name cite a primary source — six categories, then a generalisation. *"The owner
+asked for this"* is a claim of exactly that kind: it asserts something outside the tree, and it is
+load-bearing. ⚠️ **It is not the only claim class this repo has written without a source** — `make
+check`'s *"exactly one network call"* was a repo-internal figure written without a locator, corrected
+at three sites by this same pass and at four more by **FI-14** — so the claim here is narrow: **owner
+attributions are a class the tree has been writing without addresses, not the class.** **A locator is a
+date, a verbatim quotation, and an address.** The form is already in the file: ADR-0043's *"The owner
+was asked and answered. His words, verbatim, 2026-08-17:"* followed by the quotation, and ADR-0048's
+answer at **2026-08-21T14:47:25Z**, `cmsg_01S5UQT5yPAMR4PFkxyLGSj972dd1nGNhBsPu7V5MB7sih`, quoted
+there as *"proceed as recommended"* — a date, a quotation and an address, which is all three.
 
 **An address may be a project-chat message id, and usually is.** A locator is not restricted to a commit
-or a `file:line`: **the repository is not the only place the owner speaks, and it is not even the usual
-one.** A `cmsg_…` id with its UTC timestamp is a first-class address here and cites exactly as a commit
-does. **A convention admitting only repo locators would license the precise error this rule exists to
+or a `file:line`: **the repository is not the only place the owner speaks**, and on this project most
+of what he has said is in project chat rather than in a commit — every owner quotation this pass
+resolved has a `cmsg_…` address and none has a repository one, which is a statement about the
+attributions swept and not a measured frequency over everything he has written. A `cmsg_…` id with its
+UTC timestamp is a first-class address here and cites exactly as a commit does. **A convention admitting only repo locators would license the precise error this rule exists to
 prevent:** a lane searching `git log -S` and `grep` exhaustively, finding nothing, and writing
 *"unsourced"* into the tree about words said somewhere it never looked.
 
@@ -1654,7 +1660,10 @@ who never proposes the thing — so a refusal resting on an attribution nobody c
 decision resting on an unverifiable claim. **Write a refusal so it survives its attribution being
 deleted:** state the independent ground in the same breath. ADR-0026's *"Refused by the owner **and
 independently wrong**"* is the form — the conjunction is doing real work, and the bullet stands whole if
-the first four words come out.
+the first four words come out. ⚠️ **They since did:** that attribution was measured against the source
+on 2026-08-21, found to invert him, and **struck at its own site**; the bullet still reads and still
+refuses, which is the property being described. The form is the exemplar; the clause is no longer live
+text.
 
 **And the same test sorts attributions by what they are attached to. An attribution on a *motivation* is
 load-bearing in a way an attribution on a *decision* is not, because a decision can be over-determined
@@ -1675,10 +1684,19 @@ attribution**; both destroy what a reader needs to weigh the claim.
 
 **The case that produced it, with its own address, because a convention about locators that lacked one
 would be the defect in a new place.** A 2026-08-21 sweep found owner attributions carrying no locator
-across `CLAUDE.md`, `docs/DECISIONS.md`, `docs/RESEARCH.md` and `docs/ROADMAP.md`. The first lane to
+in `CLAUDE.md`, `docs/DECISIONS.md` and `docs/RESEARCH.md`, and corrected them there. It also read
+`docs/ROADMAP.md`, `docs/design/DESIGN-DIRECTION.md`, `docs/design/tokens.css` and
+`docs/PROJECT-INSTRUCTIONS.md` and corrected none of them: ⚠️ **`ROADMAP.md` was read and found
+already well formed** — its §1 header is the worked example quoted at the end of this section — while
+the other three carry surviving copies that are **registered rather than fixed**, each with its
+trigger, in [`REVIEW-LOG.md`](./REVIEW-LOG.md)'s `LS-394.26`. **The list of files swept and the list of
+files changed are not the same list, and saying so is the point.** The first lane to
 check them searched the tree and git history exhaustively and was about to record *"unsourced"* —
-**against attributions the owner's own messages do support.** Two of them trace to
-`cmsg_01S5UQT5yPAMR4PFkxyLGSj9RXhqeDFjfm9b6JCFa9jyab`, **2026-08-16T00:09:09Z**: `CLAUDE.md`'s speed rule
+**against attributions the owner's own messages do support.** Two of them trace to the **message**
+`cmsg_01S5UQT5yPAMR4PFkxyLGSj9RXhqeDFjfm9b6JCFa9jyab`, **2026-08-16T00:09:09Z**. ⚠️ **That id names
+two different things and the difference matters here:** a thread carries its opening message's id, so
+the same string is both *the opening message* and *the opening thread*. **Where this pass means the
+thread it says so in the same breath.** From the message: `CLAUDE.md`'s speed rule
 traces to its *"What this needs to do - it needs to be fast."*, and its adversarial-review rule to that
 message's closing sentence, *"we should have an adversarial agent with strict quality restrictions for
 providing feedback to other workers."* **He asked for that twice, and the second is the stronger** —
@@ -1693,17 +1711,67 @@ for this explicitly"* while doing nothing to rescue *"mandatory"*, a word appear
 in any corpus swept.** *"it needs to be fast"* became *"the owner's **number-one requirement**"*, a
 ranking he did not give. **Both rules are real derivations of things he actually said, and both are
 firmer than what he said** — not invented, not transcribed. **Quote him and let the reader measure the
-distance; never render the distance away.**
+distance; never render the distance away.** The bound on *"nowhere in his words"* is the coverage
+statement below, and it is a bound rather than a flourish.
 
-**Coverage, because an absence claim that names no corpus points at nothing a reader can locate.**
-The sweep behind *"nowhere in his words"* is **five raw chat-thread and project-timeline dumps captured
-2026-08-21, carrying 55 owner-authored messages**, searched case-insensitively: **zero** match
-`/mandator/i`, **zero** match `/number-one/i`, and **one** matches `/number one/i` —
+📌 **And the provenance of both firmer renderings is now known, which is a better account than
+"unsourced".** They were **drafted by an agent and adopted by the owner**, not written by either alone.
+`cmsg_01S5UQT5yPAMR4PFkxyLGSj9WqPaxikQH9VLRWriKmb3Hj`, **2026-08-16T02:31:23Z**, author **agent**, is a
+post handing him a drafted project-instructions text to paste into the Project's settings, and that
+draft already contains both sentences verbatim: *"Perceived speed is the owner's number-one
+requirement, so anything that puts a synchronous upstream call on a render path is wrong by default and
+needs an explicit argument to survive."* and *"Adversarial review is mandatory, and the owner asked for
+it explicitly."* He then applied that text. ⚠️ **So the accurate description is agent-drafted and
+owner-adopted, not unsourced** — the ranking and the word *"mandatory"* are still not his phrasing, but
+they are not anonymous either, and **a rendering the owner adopted into his own settings is a different
+object from one nobody ever showed him.** ⚠️ **This is Corpus A evidence** — read at source on
+2026-08-21 by the lane holding project-chat access, **not independently confirmable from the
+repository**, and recorded on that footing.
+
+<a id="owner-attribution-coverage"></a>
+
+**Coverage, because an absence claim that names no corpus points at nothing a reader can locate. Two
+corpora were read, they are not the same read, and they are named separately.** This is the coverage
+statement of record for the 2026-08-21 owner-attribution sweep; every other site that needs it links
+here rather than restating it.
+
+**Corpus A — the project's opening thread, read end to end at source on 2026-08-21** by the lane
+holding project-chat access: thread `cmsg_01S5UQT5yPAMR4PFkxyLGSj9RXhqeDFjfm9b6JCFa9jyab` (the thread
+carries its opening message's id), **38 messages**, **2026-08-16T00:09:09Z → 06:07:35Z**, and the
+fetch returned **`has_more: false`** — so that thread is complete rather than sampled, and the
+replies inside it are in scope. ⚠️ **No lane in this repository can re-run that read**, because
+project-chat access is not a repository capability: it is recorded here as a first-hand read by the
+lane that made it, **not as something independently confirmed from the tree**, and a later lane
+without that access may neither extend it nor contradict it.
+
+**Corpus B — five raw dumps of tool output captured 2026-08-21 and read off disk**, carrying **55
+owner-authored messages** between them. They are two pages of the top-level project timeline
+(**2026-08-15T23:58:04Z → 2026-08-17T14:57:30Z**, 100 messages; **2026-08-17T15:21:18Z →
+2026-08-19T20:34:30Z**, 103 messages) and three whole-thread fetches — thread
+`cmsg_01S5UQT5yPAMR4PFkxyLGSj9J6UvMkpeCcQZWPM3YLjjQ2` (**2026-08-16T03:39:38Z → 18:58:07Z**, 100
+messages), thread `cmsg_01S5UQT5yPAMR4PFkxyLGSj9GmAPi2ZBTaTFSRKrTCaohN` (**2026-08-16T05:52:20Z →
+17:35:19Z**, 100), and thread `cmsg_01S5UQT5yPAMR4PFkxyLGSj97Xwu72fVNeDn9cNXaioNno`
+(**2026-08-16T16:17:03Z → 2026-08-17T03:43:30Z**, 120). ⚠️ **Every one of the five returned
+`has_more: true`, and none of them contains the opening thread's replies** — checked by id: the
+00:26:22Z, 00:35:12Z and 02:31:23Z messages of that thread appear in none of the five. **Corpus B is
+therefore bounded and Corpus A is not, which is why the two are never covered by one sentence.**
+
+**The search over Corpus B**, case-insensitive: **zero** match `/mandator/i`, **zero** match
+`/number-one/i`, and **one** matches `/number one/i` —
 `cmsg_01S5UQT5yPAMR4PFkxyLGSj97tLfzeUxKQNyk7iG9NtNSa`, **2026-08-16T03:39:04Z** — which reads *"number
 one priority"* about an agent's priority rather than about speed, so it was chased and cleared rather
-than counted. ⚠️ **Several fetches returned `has_more: true`, and the dumps do NOT include the opening
-thread's replies, so the sweep is bounded and not exhaustive** — it is a statement about what five
-named dumps contain, not a claim about everything the owner has ever said.
+than counted. ⚠️ **Positive control, fired:** the identical method over the identical five dumps
+**does** return owner statements on other topics — `/storage folder/i` returns his libraries ask in
+thread `…9J6UvMkpeCcQZWPM3YLjjQ2`, and `/adversarial agent/i` returns his adversarial-review sentence
+on the first timeline page — so a zero from this instrument is a measured zero rather than a broken
+search. ⚠️ **And a negative control, also fired:** `/super matter/i` returns **nothing** in any of the
+five, which is the honest limit of Corpus B — the owner's custom-CSS approval
+(`cmsg_01S5UQT5yPAMR4PFkxyLGSj94bkQrhhPJ4dPNrpWctD3DU`, 2026-08-16T16:41:41Z), quoted in ADR-0025's
+Amendment, **is not in these dumps at all** and was resolved by a lane reading it at source.
+
+**So the bound, stated once and precisely:** *"nowhere in his words"* means **not in Corpus A and not
+in Corpus B**, on the terms named above. It is not a claim about everything the owner has ever
+said.
 
 🚩 **The second case is worse than overstatement and is why this rule exists rather than a style note. An
 attribution can invert its source.** ADR-0026 recorded *"Refused by the owner"*, *"was ruled out by the
@@ -1711,11 +1779,22 @@ owner"* and *"he does not want UsArr reading a filesystem"*. **He asked for the 
 your storage folder"* — and then **released the request** rather than refusing: *"I mean it doesn't have
 to read the library."* Between the two sits an agent's paraphrase, *"✓ Owner clarified: UsArr never reads
 the filesystem"*, which **recurs through that thread's status blocks and is what the ADR is actually
-downstream of.** ⚠️ **Requoted authority firms up at every hop and nothing in the tree records the hop**,
-which is why the address matters more than the wording: an id and a timestamp survive the paraphrase, and
-a rendering does not. **The decision was never at risk — it stood on enumerated independent grounds, as
-its own *"independently"* said — and that is the whole argument for writing refusals that survive their
+downstream of.** ⚠️ **Requoted authority firms up at every hop, and no document under `docs/` records
+this hop** — searched at `b93f117` over `docs/`, `web/src/` and `web/scripts/` for `Owner clarified`,
+`never reads the filesystem` and `paraphrase`, with the ADR-0026 riders added by this pass excluded as
+the record being written; the hop appears in the chat transcript and, until now, nowhere in those
+roots. **Positive control for that search: the same terms do return ADR-0026's Decision text and
+`ARCHITECTURE.md` §17.8's banner**, so the roots were reachable. That is why the address matters more
+than the wording: an id and a timestamp survive the paraphrase, and a rendering does not.
+
+**The decision was never at risk — it stood on enumerated independent grounds, as its own
+*"independently"* said — and that is the whole argument for writing refusals that survive their
 attribution being deleted.**
+
+📌 **This is the account of record for that mechanism.** ADR-0026 carries the correction at each of the
+sites it lands on and points here rather than telling the mechanism again — **four copies of an
+explanation are four things that drift**, which is `LS-394.24`'s rule in
+[`REVIEW-LOG.md`](./REVIEW-LOG.md) and the reason it is written out once.
 
 The worked example of the right shape is `docs/ROADMAP.md`'s header, which scoped a rule it had
 introduced as *"at the owner's standing instruction"*, recorded exactly what it could not establish —

@@ -967,11 +967,28 @@ transcoder."*
 >
 > 📌 **The narrowing was prompted, and he exceeded the prompt. Both halves are recorded, because omitting
 > either would be the same defect this note exists to correct.** At **00:26:22Z** an agent in that thread
-> recommended delegating video playback to Jellyfin, citing its FFmpeg CVE history; a coordinator post at
-> **00:27:24Z** explicitly invited him to object *"before it writes the architecture docs"*. **He did not
-> object — and he went further than the recommendation**, because *"or do anything else"* is broader than
-> video playback and is what closes off the music and book player too. **It is still his narrowing**, and
-> its scope is his rather than the recommendation's.
+> — `cmsg_01S5UQT5yPAMR4PFkxyLGSj99DU68pDLpWRo5VyXgRpsyL`, author **agent** — recommended delegating
+> video playback to Jellyfin, citing its FFmpeg CVE history: *"Jellyfin already ships clients for Roku,
+> Android TV, Tizen, webOS and more, and its own CVE history shows what owning a transcoder costs (an
+> FFmpeg argument-injection RCE last year that was itself a bypass of an earlier fix)."*, and concluding
+> *"The recommendation is to delegate video playback to Jellyfin and own the hub, the unified library,
+> and identity."* A coordinator post at **00:27:24Z** explicitly invited him to object *"before it writes
+> the architecture docs"*.
+>
+> ⚠️ **What he did next is recorded as two replies rather than as a silence**, because an absence over a
+> gap and a pair of non-objecting answers are different evidence. `cmsg_01S5UQT5yPAMR4PFkxyLGSj92Dqyabew65JDg6cs9i4ZA8`
+> at **00:31:11Z** opens *"honestly streaming is the least of my worries here."*; then
+> `cmsg_01S5UQT5yPAMR4PFkxyLGSj9V6REyb72SabqnJajSc3NUB` at **00:35:12Z** is the sentence quoted above.
+> **Neither objects, and the second goes further than the recommendation**, because *"or do anything
+> else"* is broader than video playback and is what closes off the music and book player too. **It is
+> still his narrowing**, and its scope is his rather than the recommendation's.
+>
+> ⚠️ **Provenance of this paragraph, stated because it cannot be checked from the repository.** The
+> thread was fetched end to end at source on 2026-08-21 — 38 messages, 2026-08-16T00:09:09Z →
+> 06:07:35Z, **`has_more: false`** — by a lane holding project-chat access. **That read is first-hand
+> and is not independently confirmed by anything in the tree**, and no repository-only lane can re-run
+> it or contradict it. The five raw dumps this pass otherwise worked from **do not contain these
+> messages**, checked by id.
 >
 > ⚠️ **One consequence stated so it is not later mistaken for a discrepancy — and it is decided elsewhere,
 > in ADR-0018 Revision 2, which is not in question here and is not reopened by this note.** Read strictly,

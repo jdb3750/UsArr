@@ -41,16 +41,39 @@ and needs an explicit argument to survive review. The single deliberate exceptio
 UsArr's own protocol surfaces, and those are documented as exceptions where they occur. See
 `docs/ARCHITECTURE.md` §2 and ADR-0004.
 
-ℹ️ **Source and one correction, 2026-08-21.** Well sourced: speed is the **first** thing Joe names
-about what the product must do — *"What this needs to do - it needs to be fast."* — in the opening
-message (`cmsg_01S5UQT5yPAMR4PFkxyLGSj9RXhqeDFjfm9b6JCFa9jyab`, 2026-08-16T00:09:09Z), grounded
+ℹ️ **Source and one correction, 2026-08-21.** Well sourced: speed is the **first item in the sentence
+that introduces what the product must do** — *"What this needs to do - it needs to be fast."* — in the
+opening message (`cmsg_01S5UQT5yPAMR4PFkxyLGSj9RXhqeDFjfm9b6JCFa9jyab`, 2026-08-16T00:09:09Z), grounded
 there in a named example, and returned to unprompted in
 `cmsg_01S5UQT5yPAMR4PFkxyLGSj97tLfzeUxKQNyk7iG9NtNSa`: *"i want the end usarr to not dread having to
-come to the website, click on something and wait 5 minutes for it load"*. ⚠️ **What is corrected is
-the ranking, not the importance.** *"Number-one"* is this file's ordering, not his. The only
-explicit superlative Joe uses in either message is *"the absolute UTMOST importance"*, and he
-attaches it to **not making it look like AI slop** — which is §17.1's and ADR-0025's subject, not
-this principle's. **Speed is not demoted**; it stops being ranked above the one thing he did rank.
+come to the website, click on something and wait 5 minutes for it load …"*. ⚠️ **It is not the first
+thing he names about the product**: the message's opening sentence names unification — *"I want you to
+help me make a frontend service that can sit on top of every media-acquisition service."* — so the
+narrower claim is the one that measures.
+
+⚠️ **What changed in the sentence above is the wording of the ranking; the ranking itself is not
+removed.** *"Number-one"* was this file's ordering rather than his, and **the replacement, *"a
+top-rank owner requirement"*, is still a ranking and is still attributed to him.** It is not a
+measurement and is not offered as one: **it is the exact wording the owner was shown and approved on
+2026-08-21**, which is why a milder synonym is not substituted for it here. The honest reading is that
+speed's standing rests on his sign-off of this wording, not on a phrase of his that ranks it. **Speed
+is not demoted.**
+
+📌 **The superlative he does use, bounded to the two messages named above.** The one superlative either
+of them attaches to the product is *"the absolute UTMOST importance"*, and he attaches it to **not
+making it look like AI slop** — §17.1's and ADR-0025's subject, not this principle's. ⚠️ **There is one
+other ranking expression in those two messages** — *"number one priority"*, in
+`cmsg_01S5UQT5yPAMR4PFkxyLGSj97tLfzeUxKQNyk7iG9NtNSa` — and it is about **an agent's priority**, not
+about speed and not about the product; it is named here rather than left for a reader to find, because
+this rider is the place a reader would be misled.
+
+📌 **Provenance of *"number-one"* itself, which is more precise than "uncited".** The sentence was
+**drafted by an agent and adopted by the owner**: `cmsg_01S5UQT5yPAMR4PFkxyLGSj9WqPaxikQH9VLRWriKmb3Hj`,
+2026-08-16T02:31:23Z, author **agent**, handed him a drafted project-instructions text carrying
+*"Perceived speed is the owner's number-one requirement…"* verbatim, and he applied that text to the
+Project's settings. ⚠️ **Read at source on 2026-08-21 by a lane holding project-chat access, and not
+independently confirmed from this repository.** The ranking is still not his phrasing; it is not
+anonymous either.
 
 **2. Not a player.** UsArr never transcodes, never depends on FFmpeg, and does not implement
 video playback. It routes and links out to the media server that owns the bytes. Do not
@@ -95,14 +118,33 @@ in writing in `docs/REVIEW-LOG.md`. Findings are never silently dropped.
 ℹ️ **Source, added 2026-08-21.** Joe, project chat
 `cmsg_01S5UQT5yPAMR4PFkxyLGSj9RXhqeDFjfm9b6JCFa9jyab` (2026-08-16T00:09:09Z), the closing sentence
 of the project's opening message: *"we should have an adversarial agent with strict quality
-restrictions for providing feedback to other workers."* He raised it unprompted, so *"asked for this
-explicitly"* is exact. ⚠️ **Two things above are this file's rendering, not his words.**
-*"Mandatory"* hardens *"we should have"*; and the scope — all substantive design, research and
-synthesis — is wider than the *feedback to other workers* he named. Ruled on by Joe, 2026-08-21:
-*"i mentioned those things for sure. i don't know if i used the words "mandatory", but i do think
-they're pretty important components of the build."* **The practice stands on that ratification. The
-word is the repo's and he has flagged it as such** — so treat the pass as a strong default with a
-statable reason to skip, not as a gate he imposed.
+restrictions for providing feedback to other workers."* He raised it unprompted, and asked again
+without being asked — `cmsg_01S5UQT5yPAMR4PFkxyLGSj94vVxJJmQ6zrGdsDmn7CrdT`, 2026-08-16T05:23:03Z:
+*"we ought to have more adversarial reviews …"*.
+
+⚠️ **What *"asked for this explicitly"* is exact about, stated precisely rather than as a verdict on
+the whole sentence.** It is exact that **he explicitly asked for adversarial review** — unprompted,
+twice, in his own words. It is **not** exact that he asked for the practice at the scope this paragraph
+gives it: he named *feedback to other workers*, and the paragraph applies the pass to all substantive
+design, research and synthesis. **So the attribution is exact about the ask and wider than the ask
+about the scope**, and those are two claims rather than one. Likewise *"mandatory"* hardens *"we should
+have"*.
+
+Ruled on by Joe, 2026-08-21 — `cmsg_01S5UQT5yPAMR4PFkxyLGSj92mKCuvky88RRwSk9jLq8vE`,
+**2026-08-21T19:44:07Z**: *"i mentioned those things for sure. i don't know if i used the words
+"mandatory", but i do think they're pretty important components of the build."* **The practice stands
+on that ratification. The word is the repo's and he has flagged it as such** — so treat the pass as a
+strong default with a statable reason to skip, not as a gate he imposed. ⚠️ **The lead sentence above
+is left as it stands** because the owner's sign-off covered a specific pair of changes and rewording it
+was not among them; **the residual is registered, with its trigger**, in
+[`docs/REVIEW-LOG.md`](./docs/REVIEW-LOG.md)'s `LS-394.26`.
+
+📌 **And this sentence's provenance is known, which beats "uncited".** *"Adversarial review is
+mandatory, and the owner asked for it explicitly."* was **drafted by an agent and adopted by the
+owner**: `cmsg_01S5UQT5yPAMR4PFkxyLGSj9WqPaxikQH9VLRWriKmb3Hj`, 2026-08-16T02:31:23Z, author **agent**,
+handed him a drafted project-instructions text carrying that sentence verbatim, and he applied it to
+the Project's settings. ⚠️ **Read at source on 2026-08-21 by a lane holding project-chat access, and
+not independently confirmed from this repository.**
 
 **Verify, don't assert.** Every claim about an external API, rate limit, licensing term, port,
 endpoint or field name cites a primary source: official docs, the OpenAPI spec, or the
