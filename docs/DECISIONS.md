@@ -133,6 +133,7 @@ because no ADR ever decided it. Annotating leaves that failure mode nowhere to h
 | [0070](#adr-0070) | BookOrbit's **channel 3b carries arrivals only**, server-side filtered on `addedAt`; **edits and deletions are channel 4's** | **Accepted** — 2026-08-20; **scoped to BookOrbit's 3b** — [ADR-0035](#adr-0035) §2a's Kavita result is untouched and no other 3b source is re-answered, and what a later adapter inherits is the **method, not the field**: *build the delta on the field the source can actually serve, and assign what it cannot see to channel 4*; **the `updatedAt` client-side-stop shape is REFUSED**, not merely unused; **channel 4 is the same milestone**, so the reassignment defers nothing; **no migration, no column, no wire field and no code**; ⚠️ **the hand-off to channel 4 is an ASSIGNMENT, not a discharge, and is recorded OPEN** — `remote_hash` hashes nine values and credits are not among them, so the sweep as built is deaf to the same credits-only edit 3b is deaf to; ⚠️ **[`ARCHITECTURE.md`](./ARCHITECTURE.md) §7.1a is amended in the SAME MOTION, as conformance** — two sites, the client-side-stop paragraph's unstated boundary and the Watermark row's second load — and landing either without the other is not permitted; **§16.1's amendment is owed separately**; ⚠️ **every measurement is against the pinned commit `73b7877d`, read from server source this repo does not vendor**, so **nothing here is a claim about the owner's running instance**; ⚠️ **AMENDED 2026-08-20 by the slice that implements it, and the coupling is a DEPENDENCY rather than convenience batching** — Decision 1 names `after` and **excludes `between`** with its reason, the capability claim is **bounded to `73b7877d` and `v2.6.0`** with the owner's version unrecorded, and **Decisions 8-13 are added**: the **representation dependency** (sub-second precision must survive to the boundary; `internal/store/store.go`'s `timeLayout`, a second-resolution layout, would make `>` redeliver forever), §7.1a's **overlap formula RETIRED** for this source with the surviving **5 minutes recorded as a NEW, UNMEASURED constant safe in the large direction**, the **page-walk guard replaced** with its count-blind compensating-pair residual named and the phrase *"strictly better"* **banned** as an unchecked containment, ***assignment is not resolution*** stated at **every** channel-4 hand-off because **channel 4 is unbuilt**, the **wedge drill** required as a measurement rather than an intention, and the **measured-empty deviation** defended by its safe direction; the keyset verdict **keeps its conclusion and replaces its reason** — one missing filter field, `id`, not a grammar gap — and its **do-not-revisit clause is STRUCK** |
 | [0072](#adr-0072) | The project-manager thread **ratifies** the arm64 RSS spike's re-scope: the `make bench-rss` run gates **claiming arm64 support**, not v0.1 | **Accepted** — 2026-08-20; **ratifies a re-scope that [ADR-0001](#adr-0001) states in an agentless passive** — *"the requirement is re-scoped"*, no agent, no limit clause, no application line — and whose only record was a review-log disposition that names no ruler either, under *"Round 2 — the first code drop"*, *"6. A documented prerequisite was re-scoped, not dropped"* (⚠️ **the round qualifier is load-bearing**: that file opens a second *"6."* under Round 6); **the venue follows from the argument and not from who made it** — a review-log entry records a **disposition** and an ADR records a **decision**, so recording the ratification as a disposition would reproduce the defect one level up, a second entry asserting a thing is settled and containing nothing that settles it; ⚠️ **it quotes the ruling NARROWLY on purpose** — the limit clause drifted by two words in one relay on the day of the ruling (*"nothing **about** it"* for *"nothing **in** it"*), so the entry carries the arguments and quotes only what it verified; **the decision**: the arm64 `make bench-rss` run is *"a prerequisite to claiming arm64 support, not a prerequisite to v0.1"*, and ⚠️ **the limit clause is not optional** — *"the arm64 run remains owed before any claim of arm64 support. This moves the gate; it does not discharge the obligation, and nothing in it says arm64 works or that the x86-64 figures transfer"*, page size and core count both moving these numbers, so an arm64 result is a **second row** in ADR-0001 and never a replacement; 🚫 **the live alternative it closes** is *"the re-scope was never ratified, so the original gate stands"*, read at roughly **70/30** on 2026-08-20 and **right about the record, wrong about what to do with it** — v0.1 deploys to x86-64, the original clause gated the schema and *"the gate had already been passed unmet"* with eleven migrations since landed, and the project has operated on the re-scoped reading since 2026-08-16; **rejecting it costs no rigour** because *"the measurement stays owed against the claim it actually supports"*; **the reach is bounded by the ruling itself** — *"it covers sites carrying the pre-re-scope framing of the arm64 spike, wherever they are, and nothing else. A lane editing a sentence that is not about that has left the chain"*; ⚠️ **it states its reach and NOT which sites conform**, per `DEVELOPMENT.md` §11 *"A ruling states its reach, not the tree's current state"*, the rule this very ruling produced — **two statements the ruling as issued made about the tree failed verification** and the ADR carries neither, a corrected count being the same kind of claim; **supersedes nothing** — ADR-0001's text stands unreworded, its `Status:` line gains no mark, and this ADR supplies the author that sentence never had; **ships no code, no migration, no column, no configuration key and no wire field** |
 | [0073](#adr-0073) | Channel 3b's wire surface is a **sub-route**, `POST /api/v1/services/{id}/sync/delta`, answering **`202 Accepted`** and naming **no `libsync` type** | **Accepted** — 2026-08-21; **it takes the decision [ADR-0070](#adr-0070) explicitly did not** — that ADR *"builds nothing, changes no migration, no column and no wire field"* — and **reopens none of its channel scope**: arrivals only, `books.addedAt`, server-side filtered; **the engine was BUILT, TESTED AND UNREACHABLE**, in `internal/libsync/doc.go`'s own words *"NOTHING USER-FACING CAN TRIGGER IT, BECAUSE THERE IS NO HTTP ROUTE"*, with the route named there as the next slice rather than as *"later, which is where a thing goes to be forgotten"*; 🚫 **`?mode=` on the existing sync route is REFUSED, and the precedent only corroborates it** — `(*Server).routes`' `/library` comment splits routes *"over the SHAPE OF THE QUERY"* so that folding them would make *"the simple statement an argument-dependent special case of the filtered one"*, ⚠️ **which transfers as a TEST and not as EVIDENCE** (that pair are reads with different plans and cursor codecs; this pair are writes returning the same started-body), so the rejection rests on **the default and the typo** — an omitted or misspelled mode runs the **full import**, minutes and a whole-catalogue rewrite, returning the same `202`, where a mistyped path is a `404` — plus a **contract** that would otherwise vary by query parameter and an **audit verb** that could no longer tell a cheap poll from a rewrite; 🚫 **`200` with the run's result is REFUSED on principle 1** — `cmd/usarr`'s `deltaSyncLocked` escalates to `fullImportLocked` and [ADR-0070](#adr-0070) Decision 13 makes escalation the **deliberate** answer for every ambiguous state, so the tail is the full import's, and `internal/httpapi/ports.go`'s `CatalogueImports` already rules that *"a handler that waited for it would be principle 1's violation, since an import is minutes"*; 🚫 **naming a `libsync` type on the wire is REFUSED** on `ports.go`'s consumer-declared-port rule (*"Nothing below names an \*Arr type"*), which **forecloses a report body without a port-local struct** and is preserved by a port signature that returns only `error` and this package's sentinels; ⚠️ **THE COST IS NAMED RATHER THAN WAVED OFF** — `Progress` is nil by `delta.go`'s own requirement and a delta never stamps `last_full_sync_at`, so **a walking delta publishes no progress frame and gives no completion signal**, only a liveness re-ask, ⚠️ **with one exception that is the wrong way round** — an ESCALATED walk runs `fullImportLocked` → `runImport` with a non-nil `Progress` and so publishes the ordinary `import.progress` frames, leaving the expensive case observable and the cheap one silent — and the outcome is legible **only** in the `delta_walk` `sync_report` row `recordDeltaWalk` writes, which at `dcf3f55` **no route reads and no screen renders**; a read surface over that journal is recorded as **owed, not scheduled**; **the wire error code is `not_a_delta_source` and NOT the stored `no_delta_channel`** `errorClass` DECLARES for the same condition, per [`DEVELOPMENT.md`](./DEVELOPMENT.md) §11's prohibition on repairing a collision *"by making the values agree"* — ⚠️ **declares, not writes**: `Importer.DeltaSync` returns at its `DeltaSource` assertion ahead of every `recordDeltaWalk`, so no row carries the stored class today and the two are separated **at declaration**, the only moment at which separating them is free — ⚠️ **measured at `dcf3f55`: the two vocabularies share NOTHING** (seven `errorClass` values against thirty-one wire codes, empty intersection), so this would have been the **first** shared value; **`internal/libsync/doc.go`'s UNREACHABLE paragraph is falsified by the route and retires in the SAME MOTION**, [`reference/http-api.md`](./reference/http-api.md) owes a section carrying the observability subsection §4 has no analogue for, and §4's own `import_in_progress` sentence is falsified too — the shared guard means a running DELTA produces it on the full-sync route; **it builds no timer, no channel 4 and no tie drain**, and adds no migration, no column and no configuration key |
+| [0074](#adr-0074) | Channel 4's `remote_hash` drift gate is **DROPPED for BookOrbit**; the hash may gate the **store seam only** and **NEVER the credit re-apply**; **guard 1 ships wired, guard 2 is deferred on a void premise** | **Accepted** — 2026-08-21; **source-conditional, the same shape [ADR-0070](#adr-0070) used to put BookOrbit outside §7.1a's client-side stop** — §7.4's gate stands unchanged for every source whose drift consequence is a refetch, and Kavita's is one (`internal/libsync/credits.go`'s `StreamCredits`, one `GET /api/Series/metadata` per series); **BookOrbit has no refetch to gate** — its credits ride the item payload into an in-memory map (`internal/libsync/bookorbit.go`'s `keepCard`, read back by `internal/libsync/bookorbitcredits.go`'s `StreamCredits`, a file that imports no HTTP client at all); ⚠️ **THE ADR LANDS BEHIND ITS CODE AND SEPARATES WHAT IT AUTHORISES FROM WHAT IT RECORDS** — measured at `d9a3f37`, the deletion pass and guard 1 are in the tree and **the store-seam gate is NOT**, so `remote_hash` still has **no production reader** (no `SELECT` in non-test Go names it; its only reader is a test assertion) and the column this slice actually gave a first reader is its sibling `remote_identity_hash`; ⚠️ **the repurposing is BOUNDED TO ONE SEAM and the boundary is the whole decision** — the hash may gate the local write inside `internal/store/catalogue.go`'s `applyOneItem` and **may never gate the credit re-apply**, because `internal/libsync/importer.go`'s `streamAndApply` builds `imported` unfiltered and a gate there drops the item **before a `CreditRequest` is minted**, so `applyOneCreditSet` never runs and **the deafness this ADR exists to close returns identically** — worse here than for Kavita, since `keepCard` would be holding the corrected authors in memory, unread, while the row on disk stayed stale; **what the gate WOULD SAVE is claimed narrowly and is a claim about SHAPE, not size** — the `work_credit` delete-and-reinsert and its per-credit `personWorkID` lookups (`internal/store/credits.go`'s `applyOneCreditSet`, step 3), **NOT the FTS write**, which is already suppressed by the rendered-name-list compare, as year is by `year IS NOT ?` and status and declared total by the same shape, and **nobody has measured it** — if it is negligible the answer is to drop the gate, never to move it earlier; **guard 1 SHIPPED WIRED** — `applyOneItem`'s step 1a compares the stored `remote_identity_hash` against `CatalogueItem.identityHash` on any upsert that would clear `deleted_at`, hard-deletes the tombstoned link (**forced**: `ux_sil` is a plain UNIQUE index, not partial on `deleted_at`, so a tombstone and a fresh link cannot coexist), emits `store.SyncReportIDReused` and counts it on `BatchResult.IDsReused`, leaving the abandoned **work** tombstoned with its owned corrections; a NULL stored hash is **unknown, not mismatched**; **the sequencing was a ruling condition** — the guard-2 deferral is defensible only because this landed with it; **guard 2 is DEFERRED FOR BOOKORBIT ONLY, on a recorded void premise** — §7.4's "ids are reused after deletion" is a SQLite-rowid fact about the \*Arrs and BookOrbit's `books.id` / `libraries.id` are PostgreSQL `serial` with no `setval(`, no SQL `TRUNCATE`, no `RESTART IDENTITY` in `server/src` at `73b7877d2fed`, **so the premise is void for this source and stays LIVE for the \*Arrs**; ⚠️ **FOUR HAZARDS SURVIVE AS NAMED GAPS WITH NO GUARD** rather than being dropped with the premise — an older `pg_dump` restored; the instance repointed at a rebuilt server; ⚠️ **`identityHash` over an empty external-id list is the hash of an empty list and `bookOrbitExternalIDs` writes exactly one identifier (`hardcover_book`), null for any book the operator has not matched, so EVERY UNIDENTIFIED ITEM SHARES ONE IDENTITY HASH and guard 1 certifies nothing for those items**; and ⚠️ **a full list read returning zero from a source that had thousands tombstones the whole library** — more likely a broken credential than a mass deletion — mitigated only by every absence being a stamped column on a **retained** row that the next good import clears, and **NO REFUSAL THRESHOLD IS SET**, because a number is a ruling this ADR does not have; **the four `service_instance` guard-2 columns stay as an ANNOTATED SEAM** carrying the void-premise measurement at the site, on `internal/store/libraries.go`'s `Library.OrphanedAt` precedent — **its form, not its placement**, since those four are absent from `ServiceInstance` and from `serviceInstanceColumns` and it is their absence being annotated; **the deletion pass moves FOUR columns meaning four things** (`internal/store/reconcile.go`'s `SweepDeletions`, set difference in Go and never in SQL): `service_item_link.deleted_at`, `work.deleted_at` on the last live link **anywhere**, `library_source.missing_since` — **the sweep is its first writer** — and `library.orphaned_at`, set and **cleared** by `sweepOrphans`; all four `IS NULL`-guarded so they are **first-observed-absent** and the counts are transitions; ⚠️ **NO TIMER** — §7.4's every-6-h scheduler **does not exist**, the sweep runs from `FullImport`'s success path only (a partial import never sweeps, `DeltaSync` passes a nil seen-set), **and there is no reaper**: nothing hard-deletes a tombstone after seven days, so reconciliation is **not automatic**; **the drift half of channel 4 is unbuilt for every source**; ⚠️ **the two "mandatory" sentences take a SCOPING RIDER, not a deletion** (ARCHITECTURE §2.2, §7.4's heading, [ADR-0012](#adr-0012), and this file's own ADR-0070 *What this does NOT decide* §1 — **two documents, four sites; three documents specify both guards**), because with guard 2 unbuilt no document may go on saying the sweep has two mandatory guards without saying **for which source**; **no migration and no new index** — the plan guard is a **demand** on the per-item lookup (`USING INDEX ux_sil (` plus all three key columns, EXPLAINing the shipped `linkLookupSQL` constant, with `TestResurrectionPlanGuardFiresWhenRemoteKindIsDropped` as its fired positive control) and a deliberately weaker **acceptance** on the instance sweep, **never a general accept-SCAN**; ⚠️ **[`ARCHITECTURE.md`](./ARCHITECTURE.md) §7.4, §7.1a and [`reference/sync.md`](./reference/sync.md) §4 take the conditional IN THE SAME MOTION**, and `cmd/usarr/import.go`'s channel-4 comment block is a correction site in it — its *"assigning it to channel 4 would be assigning it to nothing"* is falsified by this slice, and the file already flags the credits half of that as "under correction elsewhere"; **two riders ride the landing as their own commit** — [ADR-0070](#adr-0070)'s *"The FIELD does have one"* understates the hole by a layer (`remote_hash` has no production `SELECT` either, **and this slice did not close it**), and `internal/libsync/delta.go`'s `SyncReportDeltaWalk` vocabulary check names `comic_residue`, **a member the tree does not have** — the real literals are `comic_series_synthesized` and `comic_series_memberships_declined` (`cmd/usarr/import.go`), and a vocabulary check naming a non-member is a check that did not run |
 
 ---
 
@@ -12048,3 +12049,685 @@ this decision and lands corrected with it.
 **The gate attests nothing about any of the above.** No arm of `make check` reads `docs/` for
 content; gitleaks touches the diff and attests that the prose contains no credential, not that the
 prose is true.
+
+---
+
+<a id="adr-0074"></a>
+## ADR-0074 — Channel 4's `remote_hash` drift gate is **dropped for BookOrbit**: the hash may gate the **store seam only** and **never the credit re-apply**; **guard 1 ships wired, guard 2 is deferred on a void premise**
+
+**Status:** Accepted — 2026-08-21 ·
+**This is a SOURCE-CONDITIONAL decision, and the conditional is the point** — it drops one clause of
+§7.4 for one source and rewrites the rule for nobody. §7.4's gate stands unchanged wherever a drift
+hit has the consequence §7.4 names, and for Kavita it does ·
+⚠️ **It is scoped to BookOrbit.** [ADR-0035](#adr-0035) §2a's Kavita result is untouched and
+unreworded, Kavita's credit pass is untouched, and nothing here re-answers channel 4 for Navidrome,
+Audiobookshelf or Komga ·
+⚠️ **THE ADR LANDS BEHIND ITS CODE, SO EVERY "SHIPS" BELOW IS A MEASUREMENT AND EVERY "MAY" IS A
+PERMISSION NOT YET EXERCISED.** Read at UsArr `d9a3f37`: the deletion pass and guard 1 are in the
+tree; **the store-seam hash gate of Decision 2 is NOT**, and Decision 2 says so in its own text. What
+this ADR authorises and what this ADR records are deliberately separated, because a decision record
+that reads as a build report is how *"no invented status"* gets broken by a document nobody
+re-measures ·
+⚠️ **Every BookOrbit measurement below is against the PINNED COMMIT**, `bookorbit/bookorbit` at
+`73b7877d2fede2221b0ca360af9bfced7c3797f3` — the commit
+[`api/specs/SOURCES.md`](../api/specs/SOURCES.md) pins for the vendored `packages/types`
+([ADR-0064](#adr-0064)) and the commit [ADR-0067](#adr-0067) and [ADR-0070](#adr-0070) state their own
+measurements were read at — **from a clone of the server source, which this repo does NOT vendor**.
+**No arm of `make check` re-checks any of it**, and **nothing here is a statement about the owner's
+running instance** ·
+⚠️ **`v2.6.0` AND `73b7877d` ARE NOT ONE POINT, and this ADR never writes them as though they were.**
+The tag resolves to `b25884524316`, **34 commits behind the pin**. `server/src/db/schema/books.ts` and
+`server/src/db/schema/libraries.ts` are **byte-identical** between them (blob `fefb379750` and blob
+`8552980` respectively at both revisions), so every claim below about *those two files* holds at both
+points — and **no claim below is extended to any version outside them**, on
+[ADR-0070](#adr-0070)'s own rule that two points do not establish the interval, still less the
+outside ·
+⚠️ **[`ARCHITECTURE.md`](./ARCHITECTURE.md) §7.4, §7.1a and
+[`reference/sync.md`](./reference/sync.md) §4 are amended IN THE SAME MOTION**, and the amendment is
+**conformance, not a scope change**: those three are the documents that *specify* both guards, and
+`main` must not even briefly carry this ADR beside three specifications the next commit violates ·
+**No migration, no column and no index** ·
+**Two falsified sentences elsewhere in the tree take dated riders and ride the landing as their own
+commit** — see *Consequences*.
+
+### Context
+
+#### 1 · §7.4 names exactly one consequence for a drift hit, and for BookOrbit that consequence does not exist
+
+§7.4's sweep is six steps, and step four is the whole of what the hash is for:
+*"compare `remote_hash` → refetch drifted rows"*. [`reference/sync.md`](./reference/sync.md) §4
+states it as a numbered step in the same words — *"Compare `remote_hash` → drifted rows → refetch.
+`remote_hash` covers only the **synced subset**"* — and neither document names a second consequence.
+**A hash that gates nothing but a refetch is only meaningful where a refetch is the expensive thing
+being avoided.**
+
+For **Kavita** it is. `internal/libsync/credits.go`'s `StreamCredits` issues
+`Client.SeriesMetadata` **once per series** — one `GET /api/Series/metadata` per row — because
+`SeriesDto` carries no creator field at all, which is the reason that file's own header gives for the
+credit pass being a second pass. Gating that with a hash saves a round trip per unchanged series, and
+on the reference library's ~3,000 series that is the sweep's dominant cost.
+
+For **BookOrbit** it is not, and the asymmetry is structural rather than a matter of degree.
+`authors` and `narrators` are **on the card the item walk already decoded**:
+`internal/libsync/bookorbit.go`'s `keepCard` files them into an in-memory map as each book is mapped,
+and `internal/libsync/bookorbitcredits.go`'s `StreamCredits` reads that map back through
+`BookOrbitSource.card` and **issues no request**. That file's package header says so in its own
+voice — *"it reads a map that `StreamItems` filled and issues no request — and it therefore has no
+per-item failure mode, no circuit breaker to check and no drop to record"* — and the file's import
+block is the check that it is true: `context`, `database/sql`, `fmt`, `strings`,
+`internal/store`. **No HTTP client, in any form.**
+
+So for this source the hash would be gating a map lookup. **The thing §7.4's gate exists to avoid
+has already been paid for by the item walk that produced the hash in the first place.**
+
+#### 2 · The hash structurally cannot see the class the sweep is being asked to catch
+
+`internal/store/catalogue.go`'s `remoteHash` hashes **nine** values — `Title`, `SortTitle`,
+`OriginalTitle`, `Kind`, `ContainerID`, `RemotePath`, `RemoteSubtype`, `RemoteUpdatedAt`, `HasFile` —
+and `store.CatalogueItem` **has no credits field of any kind**. This is not an omission that a wider
+hash would close from where it stands: credits do not travel on `CatalogueItem` at all, they travel
+on `store.CreditSet` down a second pass. [ADR-0070](#adr-0070) recorded the consequence and left it
+open: *"the sweep is therefore deaf to the same class 3b is deaf to."*
+
+The one hashed field that could have carried a credits-only edit is `RemoteUpdatedAt`, and
+[ADR-0070](#adr-0070) §Context 2 is the measurement that **it does not move** on exactly those write
+paths — `books.updatedAt` is maintained by an application-level `$onUpdateFn` behind a
+`scalarFieldCount > 0` guard, and a tags-only, genres-only, authors-only or narrators-only edit moves
+nothing. **Authors and narrators are both fields UsArr writes.**
+
+⚠️ **THIS IS WHY THE GATE'S SCOPE IS THE DECISION AND NOT A DETAIL.** A hash that cannot see credits,
+placed anywhere upstream of the credit pass, does not merely fail to help — **it actively suppresses
+the one pass that could have corrected the row**.
+
+#### 3 · The importer's shape makes exactly one placement safe, and it is not the obvious one
+
+`internal/libsync/importer.go`'s `streamAndApply` builds the `imported` slice inside its `flush`
+closure, **after the batch commits**, for every non-child item in the batch.
+`FullImport` hands that slice to `streamAndApplyCredits`, which turns **every** entry into a
+`CreditRequest` through `ImportedItem.creditRequest`, hands the whole set to the adapter's
+`StreamCredits`, and lands the results through `Store.ApplyCredits` →
+`internal/store/credits.go`'s `applyOneCreditSet`.
+
+There is no filter anywhere on that chain. **So a gate placed in `flush` is not a gate on a write —
+it is a gate on the item's entire downstream existence.** An item dropped from `imported` never
+becomes a `CreditRequest`, so `StreamCredits` never sees it, so `applyOneCreditSet` never runs on it,
+so the `work_credit` rows and the search document keep whatever the last import left there.
+
+⚠️ **AND `imported` HAS SINCE ACQUIRED A SECOND, ADJACENT LIST THAT IS NOT IT.** The deletion pass's
+seen-set is accumulated in the same loop **before** the child skip, because `applyOneItem` writes a
+link for a child and for its synthesised parent and both are links the read observed. `imported`
+still excludes children, on [ADR-0068](#adr-0068)'s cover budget. **The two lists are different sets
+for different reasons and neither may be derived from the other** — a deletion pass fed from
+`imported` would find every `comic_issue` link absent and tombstone the whole child side of the
+catalogue on its first run.
+
+**And for BookOrbit specifically the gate's failure is worse than for Kavita**, which is the detail
+that turns a general caution into a prohibition: `keepCard` has *already filed the corrected authors
+into the map*. The right answer is sitting in memory, the pass that would read it is never invoked,
+and the row on disk stays stale. **The correct data is present and unread**, which is a strictly
+worse shape than not having fetched it.
+
+#### 4 · The credits path already suppresses most of its own churn, so the gate must claim narrowly
+
+`applyOneCreditSet` is not an unconditional rewriter, and the parts of it that are already idempotent
+must not be counted as savings:
+
+- **The year** is `UPDATE work SET year = ?, … WHERE id = ? AND year IS NOT ?` — `IS NOT`, not `<>`,
+  deliberately, so a re-import reporting the same year affects zero rows. The comment beside it names
+  both directions and the test that executes them.
+- **The publication status** and **the declared total** take the same shape, on the same `IS NOT`
+  form.
+- **The FTS document** is rebuilt **only when the rendered name list changes**: the pass reads
+  `creditedNames` before the rewrite and again after, and calls `writeSearchDoc` only on `after !=
+  before`. An uncredited item compares `""` to `""` and touches no FTS table at all, and the file
+  names the test that pins `DocsRebuilt = 0` on a steady-state re-import.
+
+**What is left unsuppressed is step 3**: `DELETE FROM work_credit WHERE work_id = ?` followed by one
+`INSERT … ON CONFLICT DO NOTHING` per credit, each preceded by a `personWorkID` resolve. That runs
+wholesale every time, for `work_alt_title`'s reason — an upstream that **drops** a credit must not
+leave it standing forever, and a diff would silently keep a narrator the operator deleted last week.
+
+**So the gate's honest claim is the `work_credit` delete-and-reinsert and its per-credit person
+resolves. It is NOT the FTS write.** The FTS write is already free on an unchanged row.
+⚠️ **And the claim is a claim about SHAPE, not about SIZE.** Nobody has measured what that delete
+and those resolves cost on a real library; no row count and no wall-clock number stand behind it, and
+a wall-clock benchmark belongs in `make bench` rather than in a merge gate. **If the saving turns out
+to be negligible the correct response is to drop the gate, not to move it earlier** — which is
+exactly the pressure Decision 3 exists to resist.
+
+#### 5 · Guard 2's premise is a SQLite-rowid fact, and BookOrbit is not SQLite
+
+§7.4 and [`reference/sync.md`](./reference/sync.md) §4 guard 1 both ground themselves on a specific
+allocator: *"The \*Arrs allocate `id` from a plain integer primary key with no `AUTOINCREMENT`, so
+**ids are reused after deletion**."* That is a true and load-bearing statement **about SQLite**, and
+guard 2 is the instance-scoped form of the same hazard — an id space that can move backwards.
+
+Measured at `73b7877d`, over `server/src`:
+
+- **`books.id` and `libraries.id` are PostgreSQL `serial`** — `id: serial('id').primaryKey()` at
+  `server/src/db/schema/books.ts:9` (table `books`) and `server/src/db/schema/libraries.ts:22` (table
+  `libraries`). A `serial` is backed by a sequence, and a sequence does not fall back into a hole
+  left by a `DELETE`.
+- **Nothing in the tree drives the sequence backwards.** `setval(` — zero occurrences. SQL `TRUNCATE
+  TABLE` / `TRUNCATE ONLY` — zero occurrences. `RESTART IDENTITY` — zero occurrences, and that one
+  case-insensitively as a bare string. The scope includes the **72 `.sql` files** under
+  `server/src/db/migrations`. ⚠️ **The first two are stated as PRECISE greps and not as
+  case-insensitive ones**, because a case-insensitive `setval` matches `setValue` ten times and a
+  case-insensitive `truncate` matches `truncated` fifty-five times — **the loose form of this search
+  does not return zero**, and reporting it as though it did would have been a false measurement with
+  a true conclusion. The precise forms are
+  `grep -rn "setval[[:space:]]*(" server/src | grep -v setValue`,
+  `grep -rniE "\btruncate[[:space:]]+(table|only)\b" server/src` and
+  `grep -rniE "restart identity" server/src`.
+
+**So the premise §7.4 gives for guard 2 — an id space that regresses under ordinary operation — is
+VOID for BookOrbit.** ⚠️ **It is void for BookOrbit and it stays LIVE for the \*Arrs**, where the
+allocator §7.4 describes is the allocator that actually runs. Nothing here generalises, and a later
+reader must not carry this finding to a SQLite-backed source.
+
+#### 6 · What survives the void premise is a real hazard with no guard, and BookOrbit offers no leverage against it
+
+Two cases are **not** covered by the sequence argument:
+
+1. **Id-space regression by restore** — an older `pg_dump` restored over a live database. The
+   sequence comes back at the dump's value and the ids above it are re-issued to different content.
+   Nothing about `serial` prevents this; it is out of band.
+2. **The wrong or rebuilt instance** — UsArr's stored `base_url` now points at a different BookOrbit,
+   or the same one rebuilt from scratch, so every id UsArr has mapped means something else.
+
+Guard 2's designed answer to both is a fingerprint, and **BookOrbit does not expose one.**
+
+⚠️ **THAT IS A SEARCH THAT FOUND NOTHING, AND IT SHIPS WITH A POSITIVE CONTROL, BECAUSE AN ABSENCE
+CLAIM WITHOUT ONE IS INDISTINGUISHABLE FROM A BROKEN GREP.** The search:
+
+```
+grep -rlniE "instanceId|installationId|serverUuid|instance_uuid" server/src   → 0 files
+```
+
+The control — **same command, same flags, same path scope**, four terms chosen because they are
+present:
+
+```
+grep -rlniE "deviceId|sessionId|serverVersion|clientId" server/src            → 93 files
+```
+
+**The instrument finds what it is capable of finding.** The nearest single term in the same semantic
+family, `serverVersion`, resolves to KOReader package-version plumbing
+(`server/src/modules/koreader/…`) — a **build number, not an identity**, and it moves on every
+upgrade, so it cannot serve as a fingerprint even if it were exposed on a route UsArr could reach.
+
+**What that leaves is guard 1, and guard 1 alone.** `remote_identity_hash` is written at first sight
+and — per `internal/store/catalogue.go`'s `applyOneItem` step 7 — **deliberately omitted from the
+`ON CONFLICT` list so it is never overwritten**, which is the whole of the leverage this source
+offers.
+
+#### 7 · The columns, the indexes and the plan
+
+The four guard-2 columns exist and are unwired: `identity_fingerprint`, `identity_epoch`,
+`needs_reidentification` and `max_remote_id_seen`, all on `service_instance`
+(`00001_initial.sql:155-158`, under that file's own `-- identity generation guard (sync.md §4)`
+banner). ⚠️ **Three of the four have ZERO references in Go of any kind.** The fourth,
+`needs_reidentification`, has two — and **neither of them reads the column, and only one of them is
+even a comparison**: `internal/httpapi`'s `healthState` compares `service_instance.health_state`
+against the *string* `"needs_reidentification"` (and against `stateReID`,
+`"needs re-identification"`), documented in that function's own doc comment; the other is a **test
+fixture assigning** that same string to `HealthState`, which is test Go and is named as such because
+the precedent annotation this ADR copies scopes its own claim to *"non-test Go"*. **The state travels
+through `health_state`. The column named for it is dead.**
+
+On the read side, no index is owed. `ux_sil` is
+`UNIQUE (service_instance_id, remote_kind, remote_id)` and its migration comment states the
+constraint this ADR has to obey: it *"is only usable IN FULL when `remote_kind` is known at lookup
+time"*, and without it the lookup *"degrades to a range scan over every link on the instance — ~400k
+rows for a 2k-series Sonarr"*. `ix_sil_container` serves the container-scoped shape. **A
+hash-comparison lookup must therefore name `remote_kind`**, and the unqualified per-instance sweep
+correctly plans as a full `SCAN` of `service_item_link` after `ANALYZE`.
+
+⚠️ **AND `ux_sil` IS A PLAIN UNIQUE INDEX, NOT A PARTIAL ONE ON `deleted_at`
+(`00005_library_sync.sql:511`), WHICH DECIDES WHAT GUARD 1 IS ALLOWED TO DO.** `(instance, kind, id)`
+admits exactly **one** row whatever its `deleted_at` says, so a tombstone and a fresh link for the
+same upstream id **cannot coexist**. A guard that wanted to keep the tombstone as evidence and mint a
+new row beside it is not available; the only shape the schema permits is the one
+[`ARCHITECTURE.md`](./ARCHITECTURE.md) §7.4 and [`reference/sync.md`](./reference/sync.md) §4 already
+specify — hard-delete the tombstoned **link** and let the id resolve as a fresh item. **What stays
+tombstoned is the WORK**, which keeps its own `deleted_at` and its owned corrections.
+
+### Decision
+
+**1 · §7.4's HASH-GATE IS DROPPED FOR BOOKORBIT. The rule is not rewritten for anyone else.** Where
+§7.4 says *"compare `remote_hash` → refetch drifted rows"*, BookOrbit's sweep does not gate on the
+hash to decide whether to re-read the item: it re-reads every item, because the re-read is the page
+walk it was going to do anyway and the credits arrive inside it. **This is a conditional of exactly
+the shape [ADR-0070](#adr-0070) used** to put BookOrbit outside §7.1a's client-side stop: a spec
+sentence grounded on a property one source has and another does not, boundaried at the source rather
+than relaxed for everyone.
+
+**2 · THE HASH MAY BE REPURPOSED AT THE STORE SEAM, AND ONLY THERE — AND THAT PERMISSION IS NOT
+EXERCISED BY THIS SLICE.** `remote_hash` may be compared inside
+`internal/store/catalogue.go`'s `applyOneItem` to skip the local write for a row whose synced subset
+is byte-identical to what is already on disk.
+
+⚠️ **NO SUCH COMPARISON IS IN THE TREE, AND THE MEASUREMENT IS STATED HERE SO NOBODY READS THIS
+DECISION AS A BUILD REPORT.** At `d9a3f37`, `remote_hash` still has **no production reader**: no
+`SELECT` in non-test Go names the column, and its only reader anywhere is a test assertion in
+`internal/store/catalogue_test.go`. The column this slice DID give a first production reader is its
+sibling `remote_identity_hash`, through guard 1 (Decision 5) — **and `applyOneItem`'s step-1 read now
+selects `deleted_at` and `remote_identity_hash` and pointedly not `remote_hash`.** Building the gate
+is a later, optional slice, and Decision 13's drill is its precondition.
+
+**3 · GATING THE CREDIT RE-APPLY IS FORBIDDEN. This is a prohibition, not a preference, and the
+mechanism is named so nobody has to rediscover it.** No gate may be placed in
+`internal/libsync/importer.go`'s `streamAndApply` — specifically not on the `imported` append inside
+its `flush` closure — nor anywhere else upstream of `ImportedItem.creditRequest`.
+
+⚠️ **THE MECHANISM.** `imported` is what becomes `reqs`; `reqs` is what `StreamCredits` walks; a
+`store.CreditSet` is minted only for an entry that survived. **An item filtered out of `imported`
+never has a credit request minted for it**, so `internal/store/credits.go`'s `applyOneCreditSet`
+never runs on it, and the `work_credit` rows on disk stay exactly as the last import left them —
+**which is the deafness this ADR exists to close, arriving through a different door.** ⚠️ **And it is
+worse for BookOrbit than the general case**: `keepCard` has already filed the corrected authors and
+narrators into the in-memory map, so the gate strands correct data in memory, unread, beside a stale
+row. `imported` stays exactly as it is. ⚠️ **The deletion pass's seen-set, accumulated in the same
+loop, is NOT a second `imported` and must never be collapsed into one** — it spans children and
+synthesised parents on purpose (§Context 3).
+
+**4 · WHAT THE GATE WOULD SAVE IS CLAIMED NARROWLY, BECAUSE THE LARGER CLAIM IS FALSE.** The saving is
+`applyOneCreditSet`'s **step 3** — the `DELETE FROM work_credit WHERE work_id = ?` plus one
+`INSERT … ON CONFLICT DO NOTHING` per credit, each behind a `personWorkID` resolve — together with
+the item-side write `applyOneItem` would skip.
+
+⚠️ **IT IS NOT THE FTS WRITE.** The search document is already rebuilt only when `creditedNames`
+differs across the rewrite, and the year, the publication status and the declared total are already
+no-ops on an unchanged value via `IS NOT`. **Claiming the FTS write would be claiming a saving the
+credits path already makes**, and a benefit double-counted against an existing mitigation is how a
+gate gets justified into a place it does not belong. ⚠️ **The saving is unmeasured** (§Context 4).
+
+**5 · GUARD 1 SHIPS, AND IT SHIPS WIRED RATHER THAN DECLARED. THIS ONE IS A MEASUREMENT.** At
+`d9a3f37`, `internal/store/catalogue.go`'s `applyOneItem` reads `deleted_at` and
+`remote_identity_hash` alongside `work_id` in its step-1 link lookup, and its **step 1a** compares
+the stored hash against the incoming `CatalogueItem.identityHash` on any upsert that would clear
+`deleted_at`. On a mismatch it follows [`reference/sync.md`](./reference/sync.md) §4's pseudocode
+literally — hard-delete the tombstoned link (forced by `ux_sil` being plain UNIQUE, §Context 7), let
+the id resolve as a fresh item, emit `sync_report{kind: "id_reused", …}` through
+`store.SyncReportIDReused`, and count the firing on `BatchResult.IDsReused`. **The abandoned work is
+not adopted and keeps its own tombstone and its owned corrections.**
+
+⚠️ **A NULL STORED HASH IS "UNKNOWN", NOT "MISMATCHED".** No shipped writer can produce one — step 7
+always writes the column — but treating an unreadable identity as proof of reuse would make every
+reappearing item a fresh work, which **duplicates the library rather than corrupting one row of it**.
+The guard fires only on a stored value that is present and different.
+
+⚠️ **"WIRED" WAS A CHANGE OF STATE, NOT A RESTATEMENT.** Before this slice the column was written and
+compared by nothing — `internal/libsync/doc.go` said so in its own words, *"read by nothing yet"* — so
+the guard existed as an input with no consumer. **A recorded value nobody reads is not a guard**, and
+for a source with no instance identity to fingerprint it is the only leverage there is. **The
+guard-2 deferral in Decision 6 is defensible only because this landed with it**; the sequencing is a
+ruling condition of this ADR and not an implementation detail.
+
+**6 · GUARD 2 IS DEFERRED FOR BOOKORBIT, ON THE RECORDED VOID-PREMISE MEASUREMENT — AND THE DEFERRAL
+NAMES ITS SOURCE.** §7.4's stated premise for the guard does not hold at `73b7877d`: `books.id` and
+`libraries.id` are PostgreSQL `serial`, and `setval(`, SQL `TRUNCATE` and `RESTART IDENTITY` are all
+absent from `server/src`. **The premise is void for BookOrbit. It is untouched for the \*Arrs**,
+where the SQLite allocator §7.4 describes is the one that runs, and this decision must never be
+restated as a general finding about guard 2.
+
+**7 · FOUR HAZARDS SURVIVE THIS SLICE WITH NO GUARD AGAINST THEM, AND ALL FOUR ARE WRITTEN DOWN AS
+NAMED GAPS RATHER THAN AS RESIDUAL RISK SOME OTHER CHANNEL ABSORBS.** They are stated here, at the
+deferral, rather than only in *Consequences*, because a reader arrives at the deferral and not at the
+list.
+
+- **a · Id-space regression by restore.** An older `pg_dump` put back over a live database rewinds
+  the sequence out of band, and the ids above it are re-issued to different content. `serial`
+  prevents nothing here.
+- **b · The wrong or rebuilt instance.** The stored `base_url` now answers from a different
+  BookOrbit, or the same one rebuilt, so every id UsArr has mapped means something else. Guard 2's
+  designed answer to (a) and (b) is a fingerprint and **BookOrbit exposes none** (§Context 6's
+  search, with its control).
+- **c · ⚠️ GUARD 1 CERTIFIES NOTHING FOR AN UNIDENTIFIED ITEM, AND ON THIS SOURCE THAT IS THE
+  ORDINARY CASE.** `identityHash` covers the item's external ids and nothing else, so over an **empty**
+  id list it is the hash of an empty list — **one value that every unidentified item on every source
+  shares**. `internal/libsync/bookorbit.go`'s `bookOrbitExternalIDs` writes exactly **one**
+  identifier, `hardcover_book` from `HardcoverID`, and returns an empty slice for any book the
+  operator has not matched — which that function's own header calls the ordinary case in as many
+  words. **So for every unmatched book, a reused id compares equal to itself and guard 1 passes it
+  through silently.** The guard discriminates exactly as far as the upstream identifies its content
+  and no further; `applyOneItem`'s step 1a states this at the site. **Widening it means widening what
+  `identityHash` covers, which is a change to a value already stored on every row**, and it is not
+  taken here.
+- **d · ⚠️ A FULL LIST READ THAT RETURNS ZERO ITEMS TOMBSTONES THE WHOLE LIBRARY, AND THERE IS NO
+  REFUSAL THRESHOLD.** A source that reported thousands of items last week and reports none today is
+  more likely holding a broken credential or an empty root folder than to have been emptied, and the
+  sweep cannot tell the two apart: `SweepDeletions`' precondition is that the caller saw the whole
+  list, and an empty whole list is a valid whole list. **What limits the damage is that every absence
+  the sweep records is a stamped column on a RETAINED row** — `service_item_link.deleted_at`,
+  `work.deleted_at`, `library_source.missing_since`, `library.orphaned_at` — and the next good import
+  clears all four through the ordinary write path. ⚠️ **No number is set here.** A refusal threshold —
+  *"decline to sweep if more than N% of live links went absent"* — is the obvious answer and it is a
+  ruling this ADR does not have; inventing one would put an arbitrary constant in the one place where
+  being wrong costs the user their library either way. **It is recorded as an open gap with its
+  mitigation named**, and it is the strongest single argument for the sweep's cadence question
+  (§7.4's, not this ADR's) being answered before any scheduler is built.
+
+The repair for (a) and (b), if either occurs, is the **manual, unprompted full import** — a **third**
+independent reason it must stay reachable, after [ADR-0070](#adr-0070) Decision 11's two.
+
+**8 · THE FOUR GUARD-2 COLUMNS STAY, AS AN ANNOTATED SEAM CARRYING THE MEASUREMENT AT THE SITE.**
+`identity_fingerprint`, `identity_epoch`, `needs_reidentification` and `max_remote_id_seen` are not
+dropped and no migration touches them. **The annotation goes where a reader learns what
+`service_instance` carries** — `internal/store/serviceinstance.go`'s `ServiceInstance`, in the form
+this tree already uses for a column with no writer (`internal/store/libraries.go`'s
+`Library.OrphanedAt`, before this slice gave that one a writer). ⚠️ **The precedent's placement does
+not transfer, only its form**: `OrphanedAt` is a field that is *selected*, and these four are absent
+from the struct and from `serviceInstanceColumns` alike, so what is being annotated is their
+**absence**. **The void premise, its source scope and its date are written at the site**, so the next
+reader meets the measurement where the columns are rather than having to find this ADR.
+
+**9 · DELETION IS THE SWEEP'S, AND IT MOVES FOUR COLUMNS THAT MEAN FOUR DIFFERENT THINGS.**
+[ADR-0070](#adr-0070) Decision 3 assigned deletions here and §7.1a states why no page walk can carry
+them. `internal/store/reconcile.go`'s `SweepDeletions` computes the set difference **in Go, never in
+SQL** — a `NOT IN (SELECT value FROM json_each(?))` over a whole catalogue is bounded by
+`SQLITE_MAX_LENGTH` and `SQLITE_MAX_SQL_LENGTH`, which is the kind of ceiling that is reached on
+somebody else's install — and then:
+
+- **Item level — `service_item_link.deleted_at`, the 7-day tombstone** (`sweepItems`). Soft-delete,
+  never a hard delete, on §7.4's own grounds: *"My NAS unmounted and UsArr deleted everything"*.
+  ⚠️ **The tombstone is precisely the window guard 1 exists to police**, so decisions 5 and 9 are one
+  mechanism seen twice and neither ships without the other.
+- **Work level — `work.deleted_at`, and ONLY on the last live link anywhere** (`sweepItems`). The
+  work half is not a second feature: `work.deleted_at` is what browse, library search and
+  recently-added all filter on and `service_item_link.deleted_at` is read by none of the three, so a
+  pass that moved only the link would change nothing a user can see. **The `NOT EXISTS` is not
+  instance-scoped** — a work a second instance still reports stays visible.
+- **Container level — `library_source.missing_since`, an absence stamp and NOT a tombstone**
+  (`sweepContainers`). It records *"the upstream stopped reporting this container"*. **The sweep is
+  its first writer**; before this slice the only two statements that touched the column both cleared
+  it, which is what [`ROADMAP.md`](./ROADMAP.md)'s channel-4 item meant by *"Today every one clears
+  it."*
+- **Library level — `library.orphaned_at`, §6.5 rule 5's retained-orphan state** (`sweepOrphans`),
+  set when **no source of the library on any instance** is still being reported, and **cleared again**
+  when one comes back — the only clearing arm of the four, because nothing else in the tree clears
+  that column and a flag that can only be set is a library permanently marked orphaned the moment its
+  upstream blinks. ⚠️ **The row count never changes**: a source that stops being reported is
+  *retained* and stamped, not dropped.
+
+⚠️ **ALL FOUR ARE FIRST-OBSERVED-ABSENT, AND THAT IS ENFORCED IN SQL RATHER THAN IN A GO BRANCH.**
+Every stamping `UPDATE` carries `AND <column> IS NULL`, so a caller cannot re-stamp by calling twice
+and *"missing since Tuesday"* never decays into *"missing since thirty seconds ago"*. The
+`RowsAffected` counts on `SweepResult` are therefore counts of **transitions**, not of missing things.
+
+⚠️ **THE STAMPS ARE NOT INTERCHANGEABLE AND MUST NOT BE COLLAPSED.** A tombstoned item is a row the
+upstream stopped reporting. A container with `missing_since` set is a **binding** whose upstream went
+quiet — the library, its corrections and its members all stand. Collapsing them is how an unmounted
+share becomes a deleted library.
+
+**10 · THE SWEEP RUNS FROM `FullImport`'s SUCCESS PATH AND FROM NOWHERE ELSE. THERE IS NO TIMER, AND
+THIS ADR SAYS SO RATHER THAN LETTING §7.4's *"every 6 h"* BE READ AS STATUS.** §7.4's every-six-hours
+scheduler **does not exist in the tree** and this slice does not build it. `SweepDeletions`' whole
+correctness rests on a precondition it cannot check — that the caller's read saw the upstream's
+**entire** list — and `internal/libsync/importer.go` is what enforces it: `FullImport` collects the
+seen-set and calls the sweep after the item stream, the per-item passes and the rollup flush but
+**before** `rep.Completed`; every earlier return is an error return, so **a partial or failed import
+never sweeps at all**; and `DeltaSync` passes a nil seen-set, which is how channel 3b says it has no
+whole-list read to reconcile against. ⚠️ **Nor is there a reaper.** Nothing in the tree hard-deletes a
+tombstone after seven days — the window is a stamped column and a documented intent, and the only
+hard delete anywhere in channel 4 is guard 1's. **Reconciliation is therefore not automatic**, and a
+*done-when* phrased as *"the sweep runs on a schedule"* is satisfied by nothing here.
+
+**11 · NO MIGRATION AND NO NEW INDEX, AND THE PLAN GUARD DISCRIMINATES RATHER THAN ACCEPTS.**
+`ux_sil` serves the per-item lookup **only when `remote_kind` is named**, and any lookup that omits it
+degrades post-`ANALYZE`. The unqualified per-instance sweep correctly plans as a full `SCAN` of
+`service_item_link`, and that acceptance is deliberate: on a single-instance install the predicate
+selects the whole table, so an index seek would only add a lookup per row.
+
+⚠️ **SO THE PLAN GUARD IS TWO ASSERTIONS OF TWO DIFFERENT STRENGTHS, AND BOTH RUN AFTER `Analyze`.**
+`TestResurrectionLookupSeeksUxSilInFull` is the **demand**: it requires `USING INDEX ux_sil (` and the
+full three-column constraint `(service_instance_id=? AND remote_kind=? AND remote_id=?)`, and it
+EXPLAINs the shipped `linkLookupSQL` (Decision 12). `TestTheInstanceSweepIsAllowedToScan` is an
+**acceptance**, and is deliberately weaker: it asserts only that the read stays on
+`service_item_link` and acquires no `TEMP B-TREE`, because demanding an index there would be red on
+every real install and would provoke exactly the index this slice does not need.
+
+⚠️ **IT MUST NEVER BECOME A GENERAL ACCEPT-SCAN GUARD.** A guard that stops failing when the
+three-column seek on `ux_sil` is lost has stopped discriminating, and is indistinguishable from no
+guard — which is this project's most-catalogued failure shape.
+**`TestResurrectionPlanGuardFiresWhenRemoteKindIsDropped` is the positive control** that keeps the
+demand honest: it drops `remote_kind` from the statement, first asserting the shipped plan is clean so
+a pre-broken subject cannot fake a pass, then asserting the guard rejects the degraded one. ⚠️ **The
+acceptance arm has NO such control, and it also EXPLAINs a literal copy of `absentLinks`' read rather
+than a shipped identifier** — that read is an inline string in `internal/store/reconcile.go`, not a
+constant. So Decision 12's rule holds for the lookup and **does not yet hold for the sweep's own
+read**; naming that here is cheaper than a later reader discovering it, and closing it is a constant
+extraction, not a design change.
+
+**12 · THE STATEMENT THE PLAN GUARD MEASURES IS THE STATEMENT THAT SHIPS.** `applyOneItem`'s step-1
+read is the package constant `linkLookupSQL`, and the plan test EXPLAINs that identifier rather than a
+literal of its own. **A test that EXPLAINs its own copy of a query is green while the copy is faithful
+and silent the moment it stops being** — which is the failure a plan guard exists to catch,
+reproduced inside the guard.
+
+**13 · A CREDITS-ONLY DRILL IS THE PRECONDITION ON EXERCISING DECISION 2, AND IT IS NOT BUILT BECAUSE
+DECISION 2's GATE IS NOT BUILT.** The drill, when the gate is: a book whose `authors` array changes
+and **whose nine hashed fields do not move** — which §Context 2 establishes is the ordinary case,
+since `RemoteUpdatedAt` is measured not to move on a credits-only write — goes through a full import
+and a sweep, and the assertion is on `work_credit` holding the **new** name afterwards. ⚠️ **Today
+there is no gate anywhere on that chain, so the drill would pass over a subject that cannot fail**,
+which is why it is written here as a gate on future work rather than claimed as shipped. ⚠️ **A green
+suite proves the gate did not land in `flush`; it proves nothing about a running BookOrbit**, which is
+[ADR-0070](#adr-0070)'s standing distinction and holds here unchanged.
+
+**14 · THE "TWO MANDATORY GUARDS" SENTENCES TAKE A SCOPING RIDER, NOT A DELETION — AND THERE ARE
+FOUR OF THEM ACROSS TWO DOCUMENTS, NOT THREE DOCUMENTS.** With guard 2 unbuilt for this source, no
+document may go on saying the sweep has two mandatory guards without saying **for which source**. The
+sentences are riders rather than rewrites, because they were true when written and are being
+narrowed, not falsified.
+
+⚠️ **THE COUNT IS CORRECTED HERE BECAUSE IT WAS ASSERTED WRONG IN THE RULING THAT PRODUCED THIS
+ADR.** The word *"mandatory"* beside the guards appears in **two** documents:
+[`ARCHITECTURE.md`](./ARCHITECTURE.md) §2.2 and §7.4's heading, and this file — [ADR-0012](#adr-0012)
+and [ADR-0070](#adr-0070)'s *What this does NOT decide* §1. It appears **nowhere in**
+[`reference/sync.md`](./reference/sync.md) — that file's §4 heading reads *"its two guards"*, and the
+word does not occur in the file at all, though it occurs in **five** other files under
+`docs/reference/`. **Three documents SPECIFY both guards; two call them mandatory**, and sync.md's
+guard-2 block is imperative in substance regardless — *"REFUSE to run the sweep for this instance"*.
+**All three take the rider**, on the substance rather than on the word.
+
+### Why
+
+**Because a conditional is what the evidence supports and a rewrite is not.** §7.4's gate is correct
+wherever a drift hit means a refetch, and for Kavita — one `GET /api/Series/metadata` per series — it
+plainly does. Relaxing the rule for everyone on a BookOrbit measurement would be
+[ADR-0070](#adr-0070)'s Kavita error run in reverse: that ADR had to state the boundary of a *"never"*
+generalised from one source's measurement, and generalising a second source's measurement the other
+way would owe the same correction later.
+
+**Because the placement of a gate is a correctness property, not a performance one.** The importer's
+chain runs `imported` → `reqs` → `StreamCredits` → `ApplyCredits`, with no filter on it. A gate in
+`flush` reads locally as *"skip work for an unchanged row"* and behaves globally as *"never correct
+this row's credits again"*. **Nothing at the call site says so**, every test written against the
+gated helper agrees with it, and the tree already carries [ADR-0070](#adr-0070) Decision 8's general
+rule for exactly this — *a decision that depends on a representation detail must name that dependency
+in its own text* — of which "which seam the gate sits at" is the same species.
+
+**Because the honest saving is small and the dishonest one is what would get this built in the wrong
+place.** If the gate were credited with the FTS write, it would look like a large win and the
+temptation to move it earlier — where it would catch more — would follow directly. Once it is scored
+correctly, at one `DELETE` plus N `INSERT`s plus N person resolves against a path whose year, status,
+total and document writes are already suppressed, **the case for moving it earlier evaporates**, and
+that is the argument doing the work rather than a rule nobody can check.
+
+**Because guard 2 without its premise is ceremony, and ceremony that reads as a guard is worse than
+an admitted gap.** A fingerprint check needs a fingerprint. BookOrbit exposes none, its ids are
+sequence-allocated, and building a check on `identity_fingerprint` for this source would produce a
+column that is always NULL, a comparison that never fires, and a `needs_reidentification` state
+nothing can reach — **an alarm never triggered, indistinguishable from no alarm**, which is the exact
+shape [ADR-0070](#adr-0070) Decision 12 made a drill mandatory to avoid.
+
+**Because guard 1 is the only leverage and half-built leverage is none.** The column was already
+populated and already protected from overwrite. What was missing was the comparison, and deferring
+guard 2 while calling guard 1 "in place" would have put the sweep's entire tombstone-window defence
+on a value nothing read. **That is why the sequencing is written into this ADR as a condition** and
+not left to a build order nobody records.
+
+**Because a gap that is named costs less than a gap that is implied.** Decision 7's four hazards are
+each real, each unguarded, and each cheap to write down; the alternative — a sweep that silently
+does nothing about an unidentified item's reused id, or about a source that answered with an empty
+list — is a system whose failures are discovered by a user rather than by a reader.
+
+### Alternatives rejected
+
+**1 · Widen `remote_hash` to cover credits.** Rejected here, though not forever. `CatalogueItem`
+carries no credits and cannot: they arrive on a second pass as `CreditSet`, from a different adapter
+method, after the item transaction has committed. Widening the hash means either hoisting credits
+onto the item payload — which for Kavita costs a `GET` per series **before** anything can be skipped,
+destroying the saving the hash exists to create — or hashing across two passes, which means the item
+write can no longer compute its own hash. [ADR-0070](#adr-0070) left the repair open to *"channel 4's
+slice to take, on its own evidence"*; **this is that slice, and its evidence points at unconditional
+re-apply rather than at a wider hash.**
+
+**2 · Gate the credit pass on a second, credits-only hash.** Rejected as scope this milestone cannot
+carry and, more importantly, as **the wrong trade at this size**. It is a new column, a migration,
+and a second drift vocabulary — against a saving measured at one `DELETE` plus N `INSERT`s on a path
+whose expensive half is already suppressed. **"Cut before you add"**, and this adds a subsystem to
+avoid a delete-and-reinsert.
+
+**3 · Build guard 2 for BookOrbit on `serverVersion` or a config value.** Rejected on measurement.
+The only server-scoped identity-adjacent token in `server/src` is `serverVersion`, which is KOReader
+package plumbing and is a **build number** — it changes on every upgrade, so a fingerprint built on
+it would fire `needs_reidentification` on a routine `docker pull` and would not fire at all on the
+restore case it exists for. **Wrong on both directions of error.**
+
+**4 · Drop the four guard-2 columns since three have no Go references at all.** Rejected. They are
+the seam, the \*Arr adapters that need them are re-sequenced rather than cut
+([ADR-0042](#adr-0042)), and **a merged migration is never edited**. The measurement goes in the
+annotation, not into a migration.
+
+**5 · Widen `identityHash` so guard 1 discriminates on unidentified items.** Rejected in this slice,
+and named as gap 7c instead. `identityHash` is the input to a value **already stored on every
+`service_item_link` row**, so changing what it covers invalidates every recorded hash at once and
+makes the first sweep after the change look like a mass id-reuse event. It needs its own slice with
+its own migration-free re-stamping story; it does not need to be smuggled into this one.
+
+**6 · Set a refusal threshold for the empty-list case now.** Rejected as a ruling this lane does not
+have. Recorded as gap 7d with its mitigation, because *"decline the sweep above N%"* is a number, and
+an arbitrary number in the one place where being wrong in either direction costs the user their
+library is worse than an admitted gap that a later ruling can close on evidence.
+
+**7 · Say nothing about the "two mandatory guards" sentences and let them stand.** Rejected on this
+project's own rule. A specification sentence that says both guards are mandatory, standing beside a
+slice that ships one of them, is an **inverted assertion**, and this file's amendment convention
+requires the falsified sentence to carry a dated flag *"wherever a reader could otherwise take it as
+live, since anchors and search land people mid-document"*.
+
+### ⚠️ What this does NOT decide
+
+**1 · It does not re-answer channel 4 for any other source.** Kavita's credit pass, its per-series
+`GET`, and §7.4's gate as it applies to Kavita and to every \*Arr are untouched and unreworded.
+Navidrome, Audiobookshelf and Komga each arrive with their own measurement.
+
+**2 · It does not close the credits-versus-hash gap in general.** It routes around it for one source
+by re-applying unconditionally. **The hash still cannot see credits**, and any future source whose
+credits cost a round trip will meet [ADR-0070](#adr-0070)'s open residual exactly as it stands.
+
+**3 · It decides nothing about the owner's live instance.** Every BookOrbit measurement is read from
+source at `73b7877d`. **No probe against a running BookOrbit has been performed**, §7.1a's BookOrbit
+row still carries its 🚩 *"NEVER PROBED"*, and the live-run verification §16.1 says is owed is **still
+owed**. The `serial`/`setval` finding is a claim about **that source tree**, not about the database a
+given deployment is actually running against — a hand-rolled restore script outside the repository is
+exactly the surviving hazard Decision 7a names.
+
+**4 · It does not build the write path.** §7.4's write-queue precondition — the sweep may correct an
+item only when no `write_queue` row for that work is `pending`, `inflight` or `verifying` — stands
+unchanged and unbuilt, and §7.6's verbs still have no target in v0.1.
+
+**5 · It does not schedule the sweep, and it does not set its cadence.** Decision 10 records that
+there is no timer; it does not say when there should be one, what page geometry a scheduled sweep
+would use, or how it would be rate-limited. Those are §7.4's and are not re-specified here — and gap
+7d is the argument for answering them before a scheduler exists rather than after.
+
+**6 · It does not build the drift half of channel 4 at all.** §7.4 step 4 is a `remote_hash`
+comparison and a refetch; **neither is in the tree for any source**, and Decision 1 drops the gate for
+BookOrbit rather than implementing it. What shipped is the deletion half plus guard 1.
+
+### Consequences
+
+**§7.4, §7.1a and [`reference/sync.md`](./reference/sync.md) §4 take the conditional in one motion
+with this ADR.** Landing the ADR without them is not permitted: `main` would carry a decision beside
+three specifications the next commit violates, which is the coupling rule
+[ADR-0070](#adr-0070) states in its own words — *a change that creates the condition another fix
+addresses must land with it.*
+
+**`cmd/usarr/import.go`'s channel-4 comment block is a correction site in the same motion, and it
+predicted itself.** That block currently assigns *"a re-read of the whole library every N hours"* to
+channel 4, and thirteen lines later assigns every residual to the full import *"because assigning it
+to channel 4 would be assigning it to nothing"* — **true while channel 4 was unbuilt, and falsified by
+this slice.** ⚠️ **What SURVIVES the correction is the rest of that paragraph**, and it survives
+intact: the full import is still the only repair for a row UsArr itself wrote wrongly, for a skip, and
+for a tie wedge, and **must never be made to look unnecessary**. ⚠️ **What does NOT survive is the
+first paragraph's implied schedule** — there is still no timer, for channel 4 or for anything else
+(Decision 10). The file's closing paragraph already flags the credits half of its own channel-4 claim
+as *"under correction elsewhere … named so the next reader does not take the silence for agreement"* —
+**this ADR is that correction arriving.**
+
+**`internal/libsync/doc.go`'s "NOT HERE" list loses its channel-4 entry, and gains a bounded one.**
+That entry currently reads *"Channel 4, the reconciliation sweep and its two guards. Nothing here
+tombstones, deletes or detects drift — `remote_hash` and `remote_identity_hash` are WRITTEN here so
+the sweep has something to compare, and read by nothing yet."* ⚠️ **Three of its four clauses are
+falsified and ONE IS NOT**: the sweep tombstones and deletes, guard 1 compares
+`remote_identity_hash`, and guard 2 is still not here — but **`remote_hash` is still written and read
+by nothing**, exactly as that sentence says, because Decision 2's gate is unbuilt. The replacement
+keeps that half rather than sweeping it away with the rest.
+
+**Two falsified sentences elsewhere take DATED RIDERS and ride the landing as their own commit.**
+Neither is deleted — an inverted assertion gets a rider, because the reader who arrives by anchor or
+by search needs to meet the correction where the sentence is.
+
+1. ⚠️ **[ADR-0070](#adr-0070)'s *Consequences* understates the `remote_updated_at` hole by a layer.**
+   It says the column has no reader and then reassures: *"The FIELD does have one, and it is not
+   incidental — `CatalogueItem.RemoteUpdatedAt` is one of the nine values `remoteHash()` hashes …
+   which is channel 4's drift comparator."* **Measured at `d9a3f37`: `remote_hash` has no production
+   reader either.** No `SELECT` in non-test Go names it; its only reader in the tree is a test
+   assertion in `internal/store/catalogue_test.go`. So the field's one named reader is a function
+   whose output lands in a **second write-only column** — the value is hashed into a column nothing
+   selects. ADR-0070's sentence was factually correct about the field and **rhetorically reassuring
+   about a chain that terminates**. ⚠️ **AND THIS SLICE DID NOT CLOSE IT.** Guard 1 gave the
+   *sibling* column `remote_identity_hash` its first production reader and left `remote_hash` exactly
+   where it was; `applyOneItem`'s step-1 read selects `deleted_at` and `remote_identity_hash` and not
+   `remote_hash`. The rider therefore corrects the understatement **without** claiming the hole is
+   filled, which is what Decision 2 would do if it were ever exercised.
+
+2. ⚠️ **`internal/libsync/delta.go`'s `SyncReportDeltaWalk` vocabulary check names a member the tree
+   does not have.** Its comment enumerates *"container_declined, container_bind_failed,
+   container_kind_changed, identity_conflict, file_walk_failed, content_completeness, items_skipped,
+   cover_pass_incomplete, **comic_residue**, and the unwritten id_reused"*. **`comic_residue` is
+   written nowhere as a `sync_report.kind`.** The literals the tree actually writes are
+   `comic_series_synthesized` and `comic_series_memberships_declined`, both constants in
+   `cmd/usarr/import.go`; the only other occurrence of the string is `window_comic_residue`, a
+   **payload key** on the delta row and not a kind. 🚩 **A vocabulary check that names a member the
+   tree does not have is a check that did not run**, and its purpose was to prove a new kind collides
+   with nothing — a proof that is void if the enumeration is not the enumeration. It is corrected
+   here rather than left, because **this slice adds two members to that vocabulary** and would
+   otherwise be checking against a list known to be wrong.
+
+**`id_reused` and `deletion_sweep` become written `sync_report.kind`s.** `delta.go`'s enumeration
+called the first *"the unwritten `id_reused`"*; guard 1 shipping wired is what writes it
+(`store.SyncReportIDReused`), and `internal/store/reconcile.go`'s `SyncReportDeletionSweep` adds the
+second — one row per completed pass, carrying the transition counts as its `detail`. ⚠️ **The wire
+vocabulary and the storage vocabulary do not share a term here** — both are `sync_report.kind`,
+storage words, and nothing translates either to a wire word by string manipulation
+([`DEVELOPMENT.md`](./DEVELOPMENT.md) §11). [`reference/schema.md`](./reference/schema.md) §12.1
+already names `sync_report{kind: "id_reused", …}` citing sync.md §4 guard 1, so guard 1 shipping makes
+that spelling **written** rather than introducing it, and schema.md is not a correction site.
+
+**[`ROADMAP.md`](./ROADMAP.md)'s channel-4 item is narrowed, and its *Done when* stops discriminating
+the moment this lands.** It reads *"Channel 4 — reconciliation, with both sweep guards and 7-day
+tombstones"*, frames the weight in terms of **Kavita** rather than BookOrbit, and its check greps for
+a `missing_since` **or** `orphaned_at` setter. ⚠️ **This slice sets BOTH** — `sweepContainers` stamps
+`missing_since` and `sweepOrphans` sets and clears `orphaned_at` — **so that grep now passes while
+guard 2, the drift step, the scheduler and the tombstone reaper are all still absent.** The item stays
+unticked and takes a check that names what is missing.
+
+**A later reader gets the boundary in one sentence.** *The hash decides whether to rewrite the row.
+It never decides whether to re-read the credits.* Anything that gates a BookOrbit item before
+`ImportedItem.creditRequest` is minted is this ADR's defect wearing an optimisation's clothes, and if
+the credit re-apply is measured too expensive the answer is to argue about the sweep's cadence, not
+to move the gate earlier.
