@@ -1619,6 +1619,113 @@ resolved"* and reading, in part, `**Ratified by [ADR-0072](#adr-0072)**, which r
 full.` It landed in `f5ce60fdbd2195bbd8d2e077d5d5db3a47df78b9`, *"docs: ADR-0072 ratifies the arm64
 RSS re-scope, and ADR-0001 gains a rider"*.
 
+### An attribution to the owner carries a locator, and a refusal carries one absolutely
+
+**This is `CLAUDE.md`'s *"verify, don't assert"* applied to the one claim class it does not name.** That
+rule makes every claim about an external API, a port, a rate limit or a field name cite a primary
+source. *"The owner asked for this"* is a claim of exactly that kind — it asserts something outside the
+tree, it is load-bearing, and it is the one class this repo has been writing without a source. **A
+locator is a date, a verbatim quotation, and an address.** The form is already in the file: ADR-0043's
+*"The owner was asked and answered. His words, verbatim, 2026-08-17:"* followed by the quotation, and
+ADR-0048's *"answered … at **2026-08-21T14:47:25Z** (`cmsg_…`)"* — a timestamp and an address, not a
+recollection.
+
+**An address may be a project-chat message id, and usually is.** A locator is not restricted to a commit
+or a `file:line`: **the repository is not the only place the owner speaks, and it is not even the usual
+one.** A `cmsg_…` id with its UTC timestamp is a first-class address here and cites exactly as a commit
+does. **A convention admitting only repo locators would license the precise error this rule exists to
+prevent:** a lane searching `git log -S` and `grep` exhaustively, finding nothing, and writing
+*"unsourced"* into the tree about words said somewhere it never looked.
+
+**The lane that writes an attribution down resolves its locator at the primary source, and a lane that
+cannot reach that source does not write the attribution down.** That is the division of labour, and it
+is not optional in either direction: **a worker without chat access is not entitled to a verdict on what
+the owner said, in either direction** — it may report *"not sourced in the repository; primary source not
+searched by me"*, which is a statement about its own coverage, and it may not report *"unsourced"*, which
+is a statement about the world. **A quotation is verified by the lane that fetched it**; one whose chain
+of custody is coordinator → worker → file has been relayed, not verified, and relaying it into the tree
+launders a report into a citation. Hold the attribution in a delimited block the resolving lane can fill
+or strike, and let the surrounding claim stand on its measured half meanwhile.
+
+**The rule is strict for refusals and advisory elsewhere, and the asymmetry is the whole point.** A
+scoping call attributed to the owner is re-openable: it costs a conversation to re-take. **A refusal is
+not.** It forecloses work permanently, later readers meet it as settled, and its cost is paid by everyone
+who never proposes the thing — so a refusal resting on an attribution nobody can check is a permanent
+decision resting on an unverifiable claim. **Write a refusal so it survives its attribution being
+deleted:** state the independent ground in the same breath. ADR-0026's *"Refused by the owner **and
+independently wrong**"* is the form — the conjunction is doing real work, and the bullet stands whole if
+the first four words come out.
+
+**And the same test sorts attributions by what they are attached to. An attribution on a *motivation* is
+load-bearing in a way an attribution on a *decision* is not, because a decision can be over-determined
+and a motivation cannot.** *"He refused X"* can be joined by independent reasons to refuse X, and then
+the attribution is a courtesy. *"His reason was Y"* admits no such support: nothing but the owner can
+corroborate what the owner wanted, so the sentence is the citation or there is none. ADR-0026 carries
+both shapes and they behave exactly this way — its decision attributions sit beside grounds that survive
+them, while its motivation clause had no independent ground and was owed none, since it decided nothing.
+**The practical rule: a motivation clause is the cheapest thing to correct and the first to correct,
+because nothing rests on it — and it is the one that most needs its address, because nothing else can
+carry it.**
+
+**What to do when the source is not to hand.** Not *"he never said it"* — **absence of a record is not
+evidence of absence, and asserting it is the same defect one hop over.** Mark it in place, say what you
+searched and with what, say plainly which corpora you could not reach, and leave the decision standing on
+its own reasoning. **Never silently rewrite an attribution into an assertion or an assertion into an
+attribution**; both destroy what a reader needs to weigh the claim.
+
+**The case that produced it, with its own address, because a convention about locators that lacked one
+would be the defect in a new place.** A 2026-08-21 sweep found owner attributions carrying no locator
+across `CLAUDE.md`, `docs/DECISIONS.md`, `docs/RESEARCH.md` and `docs/ROADMAP.md`. The first lane to
+check them searched the tree and git history exhaustively and was about to record *"unsourced"* —
+**against attributions the owner's own messages do support.** Two of them trace to
+`cmsg_01S5UQT5yPAMR4PFkxyLGSj9RXhqeDFjfm9b6JCFa9jyab`, **2026-08-16T00:09:09Z**: `CLAUDE.md`'s speed rule
+traces to its *"What this needs to do - it needs to be fast."*, and its adversarial-review rule to that
+message's closing sentence, *"we should have an adversarial agent with strict quality restrictions for
+providing feedback to other workers."* **He asked for that twice, and the second is the stronger** —
+`cmsg_01S5UQT5yPAMR4PFkxyLGSj94vVxJJmQ6zrGdsDmn7CrdT`, **2026-08-16T05:23:03Z**: *"we ought to have more
+adversarial reviews, and then once everything is reviewed, we should have a layer of adversarial UX/UI
+masters to review as well."* **The corpus was wrong, not the method.**
+
+⚠️ **And the finding is narrower than "they were sourced after all", which is why both rules are quoted
+above rather than summarised.** Neither is a quotation of him. *"we should have an adversarial agent"*
+became *"Adversarial review is **mandatory**"* — and **the second statement strengthens *"the owner asked
+for this explicitly"* while doing nothing to rescue *"mandatory"*, a word appearing nowhere in his words
+in any corpus swept.** *"it needs to be fast"* became *"the owner's **number-one requirement**"*, a
+ranking he did not give. **Both rules are real derivations of things he actually said, and both are
+firmer than what he said** — not invented, not transcribed. **Quote him and let the reader measure the
+distance; never render the distance away.**
+
+**Coverage, because an absence claim that names no corpus points at nothing a reader can locate.**
+The sweep behind *"nowhere in his words"* is **five raw chat-thread and project-timeline dumps captured
+2026-08-21, carrying 55 owner-authored messages**, searched case-insensitively: **zero** match
+`/mandator/i`, **zero** match `/number-one/i`, and **one** matches `/number one/i` —
+`cmsg_01S5UQT5yPAMR4PFkxyLGSj97tLfzeUxKQNyk7iG9NtNSa`, **2026-08-16T03:39:04Z** — which reads *"number
+one priority"* about an agent's priority rather than about speed, so it was chased and cleared rather
+than counted. ⚠️ **Several fetches returned `has_more: true`, and the dumps do NOT include the opening
+thread's replies, so the sweep is bounded and not exhaustive** — it is a statement about what five
+named dumps contain, not a claim about everything the owner has ever said.
+
+🚩 **The second case is worse than overstatement and is why this rule exists rather than a style note. An
+attribution can invert its source.** ADR-0026 recorded *"Refused by the owner"*, *"was ruled out by the
+owner"* and *"he does not want UsArr reading a filesystem"*. **He asked for the opposite** — *"choose
+your storage folder"* — and then **released the request** rather than refusing: *"I mean it doesn't have
+to read the library."* Between the two sits an agent's paraphrase, *"✓ Owner clarified: UsArr never reads
+the filesystem"*, which **recurs through that thread's status blocks and is what the ADR is actually
+downstream of.** ⚠️ **Requoted authority firms up at every hop and nothing in the tree records the hop**,
+which is why the address matters more than the wording: an id and a timestamp survive the paraphrase, and
+a rendering does not. **The decision was never at risk — it stood on enumerated independent grounds, as
+its own *"independently"* said — and that is the whole argument for writing refusals that survive their
+attribution being deleted.**
+
+The worked example of the right shape is `docs/ROADMAP.md`'s header, which scoped a rule it had
+introduced as *"at the owner's standing instruction"*, recorded exactly what it could not establish —
+*"neither of them cites a source; `docs/PROJECT-INSTRUCTIONS.md` … carries no clause of this kind in
+**any** version from v1.0 to v1.7"* — and then kept the decision while refusing to upgrade the
+attribution: *"❗ **SO THE SCOPED RULE ABOVE RESTS ON THIS FILE'S OWN PRACTICE … AND NOT ON THIS
+REPLY.**"* **Keeping the decision and the attribution apart is what the mark is for.** A provenance rider
+is not an amendment, and `docs/DECISIONS.md`'s *How an ADR is amended when the world moves under it*
+owes nothing for one — neither the three marks always owed nor the fourth where it is needed.
+
 ### A disclosure lives where the person who would be misled will encounter it
 
 A qualifier reaches only the readers who pass through it, and in a document of any size most do not.

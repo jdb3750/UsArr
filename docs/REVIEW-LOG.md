@@ -9798,6 +9798,22 @@ fine; I only suggested tailwind for speed"*. It replaces decision points **1** a
 **2** (Bits UI), **3** (Tabler) and **4** (IBM Plex) standing, and the index row at the top of
 `DECISIONS.md` already carries it. **No later ADR supersedes it.**
 
+⚠️ **Amended 2026-08-21 — the quoted words in this section are ADR-0025's rendering, not the
+owner's text.** This entry reported the Amendment accurately: those were the words the ADR carried
+when this was written, and that report stands. What neither this entry nor the ADR checked is
+whether they matched the source. They do not. The owner's complete message
+(`cmsg_01S5UQT5yPAMR4PFkxyLGSj94bkQrhhPJ4dPNrpWctD3DU`, 2026-08-16T16:41:41Z) reads, with his
+orthography: *"honestly if custom css is what it wants thats probably fine. i only suggested
+tailwind for speed, but it doesn't super matter that much"*. The rendering dropped the opening
+*"honestly"*, gave *"thats"* an apostrophe, replaced the full stop with a semicolon, capitalised the
+*"i"*, and cut the closing clause without a mark. **This section's finding is unaffected** —
+ADR-0025 was amended, the amendment is recorded in the ADR body, no later ADR supersedes it, and the
+independent tree checks below still hold. What is corrected is the attribution of those words to the
+owner, and the phrase *"the quoted words"* above should be read as *"the words the ADR quoted"*. The
+correction of record is the dated rider at ADR-0025's Amendment in
+[`DECISIONS.md`](./DECISIONS.md), under *"⚠️ Amendment, 2026-08-16 — Tailwind is not used"*.
+**No existing text in this entry is changed.**
+
 **Verified independently of the ADR, because an amendment is a claim too.** `web/package.json` lists
 no Tailwind package in `devDependencies`; `grep -i tailwind web/pnpm-lock.yaml` returns nothing; the
 only match under `web/src` is `web/src/lib/tokenparity.test.ts`, which mentions Tailwind in the
@@ -26143,3 +26159,43 @@ the three sets now agree: 74 headings, 74 anchors, 74 rows, none of them orphane
   is the whole remedy, and no correction motion and no ADR of its own is owed.
 * **§18's `StartImport` shutdown asymmetry is unchanged and still registered**, with its trigger
   unchanged. Nothing in this round touched `run()`'s shutdown ordering.
+
+**Two more, added 2026-08-21 by the owner-attribution slice, which is a different lane and takes no
+LS number of its own.** They are recorded here rather than in a new register because a second
+register is a second thing to forget to read.
+
+* ⚠️ **The *"none of the four marks"* rephrasing reached only the sites its own diff added.** That
+  phrasing misstates [`DECISIONS.md`](./DECISIONS.md)'s rule — its *How an ADR is amended when the
+  world moves under it* section reads *"**Three marks are always owed**, and a fourth where it is
+  needed"*. That is the correction **SD-04**'s *"Second amendment, 2026-08-19 — the marks rule is
+  restated as a rule rather than a count"* already made in this file, against people who *"look for
+  four marks on an ADR that only ever owed three"*. The four sites the slice introduced now take
+  the rule's own framing. **Three sites it did not introduce still read as a count of four and are
+  deliberately untouched**, being outside the slice: `DECISIONS.md`'s *"[ADR-0026](./DECISIONS.md#adr-0026)
+  gains all four marks the preamble requires"*, *"ADR-0042 and ADR-0043 each gain the four marks the
+  preamble requires"*, and *"[ADR-0041](./DECISIONS.md#adr-0041) is annotated per the preamble's four
+  marks"* — near `:5793`, `:6247` and `:8047` at the time of writing, and **named by their text
+  because line numbers move**. ⚠️ **Each of the three is a report of what one ADR actually received,
+  not a statement of the standing rule**, so each is *defensible as written* and wrong only in what a
+  reader infers the preamble requires. **TRIGGER: the next pass that edits any of those three
+  annotation blocks for another reason rephrases it in passing** — *"the marks the preamble
+  requires"* costs nothing and carries no count. A grep-driven sweep for the phrase alone does
+  **not** fire this: this file's own hits are history and stay.
+* ⚠️ **The `CLAUDE.md` requote is fixed in `CLAUDE.md` ONLY, because that is the whole of what the
+  owner signed off.** His sign-off (`cmsg_01S5UQT5yPAMR4PFkxyLGSj92mKCuvky88RRwSk9jLq8vE`,
+  2026-08-21T19:44:07Z) answered a question naming that file, and **an approval is not widened by
+  the convenience of doing the rest in the same motion** — which is the shape **SD-08**'s
+  withheld-`CLAUDE.md`-changes register exists to hold. So *"the owner's number-one requirement"* and
+  *"Adversarial review is mandatory"* still stand, unridden, in three other places:
+  `docs/PROJECT-INSTRUCTIONS.md`, where **every archived version carries both** and which is a
+  **dated archive of superseded texts that should not be edited at all** — recorded so nobody reads
+  its hits as unfixed copies; `docs/design/DESIGN-DIRECTION.md`, whose *"owner's number-one
+  requirement, and it is a named tell besides"* is a live claim; and `docs/design/tokens.css`, whose
+  comment carries the same phrase. Located with
+  `git grep -n -e "number-one requirement" -e "Adversarial review is mandatory"` and **listed by file
+  rather than by a total**, per §11 rule 8. `docs/DEVELOPMENT.md`'s two hits are **not** in this list
+  and are correct as they stand: they quote `CLAUDE.md`'s wording *as the overstatement being
+  analysed*, which is the one context where the old phrasing is the subject. **TRIGGER: a further
+  owner sign-off naming the design documents, or `DESIGN-DIRECTION.md` being edited on that sentence
+  for another reason.** Nothing here fires on `PROJECT-INSTRUCTIONS.md`, which is closed by
+  construction.

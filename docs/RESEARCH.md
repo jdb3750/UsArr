@@ -949,6 +949,43 @@ transcoder."*
 > core capability and has **no in-app player at all**. Track 04's analysis is unchanged and
 > still decisive; the conclusion simply became stronger. The northbound protocol surfaces
 > (§4.3 below) went **up** in priority as a result.
+>
+> ⚠️ **Note added 2026-08-21 — the narrowing is correct, and this is the citation it was written
+> without.** *"Joe subsequently narrowed this further"* named no statement, and this digest's own opening
+> promises the opposite: *"Where the architecture asserts a fact, the citation is here."* **It is now
+> cited, at both ends, and *"subsequently"* turns out to be literally accurate rather than a hedge — the
+> two endpoints are twenty-six minutes apart.**
+>
+> **Before**, in the project's opening message — `cmsg_01S5UQT5yPAMR4PFkxyLGSj9RXhqeDFjfm9b6JCFa9jyab`,
+> **2026-08-16T00:09:09Z** — he wrote: *"we need to be able to stream content from it."* **After** —
+> `cmsg_01S5UQT5yPAMR4PFkxyLGSj9V6REyb72SabqnJajSc3NUB`, **2026-08-16T00:35:12Z**, a reply in that same
+> thread — he wrote: *"we don't need the capability to stream or do anything else. just have a unified
+> source that plugs into your favorite players."* **That second sentence is the one
+> [`DECISIONS.md`](./DECISIONS.md) ADR-0018 quotes**, whose `Status:` reads *"Added on the project
+> owner's input"* — and the ADR transcribed him **byte-exactly**; what it never wrote down was where the
+> words came from. **Both addresses are recorded here so neither has to be rediscovered.**
+>
+> 📌 **The narrowing was prompted, and he exceeded the prompt. Both halves are recorded, because omitting
+> either would be the same defect this note exists to correct.** At **00:26:22Z** an agent in that thread
+> recommended delegating video playback to Jellyfin, citing its FFmpeg CVE history; a coordinator post at
+> **00:27:24Z** explicitly invited him to object *"before it writes the architecture docs"*. **He did not
+> object — and he went further than the recommendation**, because *"or do anything else"* is broader than
+> video playback and is what closes off the music and book player too. **It is still his narrowing**, and
+> its scope is his rather than the recommendation's.
+>
+> ⚠️ **One consequence stated so it is not later mistaken for a discrepancy — and it is decided elsewhere,
+> in ADR-0018 Revision 2, which is not in question here and is not reopened by this note.** Read strictly,
+> *"or do anything else"* is broader than what UsArr does: **rev 2 carves back byte-carrying for audio and
+> ebooks**, because OpenSubsonic and OPDS have one acquisition verb and no safe hand-off, and **that
+> carve-back is reasoned at its own site, by an ADR, on protocol grounds.** This note neither ratifies nor
+> questions it. ✅ **And this page needs no correction on that axis**, because its own wording — *"serves no
+> media bytes **as a core capability**"* — already tracks rev 2's phrasing rather than his stricter
+> sentence. **The reason for recording it at all is that a reader who spots the gap and finds no
+> acknowledgement will reasonably wonder whether anyone noticed; someone did, and this is where it
+> points.** ✅ **Nothing here is weakened.** The narrowing stands on §4.1 below — the costing to reach
+> *"worse than Jellyfin"*, the transcode decision matrix — and on [`ARCHITECTURE.md`](./ARCHITECTURE.md)
+> §1.4, where an in-app player, a video transcoder and any FFmpeg dependency are **permanent refusals**.
+> **None of that is reopened, and no argument for reopening it appears here.**
 
 ### 4.1 The cost of building a transcoder
 
