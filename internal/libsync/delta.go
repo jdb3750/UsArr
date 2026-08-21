@@ -138,10 +138,25 @@ type DeltaObservation struct {
 // VOCABULARY CHECK against every existing member and not only the nearest one —
 // container_declined, container_bind_failed, container_kind_changed,
 // identity_conflict, file_walk_failed, content_completeness, items_skipped,
-// cover_pass_incomplete, comic_residue, and the unwritten id_reused. No
-// collision. The WIRE word for the same concept is `page-walk delta`; the two
-// are one concept in two vocabularies and nothing translates between them by
-// string manipulation.
+// cover_pass_incomplete, comic_series_synthesized,
+// comic_series_memberships_declined, id_reused and deletion_sweep. No collision.
+// The WIRE word for the same concept is `page-walk delta`; the two are one
+// concept in two vocabularies and nothing translates between them by string
+// manipulation.
+//
+// ⚠️ THIS LIST READ `comic_residue`, WHICH IS NOT A MEMBER AND NEVER WAS, and it
+// omitted three that are. Nothing in the tree writes that string as a
+// sync_report.kind; the two literals the comic path actually writes are
+// cmd/usarr/import.go's syncReportComicSeriesSynthesized and
+// syncReportComicSeriesDeclined, and the only other occurrence of the substring
+// is `window_comic_residue`, a PAYLOAD KEY on the delta row below — a different
+// vocabulary at a different grain. A VOCABULARY CHECK THAT NAMES A MEMBER THE
+// TREE DOES NOT HAVE IS A CHECK THAT DID NOT RUN: its whole purpose is to prove
+// a new kind collides with nothing, and that proof is void if the enumeration is
+// not the enumeration. Corrected 2026-08-21 with ADR-0074, whose slice is also
+// what turned "the unwritten id_reused" into a written kind
+// (store.SyncReportIDReused, guard 1 shipped wired) and added
+// store.SyncReportDeletionSweep beside it.
 const SyncReportDeltaWalk = "delta_walk"
 
 // The reasons a completed delta declines to advance the watermark. Each one

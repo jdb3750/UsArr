@@ -11185,6 +11185,20 @@ have one, and it is not incidental** — `CatalogueItem.RemoteUpdatedAt` is one 
 comparator. This ADR does not make either of them a delta cursor, and a later reader should not
 assume the column's presence implies the axis.
 
+⚠️ **RIDER 2026-08-21 — THE SENTENCE ABOVE IS TRUE AND UNDERSTATES THE HOLE BY A LAYER, AND THE
+UNDERSTATEMENT IS THE REASSURING HALF** ([ADR-0074](#adr-0074)). *"The FIELD does have one"* is
+correct — `remoteHash()` reads it. But **`remote_hash` has no production reader either**, measured at
+`d9a3f37`: no `SELECT` in non-test Go names it, and its only reader in the tree is a test assertion
+in `internal/store/catalogue_test.go`. So the reader this paragraph names is a function whose output
+lands in a **second write-only column**, and the chain the sentence offers as reassurance
+**terminates**. ⚠️ **AND THE SLICE THAT COULD HAVE CLOSED IT DID NOT.** ADR-0074 *permits* a
+store-seam `remote_hash` comparison and does not build one; what channel 4's deletion slice actually
+gave a first production reader is the **sibling** column `remote_identity_hash`, through guard 1 —
+`internal/store/catalogue.go`'s `applyOneItem` step-1 read selects `deleted_at` and
+`remote_identity_hash` and pointedly not `remote_hash`. So the correction is to the understatement
+only; the hole is still open. Nothing else in the paragraph moves, and its closing warning — that the
+column's presence does not imply the axis — stands unchanged.
+
 **§7.1a's overlap-window formula is RETIRED for this source, and this paragraph is what it
 replaced.** It read *"still has no input, and that is unchanged and still open … so the implementing
 slice inherits this, undischarged"*. The implementing slice did **not** inherit it undischarged: it
