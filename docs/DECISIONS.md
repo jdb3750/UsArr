@@ -135,6 +135,7 @@ because no ADR ever decided it. Annotating leaves that failure mode nowhere to h
 | [0072](#adr-0072) | The project-manager thread **ratifies** the arm64 RSS spike's re-scope: the `make bench-rss` run gates **claiming arm64 support**, not v0.1 | **Accepted** — 2026-08-20; **ratifies a re-scope that [ADR-0001](#adr-0001) states in an agentless passive** — *"the requirement is re-scoped"*, no agent, no limit clause, no application line — and whose only record was a review-log disposition that names no ruler either, under *"Round 2 — the first code drop"*, *"6. A documented prerequisite was re-scoped, not dropped"* (⚠️ **the round qualifier is load-bearing**: that file opens a second *"6."* under Round 6); **the venue follows from the argument and not from who made it** — a review-log entry records a **disposition** and an ADR records a **decision**, so recording the ratification as a disposition would reproduce the defect one level up, a second entry asserting a thing is settled and containing nothing that settles it; ⚠️ **it quotes the ruling NARROWLY on purpose** — the limit clause drifted by two words in one relay on the day of the ruling (*"nothing **about** it"* for *"nothing **in** it"*), so the entry carries the arguments and quotes only what it verified; **the decision**: the arm64 `make bench-rss` run is *"a prerequisite to claiming arm64 support, not a prerequisite to v0.1"*, and ⚠️ **the limit clause is not optional** — *"the arm64 run remains owed before any claim of arm64 support. This moves the gate; it does not discharge the obligation, and nothing in it says arm64 works or that the x86-64 figures transfer"*, page size and core count both moving these numbers, so an arm64 result is a **second row** in ADR-0001 and never a replacement; 🚫 **the live alternative it closes** is *"the re-scope was never ratified, so the original gate stands"*, read at roughly **70/30** on 2026-08-20 and **right about the record, wrong about what to do with it** — v0.1 deploys to x86-64, the original clause gated the schema and *"the gate had already been passed unmet"* with eleven migrations since landed, and the project has operated on the re-scoped reading since 2026-08-16; **rejecting it costs no rigour** because *"the measurement stays owed against the claim it actually supports"*; **the reach is bounded by the ruling itself** — *"it covers sites carrying the pre-re-scope framing of the arm64 spike, wherever they are, and nothing else. A lane editing a sentence that is not about that has left the chain"*; ⚠️ **it states its reach and NOT which sites conform**, per `DEVELOPMENT.md` §11 *"A ruling states its reach, not the tree's current state"*, the rule this very ruling produced — **two statements the ruling as issued made about the tree failed verification** and the ADR carries neither, a corrected count being the same kind of claim; **supersedes nothing** — ADR-0001's text stands unreworded, its `Status:` line gains no mark, and this ADR supplies the author that sentence never had; **ships no code, no migration, no column, no configuration key and no wire field** |
 | [0073](#adr-0073) | Channel 3b's wire surface is a **sub-route**, `POST /api/v1/services/{id}/sync/delta`, answering **`202 Accepted`** and naming **no `libsync` type** | **Accepted** — 2026-08-21; **it takes the decision [ADR-0070](#adr-0070) explicitly did not** — that ADR *"builds nothing, changes no migration, no column and no wire field"* — and **reopens none of its channel scope**: arrivals only, `books.addedAt`, server-side filtered; **the engine was BUILT, TESTED AND UNREACHABLE**, in `internal/libsync/doc.go`'s own words *"NOTHING USER-FACING CAN TRIGGER IT, BECAUSE THERE IS NO HTTP ROUTE"*, with the route named there as the next slice rather than as *"later, which is where a thing goes to be forgotten"*; 🚫 **`?mode=` on the existing sync route is REFUSED, and the precedent only corroborates it** — `(*Server).routes`' `/library` comment splits routes *"over the SHAPE OF THE QUERY"* so that folding them would make *"the simple statement an argument-dependent special case of the filtered one"*, ⚠️ **which transfers as a TEST and not as EVIDENCE** (that pair are reads with different plans and cursor codecs; this pair are writes returning the same started-body), so the rejection rests on **the default and the typo** — an omitted or misspelled mode runs the **full import**, minutes and a whole-catalogue rewrite, returning the same `202`, where a mistyped path is a `404` — plus a **contract** that would otherwise vary by query parameter and an **audit verb** that could no longer tell a cheap poll from a rewrite; 🚫 **`200` with the run's result is REFUSED on principle 1** — `cmd/usarr`'s `deltaSyncLocked` escalates to `fullImportLocked` and [ADR-0070](#adr-0070) Decision 13 makes escalation the **deliberate** answer for every ambiguous state, so the tail is the full import's, and `internal/httpapi/ports.go`'s `CatalogueImports` already rules that *"a handler that waited for it would be principle 1's violation, since an import is minutes"*; 🚫 **naming a `libsync` type on the wire is REFUSED** on `ports.go`'s consumer-declared-port rule (*"Nothing below names an \*Arr type"*), which **forecloses a report body without a port-local struct** and is preserved by a port signature that returns only `error` and this package's sentinels; ⚠️ **THE COST IS NAMED RATHER THAN WAVED OFF** — `Progress` is nil by `delta.go`'s own requirement and a delta never stamps `last_full_sync_at`, so **a walking delta publishes no progress frame and gives no completion signal**, only a liveness re-ask, ⚠️ **with one exception that is the wrong way round** — an ESCALATED walk runs `fullImportLocked` → `runImport` with a non-nil `Progress` and so publishes the ordinary `import.progress` frames, leaving the expensive case observable and the cheap one silent — and the outcome is legible **only** in the `delta_walk` `sync_report` row `recordDeltaWalk` writes, which at `dcf3f55` **no route reads and no screen renders**; a read surface over that journal is recorded as **owed, not scheduled**; **the wire error code is `not_a_delta_source` and NOT the stored `no_delta_channel`** `errorClass` DECLARES for the same condition, per [`DEVELOPMENT.md`](./DEVELOPMENT.md) §11's prohibition on repairing a collision *"by making the values agree"* — ⚠️ **declares, not writes**: `Importer.DeltaSync` returns at its `DeltaSource` assertion ahead of every `recordDeltaWalk`, so no row carries the stored class today and the two are separated **at declaration**, the only moment at which separating them is free — ⚠️ **measured at `dcf3f55`: the two vocabularies share NOTHING** (seven `errorClass` values against thirty-one wire codes, empty intersection), so this would have been the **first** shared value; **`internal/libsync/doc.go`'s UNREACHABLE paragraph is falsified by the route and retires in the SAME MOTION**, [`reference/http-api.md`](./reference/http-api.md) owes a section carrying the observability subsection §4 has no analogue for, and §4's own `import_in_progress` sentence is falsified too — the shared guard means a running DELTA produces it on the full-sync route; **it builds no timer, no channel 4 and no tie drain**, and adds no migration, no column and no configuration key |
 | [0074](#adr-0074) | Channel 4's `remote_hash` drift gate is **DROPPED for BookOrbit**; the hash may gate the **store seam only** and **NEVER the credit re-apply**; **guard 1 ships wired, guard 2 is deferred on a void premise** | **Accepted** — 2026-08-21; **source-conditional, the same shape [ADR-0070](#adr-0070) used to put BookOrbit outside §7.1a's client-side stop** — §7.4's gate stands unchanged for every source whose drift consequence is a refetch, and Kavita's is one (`internal/libsync/credits.go`'s `StreamCredits`, one `GET /api/Series/metadata` per series); **BookOrbit has no refetch to gate** — its credits ride the item payload into an in-memory map (`internal/libsync/bookorbit.go`'s `keepCard`, read back by `internal/libsync/bookorbitcredits.go`'s `StreamCredits`, a file that imports no HTTP client at all); ⚠️ **THE ADR LANDS BEHIND ITS CODE AND SEPARATES WHAT IT AUTHORISES FROM WHAT IT RECORDS** — measured at `d9a3f37`, the deletion pass and guard 1 are in the tree and **the store-seam gate is NOT**, so `remote_hash` still has **no production reader** (no `SELECT` in non-test Go names it; its only reader is a test assertion) and the column this slice actually gave a first reader is its sibling `remote_identity_hash`; ⚠️ **the repurposing is BOUNDED TO ONE SEAM and the boundary is the whole decision** — the hash may gate the local write inside `internal/store/catalogue.go`'s `applyOneItem` and **may never gate the credit re-apply**, because `internal/libsync/importer.go`'s `streamAndApply` builds `imported` unfiltered and a gate there drops the item **before a `CreditRequest` is minted**, so `applyOneCreditSet` never runs and **the deafness this ADR exists to close returns identically** — worse here than for Kavita, since `keepCard` would be holding the corrected authors in memory, unread, while the row on disk stayed stale; **what the gate WOULD SAVE is claimed narrowly and is a claim about SHAPE, not size** — the `work_credit` delete-and-reinsert and its per-credit `personWorkID` lookups (`internal/store/credits.go`'s `applyOneCreditSet`, step 3), **NOT the FTS write**, which is already suppressed by the rendered-name-list compare, as year is by `year IS NOT ?` and status and declared total by the same shape, and **nobody has measured it** — if it is negligible the answer is to drop the gate, never to move it earlier; **guard 1 SHIPPED WIRED** — `applyOneItem`'s step 1a compares the stored `remote_identity_hash` against `CatalogueItem.identityHash` on any upsert that would clear `deleted_at`, hard-deletes the tombstoned link (**forced**: `ux_sil` is a plain UNIQUE index, not partial on `deleted_at`, so a tombstone and a fresh link cannot coexist), emits `store.SyncReportIDReused` and counts it on `BatchResult.IDsReused`, leaving the abandoned **work** tombstoned with its owned corrections; a NULL stored hash is **unknown, not mismatched**; **the sequencing was a ruling condition** — the guard-2 deferral is defensible only because this landed with it; **guard 2 is DEFERRED FOR BOOKORBIT ONLY, on a recorded void premise** — §7.4's "ids are reused after deletion" is a SQLite-rowid fact about the \*Arrs and BookOrbit's `books.id` / `libraries.id` are PostgreSQL `serial` with no `setval(`, no SQL `TRUNCATE`, no `RESTART IDENTITY` in `server/src` at `73b7877d2fed`, **so the premise is void for this source and stays LIVE for the \*Arrs**; ⚠️ **FOUR HAZARDS SURVIVE AS NAMED GAPS WITH NO GUARD** rather than being dropped with the premise — an older `pg_dump` restored; the instance repointed at a rebuilt server; ⚠️ **`identityHash` over an empty external-id list is the hash of an empty list and `bookOrbitExternalIDs` writes exactly one identifier (`hardcover_book`), null for any book the operator has not matched, so EVERY UNIDENTIFIED ITEM SHARES ONE IDENTITY HASH and guard 1 certifies nothing for those items**; and ⚠️ **a full list read returning zero from a source that had thousands tombstones the whole library** — more likely a broken credential than a mass deletion — mitigated only by every absence being a stamped column on a **retained** row that the next good import clears, and **NO REFUSAL THRESHOLD IS SET**, because a number is a ruling this ADR does not have; **the four `service_instance` guard-2 columns stay as an ANNOTATED SEAM** carrying the void-premise measurement at the site, on the form `internal/store/libraries.go`'s `Library.OrphanedAt` carried **at `b90b031`, before `0adfe1f` falsified it** — **its form, not its placement**, since those four are absent from `ServiceInstance` and from `serviceInstanceColumns` and it is their absence being annotated; **the deletion pass moves FOUR columns meaning four things** (`internal/store/reconcile.go`'s `SweepDeletions`, set difference in Go and never in SQL): `service_item_link.deleted_at`, `work.deleted_at` on the last live link **anywhere**, `library_source.missing_since` — **the sweep is its first writer** — and `library.orphaned_at`, set and **cleared** by `sweepOrphans`; all four `IS NULL`-guarded so they are **first-observed-absent** and the counts are transitions; ⚠️ **NO TIMER** — §7.4's every-6-h scheduler **does not exist**, the sweep runs from `FullImport`'s success path only (a partial import never sweeps, `DeltaSync` passes a nil seen-set), **and there is no reaper**: nothing hard-deletes a tombstone after seven days, so reconciliation is **not automatic**; **the drift half of channel 4 is unbuilt for every source**; ⚠️ **the two "mandatory" sentences take a SCOPING RIDER, not a deletion** (ARCHITECTURE §2.2, §7.4's heading, [ADR-0012](#adr-0012), and this file's own ADR-0070 *What this does NOT decide* §1 — **two documents, four sites; three documents specify both guards**), because with guard 2 unbuilt no document may go on saying the sweep has two mandatory guards without saying **for which source**; **no migration and no new index** — the plan guard is a **demand** on the per-item lookup (`USING INDEX ux_sil (` plus all three key columns, EXPLAINing the shipped `linkLookupSQL` constant, with `TestResurrectionPlanGuardFiresWhenRemoteKindIsDropped` as its fired positive control) and a deliberately weaker **acceptance** on the instance sweep, **never a general accept-SCAN**; ⚠️ **[`ARCHITECTURE.md`](./ARCHITECTURE.md) §7.4, §7.1a and [`reference/sync.md`](./reference/sync.md) §4 take the conditional IN THE SAME MOTION**, and `cmd/usarr/import.go`'s channel-4 comment block is a correction site in it — its *"assigning it to channel 4 would be assigning it to nothing"* is falsified by this slice, and the file already flags the credits half of that as "under correction elsewhere"; **two riders ride the landing as their own commit** — [ADR-0070](#adr-0070)'s *"The FIELD does have one"* understates the hole by a layer (`remote_hash` has no production `SELECT` either, **and this slice did not close it**), and `internal/libsync/delta.go`'s `SyncReportDeltaWalk` vocabulary check names `comic_residue`, **a member the tree does not have** — the real literals are `comic_series_synthesized` and `comic_series_memberships_declined` (`cmd/usarr/import.go`), and a vocabulary check naming a non-member is a check that did not run ; ⚠️ **AMENDED 2026-08-21 BY THE REST OF ITS OWN SLICE, WHICH FALSIFIED CLAIMS IN THIS ROW** (`REVIEW-LOG.md` LS-392 carries the re-derivation): **the hazard list is COUNT-FREE and re-derived at the branch tip** — *"FOUR HAZARDS SURVIVE AS NAMED GAPS WITH NO GUARD"* was written five commits before the branch stopped moving; **gap (c) is NARROWED, not closed** — *"EVERY UNIDENTIFIED ITEM SHARES ONE IDENTITY HASH and guard 1 certifies nothing for those items"* stands, but the vacuous equality is gone (a length test precedes the comparison) and the residue is that **a genuine id reuse on an unidentified item is silently MERGED rather than split, chosen and not overlooked**, recorded by `store.SyncReportRevivedWithoutIdentity` — a record, not a guard — and **reopened only by identity coverage improving or by a merge path existing**; **gap (d)'s zero read is REFUSED** — *"a full list read returning zero from a source that had thousands tombstones the whole library … mitigated only by every absence being a stamped column on a retained row"* is superseded: `SweepDeletions` refuses instance-wide (`ErrSweepRefusedEmptyRead`, and the import fails with it) and withholds per container (`SweepScope.Observed`), while **NO REFUSAL THRESHOLD IS SET remains true** and the large-but-nonzero drop is still unguarded; **the freezing rule is NARROWED** — *"written at first sight and never overwritten"* was wrong on the ordinary case, and `remote_identity_hash` now moves for exactly one transition, `empty → present`, with **a wrong first identity frozen too** and its repair v0.2's *"fix this match"*; **the scoping-rider inventory is a LIST, not a count** — *"two documents, four sites; three documents specify both guards"* missed §16.1's v0.1 entry, the site `CLAUDE.md` calls authoritative for scope, whose *"for everything"* takes a dated narrowing rider, and §7.4's heading had *"mandatory"* struck rather than ridden and has it back; ⚠️ **and the closed set names its boundary** — the deletion pass is scoped by NOTHING and runs for **Kavita**, a wired source no measurement here covers, so **guard 2's standing requirement is not deferred for it** |
+| [0075](#adr-0075) | The declared SQLite floor is honoured by **rewriting the trigger body**, not by raising the floor: `RAISE()`'s message must be a **static literal** in any object that reaches the **persisted** schema | **Accepted** — 2026-08-21; **the persisted schema did not honour the floor the documents declare** — [`reference/schema.md`](./reference/schema.md) §1 and [`ARCHITECTURE.md`](./ARCHITECTURE.md) §6 both state **3.43.0**, while `trg_library_unfiled_no_delete` (migration 0005) raised a message built from four fragments joined with `\|\|`, which SQLite accepted as `RAISE()`'s second argument only from **3.47.0** (2024-10-21, *"Allow arbitrary expressions in the second argument to the RAISE function"*); ⚠️ **SQLite stores schema objects as TEXT, so this is a READER defect and it fires at PREPARE on EVERY statement**, not on the delete the trigger guards — verbatim `malformed database schema (trg_library_unfiled_no_delete) - near "\|\|": syntax error (11)`; ⚠️ **the operator-facing form is reachable straight from this repo's own instructions** — [`CONFIGURATION.md`](./CONFIGURATION.md) §6.2's by-hand `sqlite3 … "VACUUM INTO …"` backup answers `Error: stepping, database disk image is malformed (11)`, exits **11** and **writes no backup**, with `PRAGMA integrity_check` failing identically, so a healthy database reports itself corrupt at the moment the operator is trying to protect it; **the repair is migration `00013`, one trigger dropped and re-created**, no table, column, index or row, with the event, the `WHEN OLD.id = 0` condition and the effect carried across unchanged and the message **byte-for-byte** the 316-character string the four fragments concatenate to — proven by running the refused delete at 13 and at 12 and requiring the two error strings equal, not by diffing files; ⚠️ **verified at the DECLARED FLOOR, which is stronger than the defect was routed as** — the slice was scoped to 3.46.1 and the post-0013 database is read by **3.43.0** (built from the official amalgamation with FTS5): `PRAGMA integrity_check` → `ok`, **123 objects**, counts served off the contentless FTS5 tables, a `WITHOUT ROWID` table and `STRICT` tables alike, with 3.45.1 and 3.46.1 the same and **every one of them failing on the pre-0013 control**; **only one persisted object ever carried the construct** — of 123 objects three are triggers, and the other two already raised the literal `'audit_log is append-only'`; 🚫 **the live alternative it closes is raising the floor to 3.47.0 and editing the documents** — the cheaper edit and the worse outcome, spending a real compatibility promise on a **diagnostic string**, excluding the sqlite3 that distributions still in support ship, and excluding them from the one operation an operator performs when already frightened, while the concatenation buys nothing at runtime; 🚫 also refused: shortening the operator-facing message for source tidiness, editing merged migration 0005 (useless — existing databases already store the old trigger), and documenting the requirement instead; **enforced by a test rather than a convention** — `TestPersistedSchemaRaisesOnlyLiterals` blanks literals and comments and fails on `\|\|` inside any `RAISE()` argument, carries a vacuity check, and **both halves were fired deliberately**; ⚠️ **what it does NOT decide, stated so the next grep-driven pass does not reopen it**: the second `RAISE(… \|\| …)`, `trg_wq_rebuild_guard` at `00005_library_sync.sql:961`, **STAYS** — created on the scratch table `write_queue_new`, dropped by 0005 itself at `:984` before the rename at `:986`, **absent from the snapshot and returning 0 from `sqlite_master` on a live migrated database**, so no reader ever prepares it, and its expression message is load-bearing there because it carries the COUNT of rows that would be discarded; ⚠️ **and it does not claim the sqlite3 CLI can BUILD this schema** — it cannot, 0005 is unedited, **building and reading are different claims**, and the two sites recording the build limitation take dated riders rather than deletions |
 
 ---
 
@@ -13053,3 +13054,190 @@ It never decides whether to re-read the credits.* Anything that gates a BookOrbi
 `ImportedItem.creditRequest` is minted is this ADR's defect wearing an optimisation's clothes, and if
 the credit re-apply is measured too expensive the answer is to argue about the sweep's cadence, not
 to move the gate earlier.
+
+---
+
+<a id="adr-0075"></a>
+## ADR-0075 — The declared SQLite floor is honoured by **rewriting the trigger body**, not by raising the floor: `RAISE()`'s message must be a **static literal** in any object that reaches the persisted schema
+
+**Status:** Accepted — 2026-08-21 ·
+**Costs one migration**, `00013_raise_message_literal.sql`, which drops and re-creates exactly one
+trigger and touches no table, no column, no index and no row ·
+**Closes the alternative** *"the floor moves to 3.47.0"* — see *Alternatives* ·
+⚠️ **It is a decision about READERS, not about this project's engine.** UsArr bundles
+`ncruces/go-sqlite3` (SQLite 3.53.4), which was never affected; every measurement below is about
+some *other* SQLite opening the file UsArr wrote ·
+⚠️ **What it does NOT decide** is in a section of its own: the second `RAISE(… || …)` in migration
+0005 **stays**, and that section is why ·
+**No wire field, no configuration key, no column.**
+
+### Context
+
+#### The floor this project declares
+
+[`reference/schema.md`](./reference/schema.md) §1 states **"Minimum SQLite version: 3.43.0"**, and
+[`ARCHITECTURE.md`](./ARCHITECTURE.md) §6 states it again: `STRICT` needs 3.37, FTS5
+`contentless_delete=1` needs 3.43.0, so 3.43.0 is the floor. That is a claim about what can **read a
+UsArr database**, because the only thing a floor can usefully be about is a reader — UsArr itself
+brings its own engine and does not consult the floor.
+
+#### The persisted schema did not honour it
+
+SQLite allowed an arbitrary expression as `RAISE()`'s second argument only from **3.47.0**
+(2024-10-21). The changelog entry is one line: *"Allow arbitrary expressions in the second argument
+to the RAISE function."* Migration 0005 wrote such an expression — four string fragments joined with
+`||` — into `trg_library_unfiled_no_delete`, and **SQLite stores schema objects as text**. So the
+concatenation is re-parsed by every reader, and the resulting requirement is 3.47.0, four releases
+above the declared floor.
+
+#### The failure is at PREPARE, on every statement, and it reads as data loss
+
+It is not a failure of the delete the trigger guards. SQLite parses the whole stored schema before it
+can prepare anything, so **every** statement fails, verbatim:
+
+```
+Error: in prepare, malformed database schema (trg_library_unfiled_no_delete) - near "||": syntax error (11)
+```
+
+⚠️ **The operator-facing form is worse than the developer-facing one**, and it is reachable straight
+from this repo's own documentation. [`CONFIGURATION.md`](./CONFIGURATION.md) §6.2 gives a by-hand
+backup as `sqlite3 /config/usarr.db "VACUUM INTO '…'"`. Run against a pre-0013 database by any
+sqlite3 below 3.47.0, that command prints
+
+```
+Error: stepping, database disk image is malformed (11)
+```
+
+exits **11**, and **writes no backup file**. `PRAGMA integrity_check`, the first thing anyone reaches
+for next, fails identically. A healthy database reports itself as a corrupt one at the exact moment
+the operator is trying to protect it.
+
+### The measurements
+
+All taken 2026-08-21 on branch `wip/raise-floor-00013` off `f014dc2`. The database under test is
+built by running every migration on this project's own engine and then read by an **external**
+`sqlite3` binary — the shape the defect actually has.
+
+**Reader matrix**, probe `SELECT count(*) FROM library;`:
+
+| Reader | Pre-0013 (schema at 12) | Post-0013 (schema at 13) |
+|---|---|---|
+| **3.43.0** (built from the official amalgamation, `-DSQLITE_ENABLE_FTS5`) | `malformed database schema … near "\|\|"` | ✅ `1` |
+| **3.45.1** (official `sqlite-tools-linux-x64-3450100.zip`) | `malformed database schema … near "\|\|"` | ✅ `1` |
+| **3.46.1** (official `sqlite-tools-linux-x64-3460100.zip`) | `malformed database schema … near "\|\|"` | ✅ `1` |
+| **3.53.4** (`ncruces/go-sqlite3`, this project's engine) | ✅ | ✅ |
+
+⚠️ **The 3.43.0 row is the one that matters and it is stronger than the slice was scoped for.** The
+defect was routed as "3.46.1 cannot read it"; the repair is verified at **the declared floor itself**,
+not merely at some version below 3.47.0. At 3.43.0 the post-0013 database answers
+`PRAGMA integrity_check` with `ok`, reports **123 objects** in `sqlite_master`, and serves counts off
+the contentless FTS5 tables (`search_fts`, `search_trgm`), a `WITHOUT ROWID` table
+(`library_member`) and `STRICT` tables alike. The floor is now a measured property rather than a
+declaration.
+
+**Only one persisted object ever carried the construct.** Of those 123 objects, three are triggers
+and one of them raised a concatenated message. The other two — `trg_audit_no_delete` and
+`trg_audit_no_update` — already raised the literal `'audit_log is append-only'`.
+
+**The repair is confined to the message's spelling.** The trigger's event
+(`BEFORE DELETE ON library`), its condition (`WHEN OLD.id = 0`) and its effect (`RAISE(ABORT, …)`)
+are carried across unchanged, and the message is **byte-for-byte** the 316-character string 0005's
+four fragments concatenate to — asserted by running the refused delete at 13 and again at 12 and
+requiring the two error strings to be equal, not by comparing two files. The regenerated
+`internal/db/testdata/schema.sql` differs from its predecessor in **one hunk, inside one trigger**.
+
+### Decision
+
+1. **Any object that reaches the persisted schema raises a static string literal.** Concatenate the
+   message at authoring time. This is not a style preference: it is what keeps the stored schema
+   parseable by the readers §1 promises.
+2. **The floor stays 3.43.0.** No document's floor number changes as a result of this ADR; the
+   schema changed to meet the number, not the other way round.
+3. **The rule is enforced by a test, not by a convention.**
+   `TestPersistedSchemaRaisesOnlyLiterals` reads every trigger out of `sqlite_master`, blanks its
+   string literals and comments, and fails on a `||` inside any `RAISE()` argument. It carries a
+   vacuity check that fails if it finds no `RAISE()` at all, and both halves were fired deliberately
+   before being trusted.
+
+### Consequences
+
+⚠️ **The most consequential thing this slice found is not the trigger — it is that an operator's
+backup could silently produce nothing.** [`CONFIGURATION.md`](./CONFIGURATION.md) §6.2's by-hand
+procedure is `sqlite3 /config/usarr.db "VACUUM INTO '/config/backups/usarr-$stamp.db'"`. Run against
+a pre-`00013` database with any `sqlite3` below 3.47.0, that command **exits 11, prints
+`Error: stepping, database disk image is malformed (11)`, and writes NO FILE**. Measured, not
+inferred. Three things make it worse than an ordinary failure:
+
+1. **The database is healthy.** Nothing is wrong with it. The message is a parse refusal wearing
+   corruption's clothes.
+2. **The obvious second opinion agrees with the lie.** `PRAGMA integrity_check` fails identically,
+   so the operator's next diagnostic confirms the false diagnosis instead of correcting it.
+3. **The failure is at the worst moment.** Someone taking a manual backup is usually already
+   worried — migrating hosts, or reacting to a scare. The backup they believe they took does not
+   exist.
+
+`00013` removes the cause. §6.2 additionally gains a note naming the symptom and the remedy, because
+**databases written before `00013` still exist**, and the note is the only thing that reaches an
+operator holding one. ⚠️ **Nothing guards this and nothing can** — it is the operator's binary, not
+UsArr's. `usarr backup` does not have the problem, because it uses the bundled engine.
+
+**The floor is now a measurement, and the number did not move.** `3.43.0` stands unchanged in
+[`reference/schema.md`](./reference/schema.md) §1, [`ARCHITECTURE.md`](./ARCHITECTURE.md) §6 and
+[`DEVELOPMENT.md`](./DEVELOPMENT.md); what changed is that it is now true. ⚠️ **Recorded because the
+result is stronger than the defect was routed as**: the slice was scoped to "an old binary, 3.46.1 or
+3.45.1", and verifying only there would have left the three releases between 3.43.0 and 3.46.1
+unexamined — so the acceptance run was extended down to **3.43.0, the declared floor itself**. Every
+future claim about this floor should be made at 3.43.0 for the same reason.
+
+**A standing constraint on every future migration.** `RAISE()`'s message must be a static literal in
+anything that reaches the persisted schema. It is enforced by
+`TestPersistedSchemaRaisesOnlyLiterals` rather than by review, and that test is scoped to
+`sqlite_master` on purpose — see *What this ADR does NOT decide*.
+
+**Rolling back past `00013` reintroduces the defect**, deliberately: the Down block restores 0005's
+body verbatim, because a Down that does not restore what was there is not a rollback.
+
+### Alternatives considered
+
+🚫 **Raise the declared floor to 3.47.0 and change the documents instead.** Rejected. It is the
+cheaper edit and the worse outcome: it would spend the project's compatibility floor — a real
+promise to operators, tooling and backup scripts — on a **diagnostic string**, which is the least
+load-bearing thing in the schema. 3.47.0 is October 2024, so the floor would exclude the sqlite3
+shipped by distributions still in support, and it would exclude them from the one operation an
+operator performs when they are already frightened. The concatenation buys nothing at runtime: the
+message is a constant, and the four fragments existed only to keep the SQL source inside a line
+width.
+
+🚫 **Shorten the message so it fits one line naturally.** Rejected. The abort text is read by a
+person at the moment a delete is refused and it names the consequence and the second thing it blocks;
+trading it for source tidiness is a real loss for a cosmetic gain. The literal is long and that is
+fine — it is stored as text either way.
+
+🚫 **Edit migration 0005.** Refused on the standing rule that a merged migration is never edited, and
+independently useless: every database already in existence has the old trigger stored in it, so only
+a new migration can reach them.
+
+🚫 **Leave it and document the requirement.** Rejected. The failure mode is `database disk image is
+malformed` on a healthy database, produced by following this repo's own backup instructions. That is
+not a documentable footgun.
+
+### What this ADR does NOT decide
+
+⚠️ **The other `RAISE(… || …)` in migration 0005 stays exactly as it is, and this section exists so
+the next grep-driven pass does not reopen it.** `trg_wq_rebuild_guard`
+(`00005_library_sync.sql:961`) is created on the scratch table `write_queue_new` and dropped by
+migration 0005 itself at `:984`, before the rename at `:986`. Verified rather than assumed: it is
+absent from `internal/db/testdata/schema.sql` and `SELECT count(*) FROM sqlite_master WHERE name LIKE
+'%wq_rebuild%'` returns **0** against a live migrated database. It therefore never reaches a persisted
+schema, no reader ever prepares it, and it cannot cause this failure. Its expression message is also
+load-bearing where it is — it carries a `COUNT` of the rows that would be discarded, which is the
+whole reason that guard is a trigger. Decision 1 is scoped to the **persisted** schema for exactly
+this reason, and the guard in Decision 3 reads `sqlite_master`, so it cannot see this trigger and
+must not be widened to.
+
+⚠️ **It does not claim the sqlite3 CLI can BUILD this schema.** It cannot, and 0013 does not change
+that: migration 0005 is unedited and still contains two expression-valued `RAISE`s, so piping the
+migrations into an old `sqlite3` still fails. **Building and reading are different claims** and the
+sites that record the build limitation ([ADR-0051](#adr-0051)'s measurement note and
+`internal/store/browse_test.go`'s plan-work note) take dated riders saying so rather than being
+deleted — they were right about what they measured.
