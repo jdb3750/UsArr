@@ -7,24 +7,39 @@
 // PosterKeyExpr has a key to ship.
 //
 // ⚠️ STATUS, STATED HERE BECAUSE A GREEN TEST SUITE WILL OTHERWISE BE THE ONLY
-// THING A READER SEES. This paragraph read "TESTED AGAINST A FAKE FETCHER AND
-// NEVER AGAINST A REAL COVER — every image it has ever processed was fabricated
-// by its own tests" until 2026-08-19, when the owner reported that the library
-// grid shows cover art on his install. That is the first real cover through this
-// pipeline, so the admission is retired rather than hedged.
+// THING A READER SEES. TESTED AGAINST A FAKE FETCHER AND NEVER AGAINST A REAL
+// COVER: every image this package has processed inside this repository was
+// fabricated by its own tests. MEASURED 2026-08-21 — the tree holds no image
+// fixture of any kind, and this package's tests synthesize every source with
+// image.NewRGBA plus png.Encode or jpeg.Encode.
 //
-// WHAT THE REPORT ESTABLISHES, AND NO MORE: the whole path ran end to end at
-// least once on real bytes, against the BookOrbit adapter — fetch, decode,
-// renderAll, PutPosterAsset, and `GET /img/{key}` serving the result out of
-// cache. A grid rendering covers is not reachable with any of those links
-// broken, which is the entire strength of the evidence.
+// ⚠️ THAT ADMISSION WAS RETIRED ON 2026-08-19 AND IS RESTORED HERE, BECAUSE THE
+// STEP THAT RETIRED IT DOES NOT HOLD. The owner reported on 2026-08-19 that the
+// library grid showed cover art, and this doc inferred a completed run from it:
+// "the whole path ran end to end at least once on real bytes ... A grid
+// rendering covers is not reachable with any of those links broken, which is
+// the entire strength of the evidence." That conditional is true and vacuous,
+// because NO UsArr SCREEN COULD RENDER AN IMAGE ON THAT DATE. Measured at
+// 292ea18, the last commit of 2026-08-19: the only `<img` anywhere in web/src
+// sits inside a comment in web/src/lib/library.ts, and the only CSS url() in
+// the tree are the four @font-face sources in web/src/app.css. The first
+// rendered `<img>` in this repository is `163f608`, 2026-08-21 08:02 UTC; the
+// first one on the library grid is `a34d87f`, 2026-08-21 13:59 UTC. Both are
+// two days AFTER the report.
 //
-// ⚠️ IT IS AN INSTALL FACT AND THIS REPOSITORY CANNOT FALSIFY IT. The source is
-// the owner's own observation, dated 2026-08-19, on a machine no test reaches;
-// nothing here re-derives it and no fixture stands in for it. Dated by the
-// REPORT, because the import it describes has no date this tree can read.
+// ⚠️ WHAT IS NOT CLAIMED HERE — THE INFERENCE FAILS AT THE RENDERING, NOT AT
+// THE PIPELINE. Nothing above says this package cannot have run. The backend
+// links predate the report: `7e5934d` (2026-08-19 15:22 UTC) wrote the pipeline
+// and `c4a3277` (16:49 UTC) added the import call site. The claim is only that
+// the screen the report names could not have shown this package's output that
+// day, so the report is not evidence that it ran. WHAT THE OWNER ACTUALLY SAW
+// IS OPEN AND IS JOE'S TO ANSWER — no hypothesis is substituted here, because a
+// second guess dressed as a finding is how the first one came to be written.
+// The question left for him: on which screen, at what address, and on which
+// build was the cover art seen?
 //
-// ⚠️ WHAT IT DOES NOT ESTABLISH — three gaps, still open and NOT narrowed by it:
+// ⚠️ THREE GAPS, OPEN UNDER EITHER READING — the report did not narrow them and
+// retracting the inference does not either:
 //
 //   - COVERAGE. "Ran once" is not "ran for every work". The skipped-count
 //     question is unanswered and `items_skipped` is unmeasured for covers, so
@@ -53,12 +68,11 @@
 // concurrency bound this package declines to build — see Poster — and its gate
 // refuses rather than queueing.
 //
-// AND THAT CALLER HAS NOW RUN. The 2026-08-19 report in the status block is a
-// report about this path — covers.go phase D, on an install with a BookOrbit —
-// so the sentence that used to sit here, "the pipeline has still never been run
-// against a real cover", went with the admission it restated. Its second half
-// stands unchanged: nothing in this repository's tests supplies a real cover,
-// and none of the three gaps above is closed by the report.
+// WHETHER THAT CALLER HAS EVER RUN IS NOT KNOWN HERE. This paragraph read "AND
+// THAT CALLER HAS NOW RUN", drawn from the 2026-08-19 report by the step the
+// status block above retracts, and it does not survive it. What stands is the
+// half that never depended on the report: nothing in this repository's tests
+// supplies a real cover, and none of the three gaps above is closed.
 //
 // # What is deliberately NOT here
 //
