@@ -26282,6 +26282,101 @@ and which this preamble originally broke by opening *"Two more"* over exactly tw
   is scoped (*"strong default"*, as the rider already instructs readers to treat it) rather than
   absolute.
 
+**Added 2026-08-21 by the §17.7 design-check lane, which is a different lane again and takes no LS
+number of its own.** Recorded here for the reason the paragraph above gives, and restored from
+`cc4fb578ab158d055c4fec9434593895a8c112e9` after `f5ddc0944e05bf6cb51639ca8975fc563591db35` parked
+it so that two hand-off patch series would still apply at this file's end-of-file point. **The park
+was about position and never about content** — it said as much itself, recording the bullets as
+correct and owed rather than withdrawn. ⚠️ **Its rationale was then measured and did not hold:** the
+park assumed this lane's append was what broke the hand-off series; measured afterwards against
+`main`, the series break there on their own. The park bought nothing, so the restore costs nothing.
+The entries `cc4fb578` wrote are restored in its wording except where they say so; what sits beside
+them was found while verifying them and is new here.
+
+* ⚠️ **§17.7's exemplars are pinned by an exact-match key in `docs/design/check.mjs`, and the §17
+  site does not say so.** `70192dcd2bc9` brought both exemplars into DESIGN-DIRECTION §9.1's
+  absolute-plus-relative form and left `S17_EMDASH_ALLOWED` keyed to the pre-ruling wording, so
+  `make design` went red on the very sentence the ruling had just corrected. **The drift is the
+  PM's own partial fix, in the PM's words:** *"The drift is mine. I ruled this morning that §17.7's
+  exemplar had to lose its bare `HH:MM`; `70192dc` is that ruling landing, and I never named the
+  checker that pins the exemplar. The correction reached the document and not the check — my own
+  partial-fix pattern, and the register entry should say so rather than reading as another lane's
+  carelessness."* Recorded that way deliberately: read as another lane's carelessness it teaches
+  nobody anything, and the lane that reworded §17 could not have known what else moved.
+  **The red was the mechanism reporting, not a broken check** — exact-match keying after `norm()`
+  is what made the gap visible at all, and a tolerant key would have matched both wordings and
+  reported nothing. The key is re-keyed and the four downstream quotations are in step; what is
+  still partial is that **nothing at the §17 site tells the next re-wording lane the checker
+  exists**, so the same round trip is available to anyone who rewords a pinned string.
+  **TRIGGER: this closes when a re-wording of a pinned §17 string can no longer produce this red
+  without warning** — either because `S17_EMDASH_ALLOWED`'s own *RETIRED BY* fires (§13 gains a
+  construction rule the checker can evaluate, at which point there are no keys left to go stale),
+  or because the §17.7 bullet names `check.mjs` as a site the way it already names §16.1. Until
+  one of those, treat a §17 copy edit as a two-file edit. **Which red fires distinguishes the two
+  cases and both were drilled:** a stale key surfaces as a *violation* and short-circuits the
+  exemption-size check, while a pinned sentence that leaves §17 entirely surfaces as *"4 recorded
+  em-dash exemption(s) but 3 matched"*. They are not interchangeable, and only the second is the
+  guard people expect. The exemption-size check's own masking is the entry below.
+* ⚠️ **The exemption-size check is masked in one of the two cases it exists for, and it is the case
+  the file credits it with catching.** `check.mjs`'s §17 reporting chain is `if (s17Bad) … else if
+  (S17_EMDASH_ALLOWED.size !== s17Exempted) … else ok(…)`, so a stale key — which pushes a violation
+  in `checkCopy`'s em-dash arm and is folded into `s17Bad` by the §17 loop — takes the first branch,
+  and the size comparison never runs. **The file already knows**, in the comment on the map itself:
+  *"Note also which line fired: the §17 violation above short-circuits the size check below, so a
+  stale key surfaces as a VIOLATION and never as 'matched nothing'. The two guards are not
+  interchangeable."* It is registered here because a hazard recorded only in the source it is about
+  is a hazard whose reader has to already be in the file. ⚠️ **The cost is diagnostic, not coverage,
+  and the distinction is the whole entry.** The other branch is still reachable: a pinned sentence
+  that leaves §17 entirely is never collected by the loop, pushes no violation, and fires *"N
+  recorded em-dash exemption(s) but M matched"* — the shape `VN9.45`'s gate run recorded as live and
+  unfired, in its own words, *"All four recorded `S17_EMDASH_ALLOWED` exemptions still matched, so
+  the exemption-size check did not fire."* What is lost is **which**: a stale key reports as
+  *"violation(s) in ARCHITECTURE §17's own shipping copy"*, sending the reader to §17's copy when the
+  stale artefact is the record in `check.mjs`. That is the round trip `70192dcd2bc9` cost, and the
+  misread is why it cost it. **The `else if` has a real ground, and only half of one:** its comment
+  says the arm exists so the sweep *"never prints 'clean' beside its own failure"* — an argument for
+  suppressing the `ok`, and not for suppressing a second **failure**. **TRIGGER: this closes when a
+  stale key and a vanished string report distinguishably** — the cheap form is to lift the size
+  comparison out of the chain into an independent `if`, leaving only the `ok` gated on both being
+  clean, so a stale key prints both lines. Registered rather than repaired because this is a docs
+  restore, and a control-flow change to a guard belongs in a commit that can fire it both ways.
+* ⚠️ **Three further copies of the superseded banner survive, deliberately unedited, outside this
+  slice's four named sites.** `docs/design/DESIGN-DIRECTION.md`'s Home wireframe draws the banner
+  inside a fixed-width ASCII box; `docs/design/check.mjs`'s `exempt()` comment quotes it to explain
+  the two-words-either-side window, which the re-wording does not disturb; and
+  `web/src/lib/degraded.ts` quotes it in a doc comment. None is a verbatim-quotation claim and none
+  is checked by anything, which is why none was touched here. **A naive grep widens that number and
+  cannot settle it:** `web/src/routes/+page.svelte` also carries *"showing cached data from 11:47"*,
+  which is DESIGN-DIRECTION §9.1's counterexample rather than this banner, and is not a fourth copy.
+  **TRIGGER: if any of the three grows a sentence asserting that it quotes §17.7 exactly, it becomes
+  the defect LS-394's DESIGN-DIRECTION §13 site was** — a claim of exactness over text that is not
+  exact — **and is owed the same correction.**
+* ⚠️ **The design check's provenance line is labelled `tree` and prints a commit sha.**
+  `cc4fb578ab15` added it as the file's first output. It writes `tree` in the same six-character
+  left column the file's own status labels use — `FAIL`, `ok`, and six spaces for a continuation
+  line — so it reads as a column heading that names its value, and the value is `git rev-parse HEAD`.
+  At `ab290aa01e03` the line prints `ab290aa01e03798197200bee2b62fa85695a8ba3`, while the tree object
+  that commit names is `b3ed224afa36c0fb7da4f39e3ef03bec8b3d7c3d` — a different object of a different
+  type, reachable as `HEAD^{tree}`. **Not a false claim anywhere, which is why it is registered
+  rather than repaired under a flag.** All five branch bodies are exact, and two of them turn on the
+  very distinction the label blurs: *"working tree clean: this run checked exactly that commit"* and
+  *"working tree DIRTY: the SHA names the last commit, NOT what this run checked"*, beside *"working
+  tree UNKNOWN: git could not report status, so it is not known whether this SHA describes what was
+  checked"* and the two absent-git forms, which each end *"this run names no commit, so its result is
+  evidence about no particular tree"*. ⚠️ **The defect is that a first-time reader meets the label
+  before the body** — this lane's own verification pass took `tree` at its word on first contact and
+  went to resolve `HEAD^{tree}`, which is not the object the line prints. `tree` over a commit sha is
+  the same shape as `DEVELOPMENT.md` §11's *a wire vocabulary and a storage vocabulary never share a
+  term*, with git's own object vocabulary on one side — the class that rule exists for, since nothing
+  compiles, lints or gates a console label and both words are spelled correctly. ⚠️ **It is worst on
+  the branch that matters most**: on a dirty tree the label says `tree`, the value is a commit, and
+  what was actually checked is neither — the body says so and the label contradicts it in the
+  reader's first six characters. **TRIGGER: the next motion that opens `check.mjs` for any reason**
+  relabels the column; the repair is one string literal and the five bodies need no edit.
+  **Deliberately not fixed here** — a one-word change to a provenance line that other lanes are
+  quoting this week is worth doing once, in a commit that runs the check and pastes the new line,
+  and this restore runs it without changing it. A grep for the word alone does not fire this.
+
 ### LS-394.27 The two adversarial reviews of the owner-attribution slice, and where each finding landed
 
 **Reviewed 2026-08-21**, two independent lenses over `2e7c8f7..b93f117` — one on **provenance** (every
