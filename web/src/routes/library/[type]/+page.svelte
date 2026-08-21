@@ -10,22 +10,36 @@
 	 * That is decided; this screen is not a filtered view over all six types
 	 * wearing a type's name.
 	 *
-	 * ⚠️ IT IS THE TABLE HALF OF §16'S LINE ITEM AND NOT THE WHOLE OF IT. §16
-	 * names a grid with COVERS, and this draws rows. ⚠️ THE REASON HAS CHANGED
-	 * AND THE OLD ONE IS FALSE: this comment used to say there was no image
-	 * endpoint in `internal/httpapi/server.go`'s route table and that
-	 * `poster_asset_id` "would be an id the client cannot turn into anything".
-	 * Both halves are gone — `GET /img/{key}` is routed, and the browse response
-	 * carries `poster_key`, which `$lib/library`'s `posterUrl` turns into a URL.
-	 * What is missing now is the VIEW rather than the bytes. ⚠️ THIS USED TO SAY
-	 * the fetch half of the pipeline was not built and nothing wrote
-	 * `image_asset`; `internal/store`'s `PutPosterAsset` writes it, called once
-	 * per imported book by `internal/libsync`'s phase D on a BookOrbit import. A
-	 * key is still absent for every other adapter, for any work imported before
-	 * that pass and for any cover that 404'd, so a grid drawn today would be part
-	 * artwork and part blank rather than empty — and this screen draws none of
-	 * it. Calling this line item finished would still be the invented status
-	 * CLAUDE.md forbids.
+	 * COVERS. This screen draws them, in a posters view the toolbar toggles into
+	 * and out of, over the `poster_key` the browse response already carried.
+	 * `$lib/PosterGrid` is the grid and the card; `$lib/library`'s `posterUrl`
+	 * owns the URL and the `?w=` allowlist, and nothing here spells an `/img`
+	 * path. Table is the default, because DESIGN-DIRECTION §5.4 makes rows the
+	 * default container and a card the exception.
+	 *
+	 * ⚠️ THE BOX IS 2:3 FOR EVERY TYPE, AND THAT IS A DEFERRAL RATHER THAN A LIMIT.
+	 * This used to say the per-type shape "is not expressible here" because the
+	 * wire carries no dimensions, and that is the wrong half of §9.7. That section
+	 * assigns aspect PER MEDIA TYPE AS DATA — *"portrait 2:3 for films, series,
+	 * ebooks, audiobooks and comic series; square 1:1 for albums and artists; 16:9
+	 * for episodes"* — and on THIS screen the media type is right there in
+	 * `query.mediaType`, so nothing about the wire stands in the way of it. What
+	 * was actually decided is that branching the card's box on the media type is a
+	 * change of its own, and deliberately not one made as a side effect of adding a
+	 * view. `$lib/PosterGrid`'s CSS states the whole of it, including the half §9.7
+	 * asks for that the wire genuinely cannot answer — the shape derived from the
+	 * IMAGE, which would need dimensions this response does not carry.
+	 *
+	 * ⚠️ AND THE GRID IS PART ARTWORK AND PART BLANK ON EVERY REAL INSTALL TODAY.
+	 * `internal/store`'s `PutPosterAsset` is called once per imported book by
+	 * `internal/libsync`'s phase D on a BookOrbit import and by nothing else, so a
+	 * key is absent for every other adapter, for any work imported before that
+	 * pass and for any cover that 404'd — and `GET /img/{key}` is a cache read
+	 * that never fetches upstream, so a key whose bytes are not there answers
+	 * `404 not_cached`. Both absences draw the same empty tile
+	 * (`$lib/library.posterArtSrc`). §16's line item pairs this grid with the
+	 * image pipeline; the pipeline's coverage is what is still short, and
+	 * `docs/ROADMAP.md` owns that rather than this comment.
 	 *
 	 * ⚠️ AND IT IS NOT `/library`. That screen is THE SAME READ WITH NO
 	 * `media_type` ON IT: every media type at once, sorted and scoped by the same
@@ -104,6 +118,7 @@
 	import HaveCell from '$lib/HaveCell.svelte';
 	import Icon from '$lib/Icon.svelte';
 	import List from '$lib/List.svelte';
+	import PosterGrid from '$lib/PosterGrid.svelte';
 	import { homeMode, type HomeMode } from '$lib/home';
 	import { LOAD_MORE_PAGE_SIZE, NOTHING, type ListColumn } from '$lib/list';
 	import { cursorRejected, MEDIA_TYPES, mediaTypeLabel, type RecentItem } from '$lib/library';
@@ -119,6 +134,8 @@
 		emptyBrowseFeed,
 		fetchBrowsePage,
 		libraryScopeLine,
+		libraryViewKey,
+		LIBRARY_VIEWS,
 		MAX_LIBRARY_SLUGS,
 		nextBrowsePage,
 		NO_LIBRARY_NAMES,
@@ -126,8 +143,10 @@
 		sameBrowseQuery,
 		type BrowseFeed,
 		type BrowseQuery,
-		type LibraryNames
+		type LibraryNames,
+		type LibraryView
 	} from '$lib/librarygrid';
+	import { createLibraryView } from '$lib/libraryview.svelte';
 	import {
 		SCOPE_SELECT_LABEL,
 		scopeSelectOptions,
@@ -233,6 +252,27 @@
 	let health = $state<ServicesHealth | undefined>(undefined);
 
 	let now = $state(new Date());
+
+	/**
+	 * WHICH OF THE TWO VIEWS IS DRAWN, remembered per browser under THIS MEDIA
+	 * TYPE'S key — which is what DESIGN-DIRECTION §9.1 means by *"persisted
+	 * client-side per media type"*, and the thing Home's single key could not
+	 * express. A reader who browses films as art and audiobooks as rows is stating
+	 * two settings, not changing their mind twice.
+	 *
+	 * ⚠️ THE KEY IS A GETTER AND MUST STAY ONE. SvelteKit reuses this component
+	 * across `/library/movies` → `/library/tv`, so a key captured once would follow
+	 * the reader into the next media type and then be written back under the one
+	 * they left. `query` is the same `$derived` the rest of the screen reads, so
+	 * the key moves exactly when the address does.
+	 */
+	const view = createLibraryView(() => libraryViewKey(query?.mediaType));
+
+	/** The toggle's own handler, so both buttons take the same path and the write
+	 * cannot end up on one of them. */
+	function showView(value: LibraryView): void {
+		view.set(value);
+	}
 
 	const more = $derived(feed !== undefined && browseHasMore(feed));
 	const empty = $derived(query === undefined ? undefined : browseEmptyState(query, mode));
@@ -662,6 +702,42 @@
 				{/each}
 			</select>
 		{/if}
+
+		<!--
+			THE VIEW TOGGLE, AND IT IS `.segment` FROM app.css RATHER THAN A NEW
+			CONTROL. DESIGN-DIRECTION §9.1's last bullet puts it in the toolbar,
+			persists it per media type, and names the pair that ships — table and
+			posters — with Sonarr and Radarr's third mode, `overview`, explicitly not
+			required first.
+
+			`aria-pressed` RATHER THAN `role="radio"` OR A `<select>`. Each button is
+			a toggle whose pressed state IS the answer, which is what `aria-pressed`
+			means; a radio group would need arrow-key roving over two options, and a
+			`<select>` for a binary choice hides one half of it behind a click. Native
+			buttons keep Tab, Space and Enter for free.
+
+			BESIDE THE OTHER TOOLBAR CONTROLS AND NOT PUSHED RIGHT. The scope line
+			below already takes the toolbar's one `toolbar__spacer`, and a second one
+			would split the free space between them and strand both in the middle.
+		-->
+		<div class="segment" role="group" aria-label="View mode">
+			<!--
+				⚠️ THE LOOP VARIABLE IS `choice` AND NOT `mode`, WHICH IS NOT A STYLE
+				PREFERENCE. This screen already holds `let mode = $state<HomeMode>` — the
+				connected/degraded state §17.7's banner reads — and an `{#each … as mode}`
+				here shadows it for the whole block. Nothing in that block wants the outer
+				one today, so the shadow compiled clean and read as correct; it is the
+				next edit inside these braces that would silently get the wrong value.
+			-->
+			{#each LIBRARY_VIEWS as choice (choice)}
+				<button
+					type="button"
+					aria-pressed={view.current === choice}
+					onclick={() => showView(choice)}>{choice}</button
+				>
+			{/each}
+		</div>
+
 		{#if sortNote}
 			<!--
 				⚠️ STATED, NOT DROPPED SILENTLY. Music shipped with two options and no
@@ -755,23 +831,71 @@
 				keyset endpoint never says how many rows exist, and this one has no facet
 				count either (http-api.md §7.1).
 			-->
-			<List
-				label={`${typeLabel} in your library`}
-				columns={COLUMNS}
-				rows={feed.items}
-				key={(item: RecentItem) => String(item.id)}
-				total={more ? undefined : feed.items.length}
-				rowIntrinsic={ROW_INTRINSIC_GRID}
-				stack="two-line"
-				state={feed.items.length === 0 ? 'empty' : 'default'}
-				emptyTitle={empty.title}
-				emptyText={empty.text}
-				emptyActions={emptyExits}
-				hasMore={more}
-				loadingMore={loading}
-				onloadmore={loadPage}
-				cell={gridCell}
-			/>
+			{#if view.current === 'table'}
+				<List
+					label={`${typeLabel} in your library`}
+					columns={COLUMNS}
+					rows={feed.items}
+					key={(item: RecentItem) => String(item.id)}
+					total={more ? undefined : feed.items.length}
+					rowIntrinsic={ROW_INTRINSIC_GRID}
+					stack="two-line"
+					state={feed.items.length === 0 ? 'empty' : 'default'}
+					emptyTitle={empty.title}
+					emptyText={empty.text}
+					emptyActions={emptyExits}
+					hasMore={more}
+					loadingMore={loading}
+					onloadmore={loadPage}
+					cell={gridCell}
+				/>
+			{:else if feed.items.length === 0}
+				<!--
+					THE SAME WORDS AS THE TABLE'S EMPTY STATE, and it is the same
+					`browseEmptyState` answer both arms take. An install whose catalogue is
+					empty for this media type — or whose `?lib=` scope is — must not be told
+					two different stories depending on which view it happens to be in, and a
+					grid with no cards in it says nothing at all.
+				-->
+				<div class="empty">
+					<h2 class="empty__title">{empty.title}</h2>
+					<p class="empty__text">{empty.text}</p>
+					<div class="empty__actions">{@render emptyExits()}</div>
+				</div>
+			{:else}
+				<!--
+					THE SAME ROWS AS THE TABLE ARM, from the same feed and the same paging
+					position, so switching views neither re-reads the endpoint nor loses where
+					the reader had got to. The card's rules — one box, the image fitted inside
+					it, the title below the art, the empty tile that answers both a missing key
+					and an uncached one — are `$lib/PosterGrid`'s and are stated there.
+				-->
+				<!--
+					AVAILABILITY ON THE CARD (DESIGN-DIRECTION §9.2), BECAUSE THE TABLE ARM
+					DRAWS A Have COLUMN AND THIS IS THE SAME SCREEN. Toggling to posters must
+					not silently drop a column the reader was looking at a moment ago. It is
+					the same `<HaveCell>` and the same `$lib/library.haveCell` rollup the
+					table uses, so the two arms cannot disagree about what is held.
+				-->
+				<PosterGrid items={feed.items} availability />
+
+				{#if more}
+					<!--
+						"Load more" over keyset pages, never infinite scroll (ADR-0029), and
+						the same control the table arm gets from `<List>`.
+					-->
+					<div class="list__more">
+						<button
+							type="button"
+							class="btn"
+							onclick={loadPage}
+							aria-disabled={loading ? 'true' : undefined}
+						>
+							{loading ? 'Loading' : 'Load more'}
+						</button>
+					</div>
+				{/if}
+			{/if}
 		{/if}
 	</section>
 {/if}

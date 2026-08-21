@@ -430,6 +430,50 @@ export function posterTile(item: RecentItem): PosterTile {
 }
 
 /**
+ * THE URL A CARD SHOULD ACTUALLY PUT IN ITS `<img>`, OR `undefined` FOR THE
+ * EMPTY TILE.
+ *
+ * ⚠️ A KEY IS NOT A PROMISE THAT BYTES EXIST, AND THAT IS THE DEFECT THIS
+ * ANSWERS. `GET /img/{key}` is a cache read and never fetches upstream, so a
+ * work whose poster has not been rendered yet answers `404 not_cached` — an
+ * ordinary state, because the key is written by the catalogue import and the
+ * bytes by a separate pass. An `<img>` with no error handling then draws the
+ * browser's own broken-image glyph. On Home that is a handful of tiles; on a
+ * screenful of covers it is the whole screen reading as broken.
+ *
+ * SO A FAILED LOAD COLLAPSES INTO THE ABSENT-KEY CASE, which already has a
+ * rendering: the bordered tile filled from `--dc`. The two are different facts
+ * about the pipeline and the same fact on screen — there is no art — and giving
+ * them two renderings would put two spellings of "no cover" on one row.
+ *
+ * THE RECORD IS THE CALLER'S, held for the page view. This function is the rule
+ * and holds nothing, so `vitest.config.ts`'s node environment can call it: the
+ * failure is discovered in an `onerror` a component owns, and a rule left in
+ * that handler is a rule nothing can test.
+ *
+ * ⚠️ A KEYED RECORD AND NOT A `SvelteSet`, AND THE REASON IS THE RENDER PATH
+ * RATHER THAN TASTE. In `svelte@5.56.9`'s `src/reactivity/set.js`, `has()` on a
+ * MISS subscribes the reader to the SET-WIDE `#version` signal — the source says
+ * so in as many words: *"If the value doesn't exist, track the version in case
+ * it's added later but don't create sources willy-nilly to track all possible
+ * values"* — and `add()` calls `increment(this.#version)`. Every card whose
+ * cover is fine is a miss, so one broken cover invalidates all of them and
+ * re-runs the tile build for the whole grid: O(K·N) over K failures and N cards,
+ * on a page "Load more" grows without bound. A `$state`-proxied record has
+ * per-key granularity instead — `src/internal/client/proxy.js`'s `get` trap
+ * creates a source for an ABSENT property too (`if (s === undefined && (!exists
+ * || …))`, seeded `UNINITIALIZED` and returned as `undefined`), and the
+ * `version` a new key increments is read only by `ownKeys`, which a card that
+ * reads one id never touches.
+ */
+export function posterArtSrc(
+	tile: PosterTile,
+	failed: Readonly<Record<number, true | undefined>>
+): string | undefined {
+	return tile.src !== undefined && failed[tile.id] === undefined ? tile.src : undefined;
+}
+
+/**
  * One row, or `undefined` for a frame this screen cannot draw.
  *
  * The id is the only required field: it is the row key and the item route, and
