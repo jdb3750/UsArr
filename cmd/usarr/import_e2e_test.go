@@ -111,6 +111,17 @@ func countIn(t *testing.T, env *testEnv, q string, args ...any) int {
 	return n
 }
 
+// stringIn is countIn for a TEXT column. Separate rather than generic because a
+// scan into the wrong Go type is the failure it exists to make impossible.
+func stringIn(t *testing.T, env *testEnv, q string, args ...any) string {
+	t.Helper()
+	var v string
+	if err := env.app.store.DB().Read().QueryRowContext(t.Context(), q, args...).Scan(&v); err != nil {
+		t.Fatalf("read %q: %v", q, err)
+	}
+	return v
+}
+
 // waitForImport polls until the instance reports a COMPLETED full sync.
 //
 // It polls last_full_sync_at rather than sleeping, and it polls THAT column

@@ -6,9 +6,11 @@ import (
 	"net/http"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/jdb3750/UsArr/internal/httpapi"
 	"github.com/jdb3750/UsArr/internal/libsync"
+	"github.com/jdb3750/UsArr/internal/store"
 )
 
 // POST /api/v1/services/{id}/sync/delta, end to end through the real binary.
@@ -154,6 +156,15 @@ func TestPressingTheDeltaRouteRunsAnArrivalsWalkAndRecordsIt(t *testing.T) {
 		t.Fatalf("delta_walk rows before any press = %d, want 0 — a full import must not "+
 			"write one, or this test proves nothing", walksBefore)
 	}
+	// The cursor the bootstrap minted. It is what the walk below must ask from,
+	// and reading it here rather than hardcoding the fixture's stamp is what
+	// makes the assertion about the SEED rather than about a constant.
+	watermark := stringIn(t, env,
+		`SELECT COALESCE(arrivals_watermark, '') FROM service_instance WHERE id = ?`, id)
+	if watermark == "" {
+		t.Fatalf("the full import minted no arrivals cursor, so there is no seed for the walk to use")
+	}
+	queriesBefore := len(bo.bookQueries())
 
 	code, body := deltaSyncNow(t, env, id)
 	if code != http.StatusAccepted {
@@ -167,6 +178,57 @@ func TestPressingTheDeltaRouteRunsAnArrivalsWalkAndRecordsIt(t *testing.T) {
 		return countIn(t, env,
 			`SELECT COUNT(*) FROM sync_report WHERE kind = '`+libsync.SyncReportDeltaWalk+`'`) == 1
 	})
+
+	// 🚩 AND IT WAS AN ARRIVALS WALK, WHICH NOTHING ABOVE CAN TELL. Every other
+	// assertion in this test — the 202, the delta_walk row, the released guard —
+	// is satisfied identically by a walk that sent NO filter and re-read the
+	// whole library, which is channel 1's request wearing channel 3b's name. The
+	// one place the two differ on the wire is the filter, so the filter is the
+	// subject: exactly one `after(addedAt, …)` rule, seeded from the stored
+	// watermark and not from anywhere else.
+	asked := bo.bookQueries()[queriesBefore:]
+	if len(asked) == 0 {
+		t.Fatalf("the press read no books at all; queries seen: %+v", bo.bookQueries())
+	}
+	for _, q := range asked {
+		if q.Filter == nil {
+			t.Fatalf("the walk asked for library %d with NO filter — that is a full page walk, "+
+				"not an arrivals walk: %+v", q.LibraryID, q)
+		}
+		if q.Filter.Field != "addedAt" || q.Filter.Operator != "after" {
+			t.Errorf("the walk filtered on %s(%s), want after(addedAt)", q.Filter.Operator, q.Filter.Field)
+		}
+	}
+	// The SEED is the first request's filter value, and only the first: a keyset
+	// walk advances its cursor page by page, so a later request carrying a larger
+	// value is the walk working, not the walk losing the watermark.
+	//
+	// ⚠️ IT IS THE STORED WATERMARK MOVED BACK, NOT THE STORED WATERMARK. The
+	// exact step is internal/libsync's arrivalsLookbehind, which is unexported
+	// and pinned by that package's own tests against the constant; naming the
+	// number here would copy a constant into a second place and let the two
+	// drift. What THIS layer can assert is the shape: the seed is derived from
+	// the stored cursor — a small step BELOW it, never above it, never the zero
+	// value, never a wall-clock reading.
+	seed := asked[0].Filter.Value
+	seedAt, err := time.Parse(store.ArrivalsWatermarkLayout, seed)
+	if err != nil {
+		t.Fatalf("the walk's seed %q does not parse as an arrivals cursor: %v", seed, err)
+	}
+	markAt, err := time.Parse(store.ArrivalsWatermarkLayout, watermark)
+	if err != nil {
+		t.Fatalf("the stored watermark %q does not parse: %v", watermark, err)
+	}
+	back := markAt.Sub(seedAt)
+	if back <= 0 {
+		t.Errorf("the walk asked from %q, at or AFTER the stored watermark %q — the lookbehind "+
+			"is what covers BookOrbit's commit-visibility lag, and asking forward of the cursor "+
+			"loses exactly the rows it exists for", seed, watermark)
+	}
+	if back > time.Hour {
+		t.Errorf("the walk asked from %q, %v below the stored watermark %q — that is not a "+
+			"lookbehind off this cursor, it is a cursor from somewhere else", seed, back, watermark)
+	}
 
 	// AND THE CLAIM COMES BACK. The delta holds the SAME guard a full import
 	// holds, released by the goroutine that started it; a leak there would make

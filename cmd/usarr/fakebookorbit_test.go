@@ -100,6 +100,41 @@ type fakeBookOrbit struct {
 	// @RequirePermission to a route that carries none today, and every probe
 	// starts answering 403.
 	statsStatus map[int]int
+
+	// queries is every book listing the fake was asked for, in order, with the
+	// filter tree DECODED.
+	//
+	// 🚩 WITHOUT THIS, AN ARRIVALS WALK AND A FULL PAGE WALK ARE THE SAME
+	// REQUEST HERE. The two differ in exactly one place — channel 1 sends no
+	// `filter`, channel 3b sends one `after(addedAt, cursor)` rule — and a fake
+	// that neither parsed nor applied it made every delta assertion pass for a
+	// walk that had sent no filter at all. `record` above captures the raw body,
+	// but a raw body is not an assertion anybody writes.
+	queries []boBookQuery
+}
+
+// boBookQuery is one decoded POST /libraries/{id}/books, reduced to the parts a
+// test asks about. The zero Filter means NO filter was sent, which is channel
+// 1's request and is a different fact from a filter that matched nothing.
+type boBookQuery struct {
+	LibraryID int
+	Page      int
+	Size      int
+	// SortField and SortDir are the FIRST sort tier, which is the only one
+	// either walk sends.
+	SortField string
+	SortDir   string
+	// Filter is nil unless the request carried one.
+	Filter *boBookFilter
+}
+
+// boBookFilter is the one rule shape either walk sends, flattened out of
+// BookQueryPipe's group-of-rules tree. A request whose tree is anything else
+// fails the fake rather than being reduced to this.
+type boBookFilter struct {
+	Field    string
+	Operator string
+	Value    string
 }
 
 // boBook builds one BookCard. Field names and null-ability are
@@ -268,12 +303,48 @@ func newFakeBookOrbit(t *testing.T, token string) *fakeBookOrbit {
 				Size int `json:"size"`
 			} `json:"pagination"`
 			CollapseSeries *bool `json:"collapseSeries"`
+			// The filter tree, as BookQueryPipe validates it: a boolean group
+			// holding rules. Only the shape either walk actually sends is
+			// modelled — see boBookFilter.
+			Filter *struct {
+				Type  string `json:"type"`
+				Join  string `json:"join"`
+				Rules []struct {
+					Type     string `json:"type"`
+					Field    string `json:"field"`
+					Operator string `json:"operator"`
+					Value    string `json:"value"`
+				} `json:"rules"`
+			} `json:"filter"`
 		}
 		blob, _ := io.ReadAll(r.Body)
 		if err := json.Unmarshal(blob, &q); err != nil {
 			boNestError(w, r, http.StatusBadRequest, "Unexpected token in JSON")
 			return
 		}
+		rec := boBookQuery{LibraryID: libID, Page: q.Pagination.Page, Size: q.Pagination.Size}
+		if len(q.Sort) > 0 {
+			rec.SortField, rec.SortDir = q.Sort[0].Field, q.Sort[0].Dir
+		}
+		if q.Filter != nil {
+			// One AND group holding one rule is the whole filter this channel
+			// sends. Anything else is a shape the fake cannot honestly serve,
+			// and serving the unfiltered list for it would be the silent wrong
+			// answer this recording exists to prevent.
+			if len(q.Filter.Rules) != 1 {
+				boNestError(w, r, http.StatusBadRequest,
+					"this fake models exactly one filter rule; a walk that sends a tree must teach it the tree")
+				return
+			}
+			rec.Filter = &boBookFilter{
+				Field:    q.Filter.Rules[0].Field,
+				Operator: q.Filter.Rules[0].Operator,
+				Value:    q.Filter.Rules[0].Value,
+			}
+		}
+		f.mu.Lock()
+		f.queries = append(f.queries, rec)
+		f.mu.Unlock()
 		// BookQueryPipe's zod bounds, enforced rather than assumed: a client
 		// that asked for 500 must see the 400 a real BookOrbit answers.
 		if q.Pagination.Size < 1 || q.Pagination.Size > 200 {
@@ -295,6 +366,32 @@ func newFakeBookOrbit(t *testing.T, token string) *fakeBookOrbit {
 		}
 
 		all := f.books[libID]
+		if rec.Filter != nil {
+			// ⚠️ THE FILTER IS APPLIED, NOT JUST RECORDED. A fake that recorded
+			// `after(addedAt, X)` and then served rows at or below X would be
+			// modelling a server that ignores its own query language, and every
+			// walk built on it would look correct here and re-read the whole
+			// library in production.
+			//
+			// `after` is BookQueryBuilder's STRICT gt on books.addedAt, and the
+			// comparison is a plain string compare because the stamps are
+			// ISO-8601 UTC with fixed-width fields, where lexical order IS
+			// chronological order. That equivalence is the whole reason the
+			// cursor is stored as text; see internal/store's
+			// ArrivalsWatermarkLayout.
+			if rec.Filter.Field != "addedAt" || rec.Filter.Operator != "after" {
+				boNestError(w, r, http.StatusBadRequest,
+					"this fake models only after(addedAt, …); FIELD_OPERATORS has more and none of them is sent")
+				return
+			}
+			kept := make([]map[string]any, 0, len(all))
+			for _, b := range all {
+				if added, ok := b["addedAt"].(string); ok && added > rec.Filter.Value {
+					kept = append(kept, b)
+				}
+			}
+			all = kept
+		}
 		size := q.Pagination.Size
 		start := q.Pagination.Page * size
 		if start > len(all) {
@@ -389,6 +486,13 @@ func (f *fakeBookOrbit) record(next http.HandlerFunc) http.HandlerFunc {
 		r.Body = io.NopCloser(strings.NewReader(string(blob)))
 		next(w, r)
 	}
+}
+
+// bookQueries is every decoded book listing the fake was asked for, in order.
+func (f *fakeBookOrbit) bookQueries() []boBookQuery {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return append([]boBookQuery(nil), f.queries...)
 }
 
 func (f *fakeBookOrbit) requests() []boRequest {
