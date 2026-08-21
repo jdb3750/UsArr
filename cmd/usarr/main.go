@@ -190,6 +190,23 @@ func run() error {
 		<-sweeperDone
 	}()
 
+	// Channel 4's schedule (ARCHITECTURE.md §7.4). Started here for the two
+	// reasons above and one of its own: it reaches an UPSTREAM, so it must not
+	// begin until the client registry and the prober's context exist.
+	//
+	// It is WAITED FOR like the candidate sweeper, because it writes the
+	// catalogue and a database closed under a running import is the one failure
+	// this ordering exists to prevent. A pass in flight when the cancel lands
+	// aborts at its next context check rather than running to completion, so the
+	// wait is bounded by one HTTP round trip and one SQLite statement, not by the
+	// minutes a whole import takes.
+	reconcilerCtx, stopReconciler := context.WithCancel(context.Background())
+	reconcilerDone := a.registry.startReconciler(reconcilerCtx)
+	defer func() {
+		stopReconciler()
+		<-reconcilerDone
+	}()
+
 	srv := &http.Server{
 		Handler:           a.server.Handler(),
 		ReadHeaderTimeout: readHeaderTimeout,
@@ -237,6 +254,10 @@ func run() error {
 	// the drain; the deferred wait above is what guarantees it has actually
 	// stopped before the database closes.
 	stopSweeper()
+	// And the reconciliation sweep, for the same reason: a full import must not
+	// still be reading an upstream and writing rows through the drain. The
+	// deferred wait above is what guarantees it has actually stopped.
+	stopReconciler()
 	// An SSE connection never ends by itself; closing the hub ends the streams
 	// so Shutdown has only ordinary requests left to wait for.
 	a.server.Close()

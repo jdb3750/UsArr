@@ -27,8 +27,13 @@ import (
 // "THREE TRIGGERS" until 2026-08-21 and the delta route falsified it the same
 // day; a count is not the property (DEVELOPMENT.md §11). The property is that
 // NOTHING re-reads a whole library except by one of the entries below, each of
-// which someone or something asked for out loud — there is no timer, no sweep
-// and no implicit path.
+// which someone or something asked for out loud.
+//
+// ⚠️ THIS SENTENCE ENDED *"— there is no timer, no sweep and no implicit path"*
+// AND THE FIRST CLAUSE IS NOW FALSE (ADR-0076). reconcile.go's startReconciler
+// is a timer, and it is the last entry below. What survives is the property the
+// clause was written to protect: a re-read still happens only by an entry on
+// this list, and the timer is ON the list rather than beside it.
 //
 //   - ON CONNECT. bootstrapImport runs once when a catalogue-source client
 //     stack is built for an instance that has never completed a full sync. That
@@ -49,6 +54,13 @@ import (
 //     actually gets; §4a.3 of reference/http-api.md is where that is said to
 //     them, and the escalated run publishes the full import's own
 //     import.progress frames because it IS one.
+//   - ON A TIMER — §7.4's schedule, and the entry a reader of the old list would
+//     not expect to find. reconcile.go's startReconciler calls FullImport for
+//     every instance whose last completed full sync has aged past
+//     reconcileInterval. It is the one trigger nobody asked for out loud, which
+//     is why it is gated on a durable column rather than on the ticker alone:
+//     see reconcileDue for what "due" means and why an instance that has never
+//     synced is deliberately NOT it (that case is the bootstrap's, above).
 //   - IN PROCESS, by calling FullImport directly.
 //
 // WHY THE ON-DEMAND ONE HAD TO EXIST. bootstrapImport is gated on last_full_sync_at
@@ -60,15 +72,21 @@ import (
 // run again. A re-import is therefore not a feature of the sync core: it is what
 // makes the sync core's own fixes deliverable.
 //
-// NO TIMER, AND THAT IS STILL TRUE OF CHANNEL 4 TOO. There is no periodic
-// re-import here and adding one would be the wrong shape anyway: a re-read of
-// the whole library every N hours is channel 4's job (the reconciliation sweep,
-// which compares hashes and touches <1% of rows), not channel 1's.
+// THE PERIODIC RE-READ IS CHANNEL 4'S AND NOT CHANNEL 1'S, and that distinction
+// outlived the claim it was written to support: a re-read of the whole library
+// every N hours is the reconciliation sweep (which compares hashes and touches
+// <1% of rows), not a second bootstrap.
 //
-// ⚠️ THAT SENTENCE DESCRIBES A DESIGN, NOT A TREE. sync.md §4's "every 6 h
-// (configurable)" scheduler is not built for any channel, and the sweep that IS
-// built runs from FullImport's success path and from nowhere else. Nothing in
-// this binary reconciles on a clock.
+// ⚠️ THIS PARAGRAPH READ *"NO TIMER, AND THAT IS STILL TRUE OF CHANNEL 4 TOO …
+// sync.md §4's 'every 6 h (configurable)' scheduler is not built for any channel,
+// and the sweep that IS built runs from FullImport's success path and from
+// nowhere else. Nothing in this binary reconciles on a clock."* THE LAST THREE
+// SENTENCES ARE FALSE AS OF ADR-0076. The scheduler is built — reconcile.go's
+// startReconciler, started from main.go — and it reconciles on a clock by calling
+// FullImport, so the sweep still runs from FullImport's success path and now has
+// a second thing that gets it there. The word "(configurable)" is still not
+// honoured and deliberately: reconcileInterval is a constant, on the ruling
+// maintenance.go states for candidateSweepInterval.
 //
 // ⚠️ THIS PARAGRAPH CONTINUED *"Neither channel 4 nor channel 3b is built here —
 // which is also why this is a FULL re-import rather than a delta: internal/libsync

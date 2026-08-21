@@ -469,7 +469,13 @@ Items marked 🛑 **STOPPED** are the different case: those are stopped by the d
       channel 3b under "NOT HERE".
 
 - [ ] **Channel 4 — reconciliation. The DELETION HALF and GUARD 1 have landed; the drift step, guard
-      2, the scheduler and the tombstone reaper have not.** It carries more weight for a catalogue
+      2, the scheduler and the tombstone reaper have not.** ⚠️ **THE SCHEDULER HAS SINCE LANDED
+      (2026-08-21, [ADR-0076](./DECISIONS.md#adr-0076)) and this opening no longer describes the
+      tree.** `cmd/usarr/reconcile.go`'s `startReconciler` is the six-hourly timer and `main.go`
+      starts, cancels and waits on it. What is still missing is the drift step, guard 2 for the
+      \*Arrs, and the tombstone reaper — and the reaper is **decided absent**, not merely unbuilt:
+      ADR-0076 Decision 4 rules the seven days a restoration window, and a retention limit is a joint
+      decision with guard 1 that nobody has taken. It carries more weight for a catalogue
       source than for an \*Arr: a page walk cannot observe a deletion, and BookOrbit's arrivals filter
       sees no edit at all. ⚠️ **This item read *"with both sweep guards and 7-day tombstones"* and
       framed the weight in terms of Kavita**; [ADR-0074](./DECISIONS.md#adr-0074) ships guard 1
@@ -480,10 +486,24 @@ Items marked 🛑 **STOPPED** are the different case: those are stopped by the d
       `grep -rn 'missing_since\|orphaned_at' --include=*.go internal/` showing a statement that
       **sets** a non-NULL value, on the premise that *"today every one clears it"*, and
       `internal/store/reconcile.go`'s `sweepContainers` and `sweepOrphans` now set **both**. What is
-      left is three greps that still come back empty: a `SELECT` in non-test Go naming `remote_hash`
-      (the drift step — there is none, for any source); a reader of `identity_fingerprint` or
-      `max_remote_id_seen` (guard 2); and any caller of `SweepDeletions` other than `FullImport`
-      (there is no scheduler, and nothing hard-deletes a tombstone after seven days).
+      left is the greps that still come back empty: a `SELECT` in non-test Go naming `remote_hash`
+      (the drift step — there is none, for any source); and a reader of `identity_fingerprint` or
+      `max_remote_id_seen` (guard 2).
+      ⚠️ **A THIRD CHECK IS STRUCK 2026-08-21 RATHER THAN DELETED, BECAUSE IT IS A FALSE NEGATIVE BY
+      CONSTRUCTION:** ~~and any caller of `SweepDeletions` other than `FullImport` (there is no
+      scheduler, and nothing hard-deletes a tombstone after seven days)~~. **The scheduler that
+      shipped calls `FullImport`** — deliberately, because `SweepDeletions`' precondition is
+      satisfiable only by a real upstream read — so that grep stays empty *while a scheduler exists*.
+      Measured at both ends: at `f87aef44` and at this branch's tip the only non-test call of
+      `SweepDeletions` is `internal/libsync/importer.go`'s, inside `FullImport`. **The second half of
+      the struck parenthetical is still TRUE** — nothing hard-deletes a tombstone after seven days
+      (ADR-0076 Decision 4) — and it is carried in the opening above rather than in a check that
+      cannot see it.
+      **The check that replaces it, and it asserts the loop is WIRED rather than merely defined:**
+      `grep -n 'startReconciler(' cmd/usarr/main.go` must be NON-EMPTY. Verified to discriminate:
+      empty at `f87aef44`, and `204:	reconcilerDone := a.registry.startReconciler(reconcilerCtx)` at
+      this branch's tip. The stronger form of the same assertion, which also pins the shutdown wait,
+      is `cmd/usarr/reconcile_loop_test.go`'s `TestTheReconcilerIsStartedFromRun`.
 
 - [x] **Search over your own library — the read path AND the SCREEN.** Both landed 2026-08-18.
       `GET /api/v1/search` answers a flat ranked list off the local corpus at `04a28a4` — the handler
