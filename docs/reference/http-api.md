@@ -873,8 +873,12 @@ package doc now says so itself. **The rest of the paragraph is unchanged, and it
 this endpoint stays a full re-import**: §4a is a sibling of this section, never a replacement for it,
 and the full import is the only read that can repair a row UsArr wrote wrongly, a skip, or a deletion.
 
-Gated exactly like the five other writes on this screen: `Content-Type: application/json`, the
+Gated exactly like every other write on this screen: `Content-Type: application/json`, the
 double-submit CSRF token, an authenticated session, and the **five-minute sudo window** (§17.3.3).
+⚠️ **This sentence used to count the neighbours** ("the five other writes"), and the count was
+falsified 2026-08-21 by §4a's delta route arriving beside it. It is phrased without a number now, per
+`DEVELOPMENT.md` §11: the property is *no write on this screen is gated more weakly than its
+neighbours*, and a count is not that property.
 
 ### 4.1 Request
 
@@ -919,7 +923,7 @@ rather than collapsing it into a binary:
 
 | Question | How a caller answers it |
 | --- | --- |
-| Is it still running? | `POST` again. `409 import_in_progress` means yes; a `202` means no. |
+| Is it still running? | `POST` again. `409 import_in_progress` means a catalogue read of **some kind** is running — a full import **or** §4a's delta, which claim one guard; a `202` means none was. |
 | Did it succeed? | `last_full_sync_at` on `GET /api/v1/services/health` (§3). It is written **on success only**, so it advancing is the only positive evidence. |
 | Did it start and then fail? | It is no longer running (a `202` on a repeat press) **and** `last_full_sync_at` has not moved. |
 
@@ -932,13 +936,13 @@ nothing happened.
 
 **Every refusal below is decided before anything upstream is touched.** The kind check, the enabled
 check and the in-progress claim all complete synchronously, so a non-2xx means **no import started
-for this call**. It does not always mean nothing is running: `import_in_progress` means another one
-is, and says so in its own code.
+for this call**. It does not always mean nothing is running: `import_in_progress` means another
+catalogue read is, and says so in its own code.
 
 | Status | `error` | Meaning | `action` |
 | --- | --- | --- | --- |
 | `202` | — | Started. | — |
-| `409` | `import_in_progress` | An import for this instance is already running; a second was **not** started. Safe to press twice — the second press changes nothing. | `Wait for the running import to finish` |
+| `409` | `import_in_progress` | A full import **or** a delta (§4a) is already running for this instance; a second was **not** started. The two claim one guard, because they write the same rows through the same pipeline. Safe to press twice — the second press changes nothing. ⚠️ This row said *"an import for this instance"* until 2026-08-21, when `StartDeltaSync` began claiming the same map. | `Wait for the running import to finish` |
 | `409` | `not_a_catalogue_source` | The instance has no library to import — an indexer, not a catalogue source ([ADR-0041](../DECISIONS.md#adr-0041)). | `Run a sync on a catalogue service` |
 | `409` | `service_disabled` | The service exists and is switched off. | `Enable the service` |
 | `404` | `not_found` | No such instance **for this user** — the read is access-scoped. | — |
@@ -970,10 +974,11 @@ server-side ([ADR-0070](../DECISIONS.md#adr-0070)); it is not §7.1a's ordered p
 client-side stop, which remains the mechanism for sources that cannot express a since-filter. What
 that axis cannot see — tag, genre and author edits — is assigned to channel 4, which is not built.
 
-Gated exactly like the six other writes on this screen: `Content-Type: application/json`, the
+Gated exactly like every other write on this screen: `Content-Type: application/json`, the
 double-submit CSRF token, an authenticated session, and the **five-minute sudo window** (§17.3.3). A
 delta writes the same catalogue rows through the same pipeline as a full import, so a gate that was
-right for one cannot be optional for the other.
+right for one cannot be optional for the other. The neighbours are deliberately not counted here —
+see §4's note on why.
 
 ### 4a.1 Request
 

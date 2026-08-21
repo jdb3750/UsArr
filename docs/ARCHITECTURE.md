@@ -3710,15 +3710,17 @@ only pre-empts it turns the server's refusal into an unexplained failure.
 #### 17.3.3 `re-authentication required` — a named state, and not an authorisation failure
 
 **Every write on this screen sits behind sudo mode**, a window that opens on sign-in and on each
-password confirmation and closes **five minutes** later. Six endpoints are gated, which is every
-way this screen changes anything: create, update, delete, test-an-unsaved-service,
-test-a-saved-service, and **run-a-full-sync**. Both test endpoints are gated because a test is what
-sends a credential somewhere. ⚠️ **This read *"Five endpoints"* and named the first five**; the sixth
-is `POST /api/v1/services/{id}/sync`, the *Run full sync now* action this section already names for a
-*degraded, partial data* row, and it is gated for the same reason its five neighbours are rather than
-as a new rule — it is a write this screen makes, and one that reads a whole library over a stored
-full-admin credential. The count moved because the screen grew an action, not because the rule
-changed.
+password confirmation and closes **five minutes** later. **Every** endpoint that changes anything
+here is gated, with no exceptions and no count: create, update, delete, test-an-unsaved-service,
+test-a-saved-service, **run-a-full-sync** and **run-a-delta-sync**. Both test endpoints are gated
+because a test is what sends a credential somewhere; both sync endpoints are, because each reads a
+library over a stored full-admin credential and writes catalogue rows through one pipeline. ⚠️ **This
+paragraph counted the endpoints and the count went stale twice** — *"Five endpoints"* before
+`POST /api/v1/services/{id}/sync` landed, *"Six endpoints"* before
+`POST /api/v1/services/{id}/sync/delta` landed on 2026-08-21. It is written without a number now, per
+`docs/DEVELOPMENT.md` §11. The rule never changed: a write this screen makes is gated, and the list
+grows when the screen grows an action. `internal/httpapi/server.go`'s registrations are the tree's
+own answer to which endpoints those are.
 
 **The response is `403` with `error: sudo_required`** and `action: "Confirm your password"`. The
 screen branches on `error`, never on the status alone, because 403 is also how an ordinary
@@ -4359,8 +4361,11 @@ asserted:
   (`web/src/routes/services/+page.svelte:738`). So "sync now" exists, on the screen and on the wire.
   **There is still NO CLI subcommand.** `internal/config/flags.go` accepts exactly one positional
   form — `usarr key rotate` — and errors on every other positional, so nothing on the command line
-  reaches an import. `cmd/usarr/import.go`'s own doc comment names the three triggers there are: on
-  connect, on demand through that route, and in process.
+  reaches an import. `cmd/usarr/import.go`'s own doc comment names the triggers there are, and it
+  is authoritative over this sentence: on connect, on demand through that route, by escalation from
+  a delta press on `POST /api/v1/services/{id}/sync/delta`, and in process. ⚠️ **This read *"the
+  three triggers there are"*** and named the first three; the escalation was added to that comment
+  on 2026-08-21, and the number is deliberately gone from both.
 - **The request destination has never been written by anything.** All four columns —
   `sink_service_instance_id`, `sink_quality_profile_id`, `sink_root_folder_path`, `sink_tag_ids`
   (migration `00005_library_sync.sql`) — appear in the schema, in `internal/db/testdata/schema.sql`

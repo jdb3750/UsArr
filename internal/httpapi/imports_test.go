@@ -465,8 +465,9 @@ func TestTheFullSyncRouteNeverAnswersTheDeltasOwnCode(t *testing.T) {
 	}
 }
 
-// The delta route is gated exactly like the six service writes beside it: CSRF, a
-// session, and the sudo window. Driven through the REAL middleware chain, because
+// The delta route is gated exactly like every other service write beside it:
+// CSRF, a session, and the sudo window. (Deliberately not counted — see
+// server.go's note where the two sync routes are registered.) Driven through the REAL middleware chain, because
 // the middleware order is the subject and calling the handler directly bypasses
 // every layer of it.
 //

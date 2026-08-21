@@ -23,7 +23,12 @@ import (
 //
 // # What triggers it, and what deliberately does not
 //
-// THREE TRIGGERS, all explicit:
+// EVERY TRIGGER IS EXPLICIT, AND THEY ARE NOT COUNTED HERE. This list opened
+// "THREE TRIGGERS" until 2026-08-21 and the delta route falsified it the same
+// day; a count is not the property (DEVELOPMENT.md §11). The property is that
+// NOTHING re-reads a whole library except by one of the entries below, each of
+// which someone or something asked for out loud — there is no timer, no sweep
+// and no implicit path.
 //
 //   - ON CONNECT. bootstrapImport runs once when a catalogue-source client
 //     stack is built for an instance that has never completed a full sync. That
@@ -34,9 +39,19 @@ import (
 //   - ON DEMAND, from the Services screen's "Run full sync now" action
 //     (ARCHITECTURE.md §17.3), which reaches StartImport through
 //     POST /api/v1/services/{id}/sync.
+//   - BY ESCALATION FROM A DELTA, which is a full import nobody typed the words
+//     "full import" for and is therefore the one a reader will miss.
+//     POST /api/v1/services/{id}/sync/delta reaches StartDeltaSync, and
+//     deltaSyncLocked below calls fullImportLocked whenever libsync answers
+//     ErrEscalateToFullImport — a container bound since the last walk, or an
+//     instance that never completed a full sync. It is a PRODUCTION trigger on a
+//     button labelled for the cheap read, so the expensive read is what the user
+//     actually gets; §4a.3 of reference/http-api.md is where that is said to
+//     them, and the escalated run publishes the full import's own
+//     import.progress frames because it IS one.
 //   - IN PROCESS, by calling FullImport directly.
 //
-// WHY THE THIRD ONE HAD TO EXIST. bootstrapImport is gated on last_full_sync_at
+// WHY THE ON-DEMAND ONE HAD TO EXIST. bootstrapImport is gated on last_full_sync_at
 // and that gate is correct for what it guards — a restart must not re-read the
 // whole library — but it left the process with NO WAY AT ALL to ask for a second
 // import. Every fix that changes what an import WRITES (the credit pass writing
