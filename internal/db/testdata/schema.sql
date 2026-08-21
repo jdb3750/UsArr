@@ -1064,9 +1064,6 @@ CREATE TRIGGER trg_audit_no_update BEFORE UPDATE ON audit_log
 CREATE TRIGGER trg_library_unfiled_no_delete BEFORE DELETE ON library
   WHEN OLD.id = 0
   BEGIN
-    SELECT RAISE(ABORT, 'library 0 ("Unfiled") is reserved and cannot be deleted: it is where '
-      || 'the membership derivation files a work that belongs to no other library, and without '
-      || 'it such a work is invisible in search to every user including its owner. This also '
-      || 'blocks DELETE FROM user WHERE id = 0, the shared/system sentinel, deliberately.');
+    SELECT RAISE(ABORT, 'library 0 ("Unfiled") is reserved and cannot be deleted: it is where the membership derivation files a work that belongs to no other library, and without it such a work is invisible in search to every user including its owner. This also blocks DELETE FROM user WHERE id = 0, the shared/system sentinel, deliberately.');
   END;
 
