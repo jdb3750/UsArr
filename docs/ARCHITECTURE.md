@@ -3065,6 +3065,34 @@ one, and the resolution is not to delete the requirement but to fund the honest,
 quotas, no `request` table; those stay in v0.2. Without it, v0.1's only write path produces a
 multi-gigabyte download that UsArr forgets on the next navigation, and the acquisition loop the
 project exists to close has no memory.
+
+**The degraded-backend banner on the catalogue screens (§17.7), and only its ordinary branch.** When
+a catalogue instance stops answering, the Library screen and the per-type grids under it (§17.2's
+catalogue — `web/src/routes/library` and `web/src/routes/library/[type]`) carry a non-modal banner
+naming that instance **by the name the user gave it**, a state word, **that instance's own** last
+successful sync, and a link to the Services screen — and **the catalogue does not grey out**.
+**It adds no endpoint, no table, no background work and no fetch**: `GET /api/v1/services/health`
+already carries `name`, `state` and `last_full_sync_at` per instance, and both screens already call
+it to word their empty state and keep nothing else from the response. So the cost is one component
+above the table, the pure function that decides its words, and a link. **This is a deliberate
+addition to v0.1 and it is listed here because §16 is authoritative**: §17.7 had required the
+banner, §16 had not funded one — before this paragraph the word did not occur in this section at
+all — and the resolution
+is not to delete the requirement but to fund the honest, small version of it.
+
+**The honest, small version is the branch where the instance has a sync time**, and §17.7's other
+branch is **excluded here on purpose, so that the boundary is a scoping decision recorded now rather
+than a gap discovered later**. That branch is the instance with **no change feed at all**, whose
+sentence reads *"showing cached data from the last full compare at 09:12"*. Two reasons, and either
+alone would carry it. **No v0.1 source is in that state** — §17.7 says so in terms, in the paragraph
+that specifies the branch — so it would ship as copy no source this milestone can run is able to
+produce, which is the invented status CLAUDE.md forbids, expressed as a sentence rather than as a
+number. And telling the two branches apart on the client needs a **per-channel sync time the health
+response does not send**: it carries `last_full_sync_at` and no delta equivalent, so the distinction
+is a wire change in another lane and not a rendering decision on this one. When that wire arrives,
+the second branch is a sentence in an existing component rather than a subsystem — which is the
+whole reason it is worth saying no to now.
+
 Owner account, Argon2id, cookie sessions, CSRF, encrypted credentials **with key versioning, AAD and
 a working `usarr key rotate`**, the SSRF egress policy, redaction middleware. **Zero external metadata
 providers** — **no TMDB account is required to see your own library**, because v0.1's source carries
