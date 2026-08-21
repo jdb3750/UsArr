@@ -194,8 +194,48 @@ on an upsert that would clear deleted_at:
         clear deleted_at as normal
 ```
 
-`remote_identity_hash` is recorded at first sight, which makes the comparison O(1) and means the
-guard costs one column and one comparison per resurrection.
+⚠️ **THE BLOCK ABOVE IS ILLUSTRATIVE, NOT BINDING** ([ADR-0074](../DECISIONS.md#adr-0074),
+2026-08-21). It states the shape of the guard — compare an identity, and let a mismatch cost the link
+rather than the work — and it is **not** the branch structure that ships.
+[`ARCHITECTURE.md`](../ARCHITECTURE.md) §7.4 is the design and this file is its long-form companion,
+so §7.4 carries the change and this section follows it. **What the tree does** is
+`internal/store/catalogue.go`'s `guardOne`, and the difference is one branch this pseudocode has no
+room for:
+
+```
+on an upsert that would clear deleted_at:
+    if link.remote_identity_hash IS NULL:            -> unknown, not mismatched; revive
+                                                        (unreachable: every writer fills it)
+    if the incoming payload carries NO external ids: -> nothing to compare; revive, and emit
+                                                        sync_report{kind: "revived_without_identity"}
+    if incoming != link.remote_identity_hash:        -> hard-delete, fresh link,
+                                                        sync_report{kind: "id_reused"}
+    else:                                            -> clear deleted_at as normal
+```
+
+**The length test comes before the comparison because an equality that holds vacuously is not
+evidence.** `hash([])` is one constant every unidentified item shares, so on a source whose ordinary
+state is unidentified the original `!=` answered *"same content"* for two unrelated items. §7.4's
+guard-1 riders carry which way the evidence-free case falls and what would reopen it.
+
+⚠️ **AND `remote_identity_hash` MOVES EXACTLY ONCE, empty → present, AND NEVER AGAIN.** This
+paragraph read *"`remote_identity_hash` is recorded at first sight, which makes the comparison O(1)
+and means the guard costs one column and one comparison per resurrection"*, and the tree implemented
+*"written at first sight and never overwritten"*. The cost claim survives — one column, one
+comparison. **The freezing rule did not**, because it landed unnarrowed and was wrong on the ordinary
+case: first sight of an unmatched item stores the empty-list hash, and the identity that arrives when
+an operator matches it then reads as an identity that CHANGED, hard-deleting a link on a reuse that
+never happened. One transition is permitted and no other:
+
+```
+on upsert:
+    if link.remote_identity_hash == hash([]):  store the incoming identity   (empty -> present)
+    else:                                      leave the stored value alone   (NULL included)
+```
+
+An **established** identity is still frozen against the upstream and against anyone who has got at
+the upstream, which is what the guard rests on. ⚠️ **A wrong first identity is frozen too**; the
+repair is v0.2's *"fix this match"*, not an upstream believed a second time.
 
 ### Guard 2 — instance identity generation
 
@@ -222,8 +262,14 @@ monotonic-id check is the floor.
 
 ⚠️ **AND THIS GUARD IS DEFERRED FOR BOOKORBIT, ON A MEASURED VOID PREMISE**
 ([ADR-0074](../DECISIONS.md#adr-0074), 2026-08-21). The pseudocode above stays as written and stays
-binding **for the \*Arrs** — *"REFUSE to run the sweep for this instance"* is imperative and is not
-softened. What is scoped is its **premise**: an id space that regresses under ordinary operation is a
+binding **for every source but BookOrbit** — *"REFUSE to run the sweep for this instance"* is
+imperative and is not softened. ⚠️ **THAT SET IS NAMED BY ITS BOUNDARY RATHER THAN BY ITS ONE
+INTERESTING MEMBER**: it was written as *"for the \*Arrs"*, and the \*Arrs have no adapter yet
+(ADR-0042, ADR-0045), so the imperative would have been binding on nothing that runs. **Kavita is a
+wired catalogue source and the sweep runs for it** — `internal/libsync`'s `FullImport` calls
+`SweepDeletions` unconditionally and nothing in the pass is scoped by source — and **no measurement
+anywhere in this repo covers Kavita's id allocator**, so the exemption below is not available to it.
+The deferral is one source's, backed by one measurement. What is scoped is its **premise**: an id space that regresses under ordinary operation is a
 SQLite-rowid property, and BookOrbit's `books.id` / `libraries.id` are PostgreSQL `serial` with no
 `setval(`, no SQL `TRUNCATE` and no `RESTART IDENTITY` in `server/src` at pin `73b7877d2fed`.
 ⚠️ **The surviving hazard is a NAMED GAP WITH NO GUARD** — an older `pg_dump` restored, or the
@@ -234,8 +280,17 @@ instance repointed at a rebuilt server — and BookOrbit exposes **no instance i
 written, which `ux_sil` being a plain UNIQUE index rather than a partial one makes the only available
 shape. ⚠️ **Guard 1's own reach is bounded by what identifies the item**: the incoming hash is over the
 payload's external ids, so an item carrying **none** hashes identically to every other item carrying
-none, and the `if` above never fires for it. On a source whose ordinary state is unidentified that is
-most of the catalogue — ADR-0074's third named gap, also with no guard.
+none. On a source whose ordinary state is unidentified that is most of the catalogue.
+
+⚠️ **RIDER 2026-08-21 — THE SENTENCE ABOVE CONTINUED *"and the `if` above never fires for it … also
+with no guard"*, AND IT NO LONGER DESCRIBES THE TREE.** The guard does not reach that `if` at all for
+such an item: the length branch answers first, the tombstone is **revived**, and a
+`sync_report{kind: "revived_without_identity"}` row records that nothing was certified. So a genuine
+id reuse on an unidentified item is **silently merged rather than split** — the new content adopts
+the old work and its owned rows, and no row calls it a reuse, because nothing observed one. **That is
+chosen, not overlooked**, on the ground that the split it replaces is permanent in v0.1 (§6.4 defers
+`work_merge`) and certain on the common case, while the merge needs an id reuse ADR-0074 measures
+void for this source. §7.4 carries the full ruling and the two things that reopen it.
 ⚠️ **The four `service_instance` columns this guard names stay as an annotated seam**; no migration
 touches them, and the annotation lives on `store.ServiceInstance`, which is where their **absence**
 is visible.

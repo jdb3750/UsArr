@@ -689,6 +689,19 @@ is never edited** — so the same superseded sentence stands in
 `internal/db/migrations/00005_library_sync.sql` and is history there. `internal/libsync` is what
 answers who writes these columns today.
 
+⚠️ **`remote_identity_hash`'s *"at first sight"* is superseded in the same way, and is likewise left
+standing** (2026-08-21, [ADR-0074](../DECISIONS.md#adr-0074)). The column comment above reads *"hash
+of the remote's external ids, at first sight; the O(1) guard against id resurrection (sync.md §4)"*,
+and it transcribes migration 0005, so it is not edited here for the reason the paragraph above gives.
+**What the tree does is one transition and no other: `empty → present`.** The value is written at
+first sight; the ONLY later write permitted is an arriving identity replacing the empty-list hash of
+an item nobody had matched yet. An **established** identity never moves again, against the upstream
+or against anyone who has got at the upstream, and NULL is not empty and is left alone. The
+unnarrowed rule — first sight and never overwritten — read *"the operator matched this book"* as
+*"the upstream repointed this id"* and hard-deleted a live link for it, which is the ordinary
+BookOrbit lifecycle rather than an attack. `internal/store/catalogue.go`'s `applyOneItem` step 7 is
+what implements it, and ARCHITECTURE §7.4 carries the rule.
+
 **`ux_sil` is only usable in full if `remote_kind` is known at lookup time**, which is why the
 northbound ID encodes it (ARCHITECTURE §5.3). Without it, `WHERE service_instance_id=? AND
 remote_id=?` yields `SEARCH service_item_link USING INDEX ux_sil (service_instance_id=?)` — a range
@@ -1519,6 +1532,22 @@ CREATE UNIQUE INDEX ux_library_slug ON library(user_id, slug);
 CREATE UNIQUE INDEX ux_library_name ON library(user_id, name);
 CREATE INDEX ix_library_kind ON library(user_id, kind) WHERE enabled = 1;
 ```
+
+⚠️ **`orphaned_at`'s *"when the last library_source goes away"* is not what the writer does, and the
+column comment is left standing** (2026-08-21, [ADR-0074](../DECISIONS.md#adr-0074)) — it transcribes
+migration 0005, and a merged migration is never edited. **No `library_source` row ever goes away.**
+`internal/store/reconcile.go`'s `sweepOrphans` stamps the column when no source of the library is
+still being **reported**; the rows are all retained, and the ones that stopped being reported carry
+`missing_since` instead. It is also the only one of the sweep's four stamps with a clearing arm,
+because nothing else in the tree clears it and a flag that can only be set marks a library
+permanently orphaned the moment its upstream blinks. ⚠️ **AND A SOURCE ON A SOFT-DELETED
+`service_instance` IS NOT A SOURCE.** The FK cascade fires on a HARD delete only, so soft-deleting an
+instance leaves its `library_source` rows in place with `missing_since` NULL — invisible to
+`librarySourcesSQL`, which filters `service_instance.deleted_at IS NULL`, and, before this was fixed,
+enough to satisfy the orphan rule's `NOT EXISTS` forever. Both arms of the rule now require the
+source's instance to be live, so the read and the sweep use one definition; and because no sweep ever
+runs for a deleted instance, `SoftDeleteServiceInstance` performs the orphan pass itself, inside its
+own transaction. **Deleting an instance is an orphaning event, and it is the one no sweep can reach.**
 
 **Who owns a library — the question §6.5 left with two live readings, settled here.** ADR-0026 and
 §6.5 call a library *user-owned*; §12.2 names `user_library_access` (v1.0) as the mechanism for

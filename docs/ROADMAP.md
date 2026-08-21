@@ -441,19 +441,25 @@ read directly for what §2's obligation 3 says about them.
 Ordered roughly by what the rest depends on, not by size.
 
 ⚠️ **EVERY ITEM BELOW THAT NAMES KAVITA IS WRITTEN AGAINST A SOURCE v0.1 NO LONGER TAKES (§1)** —
-channel 3b, channel 4, the per-series volume/chapter walk, the *"not identified"* badge, and the
+channel 3b, the per-series volume/chapter walk, the *"not identified"* badge, and the
 zero-external-providers evidence clause. **The work each names is real and source-shaped**, and what
 each owes is that same work pointed at BookOrbit. **None of them is re-pointed line by line here**,
 and the reason has changed: this used to say *"~~re-pointing them is the unwritten ADR's job~~"*, and
 the ADR landed — [ADR-0052](./DECISIONS.md#adr-0052) **deliberately declined to re-answer** ADR-0041
-clause 4's channel list, reopening it instead. ⚠️ **ONE OF THE FIVE IS NOW RE-POINTED, 2026-08-20 —
-THE ZERO-EXTERNAL-PROVIDERS EVIDENCE CLAUSE.** Its box below reads *"for BookOrbit"* and its body
-names BookOrbit's payloads. **CITE `8cdf399`, NOT EITHER MERGE.** Only the **source name** moved,
-which is a different defect from the per-item **rewrite** this sentence defers — the evidence
-obligation is still owed and its box is still open. **The other four are untouched by that pass, and
-this sentence still holds of them.** So the per-item rewrite is owed by whoever writes the adapter,
-against §16's narrower channel sentence (§1), and **channel 3b's item in particular cannot simply be
-re-pointed** — for `work_comic` there is nothing at the far end to point it at (§3).
+clause 4's channel list, reopening it instead. ⚠️ **THE ZERO-EXTERNAL-PROVIDERS EVIDENCE CLAUSE IS
+RE-POINTED, 2026-08-20.** Its box below reads *"for BookOrbit"* and its body names BookOrbit's
+payloads. **CITE `8cdf399`, NOT EITHER MERGE.** Only the **source name** moved, which is a different
+defect from the per-item **rewrite** this sentence defers — the evidence obligation is still owed and
+its box is still open. **The rest are untouched by that pass, and this sentence still holds of
+them.** ⚠️ **AND THE INVENTORY IS NO LONGER A COUNT.** It read *"channel 3b, **channel 4**, the
+per-series volume/chapter walk …"* and *"ONE OF THE FIVE … The other four"*; the channel-4 item was
+rewritten on 2026-08-21 and no longer frames its weight in terms of Kavita — the only Kavita left in
+it is inside a dated rider quoting what it used to say, which is history rather than staleness
+([`DEVELOPMENT.md`](./DEVELOPMENT.md) §11). It is dropped from the list rather than the list
+re-numbered, because a count maintained by a different act than the thing it counts is what went
+stale here. So the per-item rewrite is owed by whoever writes the adapter, against §16's narrower
+channel sentence (§1), and **channel 3b's item in particular cannot simply be re-pointed** — for
+`work_comic` there is nothing at the far end to point it at (§3).
 Items marked 🛑 **STOPPED** are the different case: those are stopped by the decision itself.
 
 - [ ] **Channel 3b — the ordered page-walk delta, for Kavita.** The watermark walk with an overlap

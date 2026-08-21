@@ -422,7 +422,7 @@ from a failure.
 | `items[].enabled` | yes | |
 | `items[].include_in_search` | yes | Independent of `enabled`; both are read from their own column. |
 | `items[].item_count` | yes | `library_member` rows in this library **that the caller's access scope admits**. Edition-grained by the table's key; equal to a count of distinct works today, because the only writer files every work under the `edition_id = 0` "whole work" sentinel. |
-| `items[].orphaned_at` | **no** | RFC 3339 UTC. §6.5 rule 5's retained-with-a-reason state, set when the last source goes away. ⚠️ **Nothing writes it** — see §2.4. |
+| `items[].orphaned_at` | **no** | RFC 3339 UTC. §6.5 rule 5's retained-with-a-reason state: no source of this library is still being reported by anybody. ⚠️ **This row read *"set when the last source goes away … Nothing writes it"*, and both halves are false as of 2026-08-21** — see §2.4. The sources are **retained**, and the column has two writers. |
 | `items[].completeness` | **no** | What the last import measured about how much of this library's upstream containers UsArr's credential could see. ⚠️ **Absent means nothing was measured, never "complete"** — see §2.7. |
 | `items[].skipped` | **no** | What the last import **read and did not map** in this library's containers. A different axis from `completeness`, not its inverse. ⚠️ **Absent means nothing walked this library, never "nothing was skipped"** — see §2.6a. ⚠️ **Its `items` is per LIBRARY and several rows can report one container's skip, so do not sum it across rows** — fold on `skipped.containers`. |
 | `items[].sources` | yes | Possibly `[]`. Never absent: an absent key reads as *"unknown"*, and *"this library has no sources"* is precisely what §17.8's orphaned state renders. |
@@ -434,7 +434,7 @@ from a failure.
 | `sources[].container_ref` | yes | The container the **upstream itself** reported, verbatim. A Kavita library id in v0.1. |
 | `sources[].container_name` | **no** | The container's own name as the upstream reported it at bind time — §17.8's *"upstream's own name beneath it, greyed and non-editable"*. Absent, not `""`, when unrecorded. |
 | `sources[].is_metadata_authority` | yes | §17.8 suppresses the *control* below two sources; the fact still travels. |
-| `sources[].missing_since` | **no** | RFC 3339 UTC. §17.8's per-source health: the upstream stopped reporting this container. ⚠️ **Nothing sets it** — see §2.4. |
+| `sources[].missing_since` | **no** | RFC 3339 UTC. §17.8's per-source health: the upstream stopped reporting this container. ⚠️ **This row read *"Nothing sets it"*, and that is false as of 2026-08-21** — the deletion sweep is its first writer; see §2.4. |
 
 **Nothing service-side beyond a name and a kind is on the wire, and nothing can be.** This is the
 only user-facing read in the product that joins a list to `service_instance`, the row carrying
@@ -452,16 +452,36 @@ chip, never proposed."** This endpoint is the Libraries screen, so the row is ex
 unconditionally, with no parameter that can include it. A client never has to filter for it and must
 not treat `id = 0` as a library.
 
-### 2.4 Three fields describe states nothing in the tree can currently reach
+### 2.4 `formats` describes a state nothing in the tree can currently reach
 
-Stated here rather than left to be inferred, because a screen that renders none of them is reporting
+Stated here rather than left to be inferred, because a screen that renders it never is reporting
 the **writer's** silence and not the upstream's:
 
 | Field | Status |
 | --- | --- |
-| `sources[].missing_since` | The two statements in non-test Go that touch the column both **clear** it; no code path sets a non-NULL value. So *"no source is missing"* is not a positive health check. |
-| `items[].orphaned_at` | No writer and no reader in non-test Go. |
 | `items[].formats` | No writer: `library.formats` is NULL on every row, so the Ebooks/Audiobooks split it exists for is not reachable in v0.1 (§17.8 marks that split *"from the milestone Audiobookshelf lands in, not v0.1"*). |
+
+⚠️ **THIS SECTION WAS HEADED *"Three fields describe states nothing in the tree can currently reach"*
+AND LISTED TWO MORE, AND CHANNEL 4 GAVE BOTH A WRITER** (2026-08-21,
+[ADR-0074](../DECISIONS.md#adr-0074)). The two rows are corrected here rather than deleted, because a
+client author who read the old table built against it:
+
+- **`sources[].missing_since`** read *"The two statements in non-test Go that touch the column both
+  **clear** it; no code path sets a non-NULL value. So 'no source is missing' is not a positive health
+  check."* The first sentence is now false — `internal/store/reconcile.go`'s `sweepContainers` stamps
+  it for a container the last whole-list read did not report. ⚠️ **The conclusion survives on a
+  different leg and clients must not invert it**: the column records an ABSENCE, so an unset value
+  means *nothing has been observed*, never *observed and fine*. There is still no positive
+  health check on this response.
+- **`items[].orphaned_at`** read *"No writer and no reader in non-test Go."* Wrong on both halves.
+  It has **two writers**: `sweepOrphans`, from the deletion sweep, and `SoftDeleteServiceInstance`,
+  which runs the same orphan pass in its own transaction because deleting an instance is the one
+  orphaning event no sweep can reach. It also has a reader, and had one before that slice —
+  `internal/store/libraries.go`'s `listLibrariesSQL` selects it. Same standing warning: an unset
+  value is *unobserved*, not *healthy*.
+
+**What a client can rely on either way:** both fields stay optional, and absence keeps meaning
+UNKNOWN. Nothing about the wire shape changed; what changed is that the states are now reachable.
 
 **And the request destination is absent from this response entirely.** §17.8: *"The `Request
 destination` column does not render in v0.1, and it returns with the first service that can be a
@@ -966,15 +986,26 @@ that. It is **per instance**, for §4's reason — the control lives on a servic
 
 **Why it is a separate route and not a mode flag on §4.** The two reads answer different questions
 and refuse for different reasons. A full import re-reads the whole library and is the only thing that
-can repair a row UsArr itself wrote wrongly, a skip or a deletion; a delta revisits nothing it is not
-told about. And a source can have a catalogue UsArr imports and **no change feed at all** — Kavita is
+can repair a row UsArr itself wrote wrongly, a skip or a tie wedge; a delta revisits nothing it is not
+told about. ⚠️ **This read *"a row UsArr itself wrote wrongly, a skip or a deletion"* until
+2026-08-21, and *"or a deletion"* is struck rather than reworded**: channel 4's deletion pass runs on
+the full import's success path and repairs deletions itself, so the full import is no longer the only
+thing that can ([ADR-0074](../DECISIONS.md#adr-0074)). The rest of the sentence is unchanged and is
+the durable half — no upstream re-read can see a row UsArr wrote wrongly, because the upstream is not
+wrong about it. And a source can have a catalogue UsArr imports and **no change feed at all** — Kavita is
 the live one — so this route has a refusal §4 does not, and folding them together would put that
 refusal into a status code that already means four other things.
 
 **It is `arrivals`-shaped, not `updatedAt`-shaped.** BookOrbit's 3b filters on `books.addedAt`
 server-side ([ADR-0070](../DECISIONS.md#adr-0070)); it is not §7.1a's ordered page walk with a
 client-side stop, which remains the mechanism for sources that cannot express a since-filter. What
-that axis cannot see — tag, genre and author edits — is assigned to channel 4, which is not built.
+that axis cannot see — tag, genre and author edits — is assigned to channel 4. ⚠️ **This sentence
+ended *"channel 4, which is not built"*, and that is half-true as of 2026-08-21.** Channel 4's
+DELETION half is built and runs from every full import; its DRIFT step — §7.4's `remote_hash`
+comparison and the refetch it triggers — is **built for no source at all**, and the drift step is the
+half that would carry these edits. So the assignment is still an assignment and not a discharge, and
+the precision matters: what is unbuilt is not "channel 4", it is the step this sentence's residue
+goes to ([ADR-0074](../DECISIONS.md#adr-0074)).
 
 Gated exactly like every other write on this screen: `Content-Type: application/json`, the
 double-submit CSRF token, an authenticated session, and the **five-minute sudo window** (§17.3.3). A

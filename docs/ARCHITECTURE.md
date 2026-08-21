@@ -1368,7 +1368,7 @@ Five properties, each of which is a correctness requirement rather than a detail
 | **Ordering guarantee** | The source must return items ordered by a monotonic last-modified field it maintains itself. Probed at connect time, not assumed. |
 | **Overlap window** | Re-read `max(5 min, 2 × \|clock_skew_secs\| + poll interval)` **behind** the watermark, from the `Date` header skew already measured per instance (§7.3). Items changed during the walk otherwise fall between pages. |
 | **Page-walk stability** | An ordering key that mutates *while* the walk runs reorders the result set under the cursor, so an item can be skipped. The walk therefore records the first page's top item and **restarts if it is no longer first on the next poll**, rather than continuing into a reordered set. |
-| **Deletions** | A page walk **cannot observe a deletion**, structurally. Channel 4 remains the only deletion path for these sources, which is exactly why the sweep is doing more work here than it does for the \*Arrs. ⚠️ **The sweep uses FOUR stamps and they are not interchangeable** ([ADR-0074](./DECISIONS.md#adr-0074)): `service_item_link.deleted_at` is the **item tombstone** — the window guard 1 exists to police — and `work.deleted_at` follows it only when a work loses its last live link **on any instance**, because the work column is the one every user-facing read filters on; `library_source.missing_since` is a **container absence stamp**, meaning "the upstream stopped reporting this container", with the library, its corrections and its members all left standing; and `library.orphaned_at` is §6.5 rule 5's library-level state, set when no source of the library anywhere is still reported and **cleared again** when one comes back. All four are stamped `IS NULL`-guarded, so each records when the absence **began**. **Collapsing the container stamp into the item tombstone is how an unmounted share becomes a deleted library.** |
+| **Deletions** | A page walk **cannot observe a deletion**, structurally. Channel 4 remains the only deletion path for these sources, which is exactly why the sweep is doing more work here than it does for the \*Arrs. ⚠️ **The sweep uses FOUR stamps and they are not interchangeable** ([ADR-0074](./DECISIONS.md#adr-0074)): `service_item_link.deleted_at` is the **item tombstone** — the window guard 1 exists to police — and `work.deleted_at` follows it only when a work loses its last live link **anywhere** — not on the sweeping instance, on any instance at all, which is why the `NOT EXISTS` behind it is deliberately not instance-scoped — because the work column is the one every user-facing read filters on; `library_source.missing_since` is a **container absence stamp**, meaning "the upstream stopped reporting this container", with the library, its corrections and its members all left standing; and `library.orphaned_at` is §6.5 rule 5's library-level state, set when no source of the library anywhere is still reported and **cleared again** when one comes back. All four are stamped `IS NULL`-guarded, so each records when the absence **began**. **Collapsing the container stamp into the item tombstone is how an unmounted share becomes a deleted library.** ⚠️ **AND A SOURCE ON A SOFT-DELETED INSTANCE IS NOT A SOURCE** (2026-08-21). The FK cascade fires on a hard delete only, so soft-deleting an instance leaves its `library_source` rows in place with `missing_since` still NULL — invisible on the screen, which filters `service_instance.deleted_at IS NULL`, and enough to keep the orphan rule's `NOT EXISTS` satisfied forever. The rule and the screen therefore use **one** definition of a source that counts, and because no sweep ever runs for a deleted instance, **deleting the instance is itself an orphaning event**: it stamps the libraries it was the last live source of, in its own transaction, rather than waiting for a sweep that will not come. |
 
 **What happens when the ordering guarantee is absent — and it is absent for at least one source
 today.** The instance falls back to **reconciliation only**, and this is surfaced rather than
@@ -1457,7 +1457,15 @@ at connect time**, since every spec types it `date-time` and says nothing about 
 response is unbounded** — there is no `limit` parameter (unlike `/history`), so an instance offline
 for a week returns its whole history in one array.
 
-### 7.4 Channel 4 — reconciliation, and its two guards (⚠️ one of which is source-conditional; see ADR-0074)
+### 7.4 Channel 4 — reconciliation, and its two **mandatory** guards (⚠️ one of which is source-conditional; see ADR-0074)
+
+⚠️ **THE WORD *mandatory* WAS DELETED FROM THIS HEADING ON 2026-08-21 AND IS PUT BACK ON 2026-08-21.**
+The heading read *"its two **mandatory** guards"* at `b90b031`, [ADR-0074](./DECISIONS.md#adr-0074)
+Decision 14 ruled that those sentences take *"a SCOPING RIDER, **NOT A DELETION**"* because they were
+true when written and are being narrowed, and the conformance commit then struck the word here while
+§2.2 — the other site Decision 14 names — narrowed it correctly. The narrowing lives in the
+parenthetical instead: **guard 1 is mandatory everywhere**, and guard 2's *premise* is what is
+source-conditional. No cross-reference targeted the old anchor, so nothing dangled either way.
 
 Every 6 h plus on demand: fetch the full entity list per instance; left-anti-join
 `service_item_link` → rows deleted upstream; **soft-delete with a 7-day tombstone**; compare
@@ -1487,7 +1495,33 @@ item to the old `work_id` — poster, tags, requests and northbound ID all now p
 film. The 7-day tombstone is precisely the window in which this is possible. **On any upsert that
 would clear `deleted_at`, compare the remote payload's external identity against the tombstoned
 link's `work_id`**; on mismatch, hard-delete the tombstone and create a fresh link.
-`remote_identity_hash`, recorded at first sight, makes it O(1).
+`remote_identity_hash` makes it O(1).
+
+⚠️ **"MISMATCH" IS ONE OF FOUR ANSWERS, AND ONLY ONE OF THEM HARD-DELETES**
+([ADR-0074](./DECISIONS.md#adr-0074), 2026-08-21; `internal/store/catalogue.go`'s `guardOne`,
+`guardOneVerdict`, `firesGuard` and `recordsRevival`). A hash comparison alone cannot separate *"the
+identity changed"* from *"there is no identity to compare"*, because both read as inequality, and on
+a source whose ordinary state is unidentified the second is the common case. So the comparison is
+reached only when **both sides carry identifiers**: stored present and different **fires** and is the
+sentence above; stored present and incoming **empty** revives the tombstone and writes a
+`sync_report{kind: "revived_without_identity"}` row saying the guard certified nothing; stored
+present and equal revives silently; a stored NULL is **unknown, not mismatched**, and is unreachable
+because every shipped writer fills the column. **The destructive branch is the narrowest of the
+four**, which is the direction this guard's errors have to fall.
+
+⚠️ **AND THE COLUMN MOVES EXACTLY ONCE, empty → present, AND NEVER AGAIN.** This sentence read
+*"`remote_identity_hash`, recorded at first sight, makes it O(1)"*, and the tree read *"written at
+first sight and never overwritten"* with the column omitted from step 7's `ON CONFLICT` list — a rule
+that **landed unnarrowed and was wrong on the ordinary case**. First sight of a BookOrbit book is
+before anybody has matched it, so the row froze the hash of an empty identifier list; the operator
+then matches it, it is tombstoned, it comes back carrying the identifier it has had ever since, and
+guard 1 read `identity_changed` and hard-deleted a link on a reuse that never happened. The rule is
+now **one transition** — a stored empty-list hash is replaced by an arriving identity, and nothing
+else ever moves the value. An **established** identity is still frozen against the upstream and
+against anyone who has got at the upstream, which is the whole of what the guard rests on, and this
+strictly reduces the firings of the destructive branch. ⚠️ **A wrong FIRST identity is frozen too.**
+That is the cost and it is not repaired here: the repair is v0.2's *"fix this match"* — an owner
+correcting a binding — and never an upstream believed a second time.
 
 **Guard 2 — instance identity generation.** An \*Arr restored from an older backup moves its id space
 *backwards*, so ids UsArr has mapped now belong to different content. Under "the \*Arr always wins"
@@ -1511,9 +1545,34 @@ zero files, and the same search shape over four terms that ARE present returns 9
 was working. **Guard 1 is the whole of this source's leverage**, which is why ADR-0074 required it
 shipped **wired** — `remote_identity_hash` recorded and *compared* — rather than merely recorded.
 ⚠️ **AND GUARD 1's OWN REACH IS BOUNDED BY WHAT IDENTIFIES THE ITEM.** The comparison is over the
-item's external ids, so an item with **none** hashes the same as every other item with none — on a
-source whose ordinary state is unidentified (§6.4) the guard passes a reused id through in silence.
-That is ADR-0074's third named gap and it has no guard either.
+item's external ids, so an item with **none** hashes the same as every other item with none, and on a
+source whose ordinary state is unidentified (§6.4) that is most of the catalogue.
+
+⚠️ **RIDER 2026-08-21 — THE SENTENCE ABOVE ENDED *"the guard passes a reused id through in silence.
+That is ADR-0074's third named gap and it has no guard either"*, AND BOTH HALVES NOW READ WRONG.**
+*"In silence"* is false: every revival the guard makes with nothing to compare writes a
+`sync_report{kind: "revived_without_identity"}` row and moves a counter of its own, so the two
+outcomes that leave identical rows behind — *"the identity agreed"* and *"there was no identity"* —
+are distinguishable after the fact. *"No guard either"* understates what is there and overstates what
+it buys. **The residue, in plain words: a genuine id reuse on an unidentified item is now silently
+MERGED rather than split.** The new content adopts the old work, its tags and its requests, and no
+row says a reuse happened, because nothing observed one. **That is chosen, not overlooked.** The
+alternative — mint a fresh work — is the split, and in v0.1 the split is permanent: §6.4 defers
+`work_merge` and its un-merge machinery out of the milestone, `TestDeferredTablesAreAbsent` fails a
+migration that creates the table early, so *"a later merge puts it back"* names nothing that exists.
+Re-minting is **certain** on every ordinary resurrection of an unmatched book; the merge it avoids
+needs a genuine id reuse, which ADR-0074 measures **void** for the one source v0.1 ships. A certain
+harm in the common case loses to a conditional harm in the measured-rare case, and a row after the
+fact is not a guard before it.
+
+⚠️ **WHAT REOPENS THIS, AND IT IS TWO THINGS RATHER THAN A REVIEW OF THE ARGUMENT.** **(1) Identity
+coverage improving** — if most items on a source arrive carrying an identifier, the evidence-free
+case stops being the common case and the rate argument that decided it inverts. **(2) A merge path
+existing** — the moment a work can be merged back, the split stops being permanent and becomes the
+recoverable error the original ruling assumed it already was. Either one is grounds to move the
+evidence-free case back to the fresh-link side; neither has happened, and nothing else is. ⚠️ **A
+wrong FIRST identity is frozen too** — see the guard-1 rider above, whose correction path is v0.2's
+*"fix this match"* and not this slice.
 
 ### 7.5 Degradation: per-instance circuit breakers
 
@@ -2828,7 +2887,22 @@ than it was to Kavita, and lands with the first \*Arr adapter, **which is v0.2**
 ([ADR-0045](./DECISIONS.md#adr-0045)). **Reconciliation with 7-day
 tombstones and both sweep guards** for everything — and it carries more weight here than it would for
 an \*Arr, because a page walk cannot observe a deletion (§7.1a) and Kavita's watermark moves on a
-chapter *add* only (ADR-0035 §2a clause (c)). SignalR and webhooks are **out**. **The minimal write path**
+chapter *add* only (ADR-0035 §2a clause (c)). ⚠️ **NARROWED 2026-08-21 BY
+[ADR-0074](./DECISIONS.md#adr-0074), AND WHAT IS WRONG ABOVE IS *"for everything"* RATHER THAN THE
+GUARDS.** The sentence stands: reconciliation with 7-day tombstones is v0.1's, and so are both
+guards. What v0.1 **ships** is **guard 1 wired** — the identity comparison actually executing on
+every upsert that would clear a tombstone — and **guard 2 unbuilt**, deferred **for BookOrbit** on
+the void-premise measurement ADR-0074 records: `books.id` and `libraries.id` are PostgreSQL `serial`,
+with no `setval(`, no SQL `TRUNCATE` and no `RESTART IDENTITY` in `server/src` at pin `73b7877d2fed`,
+so the id-space regression guard 2 answers does not arise there under ordinary operation. ⚠️ **GUARD
+2 REMAINS v0.1's REQUIREMENT FOR ANY SOURCE WHOSE PREMISE HAS NOT BEEN MEASURED VOID** — the \*Arrs,
+whose SQLite rowid allocator is the premise, and every source nobody has measured, which includes the
+Kavita adapter this milestone still carries. The deferral is a source-scoped exemption backed by a
+measurement, not a milestone cut, and a second source does not inherit it by being next.
+**The scoping rider lives at these sites**, listed rather than counted because this count has already
+gone stale once: §2.2's *"Both mandatory"* sentence, §7.4's heading, this entry,
+[ADR-0012](./DECISIONS.md#adr-0012), [ADR-0070](./DECISIONS.md#adr-0070)'s *What this does NOT decide*
+§1, and [`reference/sync.md`](./reference/sync.md) §4's guard-2 block. SignalR and webhooks are **out**. **The minimal write path**
 (`monitor`, `unmonitor`, `delete`, `add`) on the durable command queue **re-sequences out of v0.1 and
 lands with the first \*Arr adapter — specified, not built** ([ADR-0042](./DECISIONS.md#adr-0042)); no
 optimistic apply when it does. ⚠️ **That slot was *relative* and is now absolute: the first \*Arr
