@@ -97,8 +97,13 @@ func TestTheSweepRefusesAZeroReadWhileTheInstanceHasLiveLinks(t *testing.T) {
 	inst, _ := sweepFixture(t, s)
 
 	res, err := s.SweepDeletions(t.Context(), inst, nil, nil, sweepLater)
+	// ⚠️ Errorf, NOT Fatalf, AND THE REASON IS THE MUTATION DRILL. Fatalf here
+	// short-circuits every assertion below, so a tree with the refusal DELETED
+	// reported only "the error is missing" — an assertion on the error's shape,
+	// passing over its own subject. The damage the guard exists to prevent is the
+	// tombstoned library, and this test must name it when it happens.
 	if !errors.Is(err, ErrSweepRefusedEmptyRead) {
-		t.Fatalf("SweepDeletions err = %v, want ErrSweepRefusedEmptyRead", err)
+		t.Errorf("SweepDeletions err = %v, want ErrSweepRefusedEmptyRead", err)
 	}
 
 	// NOTHING MOVED. Asserted per row, by identity, and not as a count of rows
@@ -152,14 +157,26 @@ func TestTheSweepRefusesAZeroReadWhileTheInstanceHasLiveLinks(t *testing.T) {
 // library be orphaned, which is the state §6.5 rule 5 exists to record.
 func TestAGenuinelyEmptyInstanceStillSweeps(t *testing.T) {
 	s := newTestStore(t)
-	inst, _ := sweepFixture(t, s)
+	inst, binds := sweepFixture(t, s)
+	manga := binds["1"].LibraryID
+	ebooks := binds["2"].LibraryID
+	if manga == 0 || ebooks == 0 || manga == ebooks {
+		t.Fatalf("the fixture bound %d and %d; this test needs two distinct libraries", manga, ebooks)
+	}
 
-	// Empty the instance first, through the ordinary pass. The seed read is
+	// Empty the ITEM half first, through the ordinary pass. The seed read is
 	// NON-EMPTY — one ref for an item that does not exist — so it is not itself a
 	// refusal, and it reports none of the three real items, which tombstones all
 	// of them.
+	//
+	// ⚠️ IT REPORTS BOTH CONTAINERS, and that is what makes the assertions below
+	// measure something. A seed that passed nil containers would stamp
+	// missing_since and orphan both libraries itself, leaving the sweep under test
+	// with no transition left to make — and the test would then be green whether
+	// the container half ran or not.
 	if _, err := s.SweepDeletions(t.Context(), inst,
-		[]LinkRef{{RemoteKind: "series", RemoteID: "no-such-item"}}, nil, sweepLater); err != nil {
+		[]LinkRef{{RemoteKind: "series", RemoteID: "no-such-item"}},
+		[]string{"1", "2"}, sweepLater); err != nil {
 		t.Fatalf("seed sweep: %v", err)
 	}
 	// Now every link is tombstoned, so the instance has no LIVE links at all.
@@ -167,13 +184,50 @@ func TestAGenuinelyEmptyInstanceStillSweeps(t *testing.T) {
 		 WHERE service_instance_id = ? AND deleted_at IS NULL`, inst); n != 0 {
 		t.Fatalf("%d live links remain; this test's premise does not hold", n)
 	}
+	for _, ref := range []string{"1", "2"} {
+		if m := nullStr(t, s, `SELECT missing_since FROM library_source
+			 WHERE service_instance_id = ? AND container_ref = ?`, inst, ref); m.Valid {
+			t.Fatalf("the seed already stamped container %s missing; "+
+				"the sweep under test has no work left to prove it did", ref)
+		}
+	}
 
 	res, err := s.SweepDeletions(t.Context(), inst, nil, nil, sweepLater)
 	if err != nil {
-		t.Fatalf("a genuinely empty instance was refused: %v", err)
+		t.Errorf("a genuinely empty instance was refused: %v", err)
+	}
+
+	// ⚠️ THE ASSERTION IS THE CONTAINER HALF'S WORK, NOT THE ABSENCE OF AN ERROR.
+	// "Still sweeps" is a claim about what the pass DID, and a test that only
+	// checked `err == nil` and a sync_report count passed over its own subject:
+	// it stayed green for a refusal made unconditional right up until the error
+	// changed, and said nothing at all about the stamping this instance needs.
+	// This is how a library whose last container went away gets orphaned.
+	for _, ref := range []string{"1", "2"} {
+		m := nullStr(t, s, `SELECT missing_since FROM library_source
+			 WHERE service_instance_id = ? AND container_ref = ?`, inst, ref)
+		if !m.Valid {
+			t.Errorf("container %s was not stamped missing; the container half did not run", ref)
+			continue
+		}
+		if m.String != FormatTime(sweepLater) {
+			t.Errorf("container %s missing_since = %q, want %q", ref, m.String, FormatTime(sweepLater))
+		}
+	}
+	for what, id := range map[string]int64{"manga": manga, "ebooks": ebooks} {
+		if o := nullStr(t, s, `SELECT orphaned_at FROM library WHERE id = ?`, id); !o.Valid {
+			t.Errorf("library %s (%d) lost its last source and was not orphaned", what, id)
+		}
+	}
+	if res.SourcesMissing != 2 || res.LibrariesOrphaned != 2 {
+		t.Errorf("result = %+v, want two sources missing and two libraries orphaned", res)
 	}
 	if res.LinksLive != 0 {
 		t.Errorf("LinksLive = %d, want 0", res.LinksLive)
+	}
+	if n := count(t, s, `SELECT COUNT(*) FROM sync_report WHERE service_instance_id = ? AND kind = ?`,
+		inst, SyncReportDeletionSweepRefused); n != 0 {
+		t.Errorf("%d deletion_sweep_refused rows for an instance that had nothing to protect", n)
 	}
 	if n := count(t, s, `SELECT COUNT(*) FROM sync_report WHERE service_instance_id = ? AND kind = ?`,
 		inst, SyncReportDeletionSweep); n == 0 {
