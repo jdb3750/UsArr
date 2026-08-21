@@ -24261,6 +24261,24 @@ its header promises rather than being renamed down to what it managed. Every row
 freshness claim would be one nothing measures. What the word asserts is what was checked — an import
 completed and these rows came out of it.
 
+🔻 **FALSIFIED 2026-08-21 by [ADR-0076](./DECISIONS.md#adr-0076) — the PREMISE only, and the remedy
+F9 applied is unaffected.** The paragraph above argues from *"there is no periodic re-sync in this
+build"*, and that is no longer true of the tree: `cmd/usarr/reconcile.go`'s `startReconciler`, wired
+in `cmd/usarr/main.go`, re-reads an instance whose last completed full sync is older than the
+reconciliation interval. **The original text is left standing rather than reworded**, because this
+row records what was argued at the time it was argued.
+**THE CONCLUSION OUTLIVES THE PREMISE, so `catalogued` is still the right word and F9 stays
+applied.** The sweep does not turn the Block A number into a freshness claim: its cadence is per
+INSTANCE where that row is per MEDIA TYPE, aggregated over every instance that writes the type; an
+instance that has never completed a full sync is deliberately never due, so the sweep never re-reads
+it; and a failed run leaves `last_full_sync_at` unwritten. There is still no instant the number can
+point at and call itself current. `web/src/lib/home.ts`'s `SUMMARY_STATE` note carries the same
+correction and is the site of record for it.
+**Scope: this changes no verdict.** F9 stays **applied**, no count or table above is amended, and
+the OTHER stale claim in this same section — *"§17.7 has an `ok` state"* — is **not** dispositioned
+here: `home.ts` records that citation as withdrawn on 2026-08-20 with no replacement located, and
+whether §17 gains the state is §17's owner's call, not this rider's.
+
 ⚠️ **All three take the same grey (`.st--none`), including `ok`.** Nothing here is broken and nothing
 failed, so no error or warning tone is available; and `st--ok`'s green on three healthy rows would
 turn Block A into the reassurance panel DESIGN-DIRECTION §9.5 rules out — *"chroma marks what is
