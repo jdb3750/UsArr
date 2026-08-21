@@ -26143,3 +26143,36 @@ the three sets now agree: 74 headings, 74 anchors, 74 rows, none of them orphane
   is the whole remedy, and no correction motion and no ADR of its own is owed.
 * **§18's `StartImport` shutdown asymmetry is unchanged and still registered**, with its trigger
   unchanged. Nothing in this round touched `run()`'s shutdown ordering.
+* ⚠️ **§17.7's exemplars are pinned by an exact-match key in `docs/design/check.mjs`, and the §17
+  site does not say so.** `70192dcd2bc9` brought both exemplars into DESIGN-DIRECTION §9.1's
+  absolute-plus-relative form and left `S17_EMDASH_ALLOWED` keyed to the pre-ruling wording, so
+  `make design` went red on the very sentence the ruling had just corrected. **The drift is the
+  PM's own partial fix, in the PM's words:** *"The drift is mine. I ruled this morning that §17.7's
+  exemplar had to lose its bare `HH:MM`; `70192dc` is that ruling landing, and I never named the
+  checker that pins the exemplar. The correction reached the document and not the check — my own
+  partial-fix pattern, and the register entry should say so rather than reading as another lane's
+  carelessness."* Recorded that way deliberately: read as another lane's carelessness it teaches
+  nobody anything, and the lane that reworded §17 could not have known what else moved.
+  **The red was the mechanism reporting, not a broken check** — exact-match keying after `norm()`
+  is what made the gap visible at all, and a tolerant key would have matched both wordings and
+  reported nothing. The key is re-keyed and the four downstream quotations are in step; what is
+  still partial is that **nothing at the §17 site tells the next re-wording lane the checker
+  exists**, so the same round trip is available to anyone who rewords a pinned string.
+  **TRIGGER: this closes when a re-wording of a pinned §17 string can no longer produce this red
+  without warning** — either because `S17_EMDASH_ALLOWED`'s own *RETIRED BY* fires (§13 gains a
+  construction rule the checker can evaluate, at which point there are no keys left to go stale),
+  or because the §17.7 bullet names `check.mjs` as a site the way it already names §16.1. Until
+  one of those, treat a §17 copy edit as a two-file edit. **Which red fires distinguishes the two
+  cases and both were drilled:** a stale key surfaces as a *violation* and short-circuits the size
+  check, while a pinned sentence that leaves §17 entirely surfaces as *"4 recorded em-dash
+  exemption(s) but 3 matched"*. They are not interchangeable, and only the second is the guard
+  people expect.
+* ⚠️ **Three further copies of the superseded banner survive, deliberately unedited, outside this
+  slice's four named sites.** `docs/design/DESIGN-DIRECTION.md`'s Home wireframe draws the banner
+  inside a fixed-width ASCII box; `docs/design/check.mjs`'s `exempt()` comment quotes it to explain
+  the two-words-either-side window, which the re-wording does not disturb; and
+  `web/src/lib/degraded.ts` quotes it in a doc comment. None is a verbatim-quotation claim and none
+  is checked by anything, which is why none was touched here. **TRIGGER: if any of the three grows
+  a sentence asserting that it quotes §17.7 exactly, it becomes the defect LS-394's
+  DESIGN-DIRECTION §13 site was** — a claim of exactness over text that is not exact — **and is
+  owed the same correction.**

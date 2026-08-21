@@ -61,9 +61,9 @@ type ServiceInstance struct {
 	// written locally — that one is service_item_link.synced_at, which is per
 	// row and moves per batch. The distinction is invisible on a healthy system
 	// and is the whole content of the field on a degraded one, which is the only
-	// time ARCHITECTURE.md §17.7's "showing cached data from 14:02" banner
-	// renders. docs/reference/http-api.md §3.5 is the contract; StampFullSync
-	// carries the argument for the choice.
+	// time ARCHITECTURE.md §17.7's "showing cached data from 14:02, 6 minutes
+	// ago" banner renders. docs/reference/http-api.md §3.5 is the contract;
+	// StampFullSync carries the argument for the choice.
 	//
 	// It is written ON SUCCESS ONLY, by StampFullSync, so it never claims a
 	// freshness the replica does not have: a partial import leaves its

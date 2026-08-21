@@ -2345,7 +2345,7 @@ recovery action is reachable:
   are neutral; `tag.color` is the only colour field in the data model and is user-controlled, not
   chrome.
 - **Degraded instance → a small non-modal banner** naming it: "Kavita is unreachable — showing
-  cached data from 14:02", linking to Services. **The catalogue does not grey out** and shows no
+  cached data from 14:02, 6 minutes ago", linking to Services. **The catalogue does not grey out** and shows no
   spinner. Writes are accepted with the label "queued — Radarr 4K is unreachable" — which keeps an
   \*Arr on purpose, because writes to a media backend do not exist (§17.7).
 - **Needs re-identification → a blocking banner** on that instance's rows and on Services, because
@@ -3227,8 +3227,8 @@ widened, and nothing else. The `[review]` rules below are still human judgement 
   comprehensive, "AI-powered".
 - `[grep]` No `—` (U+2014) in any string under 15 words, **except where
   [`ARCHITECTURE.md`](../ARCHITECTURE.md) §17.7 fixes the wording**: its degraded-instance banner
-  is quoted verbatim as *"Kavita is unreachable — showing cached data from 14:02"*, which is
-  eight words. §17 wins over this checklist, so the rule carries the exception rather than the
+  is quoted verbatim as *"Kavita is unreachable — showing cached data from 14:02, 6 minutes
+  ago"*, which is eleven words. §17 wins over this checklist, so the rule carries the exception rather than the
   banner carrying a rewrite. **What the ban forbids is the punctuation, never the construction:**
   §1.4's head-and-detail form is prescribed, and in a UI string its beat is a **colon** for a
   statement and its reason (*"Grab failed: HTTP 502"*), or a full stop and two sentences for a

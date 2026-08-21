@@ -130,6 +130,45 @@ const ROOT = join(DESIGN, '..', '..');
 const URL = 'file://' + join(MOCKUPS, 'prototype.html');
 
 /* ---------------------------------------------------------------------------
+ * ONE LINE, PRINTED FIRST: WHICH TREE THIS RUN ACTUALLY CHECKED.
+ *
+ * A green that does not name its tree is a rumour. Every other line below
+ * reports a count, per this file's rule 1, and none of them says WHICH
+ * revision of the specification and the mockups those counts were taken over.
+ * That gap is not theoretical: a working tree that predates a specification
+ * change passes silently, and the pass is then quoted at a later tree it was
+ * never run on. This line makes a stale green self-identifying.
+ *
+ * THE DIRTY FLAG IS THE LOAD-BEARING HALF. The commit is resolved with no
+ * assumption that the tree is clean, because it usually is not: this check is
+ * run mid-edit. On a dirty tree the SHA names the last commit and NOT what was
+ * checked, so printing the SHA alone would be a more confident lie than
+ * printing nothing. Say which of the two the reader is holding.
+ *
+ * It never fails the run. Absent git, or a directory that is not a repository,
+ * is a fact about provenance and not a design defect, so it is reported in the
+ * same line rather than raised as a failure this file has no standing to make.
+ * ------------------------------------------------------------------------- */
+console.log('tree  ' + (() => {
+  let git;
+  try { git = createRequire(import.meta.url)('node:child_process'); } catch { git = null; }
+  if (!git) return 'no child_process: this run names no commit, so its result is evidence about no particular tree';
+  const run = (...args) => git.execFileSync('git', args, { cwd: ROOT, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] });
+  let sha;
+  try { sha = run('rev-parse', 'HEAD').trim(); } catch {
+    return 'git unavailable or not a repository: this run names no commit, so its result is evidence about no particular tree';
+  }
+  /* Resolved separately, and a failure here is not fatal: a repository can
+     answer rev-parse and still refuse status (a broken index, a lock held by
+     another process). Unknown is reported as unknown rather than as clean. */
+  let dirty;
+  try { dirty = run('status', '--porcelain').trim().length > 0; } catch { dirty = null; }
+  if (dirty === null) return sha + ', working tree UNKNOWN: git could not report status, so it is not known whether this SHA describes what was checked';
+  if (dirty) return sha + ', working tree DIRTY: the SHA names the last commit, NOT what this run checked';
+  return sha + ', working tree clean: this run checked exactly that commit';
+})());
+
+/* ---------------------------------------------------------------------------
  * Playwright is resolved rather than hard-coded, and the failure is explained.
  *
  * This import used to be an ABSOLUTE path into one container's global npm root
@@ -1936,7 +1975,25 @@ head('1b. §13 copy bans, over rendered chrome text (a <td> is data, not copy)')
      * exempts is unchanged and so is its RETIRED BY; only the subject moved,
      * and it moved because the size check below fails on an exemption that
      * matches nothing — which is exactly how this file learns that §17 ruled. */
-    ['komga is unreachable — showing cached data from the last full compare at 09:12',
+    /* ⚠️ Re-keyed again on 2026-08-21, appending `, 3 hours ago`, and tracking a
+     * ruling made in §17 for the second time: 70192dcd2bc9 brought both of
+     * §17.7's exemplars into the absolute-plus-relative form DESIGN-DIRECTION
+     * §9.1 requires — the section that names THIS banner as its worked failure,
+     * because "showing cached data from 11:47" reads the same at six minutes and
+     * at twenty-two hours. So the old key encoded the violation: it was the
+     * pre-ruling wording, and matching it was this file vouching for a sentence
+     * §9.1 bans.
+     *
+     * The red that resulted was the mechanism REPORTING A REAL DESYNC, not a
+     * broken check. §17 moved, the registered answer had not caught up, and
+     * exact-match keying after norm() is what made the gap visible at all. Do
+     * not soften it into a prefix, a fuzzy compare, or a norm() that strips the
+     * relative clause — a tolerant key would have matched both wordings and
+     * reported nothing, which is the failure mode this map exists to avoid.
+     * Note also which line fired: the §17 violation above short-circuits the
+     * size check below, so a stale key surfaces as a VIOLATION and never as
+     * "matched nothing". The two guards are not interchangeable. */
+    ['komga is unreachable — showing cached data from the last full compare at 09:12, 3 hours ago',
       'The stale-data banner exempt() was built for, at §17 source. Head is the ' +
       'failing component, detail is the observed symptom and its time. ' +
       'RETIRED BY: §13 gaining a construction rule the checker can evaluate.'],

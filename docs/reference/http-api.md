@@ -821,7 +821,7 @@ non-zero case only, as a note; and pin both halves the way `services.test.ts` an
 
 🚩 **This is the field a "cached as of" banner renders, so the instant it names is the contract.**
 ARCHITECTURE.md §17.7 specifies a non-modal banner for a degraded instance — *"Kavita is
-unreachable — showing cached data from 14:02"* — and that number comes from here. "Cached as of" is
+unreachable — showing cached data from 14:02, 6 minutes ago"* — and that number comes from here. "Cached as of" is
 ambiguous between at least three instants, which **coincide on a healthy system and diverge exactly
 when the service is unreachable**, which is the only time the banner renders. A banner built on the
 wrong one is wrong precisely when it is the only thing on screen.
