@@ -4517,6 +4517,11 @@ loudly at the \*Arr.
    > untouched: no decision is superseded here, and this rider records a measurement rather than
    > taking one.** If the answer is that the decision survives, a further dated rider saying so is the
    > whole remedy; if it is not, that is a correction motion with an ADR of its own.
+   >
+   > ⚠️ **ANSWERED 2026-08-21, in the rider on the summation paragraph below** (*"Does the
+   > decision survive on 2 and 3 alone?"*), which is the *further dated rider* this note asks
+   > for: **the decision survives, on limb (b) of ground 3**, and no ADR of its own is owed.
+   > This paragraph is kept as written because the routing is part of the record.
 3. *"Fails loudly"* is aspirational either way. **Nothing outside `internal/db/spike/` reads
    `write_queue`** — measured 2026-08-17 on `b8bb500` with
    `grep -rn "write_queue" --include=*.go internal/ cmd/ | grep -v _test.go`, whose only hits are the
@@ -4532,6 +4537,38 @@ pointing at nothing. Ground 2 says the outliving row could only ever have failed
 nothing would notice it either way. Neither borrows anything from the sweep's permissions. The
 rejected alternatives below — `RESTRICT`, `SET NULL`, no foreign key — are likewise argued without
 ground 1.
+
+> ⚠️ **RIDER, 2026-08-21 ([ADR-0076](#adr-0076), REVIEW-LOG LS-394). THIS PARAGRAPH IS THE ONLY PLACE
+> IN THE ADR WHERE EACH GROUND IS SAID TO CARRY HALF THE DECISION, AND BOTH HALVES NEED CORRECTING.**
+> The conclusion is undisturbed. What the conclusion rests on is not what this sentence says it is.
+>
+> **ON GROUND 2 — *"the outliving row could only ever have failed"*. That ground HOLDS VACUOUSLY AND
+> THEREFORE SUPPORTS NOTHING.** It is not false and it is not withdrawn: its antecedent, a `work`
+> reaching hard delete, never occurs, measured with the instrument and the positive control in the
+> rider at the head of this section. **The general form, which is why this is written down rather
+> than filed as a curiosity: an equality that holds vacuously is not evidence; a ground that holds
+> vacuously is not support.** So *"ground 2 says …"* cites a true sentence that carries no load here.
+>
+> **ON GROUND 3 — *"nothing would notice it either way"*. That is ONE OF GROUND 3'S TWO LIMBS, AND IT
+> IS THE WEAKER ONE.** Ground 3 reads as a single argument and is two, of unequal strength:
+>
+> - **Limb (a), the limb this paragraph leans on** — *"fails loudly" is aspirational, because nothing
+>   outside `internal/db/spike/` reads `write_queue`*. This is an argument from an absence, **and
+>   absences end.** ⚠️ **TRIGGER: if `write_queue` gains a reader, limb (a) weakens and decision 3 is
+>   worth re-examining.** A reader is something that executes SQL against the table; a comment naming
+>   the table is a citation of this ADR, not a reader. An absence with no expiry is a claim carrying a
+>   hidden clock, so the clock is written down here rather than left to be rediscovered.
+> - **Limb (b), which this paragraph never invokes** — `CASCADE` is the answer the table already gives
+>   for its other two parents, and it is the one SQLite can enforce today. **This limb is
+>   unconditional and carries decision 3 by itself**, and it **survives limb (a)'s trigger
+>   unchanged**: a `write_queue` reader appearing does not make `SET NULL` enforceable, does not give
+>   `RESTRICT` a `work` delete to restrict, and does not make a third `ON DELETE CASCADE` inconsistent
+>   with the two this table already carries.
+>
+> **SO THE DECISION SURVIVES, AND IT SURVIVES ON LIMB (b) — not on "2 and 3", and not on the count
+> this paragraph's opening question asks for.** Count grounds by the ones that can bear load, not by
+> the ones that are true. **The Status line does not move**: nothing here supersedes a decision, and
+> this rider records where the load sits rather than moving it.
 
 ### Alternatives rejected
 
