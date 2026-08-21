@@ -1000,14 +1000,30 @@
 		NOT OFF A DOCUMENT, and it does not agree with every document. See
 		`librarySummary`, which names the disagreement and what was measured.
 
-		DRAWN ONLY IN `library` MODE, and that is principle 3 rather than an
-		omission — the same gate Block C and the search box take, for the same
-		reason. With no library-bearing service every one of the six rows would
-		say `no catalogue source connected`, and §17.2 rules on exactly that
-		shape: "Rendering six rows of which six are `no catalogue source` is not
-		§17.2's screen; it is a table with no data in it, and rule 13's own bound
-		— the ban is on a region that says NOTHING — does not rescue a block whose
-		every row says the same nothing." An `unconfigured` install goes to the
+		DRAWN ONLY IN `library` MODE. THE BEHAVIOUR STANDS; ITS STATED
+		JUSTIFICATION DOES NOT, AND A RE-DERIVATION IS OWED. This gate was
+		defended here by a sentence in quotation marks attributed to §17.2, ruling
+		that six rows all reading `no catalogue source` amount to an empty table
+		that DESIGN-DIRECTION rule 13 does not rescue. That sentence is nowhere in
+		§17.2 and nowhere else in this repo — it was quoted from no source, and it
+		is removed rather than reworded, because text that cannot be located does
+		not get quotation marks around it. It is not restated verbatim here
+		either: a fabrication reproduced in quotes is still a quotation with no
+		address, and the next reader grepping for it should find nothing.
+
+		WHAT REMOVING IT DOES NOT DO IS DECIDE THE QUESTION EITHER WAY. Void
+		reasoning does not falsify the conclusion it was offered for, so the gate
+		is left exactly as it is; nor does it establish it, so no replacement
+		justification is invented here. Whoever next touches this gate owes it a
+		derivation from §17.2 and principle 3 themselves — and owes it to Block C
+		and the search box in the same pass, which take this same gate and were
+		defended by this same removed sentence.
+
+		WHAT §17.2 DOES SAY IS ABOUT A DIFFERENT INSTALL, AND IT CUTS THE OTHER
+		WAY: the case it rules on is the one where SOME of the six are sourceless,
+		and it rejects dropping those rows in the words the paragraph above
+		quotes. The all-sourceless install — no library-bearing service at all —
+		is a case §17.2 does not reach. An `unconfigured` install goes to the
 		wizard and never to a home page at all (§17.7).
 
 		NOTHING IS DRAWN BEFORE THE READ LANDS. No skeleton, no shimmer, no zeroed
