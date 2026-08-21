@@ -25989,3 +25989,139 @@ message-only**, so every tree on the branch is byte-identical across it. ⚠️ 
 SHAs quoted from this branch no longer resolve**, which is why this entry's own target is cited by
 tree — see the preamble. The false *"only sentence in the docs promising a far end"* claim (§16) was
 corrected in the rewritten message of the commit that made it, in the same motion.
+
+---
+
+## LS-394 — third round, 2026-08-21: the second round's rulings applied, and the partial fix registered
+
+**Target:** this branch merged forward onto `origin/main` at `7c8cb1b1da9e`, tree
+`122665c3066d51d74366aa159d7debb600b7a9d2` — the state the corrections below were written against.
+**Same id, on the same ruling as the second round:** an LS number covers a slice's review, not a
+round, so nothing here takes a new id and no ADR is opened. **Findings are numbered for citation and
+nothing states how many there are** — this entry has been burned twice by counting its own contents
+(§17), and a third time is not owed to anyone.
+
+This round applies rulings rather than making findings. Every measurement below was re-fired at this
+tip before it was written down, including the one that arrived in the routing note with a figure
+attached.
+
+### LS-394.21 🚩 ADR-0039's ground 3 is TWO grounds, and only one of them can expire — **applied, and the weaker limb now carries a trigger**
+
+§16 recorded that ground 1 is struck and ground 2 vacuous, and routed *"does decision 3 still stand"*
+as unanswered. It is answered here: **yes, on limb (b).**
+
+The summation paragraph — *"Does the decision survive on 2 and 3 alone? Yes, and plainly"* — is the
+**only** place in the ADR where each ground is stated as carrying half the decision, so it is the only
+place the rider goes. It presupposed two things. That ground 2 bears load: it does not, because it
+holds **vacuously**, and *an equality that holds vacuously is not evidence; a ground that holds
+vacuously is not support*. And that ground 3 is one argument: it is two.
+
+* **Limb (a)** — *"fails loudly" is aspirational, because nothing outside `internal/db/spike/` reads
+  `write_queue`*. An argument from an absence, true as measured and true only while the measurement
+  holds.
+* **Limb (b)** — `CASCADE` is what the table already gives its other two parents and what SQLite can
+  enforce today. **Unconditional, and it carries the decision by itself.** A `write_queue` reader
+  appearing does not make `SET NULL` enforceable, does not give `RESTRICT` a `work` delete to
+  restrict, and does not make a third `ON DELETE CASCADE` inconsistent with the two already there.
+
+The ground-2 rider's own instruction was that *"a further dated rider saying so is the whole remedy"*
+if the decision survives. That rider is this one; a pointer was added at the routing note rather than
+rewriting it, because the routing is part of the record. **ADR-0039's Status line does not move — no
+decision is superseded.**
+
+### LS-394.22 🚩 The index row presupposed the count three riders had already corrected — **applied**
+
+The 2026-08-21 rider pass reached three sites inside ADR-0039 and missed the fourth. `DECISIONS.md`'s
+index row still read *"the decision stands on **grounds 2 and 3**, which are independent of it"*, which
+presupposes both the count and that ground 2 bears load. Riddered rather than rewritten: the sentence
+was true when it was written in 2026-08-17, and a dated rider is how this file records that.
+
+**The lesson is about rider passes, not about this row.** A correction that walks an ADR's body and
+stops there leaves the index — the surface most readers actually meet — stating the superseded
+version. The index is a site.
+
+### LS-394.23 🚩 Ground 3's enumeration counted its hits, and the count went stale while the fact did not — **applied, count-free, and re-measured rather than carried forward**
+
+The enumeration read *"whose only hits are the standalone RSS-spike binary under `internal/db/spike/`
+and one comment at `internal/httpapi/grabs.go:58`"*, measured 2026-08-17 on `b8bb500`.
+
+⚠️ **Re-measured in this lane rather than taken from the routing note that reported it.** Same command,
+`grep -rn "write_queue" --include=*.go internal/ cmd/ | grep -v _test.go`, at this tip: it now also
+returns `internal/store/writequeue.go`, `internal/store/images.go` and `internal/store/imagewrite.go`,
+and the `grabs.go` comment has moved down its own file. **Every one of the new hits is a comment.**
+The reading line is still `internal/db/spike/workload.go`'s `SELECT id, kind FROM write_queue`, behind
+`//go:build bench` — confirmed here by `go list ./...`, which does not name the package, against
+`go list -tags bench ./...`, which does.
+
+**So the substance never moved and the figure did.** The fix is not a fresher number; a figure that
+goes stale while the fact it was cited for does not is a maintenance obligation bought for nothing.
+The enumeration is now **classified rather than counted** — readers in one bullet, citations in the
+other — and it states the distinction the count concealed: ⚠️ **a comment match is a citation of the
+ADR, not a reader.** `internal/store/writequeue.go` is named because it is the case that most looks
+like a counterexample and is not: **declaring a vocabulary is not reading a table.**
+
+### LS-394.24 🚩 ADR-0039's pointer at migration 0005's header was stale BY CONSTRUCTION — **applied, as a provenance claim**
+
+The Status line said 0005's header *"carries the same reasoning next to the SQL"*. That header restates
+all three of decision 3's grounds unqualified, including the struck one and the vacuous one — and **a
+merged migration is never edited**, so the pointer could not be made true by fixing the header, and
+would go wrong again after the next rider.
+
+**What changed is the claim, not the header.** It now says the header carries the reasoning **as it
+stood when 0005 landed**, and that the ADR is authoritative for where it stands now. That is
+permanently true and needs no maintenance. The pointer sites deliberately **do not describe the
+divergence**, because a description of a divergence is the thing that needs updating when the
+divergence changes.
+
+**Explained once.** ADR-0039's Status line is the single home; `reference/schema.md` §10 and
+`FUTURE.md` §11 point at it rather than each keeping an account of their own. **Four copies of an
+explanation are four things that drift, which is how this pointer went wrong to begin with.**
+
+⚠️ **The routing note expected four sites carrying this claim; there are three, and the fourth thing
+that looks like one is not.** Measured at tree `122665c3`, before any of these edits, with
+`git grep -n "header carries\|carries it next to the SQL\|beside the SQL\|next to the SQL" -- docs/`,
+then read rather than counted — the pattern also catches other files' headers, and one line of the
+Status-line claim is invisible to it because the sentence wraps mid-phrase, which is itself a reason
+not to hand a census to a grep total.
+
+* **Carrying the claim, and corrected:** `DECISIONS.md`'s ADR-0039 Status line, `reference/schema.md`
+  §10, `FUTURE.md` §11.
+* **Points at the SAME header for a DIFFERENT argument, and left alone:** `DEVELOPMENT.md` §11's
+  worked example, which says 0005's header *"carries this argument in full next to the SQL"* about the
+  **12-step rebuild and `PRAGMA foreign_keys`**, not about decision 3's grounds. That argument has not
+  been superseded, so the pointer is not stale and needed no provenance clause. **Named here so the
+  next person does not re-find it and assume it was missed.**
+* **Not a pointer at all:** `reference/schema.md` near `:1290`, one of the routed leads, is the
+  paragraph recording ADR-0039's `sync.md` §4 misquotation. It makes no claim about the migration
+  header.
+
+**Reported rather than made up to the expected number.**
+
+### LS-394.25 🚩 ADR-0076 had no index row, and no anchor either — **applied**
+
+The commit that landed ADR-0076's body edited the index and never added a row. Two lanes counted 73
+rows spanning 0001–0075 independently; measured here as well, against 74 `## ADR-` headings, leaving
+exactly one heading with no row.
+
+**The anchor was the half nobody had noticed.** ADR-0076 also lacked the `---` separator and the
+`<a id="adr-0076"></a>` anchor that every other ADR in the file carries — so the row, had it been
+added alone, would have shipped with a dead link. Both are added in the placement the others use, and
+the three sets now agree: 74 headings, 74 anchors, 74 rows, none of them orphaned.
+
+### LS-394.26 Partial fixes, and the triggers that close them
+
+**The register, kept because an absence with no expiry is a claim carrying a hidden clock.**
+
+* ⚠️ **ADR-0039's ground 3, limb (a), is fixed only for as long as the tree stays as it is.**
+  *"Nothing outside `internal/db/spike/` reads `write_queue`"* is measured, not argued, and the
+  measurement is what the limb rests on. **TRIGGER: if `write_queue` gains a reader, limb (a) weakens
+  and ADR-0039's ground 3 wants re-examining.** A reader is something that executes SQL against the
+  table — a comment naming it is a citation of the ADR and does not fire this. **What is owed then is a
+  re-reading of the ground, not a reopening of the decision**, because limb (b) is unconditional and
+  survives the trigger unchanged. The likeliest firing is the first production `write_queue` worker,
+  which is not v0.1's ([ADR-0042](./DECISIONS.md#adr-0042)).
+* **§18's *"ADR-0039's soundness on ground 3 alone"* item is CLOSED**, not carried forward. It was
+  routed on the PM's ruling and the ruling arrived: the decision survives on limb (b), a dated rider
+  is the whole remedy, and no correction motion and no ADR of its own is owed.
+* **§18's `StartImport` shutdown asymmetry is unchanged and still registered**, with its trigger
+  unchanged. Nothing in this round touched `run()`'s shutdown ordering.
