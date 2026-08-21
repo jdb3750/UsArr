@@ -39,8 +39,10 @@ type fakeKavita struct {
 	libraries int
 	// series is what POST /api/Series/all-v2 answers. It is nil by default,
 	// which serves the EMPTY ARRAY the connection-test tests expect; a test that
-	// wants a catalogue sets it before the instance is added. It is written only
-	// during setup, before the server can be reached.
+	// wants a catalogue sets it before the instance is added. Written during
+	// setup, or later through setSeries — which takes mu, as the handler's read
+	// does — so a test about a SECOND read of one upstream can make the upstream
+	// stop reporting something between the two.
 	series []map[string]any
 	// metadata is what GET /api/Series/metadata?seriesId=N answers, keyed by
 	// series id. A series with no entry gets an EMPTY SeriesMetadataDto rather
@@ -133,7 +135,7 @@ func newFakeKavita(t *testing.T, authKey string) *fakeKavita {
 		// A JSON ARRAY, never `null`. An empty `series` slice would encode as
 		// `null` and the streaming decoder would reject the body as "expected a
 		// JSON array" — a fixture failure that reads exactly like a client bug.
-		out := k.series
+		out := k.currentSeries()
 		if out == nil {
 			out = []map[string]any{}
 		}
@@ -217,6 +219,22 @@ func (k *fakeKavita) currentHold() chan struct{} {
 // the same mutex the handler reads it through. The field's own comment says it
 // is written only during setup; a test that re-imports has to change what the
 // upstream says between two imports, which is the whole point of re-importing.
+// setSeries replaces the series list WHILE THE SERVER IS RUNNING, under the same
+// mutex currentSeries reads it through. A deletion sweep can only be observed
+// against an upstream that has stopped reporting something, and the only way to
+// reach that state with one fake is to change it between two reads.
+func (k *fakeKavita) setSeries(series []map[string]any) {
+	k.mu.Lock()
+	defer k.mu.Unlock()
+	k.series = series
+}
+
+func (k *fakeKavita) currentSeries() []map[string]any {
+	k.mu.Lock()
+	defer k.mu.Unlock()
+	return k.series
+}
+
 func (k *fakeKavita) setMetadata(md map[int]map[string]any) {
 	k.mu.Lock()
 	defer k.mu.Unlock()
