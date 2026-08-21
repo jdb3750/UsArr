@@ -25,11 +25,36 @@ import (
 // ⚠️ AND §7.4's "PLUS ON DEMAND" WAS ALREADY BUILT TOO, which is why there is no
 // request channel here and this loop is shaped like startCandidateSweeper rather
 // than like RunProber. The Services screen's "Run full sync now" reaches
-// StartImport through POST /api/v1/services/{id}/sync (§17.3), and StartImport
-// runs the identical pass through the identical guard. A second on-demand door
-// into one behaviour would be a trigger with no caller, and import.go's header
-// enumerates the triggers explicitly — adding an unreachable fourth entry to
+// StartImport through POST /api/v1/services/{id}/sync (§17.3), and it takes THE
+// IDENTICAL GUARD: the same beginImport claim over the same importMu/importing
+// map, refusing with the same httpapi.ErrImportInProgress. A second on-demand
+// door into one behaviour would be a trigger with no caller, and import.go's
+// header enumerates the triggers explicitly — adding an unreachable entry to
 // that list would make the list wrong in the direction it is hardest to notice.
+//
+// ⚠️ THIS SENTENCE READ *"StartImport runs the IDENTICAL PASS through the
+// identical guard"* AND THE FIRST HALF OVERSTATES IT (REVIEW-LOG LS-394.11). The
+// GUARD is identical — executed and confirmed. The PASS is not, and every
+// difference runs in the direction a reader of the old sentence would not expect:
+//
+//   - StartImport PRE-FLIGHTS SYNCHRONOUSLY: catalogueSource's kind check, then
+//     errImportsNotArmed, both answered to the caller before anything starts.
+//     This loop does neither, and relies entirely on reconcileDue's never-synced
+//     clause to keep a Prowlarr off the wire — see reconcileDue and
+//     TestTheScheduleNeverReadsAServiceThatHasNeverCompletedAFullSync.
+//   - StartImport RETURNS IMMEDIATELY, so N presses across N instances run
+//     concurrently. §7.4's "bounded rate", such as it is honoured at all, is
+//     honoured on THIS path only.
+//   - StartImport's goroutine is cancelled by stopProber() and is NEVER WAITED
+//     FOR before a.Close(); this loop's context is cancelled AND waited on
+//     (main.go's `<-reconcilerDone`), which is what
+//     TestTheReconcilersDoneChannelStaysOpenWhileAPassIsRunning pins. ⚠️ That
+//     asymmetry is PRE-EXISTING and is not this slice's to fix: recorded here so
+//     the two paths are not read as standing in the same relation to the hazard
+//     main.go's own comment cites.
+//   - StartImport returns typed errors to a handler behind csrfProtected +
+//     authenticated + sudo. This loop has no principal at all, and logs and
+//     discards.
 //
 // # It calls FullImport and not SweepDeletions, and that is not a shortcut
 //
@@ -122,25 +147,58 @@ func (g *registry) startReconciler(ctx context.Context) <-chan struct{} {
 //
 // # The enumeration predicate is `deleted_at IS NULL AND enabled = 1`
 //
-// ⚠️ NEITHER HALF OF IT DEPENDS ON THIS FUNCTION, and that was measured rather
-// than assumed — the loop below states the predicate, and every layer under it
-// states it again. A reader who takes the two clauses here for the only thing
-// standing between a timer and a deleted service has it backwards, and a reader
-// who therefore deletes them has removed the cheapest copy, not the load-bearing
-// one. What each half really rests on, at this tip:
+// NEITHER CLAUSE HERE IS THE ONLY THING ENFORCING ITS HALF — the loop below
+// states the predicate, and layers under it state it again. A reader who takes
+// the two clauses here for the only thing standing between a timer and a deleted
+// service has it backwards.
 //
-//   - `deleted_at IS NULL`: FOUR independent filters, none of them here.
-//     store.listServiceInstances hard-codes `WHERE deleted_at IS NULL` into the
-//     statement ahead of the Scope predicate, so Scope{AllInstances: true} is
-//     `1=1` over the LIVE rows and cannot widen onto the dead ones — Scope
-//     decides which visible instance a caller may see, never whether a tombstoned
-//     one is visible at all. store.LastFullSyncAt carries the same clause, so a
-//     tombstoned instance can never be due. store.getServiceInstance carries it a
-//     third time, so registry.entry cannot build a client for one. And
-//     sweepOrphans' restore arm requires `si_orphan.deleted_at IS NULL` on both
-//     arms (REVIEW-LOG C-6), so the stamp survives even a pass that reached it.
-//     All four had to be removed together before the guard in
-//     reconcile_schedule_test.go could be made to fail.
+// ⚠️ THIS PARAGRAPH OPENED *"NEITHER HALF OF IT DEPENDS ON THIS FUNCTION"* AND
+// THAT IS FALSE OF THE TOMBSTONE HALF (measured 2026-08-21, REVIEW-LOG LS-394.10).
+// SoftDeleteServiceInstance clears `enabled` IN THE SAME STATEMENT that stamps
+// `deleted_at` — internal/store/serviceinstance.go, `UPDATE service_instance SET
+// deleted_at = ?, enabled = 0 WHERE id = ? AND deleted_at IS NULL` — so the
+// `!si.Enabled` continue below is a protection on the tombstone half as well, and
+// one of the strips is in THIS FILE. With every other site named here stripped
+// and `!si.Enabled` left standing,
+// TestTheScheduleLeavesADeletedServicesLibraryOrphaned stayed GREEN (`ok 0.18s`);
+// removing `!si.Enabled` as well is what produced the red this comment claimed.
+//
+// The sites, at this tip. ⚠️ A LIST AND NOT A NUMBER: this bullet said "FOUR
+// independent filters, none of them here" and was wrong in both halves at once,
+// which is the shape DEVELOPMENT.md §11 rule 8 is about.
+//
+//   - `deleted_at IS NULL`, in the store:
+//
+//     store.LastFullSyncAt's own `deleted_at IS NULL`
+//     (internal/store/catalogue.go) — a tombstoned instance can never be DUE.
+//     ⚠️ INDIVIDUALLY DECISIVE: from the everything-stripped red state, restoring
+//     this one clause and nothing else turned the guard green again.
+//
+//     sweepOrphans' RESTORE arm — `si_orphan.deleted_at IS NULL` inside its
+//     EXISTS (internal/store/reconcile.go, REVIEW-LOG C-6) — so a pass that
+//     reached the library cannot clear the stamp. ⚠️ ALSO INDIVIDUALLY DECISIVE,
+//     measured the same way. ⚠️ AND IT IS THE RESTORE ARM ALONE. This said "on
+//     both arms". The STAMP arm's copy of the clause is the MECHANISM, not a
+//     protection: strip it and SoftDeleteServiceInstance never orphans the
+//     library at all, so the guard dies at its own vacuity check — "soft-deleting
+//     the only instance did not orphan its library" — rather than at the
+//     assertion it exists to make.
+//
+//     store.getServiceInstance's `deleted_at IS NULL`
+//     (internal/store/serviceinstance.go) — registry.entry cannot build a client
+//     for a tombstoned instance.
+//
+//     store.listServiceInstances' hard-coded `WHERE deleted_at IS NULL`, ahead of
+//     the Scope predicate: Scope decides which VISIBLE instance a caller may see,
+//     never whether a tombstoned one is visible at all. ⚠️ IT FILTERS THE
+//     ENUMERATION AND NOT THE EFFECT, which is a weaker claim than this comment
+//     used to make for it. Strip it alone and `Scope{AllInstances: true}` DOES
+//     hand this loop the tombstoned row — measured, `1 row(s) … id=1
+//     name="Kavita" enabled=false`. What keeps the pass off it then is the two
+//     decisive clauses above and the `!si.Enabled` continue below.
+//
+//   - `deleted_at IS NULL`, HERE: the `!si.Enabled` continue, by way of the soft
+//     delete's own `enabled = 0`.
 //
 //   - `enabled = 1`: the filter below, plus registry.entry's own refusal
 //     (services.go: "%q is disabled"), which is on FullImport's path through
@@ -155,12 +213,12 @@ func (g *registry) startReconciler(ctx context.Context) <-chan struct{} {
 //
 // WHAT THE TOMBSTONE HALF IS PROTECTING, since it is the non-obvious one.
 // SoftDeleteServiceInstance stamps library.orphaned_at in the same transaction
-// that tombstones the instance (REVIEW-LOG C-6), because a deleted instance never
+// that tombstones the instance AND DISABLES IT (REVIEW-LOG C-6), because a deleted instance never
 // imports again and no sweep can ever reach the library it abandoned. A scheduler
 // that enumerated tombstoned rows would break that premise on a timer. The guard
 // asserts the EFFECT — the stamp still set after a pass — rather than the
-// predicate's text, because the predicate is spread across five files and a test
-// that read it back would only be reading itself.
+// predicate's text, because the predicate is spread across this loop and the
+// store and a test that read it back would only be reading itself.
 //
 // SEQUENTIAL, and that is §7.4's "bounded rate" as far as it is honoured here: at
 // 03:00 every catalogue instance comes due in the same tick, and reconciling them

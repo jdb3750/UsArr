@@ -1,6 +1,8 @@
 package main
 
 import (
+	"fmt"
+	"strings"
 	"testing"
 	"time"
 )
@@ -161,26 +163,40 @@ func TestTheScheduleDoesNotReadAServiceTheOperatorDisabled(t *testing.T) {
 
 // `deleted_at IS NULL`.
 //
-// ⚠️ THIS HALF OF THE PREDICATE IS ENFORCED FOUR TIMES OVER AND NOT ONCE IN
-// reconcile.go, WHICH IS THE MEASUREMENT AND NOT AN EXCUSE FOR THE TEST. Fired
-// by stripping, in order: reconcileOnce's use of ListServiceInstances (whose
-// statement hard-codes `WHERE deleted_at IS NULL` ahead of the Scope predicate,
-// so Scope CANNOT widen onto tombstoned rows) for raw all-instances SQL; then
-// registry.entry's disabled refusal and store.getServiceInstance's own
-// `deleted_at IS NULL`; then sweepOrphans' restore-arm `si_orphan.deleted_at IS
-// NULL` (REVIEW-LOG C-6); and finally store.LastFullSyncAt's `deleted_at IS
-// NULL`, which is what actually kept a tombstoned instance from ever being DUE.
-// With all four gone it goes red: "a scheduled pass cleared the orphaned_at stamp
-// SoftDeleteServiceInstance set."
+// ⚠️ THIS COMMENT SAID *"ENFORCED FOUR TIMES OVER AND NOT ONCE IN reconcile.go"*
+// AND BOTH HALVES ARE FALSE (re-measured 2026-08-21, REVIEW-LOG LS-394.10). The
+// sites are listed in reconcileOnce's own doc comment, which is where a reader
+// looking for the predicate goes; what belongs here is the drill that fired this
+// test, in the order it was applied:
+//
+//  1. reconcileOnce's ListServiceInstances call replaced with raw
+//     `SELECT id, enabled FROM service_instance`. GREEN.
+//  2. registry.entry's disabled refusal, and store.getServiceInstance's own
+//     `deleted_at IS NULL`. GREEN.
+//  3. sweepOrphans' RESTORE-arm `si_orphan.deleted_at IS NULL` (REVIEW-LOG C-6)
+//     — the restore arm only; the stamp arm's copy is the mechanism that orphans
+//     the library in the first place, and stripping it kills this test at its own
+//     vacuity check instead. GREEN.
+//  4. store.LastFullSyncAt's `deleted_at IS NULL`. STILL GREEN — and this is
+//     where the old account stopped and declared the red.
+//  5. reconcileOnce's own `!si.Enabled` continue. RED: "a scheduled pass cleared
+//     the orphaned_at stamp SoftDeleteServiceInstance set."
+//
+// STEP 5 IS THE CORRECTION. SoftDeleteServiceInstance clears `enabled` in the
+// same statement that stamps `deleted_at`, so the loop's `enabled` filter is a
+// protection on the TOMBSTONE half too — one of the strips is in reconcile.go
+// after all. Of the store-side clauses, LastFullSyncAt's and sweepOrphans'
+// restore arm are each INDIVIDUALLY DECISIVE: from the step-5 red, restoring
+// either one alone turns this green again.
 //
 // SO IT IS A REGRESSION GUARD ON A CONJUNCTION, and the honest reading is that no
-// single plausible edit to reconcile.go can break it today. It is kept because
-// the thing it protects is not local: SoftDeleteServiceInstance stamps
-// library.orphaned_at in the delete's own transaction precisely because no sweep
-// can ever reach a deleted instance's library again, and a schedule is the first
-// thing in this binary that could falsify that premise without anyone pressing a
-// button. The assertion is the stamp's survival, so it holds whichever layer is
-// doing the work and notices when the last one goes.
+// single plausible edit can break it today. It is kept because the thing it
+// protects is not local: SoftDeleteServiceInstance stamps library.orphaned_at in
+// the delete's own transaction precisely because no sweep can ever reach a
+// deleted instance's library again, and a schedule is the first thing in this
+// binary that could falsify that premise without anyone pressing a button. The
+// assertion is the stamp's survival, so it holds whichever layer is doing the
+// work and notices when the last one goes.
 func TestTheScheduleLeavesADeletedServicesLibraryOrphaned(t *testing.T) {
 	kav := newFakeKavita(t, importAuthKey)
 	kav.libraries = 1
@@ -205,4 +221,84 @@ func TestTheScheduleLeavesADeletedServicesLibraryOrphaned(t *testing.T) {
 		t.Errorf("a scheduled pass cleared the orphaned_at stamp SoftDeleteServiceInstance set.\nProcess log:\n%s",
 			env.logs())
 	}
+}
+
+// NEVER SYNCED IS NOT DUE — reconcileDue's `if !at.Valid { return false }`, the
+// arm its own doc comment calls load-bearing and the one nothing was firing.
+//
+// ⚠️ FIRED. Inverting that arm to `return true` turns this red:
+// "a scheduled pass found an instance that has never completed a full sync DUE."
+// Before this test existed, the same inversion left the whole cmd/usarr suite
+// green — every other test of the schedule arranges an instance that HAS synced,
+// so the unset column was a state none of them was ever standing in.
+//
+// # A PROWLARR IS THE SUBJECT, because it is the case that never heals
+//
+// last_full_sync_at is written on success only, and a Prowlarr has no catalogue
+// and will never write it — so under the opposite reading it is permanently
+// overdue and produces a kind refusal on every tick for the life of the process.
+// The other two cases the arm covers reach the same clause by a different route:
+// a catalogue source awaiting its bootstrap, and one whose bootstrap keeps
+// failing. This one is chosen because it cannot be argued away as a transient.
+//
+// ⚠️ THE CONTROL AND THE SUBJECT ARE THE SAME SENTENCE ABOUT TWO INSTANCES, read
+// out of one process log after one pass. reconcileInstance logs "due a re-read"
+// with the instance id before it touches an upstream, so due-ness is asserted
+// where the arm decides it rather than three layers downstream. The Kavita
+// beside the Prowlarr IS due, so a reconcileOnce that enumerated nothing — or a
+// log this test failed to read, or a message that has since been reworded —
+// fails on the control before the refusal is asserted at all.
+func TestTheScheduleNeverReadsAServiceThatHasNeverCompletedAFullSync(t *testing.T) {
+	kav := newFakeKavita(t, importAuthKey)
+	kav.libraries = 1
+	kav.series = twoSeries()
+	prow := newFakeProwlarr(t, importProwlarrKey)
+
+	env := newTestApp(t)
+	kavitaID := importedKavita(t, env, kav)
+
+	var prowlarr serviceBody
+	env.do(t, "POST", "/api/v1/services", map[string]any{
+		"kind": "prowlarr", "name": "Prowlarr", "base_url": prow.URL(),
+		"api_key": importProwlarrKey,
+	}, &prowlarr)
+
+	// A Prowlarr never completes a full sync, so nothing ever stamps the column.
+	if at, err := env.app.store.LastFullSyncAt(t.Context(), prowlarr.ID); err != nil {
+		t.Fatalf("read last_full_sync_at for the Prowlarr: %v", err)
+	} else if at.Valid {
+		t.Fatalf("the Prowlarr's last_full_sync_at is set to %q; the arm under test is "+
+			"about an UNSET column and this test would be drilling something else", at.String)
+	}
+
+	env.app.registry.reconcileOnce(t.Context(), aged())
+	logs := env.logs()
+
+	// THE CONTROL, first: the pass ran, it found the Kavita due, and it said so
+	// in the words this test is about to search for. Without it the refusal below
+	// is satisfied by an empty pass and by a message that was renamed.
+	if !strings.Contains(logs, dueLine(kavitaID)) {
+		t.Fatalf("the scheduled pass never found the Kavita due, though its last full sync has "+
+			"aged past reconcileInterval at this clock. Either no pass ran or reconcileInstance no "+
+			"longer logs %q — and the refusal asserted below is vacuous either way.\n"+
+			"Process log:\n%s", dueLine(kavitaID), logs)
+	}
+
+	// THE SUBJECT.
+	if strings.Contains(logs, dueLine(prowlarr.ID)) {
+		t.Errorf("a scheduled pass found an instance that has never completed a full sync DUE. "+
+			"A Prowlarr will never write last_full_sync_at, so treating unset as due makes it "+
+			"permanently overdue: a kind refusal on every tick for the life of the process.\n"+
+			"Process log:\n%s", logs)
+	}
+}
+
+// dueLine is reconcileInstance's "this instance is due" sentence for one
+// instance, as it lands in the process log.
+//
+// The trailing space matters: without it instance_id=2 is a prefix of
+// instance_id=20, and this test's whole subject is WHICH instance the pass
+// decided about.
+func dueLine(instanceID int64) string {
+	return fmt.Sprintf("catalogue is due a re-read\" instance_id=%d ", instanceID)
 }
