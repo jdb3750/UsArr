@@ -1019,10 +1019,18 @@ endpoint's tail is a full import's tail, and why it cannot be synchronous.
 `sync_report` row of kind `delta_walk` per run, carrying the walk's outcome class, its window and its
 watermark movement. That row — not this endpoint — is where "what happened" is read.
 
-⚠️ **That record's vocabulary is not this endpoint's.** The stored class for "this source has no delta
-channel" is `no_delta_channel`; the wire code for the same condition is `not_a_delta_source`. They are
-deliberately different strings, per `DEVELOPMENT.md` §11 — *a wire vocabulary and a storage vocabulary
-never share a term* — and making them agree is explicitly the wrong repair.
+⚠️ **That record's vocabulary is not this endpoint's.** `internal/libsync`'s `errorClass` **declares**
+the stored class `no_delta_channel` for "this source has no delta channel"; the wire code for the same
+condition is `not_a_delta_source`. They are deliberately different strings, per `DEVELOPMENT.md` §11 —
+*a wire vocabulary and a storage vocabulary never share a term* — and making them agree is explicitly
+the wrong repair.
+
+⚠️ **No `delta_walk` row carries `no_delta_channel` today, and the split still holds.** That
+`errorClass` arm is unreachable from this route: `Importer.DeltaSync` returns `ErrNoDeltaChannel` at
+its `DeltaSource` type assertion, ahead of every `recordDeltaWalk` call, so the condition is refused
+before anything durable is written — and §4a.4's pre-flight refuses it earlier still, with the wire
+code. The two spellings are therefore separated at declaration rather than at collision, which is the
+only moment at which separating them is free.
 
 ### 4a.4 A non-2xx never means "a walk you asked for is running"
 

@@ -82,10 +82,13 @@ func TestADeltaSyncOfASourceWithNoDeltaChannelIsRefusedByItsOwnCode(t *testing.T
 	if !strings.Contains(body, `"action":"Run a full sync instead"`) {
 		t.Errorf("the refusal names no way out: %s", body)
 	}
-	// ⚠️ AND THE STORAGE VOCABULARY MUST NOT BE ON THE WIRE. internal/libsync
-	// writes "no_delta_channel" into sync_report.detail for this same condition;
-	// DEVELOPMENT.md §11 forbids the two sets sharing a term, and this is the
-	// only place the collision could show up.
+	// ⚠️ AND THE STORAGE VOCABULARY MUST NOT BE ON THE WIRE. internal/libsync's
+	// errorClass DECLARES "no_delta_channel" for this same condition — declares,
+	// not writes: DeltaSync returns at its DeltaSource assertion before any
+	// recordDeltaWalk, so nothing lands that class in sync_report.detail today.
+	// The string is one edit from being written, DEVELOPMENT.md §11 forbids the
+	// two sets sharing a term, and this is the only place a collision could
+	// surface — so the guard is kept ahead of the collision rather than after it.
 	if strings.Contains(body, "no_delta_channel") {
 		t.Errorf("the wire body carries internal/libsync's STORED class: %s", body)
 	}

@@ -77,17 +77,25 @@ const (
 	//
 	// ⚠️ THE SPELLING DIVERGES FROM internal/libsync's STORED CLASS ON PURPOSE,
 	// AND THE NEXT READER'S INSTINCT WILL BE TO "FIX" IT.
-	// internal/libsync/delta.go's errorClass writes the literal
-	// "no_delta_channel" into sync_report.detail for this same condition,
-	// against ErrNoDeltaChannel. That is the STORAGE
-	// vocabulary; this is the WIRE vocabulary, and DEVELOPMENT.md §11 ("a wire
-	// vocabulary and a storage vocabulary never share a term") is explicit that
-	// the repair for a collision is distinct spellings, never making the two
-	// values agree — because two vocabularies that match today are free to
-	// diverge tomorrow, and one shared identifier turns a change to a durable
-	// record into a change on the wire. So: distinct by construction, and
-	// spelled to match its sibling not_a_catalogue_source rather than to match
-	// the journal.
+	// internal/libsync/delta.go's errorClass DECLARES the literal
+	// "no_delta_channel" for this same condition, against ErrNoDeltaChannel.
+	// That is the STORAGE vocabulary; this is the WIRE vocabulary, and
+	// DEVELOPMENT.md §11 ("a wire vocabulary and a storage vocabulary never
+	// share a term") is explicit that the repair for a collision is distinct
+	// spellings, never making the two values agree — because two vocabularies
+	// that match today are free to diverge tomorrow, and one shared identifier
+	// turns a change to a durable record into a change on the wire. So: distinct
+	// by construction, and spelled to match its sibling not_a_catalogue_source
+	// rather than to match the journal.
+	//
+	// 🚩 THAT errorClass ARM IS UNREACHABLE TODAY, AND THE DIVERGENCE STILL HAS
+	// TO HOLD. Importer.DeltaSync returns ErrNoDeltaChannel at its DeltaSource
+	// type assertion, which is ahead of every recordDeltaWalk call site, so no
+	// sync_report.detail row carries "no_delta_channel" and the collision cannot
+	// be observed in the database. It is declared rather than written — one edit
+	// to where that assertion sits makes it written — and a vocabulary rule that
+	// only took effect once the two values were both live would be a rule that
+	// arrives after the identifier it governs has already been chosen.
 	CodeNotDeltaSource ErrorCode = "not_a_delta_source"
 	// CodeServiceDisabled answers a request that NAMED a service the user has
 	// turned off. It is distinct from not_configured (nothing is set up) and
