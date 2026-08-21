@@ -25376,3 +25376,157 @@ them, and both hold at the tip: **`remote_hash` is still a permission taken and 
 `SELECT` in non-test Go names it, so ADR-0074 Decision 2 and ADR-0070's rider remain accurate — and
 **`SweepDeletions` still has exactly one caller**, `FullImport`, so `ROADMAP.md`'s third replacement
 check still comes back empty.
+
+---
+
+## LS-393 — migration 00013 (the `RAISE` literal) reviewed: the routed lead was right and understated, the repair verifies at the DECLARED floor rather than at the version it was routed for, and the recorded sentence it was sent to correct does not exist in the form it was quoted in
+
+**Date:** 2026-08-21. **Target:** `wip/raise-floor-00013`, branched from `origin/main` at
+`f014dc25db377bce9db9030e3cb58538a2451ae0` (`git rev-parse --is-shallow-repository` → `false`).
+**Id:** `LS-393`, allocated by the coordinator and re-checked at this tip rather than taken on
+report — `git grep -c 'LS-393' f014dc25 -- docs/` returned nothing, and `LS-392` is the highest
+entry on `main`. **Scope:** migration `00013`, its tests, [ADR-0075](./DECISIONS.md#adr-0075) and the
+doc corrections that ride with them. Every finding below is **applied** or **rebutted in writing**.
+
+### LS-393.1 What the routed lead claimed, and what it measured out as
+
+The lead was relayed as a set of facts to re-verify rather than trust. All of it is re-derived here.
+
+| Routed claim | At this tip |
+|---|---|
+| The blocker is `trg_library_unfiled_no_delete` at `00005_library_sync.sql:625-632` | ✅ **Exact.** The `CREATE TRIGGER` is at `:625` and the `END;` at `:632` |
+| `RAISE`'s `\|\|` message needs SQLite ≥ 3.47.0 | ✅ **Verified against the primary source, verbatim** — sqlite.org/changes.html, *"2024-10-21 (3.47.0) Allow arbitrary expressions in the second argument to the RAISE function."* Confirmed a second way, by execution: 3.43.0, 3.45.1 and 3.46.1 all reject it and 3.53.4 accepts it |
+| The failure is at PREPARE, on every statement | ✅ **Reproduced.** `Error: in prepare, malformed database schema (trg_library_unfiled_no_delete) - near "\|\|": syntax error (11)`, on `SELECT count(*) FROM library` and on `PRAGMA integrity_check` alike |
+| Reader matrix 3.45.1 fail / 3.46.1 fail / 3.53.4 works | ✅ **Reproduced, and extended downward** — see LS-393.2 |
+| 123 persisted schema objects, one carrying the construct | ✅ **Exact.** `SELECT count(*) FROM sqlite_master` → `123`; three are triggers and the other two already raised the literal `'audit_log is append-only'` |
+| A collapsed message lets an old reader take the whole schema | ✅ **Reproduced at a lower version than claimed** |
+| The second `RAISE … \|\|` is at `:961` and is a non-persisted scratch table | ✅ **Exact and confirmed non-persisted** — see LS-393.4 |
+
+### LS-393.2 🚩 The repair verifies at 3.43.0, which is a stronger result than the slice was scoped for — **applied, and the ADR is written to the stronger claim**
+
+The slice was scoped to "an old binary, 3.46.1 or 3.45.1". Taking the scope literally would have
+recorded a result that leaves the actual question open: **3.46.1 is not the floor.**
+[`reference/schema.md`](./reference/schema.md) §1 and [`ARCHITECTURE.md`](./ARCHITECTURE.md) §6 both
+declare **3.43.0**, and a repair verified only at 3.46.1 says nothing about the three releases
+between. So a **3.43.0** shell was built from the official amalgamation
+(`sqlite-amalgamation-3430000.zip`, sha256 `bb5849ae4d7129c09d20596379a0b3f7b1ac59cf9998eba5ef283ea9b6c000a5`,
+`gcc -DSQLITE_ENABLE_FTS5`) and run against the post-`00013` database:
+
+```
+PRAGMA integrity_check;        -> ok
+SELECT count(*) FROM sqlite_master;  -> 123
+SELECT count(*) FROM search_fts;     -> 0        (contentless FTS5)
+SELECT count(*) FROM search_trgm;    -> 0        (contentless FTS5)
+SELECT count(*) FROM library_member; -> 0        (WITHOUT ROWID)
+SELECT count(*) FROM work;           -> 0        (STRICT)
+exit=0
+```
+
+**The floor is now a measurement rather than a declaration**, and that is how the ADR and the three
+floor sites are worded. ⚠️ **A 3.43.0 official binary could not be used** — sqlite.org's 2023
+tools archive is `linux-x86` (32-bit) and does not execute in this container; the amalgamation build
+is the substitute and is named as one wherever the result is quoted.
+
+### LS-393.3 🚩 The sentence this slice was sent to correct does not exist in the tree in the form it was quoted — **applied to the nearest true sites, and the discrepancy recorded rather than papered over**
+
+The brief names a recorded finding whose fix was *"a newer SQLite, and no query avoids it"*, with the
+second half now false. **That string is not in the repo at `f014dc25`.** Searched: `no query avoids`,
+`avoids it`, `nothing avoids`, `newer SQLite`, `upgrade sqlite`, `too old` across `*.md`, `*.go` and
+`*.sql`. The one hit for *"avoids it"* is
+[`reference/http-api.md`](./reference/http-api.md)`:1353`, about a `SyncPhase` frame — unrelated.
+
+**What does exist is the same claim in two places, in different words**, and both are corrected:
+
+* [ADR-0051](./DECISIONS.md#adr-0051)'s measurement note — *"The system `sqlite3` CLI cannot build
+  this schema at all … migration 0005 contains `RAISE(ABORT, 'a' \|\| 'b')` and the CLI rejects it"*.
+* `internal/store/browse_test.go`'s plan-work note, which says the same thing to the reader most
+  likely to act on it.
+
+⚠️ **Both are TRUE and neither is deleted.** They measured **building**, and building is unchanged:
+0005 is a merged migration, it is never edited, it still contains two expression-valued `RAISE`s, so
+piping the migrations into an old `sqlite3` still fails. What is now false is the **reading** half a
+reader takes away from them. Each takes a **dated rider** in place, naming the measurement that
+falsifies it and the boundary — *a migrated database is now open to an external CLI; a migrations
+directory is still not.*
+
+### LS-393.4 The `:961` verification — **rebutted as a defect, and the reason is now written where the next grep will find it**
+
+`CREATE TRIGGER trg_wq_rebuild_guard BEFORE INSERT ON write_queue_new` is at `:961` (the line number
+had **not** drifted; the `RAISE` keyword itself is at `:964`). `DROP TRIGGER trg_wq_rebuild_guard;`
+is at `:984` and the rename at `:986` — the trigger is created and destroyed inside migration 0005's
+own transaction. **Confirmed non-persisted two ways**: absent from
+`internal/db/testdata/schema.sql`, and `SELECT count(*) FROM sqlite_master WHERE name LIKE
+'%wq_rebuild%' OR name LIKE '%write_queue_new%'` returns **0** against a live migrated database read
+by the 3.43.0 shell. Its expression message is load-bearing where it is — it carries the COUNT of
+rows that would be silently discarded, which is the reason M5-12 made that guard a trigger at all.
+**It stays.** Written down in three places that a grep-driven pass will hit: the `00013` header,
+ADR-0075's *What this ADR does NOT decide*, and the scope paragraph of
+`TestPersistedSchemaRaisesOnlyLiterals`.
+
+### LS-393.5 🚩 The check that let this survive was measuring the wrong side of the floor — **applied as a rider**
+
+`REVIEW-LOG.md`'s own *"Toolchain floor holds: `ncruces/go-sqlite3` ships SQLite 3.53.4, above
+`docs/reference/schema.md:12`'s `>= 3.43.0`"* is true and was never capable of catching this. A floor
+is a claim about **readers**, and the bundled engine is the one reader that cannot violate it — so
+the check verified the only participant guaranteed to pass. That bullet takes a dated rider.
+⚠️ **Its cite was also wrong when written**: `schema.md:12` is a sentence about deferred tables; the
+floor is at `:19`.
+
+### LS-393.6 🚩 A presence assertion would have passed the whole defect — **applied: every new assertion is an effect assertion, and all five were fired**
+
+`TestUnfiledLibraryIsProtected` already existed and already attempted the delete, so it is not the
+deaf guard the pattern warns about. But it asserts the message with
+`strings.Contains(err.Error(), "reserved")`, which **six of the seven words in that message could
+change under**. The new tests assert the effect and the whole message:
+
+| Guard | Sabotage | Verbatim failure |
+|---|---|---|
+| Direction 1 (refusal) | 00013 drops the trigger and never re-creates it | `DELETE FROM library WHERE id = 0 SUCCEEDED. The reserved row is unprotected.` |
+| Direction 2 (permission) | `WHEN OLD.id = 0` removed, so every delete is refused | `an ordinary library is no longer deletable after 0013: sqlite3: constraint failed: library 0 ("Unfiled") is reserved …` |
+| Message equality | one of the four fragments dropped from the literal | `0013 changed the message the operator reads.` with both strings printed |
+| `TestPersistedSchemaRaisesOnlyLiterals` | 00013's Up reverts to a concatenated message | `trigger trg_library_unfiled_no_delete raises a CONCATENATED message` |
+| …its vacuity check | the scanner blinded (`RAISE(` → `RAISEZ(`) | `no RAISE() found in any persisted trigger — this test asserted nothing.` |
+
+⚠️ **Direction 2 is the one that earns its place.** Under the sabotage that made the trigger refuse
+*every* delete on `library` — a strictly worse bug than the one it guards — **direction 1 stayed
+green**. A one-directional drill would have shipped it.
+
+### LS-393.7 🚩 The scanner had a false-negative hole — **applied**
+
+`raiseArgs` blanks string literals and comments before matching parens. As first written it did not
+track **double-quoted identifiers**, so an apostrophe inside one (`"it's"`) would open a literal that
+never closes and blank the rest of the object — hiding a real `\|\|`. That is a false negative, the
+one direction a guard must not fail in. A `"`-state was added and the behaviour probed against five
+cases, including a `\|\|` legitimately outside `RAISE()` (must not fire) and a `\|\|` inside a literal
+(must not fire). ⚠️ **The probe was a throwaway and is not committed**; the hardened scanner is.
+
+### LS-393.8 Rebutted findings
+
+* **"The pre-0013 control is reconstructed by 00013's Down, not a database that never saw 0013."**
+  True, and it does not weaken the control. The Down block is asserted **byte-for-byte identical** to
+  `00005:625-632` at authoring time, and the same test asserts the restored trigger's stored DDL
+  contains `\|\|` — so the control's schema text is 0005's schema text, and the failure under test is
+  a parse failure on that text. **Rebutted**; the equivalence is stated in the test's own comment.
+* **"`00013` should use `DROP TRIGGER IF EXISTS`."** **Rebutted.** Every database at version 12 has
+  the trigger, because 0005 created it and nothing drops it. `IF EXISTS` would convert "this database
+  is not what 0013 thinks it is" from a loud migration failure into silence, and the object being
+  guarded is the one that protects the unfiled library.
+* **"The acceptance test should run in `make check`."** **Rebutted.** It needs an external `sqlite3`
+  the agent container does not have, and fetching one is a network call —
+  [`DEVELOPMENT.md`](./DEVELOPMENT.md) §8's constraint. It is committed and **opt-in** behind
+  `USARR_OLD_SQLITE3`, so it is reproducible rather than a one-time claim, and it **fails loudly if
+  its own control does not fire** rather than passing on a reader that never had the defect.
+* **"Shorten the abort message while it is being rewritten."** **Rebutted** — ADR-0075's
+  *Alternatives*. It is read by a person at the moment a delete is refused.
+* **"The floor documents should move to 3.47.0 instead."** **Rebutted** — ADR-0075's *Alternatives*.
+  It spends a real compatibility promise on a diagnostic string.
+
+### LS-393.9 Named and not fixed
+
+* **`DECISIONS.md:114`** (ADR-0049's index row) contains an unescaped `\|\|` inside a markdown table
+  cell — `sha256("usarr/kek-id/v1" \|\| kek)` — which renders as two spurious empty cells and breaks
+  that row. Found while escaping the same construct in ADR-0075's own row. **Out of this slice's
+  scope and left alone**; recorded so it is not re-found from scratch.
+* **`CONFIGURATION.md` §6.2's operator note is a mitigation, not a guard.** Nothing checks that an
+  operator's `sqlite3` is new enough, and nothing can: it is their binary, not UsArr's. The note tells
+  them what the lie looks like. A `usarr backup` subcommand does exist and does not have this problem.
