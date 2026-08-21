@@ -1387,7 +1387,8 @@
 	<div class="section">
 		<p class="note">
 			The connection is tested before anything is saved, and a service that fails its test is never
-			stored. v0.1 connects to Prowlarr; the other services are not wired up yet.
+			stored. A catalogue is read from Kavita and BookOrbit; Prowlarr is an indexer, so it is
+			searched rather than imported.
 		</p>
 	</div>
 {/if}

@@ -415,7 +415,7 @@
 		total={count}
 		state={count === 0 ? 'empty' : 'default'}
 		emptyTitle="No libraries yet"
-		emptyText="A library appears here once a service with a catalogue is connected and its first import has run. Prowlarr alone will not produce one, because an indexer has no library to bind to."
+		emptyText="A library appears here when an import runs against a connected catalogue service — the first connect starts one, and Run full sync now starts another. Prowlarr alone will not produce one, because an indexer has no library to bind to."
 		{cell}
 		{emptyActions}
 	/>
@@ -432,7 +432,8 @@
 	<div class="section">
 		<p class="screennote">
 			Renaming a library, joining sources into one, and reordering this list are not built yet.
-			UsArr creates a library for each container a service reports, on that service's first import.
+			UsArr creates a library for each container a service reports, every time an import runs
+			against that service — not only the first.
 		</p>
 	</div>
 {/if}
