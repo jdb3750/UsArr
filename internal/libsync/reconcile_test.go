@@ -1,0 +1,241 @@
+package libsync
+
+import (
+	"database/sql"
+	"errors"
+	"strings"
+	"testing"
+
+	"github.com/jdb3750/UsArr/internal/bookorbit"
+	"github.com/jdb3750/UsArr/internal/store"
+)
+
+// Channel 4's deletion pass as it is actually reached: from FullImport's success
+// path, on the seen-set the item stream collected. internal/store's
+// reconcile_test.go covers the sweep's own behaviour; this file covers the two
+// facts only the importer can get wrong — WHICH links the read is judged to have
+// seen, and WHICH channel is allowed to reconcile at all.
+
+// issueItem is one child item and its parent, the shape ADR-0068 gives a
+// BookOrbit comic: a `comic_issue` under a `comic` series, each with its OWN
+// service_item_link.
+func issueItem(remoteID, container, seriesID, title string) store.CatalogueItem {
+	it := store.CatalogueItem{
+		RemoteID: remoteID, RemoteKind: "book", ContainerID: container, Kind: "comic_issue",
+		Title: title, SortTitle: title, NormalizedTitle: strings.ToLower(title), NormVersion: 1,
+		AddedAt: testNow, RemoteUpdatedAt: testNow, HasFile: true,
+		NumberText: sql.NullString{String: "1", Valid: true},
+		Parent: &store.CatalogueParent{
+			RemoteKind: "series", RemoteID: seriesID, Kind: "comic",
+			Title: "Series " + seriesID, SortTitle: "Series " + seriesID,
+			NormalizedTitle: "series " + seriesID, NormVersion: 1,
+		},
+	}
+	return it
+}
+
+func linkDeletedAt(t *testing.T, s *store.Store, inst int64, remoteKind, remoteID string) sql.NullString {
+	t.Helper()
+	var v sql.NullString
+	err := s.DB().Read().QueryRowContext(t.Context(), `
+		SELECT deleted_at FROM service_item_link
+		 WHERE service_instance_id = ? AND remote_kind = ? AND remote_id = ?`,
+		inst, remoteKind, remoteID).Scan(&v)
+	if err != nil {
+		t.Fatalf("read link %s/%s: %v", remoteKind, remoteID, err)
+	}
+	return v
+}
+
+// TestTheDeletionPassSpansChildrenAndSynthesisedParents is the trap this wiring
+// exists to avoid, and it is not hypothetical.
+//
+// FullImport already carries a per-item list — []ImportedItem — that
+// DELIBERATELY EXCLUDES CHILDREN, because the cover pass issues one HTTP request
+// per entry and ARCHITECTURE §13 sizes the child side at ~90,000 rows. A
+// deletion pass fed from that list would find every `comic_issue` link absent
+// from the read and tombstone the entire child side of the catalogue on the
+// first sweep of a healthy instance. The seen-set is collected separately for
+// exactly this reason, and this test is the reason written down.
+func TestTheDeletionPassSpansChildrenAndSynthesisedParents(t *testing.T) {
+	s := newTestStore(t)
+	inst := fixtureInstance(t, s)
+	src := &fakeSource{
+		containers: []store.CatalogueContainer{{RemoteID: "1", Name: "Comics", Kind: "comic"}},
+		items: []store.CatalogueItem{
+			issueItem("i1", "1", "s1", "Berserk 1"),
+			issueItem("i2", "1", "s1", "Berserk 2"),
+		},
+	}
+	rep, err := newImporter(t, s, src).FullImport(t.Context(), inst)
+	if err != nil {
+		t.Fatalf("FullImport: %v", err)
+	}
+	if !rep.Completed {
+		t.Fatal("the seeding import did not complete")
+	}
+	// The fixture must really have written links for both grains, or the
+	// assertion below is about a table with nothing in it to get wrong.
+	for _, k := range [][2]string{{"book", "i1"}, {"book", "i2"}, {"series", "s1"}} {
+		if linkDeletedAt(t, s, inst, k[0], k[1]).Valid {
+			t.Fatalf("link %s/%s was born tombstoned", k[0], k[1])
+		}
+	}
+	if rep.Deletions != (store.SweepResult{LinksLive: 3}) {
+		t.Errorf("the first import's sweep moved something: %+v", rep.Deletions)
+	}
+
+	// A SECOND, IDENTICAL import. Nothing changed upstream, so nothing may be
+	// tombstoned — child, parent or otherwise.
+	again, err := newImporter(t, s, src).FullImport(t.Context(), inst)
+	if err != nil {
+		t.Fatalf("second FullImport: %v", err)
+	}
+	for _, k := range [][2]string{{"book", "i1"}, {"book", "i2"}, {"series", "s1"}} {
+		if d := linkDeletedAt(t, s, inst, k[0], k[1]).Valid; d {
+			t.Errorf("link %s/%s was tombstoned by an import that read it", k[0], k[1])
+		}
+	}
+	if again.Deletions.LinksTombstoned != 0 || again.Deletions.WorksTombstoned != 0 {
+		t.Errorf("an unchanged re-import tombstoned something: %+v", again.Deletions)
+	}
+}
+
+func TestAFullImportTombstonesTheItemThatStoppedBeingReported(t *testing.T) {
+	s := newTestStore(t)
+	inst := fixtureInstance(t, s)
+	containers := []store.CatalogueContainer{{RemoteID: "1", Name: "Comics", Kind: "comic"}}
+
+	first := &fakeSource{containers: containers, items: genItems(3, "1", "comic")}
+	if _, err := newImporter(t, s, first).FullImport(t.Context(), inst); err != nil {
+		t.Fatalf("first FullImport: %v", err)
+	}
+
+	// Item "2" is gone upstream.
+	second := &fakeSource{containers: containers, items: genItems(3, "1", "comic")[:2]}
+	rep, err := newImporter(t, s, second).FullImport(t.Context(), inst)
+	if err != nil {
+		t.Fatalf("second FullImport: %v", err)
+	}
+
+	if !linkDeletedAt(t, s, inst, "series", "2").Valid {
+		t.Error("the item the second read did not report is still live")
+	}
+	for _, id := range []string{"0", "1"} {
+		if linkDeletedAt(t, s, inst, "series", id).Valid {
+			t.Errorf("item %s was in the read and was tombstoned anyway", id)
+		}
+	}
+	// The work is what browse and search filter on, so the tombstone has to
+	// reach it or the pass is invisible.
+	var workDeleted sql.NullString
+	if err := s.DB().Read().QueryRowContext(t.Context(), `
+		SELECT w.deleted_at FROM work w
+		  JOIN service_item_link l ON l.work_id = w.id
+		 WHERE l.service_instance_id = ? AND l.remote_kind = 'series' AND l.remote_id = '2'`,
+		inst).Scan(&workDeleted); err != nil {
+		t.Fatalf("read work: %v", err)
+	}
+	if !workDeleted.Valid {
+		t.Error("the absent item's work was not tombstoned")
+	}
+	if rep.Deletions.LinksTombstoned != 1 || rep.Deletions.WorksTombstoned != 1 {
+		t.Errorf("Deletions = %+v, want one link and one work", rep.Deletions)
+	}
+}
+
+// TestAPartialImportNeverSweeps is §7.4's nightmare bug, guarded one layer above
+// the tombstone: a stream that died mid-array has not observed an absence, it has
+// observed nothing further. Every earlier return in FullImport is an error
+// return, so the sweep is unreachable on that path — and this asserts the
+// unreachability by its EFFECT rather than by reading the code.
+func TestAPartialImportNeverSweeps(t *testing.T) {
+	s := newTestStore(t)
+	inst := fixtureInstance(t, s)
+	containers := []store.CatalogueContainer{{RemoteID: "1", Name: "Comics", Kind: "comic"}}
+
+	if _, err := newImporter(t, s, &fakeSource{
+		containers: containers, items: genItems(3, "1", "comic"),
+	}).FullImport(t.Context(), inst); err != nil {
+		t.Fatalf("seeding FullImport: %v", err)
+	}
+
+	// The stream dies after one element. The other two items are unobserved, not
+	// absent.
+	broken := &fakeSource{
+		containers: containers, items: genItems(3, "1", "comic"),
+		failAfter: 1, streamErr: errors.New("stream ended mid-array"),
+	}
+	im := newImporter(t, s, broken)
+	im.BatchRows = 1
+	rep, err := im.FullImport(t.Context(), inst)
+	if err == nil {
+		t.Fatal("the broken stream did not fail the import")
+	}
+	if rep.Completed {
+		t.Fatal("a partial import reported itself complete")
+	}
+	if rep.Deletions != (store.SweepResult{}) {
+		t.Errorf("a partial import swept: %+v", rep.Deletions)
+	}
+	for _, id := range []string{"0", "1", "2"} {
+		if linkDeletedAt(t, s, inst, "series", id).Valid {
+			t.Errorf("item %s was tombstoned by an import that never finished reading", id)
+		}
+	}
+}
+
+// TestADeltaSyncNeverSweeps is the same rule on the other channel, and it is the
+// one that matters most: a delta walk returns only what CHANGED, so the set
+// difference against it is the whole library. streamAndApply takes the seen-set
+// as a NILABLE PARAMETER precisely so channel 3b cannot collect one, and this
+// asserts the consequence against the real BookOrbit walk rather than a stub.
+func TestADeltaSyncNeverSweeps(t *testing.T) {
+	f := newDeltaFixture(t,
+		[]bookorbit.Library{{ID: 1, Name: "Fiction", BookCount: 2}},
+		map[int64][]bookorbit.Book{1: {
+			bookAt(1, "Early", at(0)),
+			bookAt(2, "Late", at(30)),
+		}})
+
+	if _, err := f.importer().FullImport(t.Context(), f.instance); err != nil {
+		t.Fatalf("FullImport: %v", err)
+	}
+	for _, id := range []string{"1", "2"} {
+		if linkDeletedAt(t, f.st, f.instance, "book", id).Valid {
+			t.Fatalf("book %s was tombstoned by the seeding import", id)
+		}
+	}
+
+	// A LATER ARRIVAL AND NOTHING ELSE. The walk's arrivals filter returns book
+	// 3 alone; books 1 and 2 are simply not in this read, which is the exact
+	// input a set difference would read as "both deleted upstream".
+	f.reader.books[1] = append(f.reader.books[1], bookAt(3, "Newest", at(60)))
+	f.reopen()
+	rep, err := f.importer().DeltaSync(t.Context(), f.instance)
+	if err != nil {
+		t.Fatalf("DeltaSync: %v", err)
+	}
+	if rep.DeclineReason != "" {
+		t.Fatalf("the delta declined (%q) and escalated, so it never ran the walk this test is about",
+			rep.DeclineReason)
+	}
+	// FEWER THAN THE THREE BOOKS THAT EXIST. The exact number is the lookbehind
+	// window's business, not this test's — what matters is that at least one
+	// book upstream is absent from this read, or there is no difference for a
+	// sweep to have got wrong. Book 1 is the one: it is the oldest arrival and
+	// no lookbehind reaches it.
+	if rep.ItemsRead >= 3 {
+		t.Fatalf("the delta read %d of 3 books, so it was not a partial read and this test proves nothing",
+			rep.ItemsRead)
+	}
+
+	for _, id := range []string{"1", "2"} {
+		if linkDeletedAt(t, f.st, f.instance, "book", id).Valid {
+			t.Errorf("book %s was tombstoned by a DELTA walk that never claimed to have read it", id)
+		}
+	}
+	if rep.Deletions != (store.SweepResult{}) {
+		t.Errorf("a delta swept: %+v", rep.Deletions)
+	}
+}

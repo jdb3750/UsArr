@@ -278,7 +278,10 @@ func (im *Importer) DeltaSync(ctx context.Context, instanceID int64) (rep DeltaR
 	}
 	rep.WatermarkAfter = rep.WatermarkBefore
 
-	bindings, err := im.bindPhase(ctx, instanceID, "delta sync", &rep.Report)
+	// THE CONTAINER REFS ARE DROPPED HERE ON PURPOSE. They exist for channel 4's
+	// deletion pass, and a delta walk reports only what changed — reconciling
+	// absences against it would tombstone everything it did not happen to see.
+	bindings, _, err := im.bindPhase(ctx, instanceID, "delta sync", &rep.Report)
 	if err != nil {
 		return rep, err
 	}
@@ -289,13 +292,14 @@ func (im *Importer) DeltaSync(ctx context.Context, instanceID int64) (rep DeltaR
 
 	seed := rep.WatermarkBefore
 	var obs DeltaObservation
+	// nil: no seen-set, for the reason streamAndApply's own doc gives.
 	imported, walkErr := im.streamAndApply(ctx, instanceID, bindings, &rep.Report,
 		func(ctx context.Context, fn func(store.CatalogueItem) error) (int, error) {
 			var n int
 			var err error
 			n, obs, err = src.StreamItemsSince(ctx, seed, fn)
 			return n, err
-		})
+		}, nil)
 	rep.Observation = obs
 	if walkErr != nil {
 		// EVERYTHING ALREADY APPLIED STANDS — FullImport's contract, and for its

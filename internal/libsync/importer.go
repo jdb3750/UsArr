@@ -146,6 +146,12 @@ type Report struct {
 	// on top (REVIEW-LOG.md LS-211.1).
 	Rollups store.RollupResult
 
+	// Deletions is what channel 4's deletion pass did — the links and works
+	// tombstoned because the read did not report them, and the containers and
+	// libraries stamped absent with them. It is all zeroes on any import that
+	// did not complete, because the sweep does not run on one.
+	Deletions store.SweepResult
+
 	// Completed is true only when the whole stream was read AND every batch
 	// committed. It is what gates last_full_sync_at.
 	Completed bool
@@ -325,12 +331,13 @@ func (im *Importer) FullImport(ctx context.Context, instanceID int64) (rep Repor
 		}
 	}()
 
-	bindings, err := im.bindPhase(ctx, instanceID, "full import", &rep)
+	bindings, containerRefs, err := im.bindPhase(ctx, instanceID, "full import", &rep)
 	if err != nil {
 		return rep, err
 	}
 
-	imported, err := im.streamAndApply(ctx, instanceID, bindings, &rep, im.Source.StreamItems)
+	var seen []store.LinkRef
+	imported, err := im.streamAndApply(ctx, instanceID, bindings, &rep, im.Source.StreamItems, &seen)
 	if err != nil {
 		return rep, err
 	}
@@ -359,6 +366,28 @@ func (im *Importer) FullImport(ctx context.Context, instanceID int64) (rep Repor
 	// PHASE D. It takes no error return and therefore has no `if err != nil`
 	// arm — the absence is the contract, not an omission. See covers.go.
 	im.fetchCovers(ctx, instanceID, imported, &rep)
+
+	// ── CHANNEL 4'S DELETION PASS, and it is here rather than on a timer of its
+	// own for one reason: this is the only place in the tree that has just read
+	// an upstream's WHOLE list, which is SweepDeletions' uncheckable
+	// precondition. §7.4's every-6-h scheduler is not built and this is not it.
+	//
+	// AFTER the item stream, the two per-item passes and the rollup flush, so
+	// nothing downstream of it re-reads a row it tombstoned; and BEFORE
+	// rep.Completed, because "read one catalogue source end to end and replace
+	// what the replica knows about it" is not done while the replica still shows
+	// items the source has stopped reporting.
+	//
+	// ⚠️ ON A FAILED OR PARTIAL IMPORT IT NEVER RUNS AT ALL. Every earlier
+	// return path is an error return, so a stream that died mid-array reaches
+	// this line only by not reaching it — which is the whole tombstone-safety
+	// argument in §7.4 applied one layer up: half a list read is a list of
+	// absences that are not absences.
+	deletions, err := im.Store.SweepDeletions(ctx, instanceID, seen, containerRefs, im.now())
+	rep.Deletions = deletions
+	if err != nil {
+		return rep, fmt.Errorf("full import of service_instance %d: %w", instanceID, err)
+	}
 
 	rep.Completed = true
 
@@ -434,6 +463,12 @@ func (im *Importer) FullImport(ctx context.Context, instanceID int64) (rep Repor
 		"declined_containers", len(rep.DeclinedContainers),
 		"skipped_containers", len(rep.SkippedContainers),
 		"identity_conflicts", len(rep.IdentityConflicts),
+		"ids_reused", rep.IDsReused,
+		"links_tombstoned", rep.Deletions.LinksTombstoned,
+		"works_tombstoned", rep.Deletions.WorksTombstoned,
+		"sources_missing", rep.Deletions.SourcesMissing,
+		"libraries_orphaned", rep.Deletions.LibrariesOrphaned,
+		"libraries_restored", rep.Deletions.LibrariesRestored,
 		"duration", rep.Duration())
 	return rep, nil
 }
@@ -450,14 +485,25 @@ func (im *Importer) FullImport(ctx context.Context, instanceID int64) (rep Repor
 // `what` names the caller in the errors, because "full import of instance 3:
 // containers" and "delta sync of instance 3: containers" are the same failure
 // reported to two different people pressing two different buttons.
+//
+// It returns the container REFS the upstream reported alongside the bindings,
+// and the two are not the same set: a DECLINED container has no binding and is
+// still a container the upstream reported. Channel 4 needs the reported set —
+// "UsArr has no kind for this" and "the upstream has stopped reporting this" are
+// different facts, and stamping the first as the second would mark a library
+// missing because an adapter's mapping changed.
 func (im *Importer) bindPhase(
 	ctx context.Context, instanceID int64, what string, rep *Report,
-) (map[string]store.CatalogueBinding, error) {
+) (map[string]store.CatalogueBinding, []string, error) {
 	containers, err := im.Source.Containers(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("%s of service_instance %d: containers: %w", what, instanceID, err)
+		return nil, nil, fmt.Errorf("%s of service_instance %d: containers: %w", what, instanceID, err)
 	}
 	rep.ContainersSeen = len(containers)
+	refs := make([]string, 0, len(containers))
+	for _, c := range containers {
+		refs = append(refs, c.RemoteID)
+	}
 	for _, c := range containers {
 		if c.Kind == "" {
 			rep.DeclinedContainers = append(rep.DeclinedContainers, DeclinedContainer{
@@ -469,7 +515,7 @@ func (im *Importer) bindPhase(
 
 	bindings, skipped, err := im.Store.BindContainers(ctx, instanceID, im.UserID, containers)
 	if err != nil {
-		return nil, fmt.Errorf("%s of service_instance %d: bind libraries: %w", what, instanceID, err)
+		return nil, nil, fmt.Errorf("%s of service_instance %d: bind libraries: %w", what, instanceID, err)
 	}
 	// A container that could not be bound is NOT an import failure. It is one
 	// missing library, reported as one missing library — BindContainers has
@@ -496,14 +542,14 @@ func (im *Importer) bindPhase(
 	for _, d := range rep.DeclinedContainers {
 		detail, err := json.Marshal(map[string]string{"name": d.Name, "reason": d.Reason})
 		if err != nil {
-			return nil, fmt.Errorf("%s of service_instance %d: encode decline: %w", what, instanceID, err)
+			return nil, nil, fmt.Errorf("%s of service_instance %d: encode decline: %w", what, instanceID, err)
 		}
 		if err := im.Store.RecordSyncReport(ctx, instanceID,
 			"container_declined", "library", d.RemoteID, string(detail)); err != nil {
-			return nil, fmt.Errorf("%s of service_instance %d: %w", what, instanceID, err)
+			return nil, nil, fmt.Errorf("%s of service_instance %d: %w", what, instanceID, err)
 		}
 	}
-	return bindings, nil
+	return bindings, refs, nil
 }
 
 // streamAndApply is the batching loop.
@@ -540,9 +586,22 @@ func (im *Importer) bindPhase(
 // second write path for the same rows.
 type stream func(ctx context.Context, fn func(store.CatalogueItem) error) (int, error)
 
+// seen, when non-nil, accumulates EVERY link key this loop wrote — children and
+// synthesised parents included, which is what separates it from the returned
+// []ImportedItem. That slice is the per-item passes' work list and deliberately
+// excludes children (see the flush below); a deletion pass fed from it would
+// find every `comic_issue` link absent from the read and tombstone the whole
+// child side of the catalogue on the first sweep.
+//
+// ⚠️ IT IS A NILABLE PARAMETER RATHER THAN A FIELD ON Report, AND THAT IS THE
+// GUARD. A delta walk returns only what changed, so the set difference against it
+// is the entire library; passing nil is how channel 3b says it has no whole-list
+// read to reconcile against, and there is no other way for this loop to hand one
+// out.
 func (im *Importer) streamAndApply(
 	ctx context.Context, instanceID int64,
 	bindings map[string]store.CatalogueBinding, rep *Report, read stream,
+	seen *[]store.LinkRef,
 ) ([]ImportedItem, error) {
 	rows := im.BatchRows
 	if rows <= 0 {
@@ -587,6 +646,19 @@ func (im *Importer) streamAndApply(
 		// keeps an entry for a child. When one wants to, this is the line that
 		// changes, and the budget above is the argument it has to answer.
 		for _, it := range batch {
+			if seen != nil {
+				// BEFORE the child skip, and with the parent's own key beside
+				// the item's: applyOneItem writes a link for both, so both are
+				// links the read observed.
+				*seen = append(*seen, store.LinkRef{
+					RemoteKind: it.RemoteKind, RemoteID: it.RemoteID,
+				})
+				if it.Parent != nil {
+					*seen = append(*seen, store.LinkRef{
+						RemoteKind: it.Parent.RemoteKind, RemoteID: it.Parent.RemoteID,
+					})
+				}
+			}
 			if it.Parent != nil {
 				continue
 			}
