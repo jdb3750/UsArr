@@ -24545,3 +24545,240 @@ legend's rider has been deleted. **Closing this entry without deleting the rider
 `ARCHITECTURE.md` pointing at a closed record**, which is the same defect this entry was opened to
 avoid. Nothing here is pending an answer from anyone: every site is classified, and the motion can be
 executed in any order.
+
+---
+
+## LS-391 — the channel-3b delta route reviewed: three sites asserted a storage write that cannot happen, two escalation guards were deaf to the escalation, and four sentences the slice falsified were not returned to
+
+**Date:** 2026-08-21. **Target:** `f4421cb` (`claude/hearth-thread-93bfq1`), the slice that made
+channel 3b reachable — `POST /api/v1/services/{id}/sync/delta`, its port, its handler, its docs and
+its tests. **Input:** one adversarial review of that slice. **Scope:** all thirteen items the
+reviewer raised — eight findings and five NOTEs. Nothing is dropped: each is **applied** or
+**rebutted in writing** below.
+
+**Fix commits**, oldest first: `7153657`, `4471c58`, `6712ae1`, `2dcb71e`, `4911ac4`, `52f2b28`.
+
+### Disposition
+
+| # | Finding | Disposition | Commit |
+|---|---|---|---|
+| 1 | Three sites assert a storage write that cannot happen | **Applied** | `7153657` |
+| 2 | The escalation guards assert a row the delta itself writes | **Applied**, fired red | `4471c58` |
+| 3 | Four sentences this slice falsified | **Applied**, count-free | `6712ae1` |
+| 4 | §4.4/§4a.4 error tables omit 401 and 415, and mis-state 404 | **Applied** | `2dcb71e` |
+| 5 | §4a.3 implies the escalation is invisible everywhere | **Applied** | `2dcb71e` |
+| 6 | The arrivals-walk test cannot see the arrivals filter | **Applied**, fired red | `4911ac4` |
+| 7 | `StartDeltaSync`'s second `%w` has no guard | **Applied**, fired red | `52f2b28` |
+| 8 | A shared wire/journal value called a virtue | **Applied** | `52f2b28` |
+| N1 | Vocabulary audit — two inherited collisions | **Recorded**; one repaired in comment, one rebutted | `52f2b28` |
+| N2 | Security clean; the pre-flight's zero-network claim | **Recorded**, no action | — |
+| N3 | The concurrency guard is correct, with two live edges | **Recorded**, no action | — |
+| N4 | Principle 4: the port carries no scope parameter | **Recorded**, no action | — |
+| N5 | What the slice did not reach | **Recorded**, no action | — |
+
+### 1 — `no_delta_channel` is DECLARED, never written. Applied.
+
+`internal/httpapi/errorcodes.go` (`CodeNotDeltaSource`), `docs/reference/http-api.md` §4a.3 and
+`cmd/usarr/delta_route_e2e_test.go` each stated as fact that `internal/libsync` **writes**
+`no_delta_channel` into `sync_report.detail` for this condition. It cannot, and the ordering was
+re-verified rather than taken from the brief: `Importer.DeltaSync` (`internal/libsync/delta.go`)
+returns `ErrNoDeltaChannel` at its `DeltaSource` type assertion, which is the FIRST statement after
+the report is initialised and therefore ahead of all seven `recordDeltaWalk` call sites in that file,
+including `escalate`'s. The only other `DeltaSource` assertion, in `mintArrivalsWatermark`, returns
+`nil` rather than the sentinel. `errorClass`'s `no_delta_channel` arm is consequently unreachable
+from any path, and `errorClass` has exactly one caller — `recordDeltaWalk`.
+
+All three sites now say *declares*, and each names why the divergence still binds although the
+collision cannot be observed in the database: the arm is one edit away from being written, and a
+vocabulary rule that took effect only once both values were live would arrive after the identifier it
+governs had already been chosen. **The divergent spellings and the `DEVELOPMENT.md` §11 argument are
+untouched** — the decision was right and only its justification was false.
+
+### 2 — Both escalation guards asserted a row the delta writes for itself. Applied, and fired.
+
+`TestADeltaStartedFromTheWireThatEscalatesNeverPutsItsSentinelOnTheWire`
+(`cmd/usarr/delta_route_e2e_test.go`) and the pre-existing
+`TestADeltaThatEscalatesDoesNotDeadlockAgainstItsOwnImportGuard`
+(`cmd/usarr/bookorbit_delta_e2e_test.go`) both counted `library` rows with `managed_by = 'auto'`.
+`Importer.DeltaSync` calls `bindPhase` **before** `deltaPreconditions`, so the second library row is
+written by the delta itself, before the escalation has been decided.
+
+`delta_walk`.`escalated_to_full_import` was considered and rejected as the replacement: `escalate`
+writes it at the moment libsync DECIDES to escalate, so it is present whether or not `cmd/usarr`
+carries the decision out. The subject is now the `work` rows, which only a full import of the newly
+bound container lands.
+
+**Fired two ways, and the transcripts are the point of the entry.**
+
+- Escalation branch deleted from `deltaSyncLocked` (`cmd/usarr/import.go`): before the fix, the wire
+  test **passed**, which is the reviewer's claim reproduced. After the fix both fail —
+  `timed out waiting for the escalated full import to land the newly bound library's book`, and the
+  older test on the returned sentinel.
+- Escalation branch kept, `fullImportLocked` not called: both fail on the work count itself
+  (`works = 1, want 2`), which is what proves the new assertion rather than a neighbouring one is
+  live.
+
+Restored, both pass.
+
+### 3 — Four falsified sentences, corrected without a new count. Applied.
+
+Each was verified against the tree before rewriting.
+
+- **`docs/reference/http-api.md` §4.4's `import_in_progress` row** said *"An import for this instance
+  is already running"*. `registry.StartDeltaSync` claims the same `beginImport` map, so a running
+  **delta** also produces `import_in_progress` on `POST /sync`. §4.3's *"Is it still running?"* row
+  carried the same ambiguity and is corrected with it; §4.4's preamble said *"another one is"* and
+  now says *another catalogue read is*.
+- **§4's "the five other writes on this screen"**, **`internal/httpapi/server.go`'s "its five
+  neighbours … the sixth way this screen changes something"**, and **`cmd/usarr/import.go`'s "THREE
+  TRIGGERS, all explicit"**.
+
+`import.go`'s is the one that mattered most: `CLAUDE.md` points readers at that comment as the
+authority on what triggers an import, and `ARCHITECTURE.md` §17.8 quoted the number. The list now
+carries a fourth entry — **by escalation from a delta press** — written at length, because it is a
+full import nobody typed the words "full import" for, on a button labelled for the cheap read.
+§17.8's quoting sentence is corrected in the same commit and now defers to the comment rather than
+restating its count.
+
+**Every correction is count-free rather than re-counted**, per `DEVELOPMENT.md` §11, and the sweep
+went past the brief's list. The three counts this slice itself introduced — §4a's *"six other
+writes"*, `server.go`'s *"the five writes above that"*, `imports_test.go`'s *"the six service writes
+beside it"* — are count-free too, and so is `ARCHITECTURE.md` §17.3.3's *"Six endpoints are gated"*,
+which had already gone stale once for the same reason and would have gone stale a second time here.
+The properties are *no write on this screen is gated more weakly than its neighbours* and *nothing
+re-reads a whole library except by an explicit trigger*; neither is a number.
+
+### 4 — Two gate rows missing from both error tables, and a 404 that means two things. Applied.
+
+`checkContentTypeJSON` runs inside `csrfProtected` **ahead of** the token comparison, so `415
+unsupported_media_type` is the first answer the gate can give; `authenticated` sits between the two
+403s and answers `401 unauthorized`. Neither was in §4.4 or §4a.4. Both are now, with the ordering
+stated rather than implied. `pathInt64` (`internal/httpapi/json.go`) answers `404 not_found` for any
+`{id}` that is not a positive integer, before the store is reached — so both tables' 404 rows now
+name two conditions. **Beyond the brief:** the brief asked only for the two omissions in §4.4 and
+left its 404 alone; the same mis-statement was there and is fixed in the same motion.
+
+### 5 — The escalation is invisible on the response and NOT invisible everywhere. Applied.
+
+Verified before writing: `deltaSyncLocked`'s escalation arm calls `fullImportLocked` → `runImport`,
+and `runImport` builds its `libsync.Importer` with `Progress: g.importProgress()` — non-nil — while
+`runDelta` sets `Progress: nil` with a comment saying why. So an escalated walk publishes the full
+import's `import.progress` frames on `GET /api/events` because it **is** a full import, and a
+non-escalating delta publishes none. §4a.3 says so, and says what the absence of frames does not
+mean, pointing at §5.1's silence-is-UNKNOWN rule.
+
+### 6 — The fake could not tell an arrivals walk from a full page walk. Applied, and fired.
+
+`cmd/usarr/fakebookorbit_test.go`'s `POST /api/v1/libraries/{id}/books` handler decoded `sort`,
+`pagination` and `collapseSeries` and **never `filter`** — the one field that distinguishes channel
+3b's request from channel 1's. Every assertion in
+`TestPressingTheDeltaRouteRunsAnArrivalsWalkAndRecordsIt` passed for a walk that sent no filter.
+
+**Applied wider than asked.** The fake now decodes the filter into `boBookQuery` *and applies it* —
+`after` as BookOrbit's strict `gt` on `books.addedAt`, compared as strings because
+`store.ArrivalsWatermarkLayout` is fixed-width UTC and lexical order is chronological order. Record
+without apply would have modelled a server that ignores its own query language, and any walk built
+on it would look correct here and re-read the whole library in production. A tree the fake cannot
+honestly serve — more than one rule, or any other field or operator — is a `400`, never a fallback to
+the unfiltered list.
+
+**One thing in the brief was wrong against the tree, and the assertion is narrower for it.** The
+brief asked for `after(addedAt)` *"seeded from the stored watermark"*. It is seeded from the stored
+watermark **moved back by `internal/libsync`'s `arrivalsLookbehind`** — five minutes, covering
+BookOrbit's commit-visibility lag and its `status = 'processing'` window, not clock skew. The first
+run of the new assertion failed on exactly that (`asked from "…T09:55:00.000Z", want …"T10:00:00.000Z"`),
+which is the guard doing its job on its first firing. The constant is unexported and pinned by
+`internal/libsync/delta_test.go`; copying the number into `cmd/usarr` would give one constant two
+homes, so this layer asserts the shape instead — strictly below the stored cursor, by less than an
+hour, parsed with `store.ArrivalsWatermarkLayout`.
+
+**Fired:** with `arrivalsRequest`'s filter suppressed in `internal/bookorbit/arrivals.go`, the test
+fails with *"the walk asked for library 1 with NO filter — that is a full page walk, not an arrivals
+walk"*. Restored, it passes, and so do `./cmd/usarr`, `./internal/libsync` and `./internal/bookorbit`
+in full.
+
+### 7 — The double-`%w` seam had no guard. Applied, and fired.
+
+`registry.StartDeltaSync` wraps `httpapi.ErrNotDeltaSource` **and** `libsync.ErrNoDeltaChannel` with
+two `%w` verbs, and `internal/httpapi/ports.go`'s `ErrNotDeltaSource` doc spends five lines
+defending why: `internal/httpapi` declares its own sentinel and never imports `internal/libsync`
+(§2.3 rule 1), so `cmd/usarr` is the one place the two are joined. Nothing asserted the second verb.
+`TestADeltaSyncOfASourceWithNoDeltaChannelIsRefusedByItsOwnCode` now matches
+`errors.Is(err, libsync.ErrNoDeltaChannel)` on `StartDeltaSync`'s own return — the same instance the
+rest of that test already interrogates twice. **Fired:** with the second `%w` replaced by `%s` the
+test fails; restored, it passes.
+
+### 8 — "so the journal and the wire agree" taught the opposite of §11. Applied.
+
+`handleDeltaSyncService` (`internal/httpapi/imports.go`) offered the wire's `"started"` and the audit
+row's `"started"` agreeing as a virtue, and `TestDeltaSyncStartsAWalkAndSaysSoWithoutWaiting`
+repeated it. §11 says making two vocabularies' values agree is the wrong repair for a collision, so
+a comment praising the agreement is a comment arguing against the rule the file three directories
+over is enforcing. Both clauses are gone. **The value is unchanged and deliberately so** — it is
+inherited from `POST /sync`, whose body this response matches field for field, and changing it is a
+wire change outside this slice's scope. It is named as a coincidence rather than defended, so nobody
+argues from it later.
+
+### N1 — Vocabulary audit. Recorded; one repaired, one rebutted.
+
+The reviewer enumerated the slice's wire and storage vocabularies and found two collisions, **both
+inherited rather than introduced here**.
+
+- **`started`** — the wire's `status` value and the audit row's action outcome. Repaired in comment
+  by finding 8; the value stands, for the reason given there.
+- **`kind`** — the 202 body's `kind` is a SERVICE kind (`bookorbit`, `kavita`) while
+  `sync_report.kind` is a REPORT kind (`delta_walk`, `items_skipped`). **Rebutted as a §11
+  violation.** §11's rule is that a wire vocabulary and a storage vocabulary never share a *term* —
+  a value, an identifier one of them could be mistaken for the other of. These share a *field name*
+  across two different objects that no code path converts between, and their value sets are
+  disjoint. Renaming either is a breaking wire change or a migration, bought with nothing: there is
+  no site where one could be passed where the other is expected. Recorded here so the next reader
+  finds the reasoning rather than reopening it.
+
+### N2 — Security. Recorded, no action.
+
+The reviewer reports the slice clean, and specifically that `StartDeltaSync`'s pre-flight touches no
+network: `entry()` reads one SQLite row and opens a stored credential, `catalogueSource()` is a
+struct literal, the `DeltaSource` assertion is a type check, and the egress client resolves at dial
+time. The reviewer proved it by execution rather than by reading the comment that claims it. No
+credential, base URL or upstream body reaches the 202 body — its four fields are allowlisted and
+`TestDeltaSyncStartsAWalkAndSaysSoWithoutWaiting` fails on any fifth.
+
+### N3 — The concurrency guard. Recorded, no action.
+
+Correct as built: a delta and a full import claim one `beginImport` entry because they write the same
+rows through the same batching loop, and the escalation runs on `fullImportLocked` so it cannot
+collide with the claim its own press made. Two live edges, both intended and both documented where
+they occur — a delta is refused while a full import runs and vice versa (which is what finding 3's
+first bullet made §4.4 say out loud), and the claim is released by the goroutine that started the
+walk, which `TestPressingTheDeltaRouteRunsAnArrivalsWalkAndRecordsIt` asserts comes back.
+
+### N4 — Principle 4. Recorded, no action.
+
+`Imports.StartDeltaSync(instanceID int64)` carries no scope parameter, so authorization is done
+entirely by the handler's scoped `GetServiceInstance` before the port is reached. The consequence:
+an instance out of scope is refused with 404 at the handler, and nothing below the port re-checks —
+so a future second caller of the port would be unguarded. It is not a defect today because v0.1 has
+one user and one caller, and it is not a seam anyone should silently rely on. Recorded rather than
+fixed: adding a scope parameter to a port with one caller and one user is speculative generality,
+and the honest place for the constraint is this record.
+
+### N5 — What the slice did not reach. Recorded, no action.
+
+Two gaps, both deliberate and both true at `52f2b28`:
+
+- **No UI.** Measured: `git grep 'sync/delta' web/src` returns exactly one hit,
+  `web/src/lib/services.ts`'s `SyncChannel` doc comment, which NAMES the route and does not call it —
+  and says why, in its own words: nothing constructs a `SyncChannel` because
+  `GET /api/v1/services/health` publishes no delta equivalent of `last_full_sync_at`. §17.3's screen
+  shows *Run full sync now* and no delta control. The route is reachable by hand and by test only.
+- **`delta_walk` rows have no reader.** Measured: every non-test occurrence of `SyncReportDeltaWalk`
+  or the literal `delta_walk` is a WRITE (`internal/libsync/delta.go`'s `recordDeltaWalk`), its
+  constant, or a comment about it. Nothing reads one back — not the Services screen, not the
+  Libraries screen, not an API surface. `internal/store/arrivals.go` says a screen's delta freshness
+  instant "comes from the latest `delta_walk` sync_report row's created_at"; that is a design
+  statement about a screen that does not exist, not a reader. The row is the durable record §4a.3
+  sends readers to, and today reading it means reading SQLite by hand.
+
+Neither is a defect of this slice, which was scoped to making channel 3b reachable. Both are named
+here so the next reader does not mistake the route's existence for a feature a user can press.
