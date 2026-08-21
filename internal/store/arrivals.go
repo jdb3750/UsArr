@@ -28,8 +28,12 @@ import (
 //
 // `service_instance.last_delta_sync_at` (migration 00001) is the seam this
 // channel was expected to land in, and 3b does not use it. Stated at the seam
-// rather than in a design document, on internal/store/libraries.go's precedent
-// for `orphaned_at`:
+// rather than in a design document, on the precedent internal/store/libraries.go
+// SET for `orphaned_at` — ⚠️ past tense as of 2026-08-21, because channel 4's
+// sweepOrphans gave that column a writer and libraries.go's annotation was
+// rewritten with it (`0adfe1f`). The form is what was borrowed and the form is
+// unchanged; following the pointer today lands on a column that HAS a writer, so
+// it is a precedent for how to say this and not an example of the same state:
 //
 //   - ⚠️ NOTHING WRITES IT AND NOTHING READS IT. Measured over the tree:
 //     `last_delta_sync_at` and any Go spelling of it occur in migration 00001,

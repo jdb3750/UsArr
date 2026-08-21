@@ -80,13 +80,21 @@ type ServiceInstance struct {
 	// under its own "-- identity generation guard (sync.md §4)" banner). None of
 	// them is selected here or named in serviceInstanceColumns below.
 	//
-	// ⚠️ NOTHING WRITES OR READS ANY OF THEM. Measured over the tree at d9a3f37:
-	// identity_fingerprint, identity_epoch and max_remote_id_seen have ZERO Go
-	// references of any kind. needs_reidentification has two and neither touches
-	// the column — httpapi's healthState COMPARES health_state against the STRING
-	// "needs_reidentification" (and against stateReID, "needs re-identification"),
-	// and the other is a TEST FIXTURE assigning that same string to HealthState.
-	// The state travels through health_state; the column named for it is dead.
+	// ⚠️ NOTHING WRITES OR READS ANY OF THEM, and the measurement is phrased as
+	// "no reader and no writer" rather than as a reference count ON PURPOSE.
+	// Measured over the tree at d9a3f37: identity_fingerprint, identity_epoch and
+	// max_remote_id_seen had zero Go references of any kind — and then this
+	// annotation named all three in a .go file, so a later reader re-running a
+	// reference count gets a non-zero and cannot tell whether the state changed
+	// or whether they are reading this comment back to itself. ROADMAP.md's
+	// channel-4 check is worded the durable way ("a READER of
+	// identity_fingerprint or max_remote_id_seen") and comes back empty; this
+	// claim borrows it. needs_reidentification has two Go references and neither
+	// touches the column — httpapi's healthState COMPARES health_state against
+	// the STRING "needs_reidentification" (and against stateReID, "needs
+	// re-identification"), and the other is a TEST FIXTURE assigning that same
+	// string to HealthState. The state travels through health_state; the column
+	// named for it is dead.
 	//
 	// THE SEAM IS KEPT BECAUSE ITS PREMISE IS ONLY VOID FOR ONE SOURCE, AND THIS
 	// IS THE PART A LATER READER MUST NOT GENERALISE. Guard 2 answers an id space
@@ -120,9 +128,17 @@ type ServiceInstance struct {
 	// why passing through beats re-minting on this source. A row after the fact
 	// is not a guard before it.
 	//
-	// THE FORM OF THIS ANNOTATION IS libraries.go's Library.OrphanedAt, NOT ITS
-	// PLACEMENT: that one annotates a field that IS selected, and what is being
-	// annotated here is these four columns' absence from the struct.
+	// THE FORM OF THIS ANNOTATION IS libraries.go's Library.OrphanedAt AS IT
+	// STOOD AT b90b031, NOT ITS PLACEMENT and not its present text. That
+	// annotation read "NOTHING WRITES IT … a renderer that shows an 'orphaned'
+	// chip is showing a state nothing can currently produce"; 0adfe1f rewrote it
+	// in this same slice, because sweepOrphans now sets the column and clears it
+	// again. ⚠️ SO THE LIVE COMMENT IS NOT THE PRECEDENT — following the pointer
+	// today lands on a sentence saying the opposite of the form being borrowed,
+	// which is why the tense is past. What transfers is the SHAPE: state the
+	// measurement, its date and its scope at the seam. What does not transfer is
+	// the placement — OrphanedAt annotates a field that IS selected, and what is
+	// being annotated here is these four columns' absence from the struct.
 }
 
 const serviceInstanceColumns = `

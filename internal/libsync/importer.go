@@ -733,6 +733,17 @@ func (im *Importer) bindPhase(
 // two orders of magnitude below the 200–400 MB peak reference/sync.md §2
 // measures for the buffering this design exists to avoid. If that ever stops
 // being true the fix is a temp table, not a bigger slice.
+//
+// ⚠️ IT IS THE ONE BUDGETED ALLOCATION AND IT IS NO LONGER THE LARGEST ONE.
+// readObservation.items, accumulated by the same loop and handed to the deletion
+// pass, spans children AND one parent entry per child with no dedupe at the
+// append site — at §13's shape that is ~180,000 LinkRefs against this slice's
+// ~3,000 ImportedItems. It is still single-digit megabytes of two short strings
+// each, and store.SweepDeletions folds it into a map before the first write, so
+// the duplicate parent keys cost memory in this function and nothing downstream.
+// The two are named together because the budget above was written when this was
+// the only slice that grew with the library, and it is not: whichever one is
+// re-sized, the other is the one to check first.
 // stream is the item-producing half of streamAndApply, taken as a parameter so
 // channel 1 and channel 3b share ONE batching loop.
 //

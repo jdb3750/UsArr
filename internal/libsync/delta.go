@@ -135,28 +135,35 @@ type DeltaObservation struct {
 // carries no CHECK, so a typo is not a constraint violation, it is a count that
 // silently reads zero.
 //
-// VOCABULARY CHECK against every existing member and not only the nearest one —
-// container_declined, container_bind_failed, container_kind_changed,
-// identity_conflict, file_walk_failed, content_completeness, items_skipped,
-// cover_pass_incomplete, comic_series_synthesized,
-// comic_series_memberships_declined, id_reused and deletion_sweep. No collision.
-// The WIRE word for the same concept is `page-walk delta`; the two are one
-// concept in two vocabularies and nothing translates between them by string
-// manipulation.
+// THE COLLISION CHECK IS DERIVED, NOT COPIED. cmd/usarr's
+// TestSyncReportKindsDoNotCollide (syncreportvocab_test.go) reads every
+// `syncReport…`/`SyncReport…` string constant in non-test Go out of the tree and
+// asserts the members are pairwise
+// distinct, so this kind joins the check by existing. No enumeration is stated
+// here, in either direction. The WIRE word for the same concept is `page-walk
+// delta`; the two are one concept in two vocabularies and nothing translates
+// between them by string manipulation.
 //
-// ⚠️ THIS LIST READ `comic_residue`, WHICH IS NOT A MEMBER AND NEVER WAS, and it
-// omitted three that are. Nothing in the tree writes that string as a
+// ⚠️ THIS COMMENT CARRIED A HAND-COPIED ENUMERATION AND IT WAS WRONG TWICE, WHICH
+// IS WHY IT IS GONE RATHER THAN EXTENDED. It first read `comic_residue`, WHICH
+// IS NOT A MEMBER AND NEVER WAS — nothing in the tree writes that string as a
 // sync_report.kind; the two literals the comic path actually writes are
 // cmd/usarr/import.go's syncReportComicSeriesSynthesized and
 // syncReportComicSeriesDeclined, and the only other occurrence of the substring
 // is `window_comic_residue`, a PAYLOAD KEY on the delta row below — a different
-// vocabulary at a different grain. A VOCABULARY CHECK THAT NAMES A MEMBER THE
-// TREE DOES NOT HAVE IS A CHECK THAT DID NOT RUN: its whole purpose is to prove
-// a new kind collides with nothing, and that proof is void if the enumeration is
-// not the enumeration. Corrected 2026-08-21 with ADR-0074, whose slice is also
-// what turned "the unwritten id_reused" into a written kind
-// (store.SyncReportIDReused, guard 1 shipped wired) and added
-// store.SyncReportDeletionSweep beside it.
+// vocabulary at a different grain. Corrected 2026-08-21 with ADR-0074 to a list
+// ending *"comic_series_memberships_declined, id_reused and deletion_sweep. No
+// collision."* — and the same slice then added
+// store.SyncReportDeletionSweepRefused and store.SyncReportRevivedWithoutIdentity
+// without returning here, so the corrected list was incomplete before the branch
+// it landed on was finished. A VOCABULARY CHECK THAT NAMES A MEMBER THE TREE
+// DOES NOT HAVE IS A CHECK THAT DID NOT RUN, and one that omits a member the
+// tree does have is the same defect in the other direction: its whole purpose is
+// to prove a new kind collides with nothing, and that proof is void if the
+// enumeration is not the enumeration. A list maintained by a different act than
+// the thing it lists drifts (DEVELOPMENT.md §11); the derived check cannot.
+// internal/store/reconcile.go's SyncReportDeletionSweep took this same treatment
+// in the same slice.
 const SyncReportDeltaWalk = "delta_walk"
 
 // The reasons a completed delta declines to advance the watermark. Each one

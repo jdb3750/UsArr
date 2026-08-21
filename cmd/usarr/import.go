@@ -74,9 +74,15 @@ import (
 // which is also why this is a FULL re-import rather than a delta: internal/libsync
 // has exactly one channel"*, AND BOTH HALVES OF IT ARE NOW FALSE. Channel 3b IS
 // built: DeltaSync below is its trigger. Channel 4's DELETION HALF is built too,
-// for BookOrbit, by the slice ADR-0074 rules — guard 1 wired, guard 2 deferred on
-// a measured void premise, and §7.4 step 4's drift comparison still built for
-// nobody. What the struck sentence got RIGHT and what survives it is the reason a
+// by the slice ADR-0074 rules — guard 1 wired, guard 2 deferred on a measured
+// void premise, and §7.4 step 4's drift comparison still built for nobody.
+// ⚠️ THIS SENTENCE READ *"built too, FOR BOOKORBIT"* AND THAT IS NOT WHAT SHIPPED.
+// FullImport calls store.SweepDeletions unconditionally and nothing in the pass
+// is scoped by source, so it runs for every source catalogueSource below can
+// return — Kavita included. What IS source-scoped is ADR-0074's guard-2
+// DEFERRAL, which is BookOrbit's alone and rests on a measurement nobody has
+// taken for Kavita. Saying "for BookOrbit" of the pass invites a reader to look
+// for a switch that is not there. What the struck sentence got RIGHT and what survives it is the reason a
 // delta is not a substitute for this function: an arrivals walk revisits only what
 // arrives upstream, so it can never repair a row UsArr itself wrote wrongly, can
 // never repair a skip, and cannot clear a tie wedge.

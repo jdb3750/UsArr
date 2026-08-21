@@ -487,9 +487,15 @@ func absentSources(
 // reserved Unfiled row. Its cursor is closed before any write, on absentLinks'
 // rule.
 //
-// ⚠️ library 0 IS EXCLUDED. "Unfiled" has no sources by construction (see
-// UnfiledLibraryID), so an orphan rule that tested it would mark the one library
-// whose job is to always be there.
+// ⚠️ library 0 IS EXCLUDED, AND THE PREDICATE IS A SEAM RATHER THAN A LIVE
+// GUARD. "Unfiled" has no library_source rows by construction (see
+// UnfiledLibraryID), so `SELECT DISTINCT library_id FROM library_source` cannot
+// yield it and removing the exclusion changes nothing today — the assertion in
+// TestSweepStampsMissingSinceAndOrphanedAt that Unfiled was not orphaned passes
+// over a subject the read never produced. It is kept because the day something
+// does file a source under library 0, an orphan rule that tested it would mark
+// the one library whose job is to always be there; it is described as
+// unreachable so nobody mistakes it for protection that has ever been exercised.
 func fedLibraries(ctx context.Context, tx *sql.Tx, instanceID int64) ([]int64, error) {
 	rows, err := tx.QueryContext(ctx, `
 		SELECT DISTINCT library_id FROM library_source
@@ -615,10 +621,24 @@ func sweepItems(
 // container" and orphaned_at is "set when the last library_source goes away" —
 // both are the instant an absence BEGAN, so a sweep that re-stamped on every run
 // would turn "missing since Tuesday" into "missing since thirty seconds ago" and
-// destroy the only fact the column carries. `AND missing_since IS NULL` /
+// destroy the only fact the column carries. The RowsAffected counts are
+// therefore counts of TRANSITIONS, not of missing things.
+//
+// ⚠️ WHERE THAT IS ENFORCED IS NOT WHERE THIS COMMENT SAID IT WAS, AND THE
+// DIFFERENCE MATTERS TO THE NEXT EDIT. It read: *"`AND missing_since IS NULL` /
 // `AND orphaned_at IS NULL` in the UPDATE is what enforces it: a caller cannot
-// re-stamp by calling twice, because the second statement matches no row. The
-// RowsAffected counts are therefore counts of TRANSITIONS, not of missing things.
+// re-stamp by calling twice, because the second statement matches no row."* Only
+// the second half of that is load-bearing. absentSources already excludes
+// stamped rows, so the container UPDATE's `AND missing_since IS NULL` matches
+// what the SELECT matched and deleting it changes nothing observable — the same
+// is true of the link tombstone's `AND deleted_at IS NULL` in sweepItems, over
+// absentLinksSQL. fedLibraries does NOT pre-filter, so `AND orphaned_at IS NULL`
+// on the library UPDATE is the one clause that is genuinely doing the work, and
+// dropping it turns a test red.
+//
+// ALL THREE CLAUSES STAY. Two of them are defence in depth against a SELECT that
+// stops pre-filtering — which is exactly the "simplification" this note exists to
+// stop a later reader from making in the belief that the UPDATE has it covered.
 //
 // # The clearing arm
 //

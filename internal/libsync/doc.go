@@ -42,8 +42,14 @@
 // on the success path, which tombstones the links and works the read did not
 // report and stamps the containers and libraries that went absent with them.
 // ⚠️ THE PRECONDITION IS THAT THE READ SAW THE WHOLE LIST, AND ONLY THIS PACKAGE
-// CAN ENFORCE IT: a partial import returns before the call, and DeltaSync passes
-// a nil seen-set because an arrivals walk's set difference is the whole library.
+// CAN ENFORCE IT IN GENERAL: a partial import returns before the call, and
+// DeltaSync passes a nil seen-set because an arrivals walk's set difference is
+// the whole library. ⚠️ THE WORDS "IN GENERAL" ARE LOAD-BEARING and were added
+// after the fact — internal/store refuses ONE shape of violated precondition
+// itself, a read that reported zero items against an instance with live links
+// (store.ErrSweepRefusedEmptyRead), and says in its own voice that it is one
+// shape and only one. Every other partial read is still this package's to
+// prevent, which is what the sentence was written to say.
 // "Observed" is what the UPSTREAM reported and not what this importer applied —
 // sweepScope folds in the items the adapter read and could not map, and withholds
 // the containers that answered nothing or were measured short, so an absence is
