@@ -994,6 +994,12 @@ the \*Arr is lying: **id resurrection** (the \*Arrs reuse integer ids after dele
 link can rebind a *different* movie to the old `work_id` — compare external identity before clearing
 `deleted_at`) and **instance identity generation** (an \*Arr restored from an older backup moves its
 id space backwards; on a fingerprint change or a backwards jump in `max(id)`, refuse to sweep).
+⚠️ **AMENDED 2026-08-21 BY [ADR-0074](#adr-0074) — "both mandatory" IS SCOPED, AND THE SENTENCE'S OWN
+SUBJECT IS WHY.** Every clause above says *"the \*Arrs"*, and for the \*Arrs it stands unchanged.
+Guard 2's premise is a SQLite-rowid property, and it is measured **void** for BookOrbit — PostgreSQL
+`serial`, no sequence rewind anywhere in that tree — so ADR-0074 **defers guard 2 for that source**
+and records the surviving hazards as named gaps with no guard. **Guard 1 is unscoped and now ships
+wired**, its comparison executing rather than merely recorded.
 
 ### Alternatives rejected
 - **SignalR alone** — breaks behind reverse proxies, which is the common deployment.
@@ -11084,7 +11090,14 @@ Arrivals are the common case and the cheap one; there is no reason to pay six ho
 **1 · It does not design channel 4.** The sweep's shape, cadence, page geometry, its `remote_hash`
 comparison and its two mandatory guards are §7.4's, unchanged. This ADR **assigns work to** channel 4;
 it does not say how channel 4 does it, and nothing here should be read as having specified the sweep
-that now carries BookOrbit's edits.
+that now carries BookOrbit's edits. ⚠️ **AMENDED 2026-08-21: [ADR-0074](#adr-0074) IS THE SLICE THAT
+DID DESIGN IT, AND IT ANSWERED TWO OF THE THINGS THIS SENTENCE DEFERS DIFFERENTLY THAN THIS SENTENCE
+ANTICIPATES.** For BookOrbit the `remote_hash` comparison is **dropped** as a refetch gate and
+permitted at the store seam only — where it is still unbuilt — and **guard 2 is deferred** on a
+measured void premise. So *"its two mandatory guards are §7.4's, unchanged"* is now *"guard 1 is,
+wired; guard 2 is deferred for this source"*. **Nothing this ADR decided moves**, and its open
+residual — the sweep being deaf to the credits class — is closed by unconditional re-apply rather than
+by widening the hash, which is one of the three repairs it named as channel 4's to pick from.
 
 **2 · It decides nothing about the owner's live instance.** Every measurement cited is read from
 `bookorbit/bookorbit` at the pinned commit, from a clone of the server source. **No probe against a

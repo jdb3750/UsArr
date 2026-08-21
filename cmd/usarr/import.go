@@ -60,28 +60,45 @@ import (
 // run again. A re-import is therefore not a feature of the sync core: it is what
 // makes the sync core's own fixes deliverable.
 //
-// NO TIMER. There is no periodic re-import here and adding one would be the
-// wrong shape anyway: a re-read of the whole library every N hours is channel
-// 4's job (the reconciliation sweep, which compares hashes and touches <1% of
-// rows), not channel 1's.
+// NO TIMER, AND THAT IS STILL TRUE OF CHANNEL 4 TOO. There is no periodic
+// re-import here and adding one would be the wrong shape anyway: a re-read of
+// the whole library every N hours is channel 4's job (the reconciliation sweep,
+// which compares hashes and touches <1% of rows), not channel 1's.
+//
+// ⚠️ THAT SENTENCE DESCRIBES A DESIGN, NOT A TREE. sync.md §4's "every 6 h
+// (configurable)" scheduler is not built for any channel, and the sweep that IS
+// built runs from FullImport's success path and from nowhere else. Nothing in
+// this binary reconciles on a clock.
 //
 // ⚠️ THIS PARAGRAPH CONTINUED *"Neither channel 4 nor channel 3b is built here —
 // which is also why this is a FULL re-import rather than a delta: internal/libsync
-// has exactly one channel"*, AND THIS FILE NOW FALSIFIES THE SECOND HALF OF IT.
-// Channel 3b IS built: DeltaSync below is its trigger. Channel 4 is still not.
-// What the struck sentence got RIGHT and what survives it is the reason a delta
-// is not a substitute for this function: an arrivals walk revisits only what
+// has exactly one channel"*, AND BOTH HALVES OF IT ARE NOW FALSE. Channel 3b IS
+// built: DeltaSync below is its trigger. Channel 4's DELETION HALF is built too,
+// for BookOrbit, by the slice ADR-0074 rules — guard 1 wired, guard 2 deferred on
+// a measured void premise, and §7.4 step 4's drift comparison still built for
+// nobody. What the struck sentence got RIGHT and what survives it is the reason a
+// delta is not a substitute for this function: an arrivals walk revisits only what
 // arrives upstream, so it can never repair a row UsArr itself wrote wrongly, can
-// never repair a skip or a deletion, and cannot clear a tie wedge. THE FULL
-// IMPORT MUST STAY REACHABLE AND MUST NEVER BE MADE TO LOOK UNNECESSARY BY THE
-// DELTA SHIPPING — every residual channel 3b declines is assigned to the full
-// import, because assigning it to channel 4 would be assigning it to nothing.
+// never repair a skip, and cannot clear a tie wedge.
 //
-// ⚠️ AND THE CHANNEL-4 CLAIM IN THE FIRST PARAGRAPH IS ITSELF UNDER CORRECTION
-// ELSEWHERE — the sweep is measured deaf to the credits class, so "channel 4's
-// job" does not cover everything a re-read repairs. That correction is not this
-// change's and is deliberately not made here; it is named so the next reader
-// does not take the silence for agreement.
+// ⚠️ THE NEXT SENTENCE READ *"every residual channel 3b declines is assigned to
+// the full import, because assigning it to channel 4 would be assigning it to
+// nothing"*, AND THE CLAUSE AFTER THE COMMA IS WHAT THIS SLICE FALSIFIES —
+// deletions now have a sweep to go to. THE FULL IMPORT MUST STILL STAY REACHABLE
+// AND MUST NEVER BE MADE TO LOOK UNNECESSARY BY EITHER CHANNEL SHIPPING, and the
+// reason is now the narrower and more durable one: it is the only repair for a
+// row UsArr itself wrote wrongly, for a skip, and for a tie wedge — none of which
+// any upstream re-read can see, because upstream is not wrong about them. It is
+// also the only repair for the two id-space hazards ADR-0074 leaves unguarded.
+//
+// ⚠️ AND THE CHANNEL-4 CLAIM IN THE FIRST PARAGRAPH IS NARROWED RATHER THAN
+// DISCHARGED. The sweep was measured deaf to the credits class — remoteHash covers
+// nine fields and CatalogueItem carries no credit field — so ADR-0074 drops the
+// hash gate for BookOrbit and re-applies credits unconditionally instead of
+// widening the hash. "Channel 4's job" therefore covers the periodic re-read it
+// describes and the deletion pass that exists; it does NOT mean the hash sees
+// everything a re-read repairs, and a gate placed anywhere upstream of the credit
+// pass reintroduces exactly the deafness that correction removed.
 
 // FullImport runs channel 1 against one instance. It is the manual trigger.
 //

@@ -37,6 +37,17 @@
 // did is the delta_walk sync_report row recordDeltaWalk writes, never the
 // response body.
 //
+// ALSO HERE, BUT ONLY BEHIND A FULL IMPORT: channel 4's DELETION HALF. FullImport
+// collects every link key its walk observed and hands it to store.SweepDeletions
+// on the success path, which tombstones the links and works the read did not
+// report and stamps the containers and libraries that went absent with them.
+// ⚠️ THE PRECONDITION IS THAT THE READ SAW THE WHOLE LIST, AND ONLY THIS PACKAGE
+// CAN ENFORCE IT: a partial import returns before the call, and DeltaSync passes
+// a nil seen-set because an arrivals walk's set difference is the whole library.
+// Guard 1 lives in internal/store, at the upsert where the resurrection it
+// answers is detected. What is NOT here is guard 2 and §7.4 step 4's drift
+// comparison; see the NOT-HERE list below and ADR-0074.
+//
 // ⚠️ THIS PARAGRAPH READ *"NOTHING USER-FACING CAN TRIGGER IT, BECAUSE THERE
 // IS NO HTTP ROUTE … internal/httpapi never names DeltaSync … THE ROUTE IS THE
 // NAMED NEXT SLICE"*, AND THE NAMED NEXT SLICE LANDED. Both measurements in it
@@ -56,11 +67,30 @@
 //     stop is the mechanism for a source that CANNOT express a since-filter, and
 //     BookOrbit can (ADR-0070). Navidrome, Audiobookshelf, Kavita and Komga each
 //     get their own measurement and none of them is walked here.
-//   - Channel 4, the reconciliation sweep and its two guards. Nothing here
-//     tombstones, deletes or detects drift — remote_hash and
-//     remote_identity_hash are WRITTEN here so the sweep has something to
-//     compare, and read by nothing yet.
+//
+//   - Channel 4's GUARD 2 and its DRIFT STEP. ⚠️ THIS BULLET READ "Channel 4,
+//     the reconciliation sweep and its two guards. Nothing here tombstones,
+//     deletes or detects drift — remote_hash and remote_identity_hash are
+//     WRITTEN here so the sweep has something to compare, and read by nothing
+//     yet", AND THREE OF ITS FOUR CLAUSES ARE NOW FALSE (ADR-0074, 2026-08-21).
+//     The sweep is here — importer.go calls store.SweepDeletions from
+//     FullImport's success path — and it tombstones and deletes. Guard 1 is
+//     here: applyOneItem compares remote_identity_hash on any upsert that would
+//     clear deleted_at.
+//
+//     ⚠️ THE CLAUSE THAT SURVIVES INTACT IS THE ONE ABOUT remote_hash. It is
+//     still WRITTEN here and read by nothing: no SELECT in non-test Go names
+//     the column. ADR-0074 permits a store-seam comparison and this slice does
+//     not build one, so drift detection is absent for every source, not merely
+//     for this one.
+//
+//     What is also still absent is guard 2 — deferred for BookOrbit on a
+//     measured void premise, and simply unbuilt for the *Arrs, who have no
+//     adapter here yet. The four service_instance columns it needs are an
+//     annotated seam; see internal/store/serviceinstance.go.
+//
 //   - The write queue. §7.6's verbs have no target in v0.1.
+//
 //   - Any timer. FullImport is called on connect or on demand, by cmd/usarr.
 //
 // # Two-phase, and which phase this is

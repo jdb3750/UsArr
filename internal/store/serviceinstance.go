@@ -71,6 +71,53 @@ type ServiceInstance struct {
 	LastFullSyncAt sql.NullString
 
 	DeletedAt sql.NullString
+
+	// ── THE FOUR GUARD-2 COLUMNS ARE DELIBERATELY ABSENT FROM THIS STRUCT, AND
+	// THAT IS A RECORDED STATE RATHER THAN AN OVERSIGHT.
+	//
+	// service_instance carries identity_fingerprint, identity_epoch,
+	// needs_reidentification and max_remote_id_seen (00001_initial.sql:155-158,
+	// under its own "-- identity generation guard (sync.md §4)" banner). None of
+	// them is selected here or named in serviceInstanceColumns below.
+	//
+	// ⚠️ NOTHING WRITES OR READS ANY OF THEM. Measured over the tree at d9a3f37:
+	// identity_fingerprint, identity_epoch and max_remote_id_seen have ZERO Go
+	// references of any kind. needs_reidentification has two and neither touches
+	// the column — httpapi's healthState COMPARES health_state against the STRING
+	// "needs_reidentification" (and against stateReID, "needs re-identification"),
+	// and the other is a TEST FIXTURE assigning that same string to HealthState.
+	// The state travels through health_state; the column named for it is dead.
+	//
+	// THE SEAM IS KEPT BECAUSE ITS PREMISE IS ONLY VOID FOR ONE SOURCE, AND THIS
+	// IS THE PART A LATER READER MUST NOT GENERALISE. Guard 2 answers an id space
+	// that moves BACKWARDS, which sync.md §4 grounds on SQLite's rowid allocator —
+	// "ids are reused after deletion". That premise is LIVE for every *Arr and is
+	// measured VOID for BookOrbit: books.id and libraries.id are PostgreSQL
+	// serial, and setval(, SQL TRUNCATE and RESTART IDENTITY are all absent from
+	// server/src at bookorbit/bookorbit@73b7877d2fed. So ADR-0074 (2026-08-21)
+	// DEFERS guard 2 FOR BOOKORBIT ONLY and keeps these columns for the *Arr
+	// adapters, which are re-sequenced rather than cut (ADR-0042).
+	//
+	// ⚠️ AND WHAT SURVIVES THE VOID PREMISE IS A NAMED GAP WITH NO GUARD, not a
+	// hazard some other channel absorbs: an older pg_dump restored out of band
+	// rewinds the sequence, and the instance can be repointed at a different or
+	// rebuilt server. BookOrbit exposes no instance identity to fingerprint —
+	// a four-term search of server/src for
+	// instanceId|installationId|serverUuid|instance_uuid returns zero files, and
+	// the same search shape over four terms that ARE present returns 93 files, so
+	// the search was working rather than broken. The only repair for either case
+	// is the manual full import.
+	//
+	// So guard 1 carries this source alone, which is why ADR-0074 required it
+	// WIRED — applyOneItem's step 1a now compares remote_identity_hash, and a
+	// value nothing compares is not a guard. ⚠️ ITS REACH IS STILL BOUNDED: the
+	// comparison is over the item's external ids, so an item with none hashes
+	// like every other item with none and the guard passes a reused id through.
+	// That is ADR-0074's third named gap, and it has no guard either.
+	//
+	// THE FORM OF THIS ANNOTATION IS libraries.go's Library.OrphanedAt, NOT ITS
+	// PLACEMENT: that one annotates a field that IS selected, and what is being
+	// annotated here is these four columns' absence from the struct.
 }
 
 const serviceInstanceColumns = `

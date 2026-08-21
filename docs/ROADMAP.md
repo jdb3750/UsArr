@@ -462,12 +462,22 @@ Items marked 🛑 **STOPPED** are the different case: those are stopped by the d
       *Done when:* `internal/libsync` has a delta path and `internal/libsync/doc.go` stops listing
       channel 3b under "NOT HERE".
 
-- [ ] **Channel 4 — reconciliation, with both sweep guards and 7-day tombstones.** It carries more
-      weight for Kavita than for an \*Arr: a page walk cannot observe a deletion, and Kavita's
-      watermark moves on a chapter *add* only.
-      *Authority:* §7.4, §16 v0.1 entry ([ADR-0035](./DECISIONS.md#adr-0035) §2a).
-      *Done when:* `grep -rn 'missing_since\|orphaned_at' --include=*.go internal/` shows a statement
-      that **sets** a non-NULL value. Today every one clears it.
+- [ ] **Channel 4 — reconciliation. The DELETION HALF and GUARD 1 have landed; the drift step, guard
+      2, the scheduler and the tombstone reaper have not.** It carries more weight for a catalogue
+      source than for an \*Arr: a page walk cannot observe a deletion, and BookOrbit's arrivals filter
+      sees no edit at all. ⚠️ **This item read *"with both sweep guards and 7-day tombstones"* and
+      framed the weight in terms of Kavita**; [ADR-0074](./DECISIONS.md#adr-0074) ships guard 1
+      **wired** and **defers guard 2 for BookOrbit** on a measured void premise, leaving named gaps
+      with no guard. Guard 2 for the \*Arrs is unbuilt and re-sequenced with their adapters, not cut.
+      *Authority:* §7.4, §16 v0.1 entry, [ADR-0074](./DECISIONS.md#adr-0074).
+      *Done when:* ⚠️ **THE OLD CHECK NOW PASSES AND PROVES ALMOST NOTHING** — it was
+      `grep -rn 'missing_since\|orphaned_at' --include=*.go internal/` showing a statement that
+      **sets** a non-NULL value, on the premise that *"today every one clears it"*, and
+      `internal/store/reconcile.go`'s `sweepContainers` and `sweepOrphans` now set **both**. What is
+      left is three greps that still come back empty: a `SELECT` in non-test Go naming `remote_hash`
+      (the drift step — there is none, for any source); a reader of `identity_fingerprint` or
+      `max_remote_id_seen` (guard 2); and any caller of `SweepDeletions` other than `FullImport`
+      (there is no scheduler, and nothing hard-deletes a tombstone after seven days).
 
 - [x] **Search over your own library — the read path AND the SCREEN.** Both landed 2026-08-18.
       `GET /api/v1/search` answers a flat ranked list off the local corpus at `04a28a4` — the handler

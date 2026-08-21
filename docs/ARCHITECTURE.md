@@ -188,7 +188,12 @@ the rule, so the narrowing lives here rather than only in the ADR):
 | **Display identity** — title, sort title, year, cover, and "is this link really this work" | Upstream by default | **An explicit user correction**, then §6.3's authority rule. Both values are retained; the override never writes back upstream. |
 
 Unambiguity on the state axis prevents a category of flip-flopping bugs — and makes two guards
-mandatory, because "the \*Arr always wins" is dangerous when the \*Arr is lying (§7.4).
+mandatory, because "the \*Arr always wins" is dangerous when the \*Arr is lying (§7.4). ⚠️ **"Both
+mandatory" is scoped to the sources whose id allocator makes them so, and that is what "the \*Arr" in
+this sentence means** — for BookOrbit, guard 2's premise is measured **void** (PostgreSQL `serial`,
+no sequence rewind in the tree) and the guard is **deferred**, leaving a named gap with no guard
+rather than a rule quietly unenforced ([ADR-0074](./DECISIONS.md#adr-0074), 2026-08-21). **Guard 1 is
+mandatory everywhere and is not scoped by this.**
 
 | Concern | Model |
 |---|---|
@@ -1363,7 +1368,7 @@ Five properties, each of which is a correctness requirement rather than a detail
 | **Ordering guarantee** | The source must return items ordered by a monotonic last-modified field it maintains itself. Probed at connect time, not assumed. |
 | **Overlap window** | Re-read `max(5 min, 2 × \|clock_skew_secs\| + poll interval)` **behind** the watermark, from the `Date` header skew already measured per instance (§7.3). Items changed during the walk otherwise fall between pages. |
 | **Page-walk stability** | An ordering key that mutates *while* the walk runs reorders the result set under the cursor, so an item can be skipped. The walk therefore records the first page's top item and **restarts if it is no longer first on the next poll**, rather than continuing into a reordered set. |
-| **Deletions** | A page walk **cannot observe a deletion**, structurally. Channel 4 remains the only deletion path for these sources, which is exactly why the sweep is doing more work here than it does for the \*Arrs. |
+| **Deletions** | A page walk **cannot observe a deletion**, structurally. Channel 4 remains the only deletion path for these sources, which is exactly why the sweep is doing more work here than it does for the \*Arrs. ⚠️ **The sweep uses FOUR stamps and they are not interchangeable** ([ADR-0074](./DECISIONS.md#adr-0074)): `service_item_link.deleted_at` is the **item tombstone** — the window guard 1 exists to police — and `work.deleted_at` follows it only when a work loses its last live link **on any instance**, because the work column is the one every user-facing read filters on; `library_source.missing_since` is a **container absence stamp**, meaning "the upstream stopped reporting this container", with the library, its corrections and its members all left standing; and `library.orphaned_at` is §6.5 rule 5's library-level state, set when no source of the library anywhere is still reported and **cleared again** when one comes back. All four are stamped `IS NULL`-guarded, so each records when the absence **began**. **Collapsing the container stamp into the item tombstone is how an unmounted share becomes a deleted library.** |
 
 **What happens when the ordering guarantee is absent — and it is absent for at least one source
 today.** The instance falls back to **reconciliation only**, and this is surfaced rather than
@@ -1452,7 +1457,7 @@ at connect time**, since every spec types it `date-time` and says nothing about 
 response is unbounded** — there is no `limit` parameter (unlike `/history`), so an instance offline
 for a week returns its whole history in one array.
 
-### 7.4 Channel 4 — reconciliation, and its two mandatory guards
+### 7.4 Channel 4 — reconciliation, and its two guards (⚠️ one of which is source-conditional; see ADR-0074)
 
 Every 6 h plus on demand: fetch the full entity list per instance; left-anti-join
 `service_item_link` → rows deleted upstream; **soft-delete with a 7-day tombstone**; compare
@@ -1460,6 +1465,20 @@ Every 6 h plus on demand: fetch the full entity list per instance; left-anti-joi
 optional: an \*Arr temporarily empty (misconfigured root folder, unmounted NFS share) must not nuke
 the library. *"My NAS unmounted and UsArr deleted everything"* is the nightmare bug and one column
 plus a delay prevents it.
+
+⚠️ **THE HASH GATE IS SOURCE-CONDITIONAL, AND THE CONDITION IS WHETHER A DRIFT HIT HAS A REFETCH TO
+AVOID** ([ADR-0074](./DECISIONS.md#adr-0074), 2026-08-21). *"Compare `remote_hash` → refetch drifted
+rows"* names exactly one consequence, and it is the right one wherever the refetch is the expensive
+thing — for Kavita it is one `GET /api/Series/metadata` per series. **For BookOrbit there is no
+refetch to gate**: `authors` and `narrators` ride the item payload the walk already decoded, so its
+credit pass reads an in-memory map and issues no request at all. **BookOrbit's sweep therefore drops
+this gate** and re-applies credits unconditionally. ⚠️ **The rule is NOT relaxed for anyone else**,
+and the repurposing that decision does allow is bounded to one seam: `remote_hash` may skip the local
+row write, and **may never gate the credit re-apply**, because the credit pass is minted from the
+item batch and an item filtered out of it never has a credit request made for it. **The hash cannot
+see credits at all** — it covers a nine-field synced subset and `CatalogueItem` carries no credit
+field — so a gate placed upstream of the credit pass suppresses the one pass that could correct the
+row.
 
 **Guard 1 — id resurrection.** The \*Arrs allocate `id` from a plain integer primary key, so ids
 **are reused after deletion**: delete movie 842, add a different movie, it becomes 842, the
@@ -1477,6 +1496,24 @@ taking user tags and requests with it. Record `identity_fingerprint` at every co
 `max(remote_id)` per kind; **on a fingerprint change or a backwards jump, refuse to run the sweep**,
 mark the instance `needs_reidentification`, surface it loudly (§17.3), and re-derive links from
 `external_id` rather than `remote_id`.
+
+⚠️ **GUARD 2 IS DEFERRED FOR BOOKORBIT, ON A MEASURED VOID PREMISE — AND THE PREMISE STAYS LIVE FOR
+THE \*ARRS** ([ADR-0074](./DECISIONS.md#adr-0074), 2026-08-21). Guard 1's *"ids **are reused after
+deletion**"* is a fact about **SQLite's rowid allocator**, and guard 2 is the instance-scoped form of
+it. BookOrbit's `books.id` and `libraries.id` are PostgreSQL `serial` — a sequence, which does not
+fall back into a hole left by a `DELETE` — with no `setval(`, no SQL `TRUNCATE` and no
+`RESTART IDENTITY` anywhere in `server/src` at pin `73b7877d2fed`. **So the stated premise is void for
+that source and untouched for every \*Arr**; nothing here generalises. ⚠️ **What survives the premise
+is a NAMED GAP WITH NO GUARD**: an older `pg_dump` restored out of band, and the instance repointed at
+a different or rebuilt server. **BookOrbit exposes no instance identity to detect either with** — a
+four-term search of `server/src` for `instanceId|installationId|serverUuid|instance_uuid` returns
+zero files, and the same search shape over four terms that ARE present returns 93, so the instrument
+was working. **Guard 1 is the whole of this source's leverage**, which is why ADR-0074 required it
+shipped **wired** — `remote_identity_hash` recorded and *compared* — rather than merely recorded.
+⚠️ **AND GUARD 1's OWN REACH IS BOUNDED BY WHAT IDENTIFIES THE ITEM.** The comparison is over the
+item's external ids, so an item with **none** hashes the same as every other item with none — on a
+source whose ordinary state is unidentified (§6.4) the guard passes a reused id through in silence.
+That is ADR-0074's third named gap and it has no guard either.
 
 ### 7.5 Degradation: per-instance circuit breakers
 

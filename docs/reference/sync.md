@@ -146,7 +146,7 @@ bytes; on a Pi the parse is the expensive half.
 
 ---
 
-## 4. Channel 4 — the reconciliation sweep, and its two guards
+## 4. Channel 4 — the reconciliation sweep, and its two guards (⚠️ guard 2 is source-conditional; see ADR-0074)
 
 Every 6 h (configurable) plus on demand:
 
@@ -157,6 +157,14 @@ Every 6 h (configurable) plus on demand:
 4. Compare `remote_hash` → drifted rows → refetch. `remote_hash` covers only the **synced subset**;
    `sizeOnDisk` and friends churn constantly and would defeat it. Done right, a sweep touches <1%
    of rows.
+   ⚠️ **SOURCE-CONDITIONAL** ([ADR-0074](../DECISIONS.md#adr-0074), 2026-08-21). This step assumes a
+   drift hit has a refetch worth avoiding, which is true for Kavita (one `GET /api/Series/metadata`
+   per series) and **false for BookOrbit**, whose credits arrive on the item payload and cost no
+   request. **BookOrbit's sweep drops this gate.** Where the hash IS repurposed it gates **the local
+   row write only**: `remote_hash` covers a nine-field synced subset that **excludes credits
+   entirely**, so a gate placed upstream of the credit pass — anywhere before a credit request is
+   minted from the item batch — silently stops the one pass that could have corrected the row.
+   **Never gate the credit re-apply.**
 5. Emit a `sync_report` row.
 6. Run at low priority with a bounded rate.
 
@@ -211,6 +219,26 @@ at every connect:
 
 ⚠️ Whether every \*Arr exposes a stable database GUID is unverified; `instanceName` plus a
 monotonic-id check is the floor.
+
+⚠️ **AND THIS GUARD IS DEFERRED FOR BOOKORBIT, ON A MEASURED VOID PREMISE**
+([ADR-0074](../DECISIONS.md#adr-0074), 2026-08-21). The pseudocode above stays as written and stays
+binding **for the \*Arrs** — *"REFUSE to run the sweep for this instance"* is imperative and is not
+softened. What is scoped is its **premise**: an id space that regresses under ordinary operation is a
+SQLite-rowid property, and BookOrbit's `books.id` / `libraries.id` are PostgreSQL `serial` with no
+`setval(`, no SQL `TRUNCATE` and no `RESTART IDENTITY` in `server/src` at pin `73b7877d2fed`.
+⚠️ **The surviving hazard is a NAMED GAP WITH NO GUARD** — an older `pg_dump` restored, or the
+instance repointed at a rebuilt server — and BookOrbit exposes **no instance identity** to fingerprint
+(a four-term search returns zero files; the same search shape over four terms that are present returns
+93, so the search worked). **Guard 1 is this source's entire leverage**, so it ships **wired** — the
+`remote_identity_hash` comparison above actually executing, and hard-deleting the tombstone exactly as
+written, which `ux_sil` being a plain UNIQUE index rather than a partial one makes the only available
+shape. ⚠️ **Guard 1's own reach is bounded by what identifies the item**: the incoming hash is over the
+payload's external ids, so an item carrying **none** hashes identically to every other item carrying
+none, and the `if` above never fires for it. On a source whose ordinary state is unidentified that is
+most of the catalogue — ADR-0074's third named gap, also with no guard.
+⚠️ **The four `service_instance` columns this guard names stay as an annotated seam**; no migration
+touches them, and the annotation lives on `store.ServiceInstance`, which is where their **absence**
+is visible.
 
 ---
 
