@@ -132,6 +132,7 @@ because no ADR ever decided it. Annotating leaves that failure mode nowhere to h
 | [0069](#adr-0069) | The library-skips payload carries a **per-container breakdown** beside the library total; **apportioning** a library's total across its containers is refused | **Accepted** — 2026-08-20; **does not reverse [ADR-0063](#adr-0063)'s decisions** — that is a write rule and nothing in the writer, the schema or `SkipState` is touched — ⚠️ **but it DOES invalidate one of ADR-0063's recorded consequences**, *"no SQL and no plan changes"*, whose first half is now false and which carries a dated supersession in its own text; **the breakdown is keyed on the `(service_instance_id, container_kind, container_ref)` triple `sources[]` already publishes**, and the authoritative wire contract is [`reference/http-api.md`](./reference/http-api.md) §2.6a, **already amended** to a five-row field table saying the count breaks down by **container, never by reason**; **the shared statement is WIDENED, not forked** — `containerReportSQL` selects the three identity columns for both callers and the completeness caller scans and discards them, chosen on the plan guard rather than on the wasted scan, and **both guards were fired deliberately** (a fork reddens the skips plan assertion while the completeness one stays green); **`containers` is absent under `none`** and a **zero-count entry is dropped** even under `left_out`, on `items`'s own reasoning, so the entries always sum to `items`; ⚠️ **`skipMarks`' `alsoReporting` has the SAME defect on the per-row axis and is recorded OPEN, not fixed**; the measured pair is ground truth **2** / `main` **4** / the fix **2**, with the topology that produces it stated so the numbers are hand-checkable |
 | [0070](#adr-0070) | BookOrbit's **channel 3b carries arrivals only**, server-side filtered on `addedAt`; **edits and deletions are channel 4's** | **Accepted** — 2026-08-20; **scoped to BookOrbit's 3b** — [ADR-0035](#adr-0035) §2a's Kavita result is untouched and no other 3b source is re-answered, and what a later adapter inherits is the **method, not the field**: *build the delta on the field the source can actually serve, and assign what it cannot see to channel 4*; **the `updatedAt` client-side-stop shape is REFUSED**, not merely unused; **channel 4 is the same milestone**, so the reassignment defers nothing; **no migration, no column, no wire field and no code**; ⚠️ **the hand-off to channel 4 is an ASSIGNMENT, not a discharge, and is recorded OPEN** — `remote_hash` hashes nine values and credits are not among them, so the sweep as built is deaf to the same credits-only edit 3b is deaf to; ⚠️ **[`ARCHITECTURE.md`](./ARCHITECTURE.md) §7.1a is amended in the SAME MOTION, as conformance** — two sites, the client-side-stop paragraph's unstated boundary and the Watermark row's second load — and landing either without the other is not permitted; **§16.1's amendment is owed separately**; ⚠️ **every measurement is against the pinned commit `73b7877d`, read from server source this repo does not vendor**, so **nothing here is a claim about the owner's running instance**; ⚠️ **AMENDED 2026-08-20 by the slice that implements it, and the coupling is a DEPENDENCY rather than convenience batching** — Decision 1 names `after` and **excludes `between`** with its reason, the capability claim is **bounded to `73b7877d` and `v2.6.0`** with the owner's version unrecorded, and **Decisions 8-13 are added**: the **representation dependency** (sub-second precision must survive to the boundary; `internal/store/store.go:41`'s second-resolution layout would make `>` redeliver forever), §7.1a's **overlap formula RETIRED** for this source with the surviving **5 minutes recorded as a NEW, UNMEASURED constant safe in the large direction**, the **page-walk guard replaced** with its count-blind compensating-pair residual named and the phrase *"strictly better"* **banned** as an unchecked containment, ***assignment is not resolution*** stated at **every** channel-4 hand-off because **channel 4 is unbuilt**, the **wedge drill** required as a measurement rather than an intention, and the **measured-empty deviation** defended by its safe direction; the keyset verdict **keeps its conclusion and replaces its reason** — one missing filter field, `id`, not a grammar gap — and its **do-not-revisit clause is STRUCK** |
 | [0072](#adr-0072) | The project-manager thread **ratifies** the arm64 RSS spike's re-scope: the `make bench-rss` run gates **claiming arm64 support**, not v0.1 | **Accepted** — 2026-08-20; **ratifies a re-scope that [ADR-0001](#adr-0001) states in an agentless passive** — *"the requirement is re-scoped"*, no agent, no limit clause, no application line — and whose only record was a review-log disposition that names no ruler either, under *"Round 2 — the first code drop"*, *"6. A documented prerequisite was re-scoped, not dropped"* (⚠️ **the round qualifier is load-bearing**: that file opens a second *"6."* under Round 6); **the venue follows from the argument and not from who made it** — a review-log entry records a **disposition** and an ADR records a **decision**, so recording the ratification as a disposition would reproduce the defect one level up, a second entry asserting a thing is settled and containing nothing that settles it; ⚠️ **it quotes the ruling NARROWLY on purpose** — the limit clause drifted by two words in one relay on the day of the ruling (*"nothing **about** it"* for *"nothing **in** it"*), so the entry carries the arguments and quotes only what it verified; **the decision**: the arm64 `make bench-rss` run is *"a prerequisite to claiming arm64 support, not a prerequisite to v0.1"*, and ⚠️ **the limit clause is not optional** — *"the arm64 run remains owed before any claim of arm64 support. This moves the gate; it does not discharge the obligation, and nothing in it says arm64 works or that the x86-64 figures transfer"*, page size and core count both moving these numbers, so an arm64 result is a **second row** in ADR-0001 and never a replacement; 🚫 **the live alternative it closes** is *"the re-scope was never ratified, so the original gate stands"*, read at roughly **70/30** on 2026-08-20 and **right about the record, wrong about what to do with it** — v0.1 deploys to x86-64, the original clause gated the schema and *"the gate had already been passed unmet"* with eleven migrations since landed, and the project has operated on the re-scoped reading since 2026-08-16; **rejecting it costs no rigour** because *"the measurement stays owed against the claim it actually supports"*; **the reach is bounded by the ruling itself** — *"it covers sites carrying the pre-re-scope framing of the arm64 spike, wherever they are, and nothing else. A lane editing a sentence that is not about that has left the chain"*; ⚠️ **it states its reach and NOT which sites conform**, per `DEVELOPMENT.md` §11 *"A ruling states its reach, not the tree's current state"*, the rule this very ruling produced — **two statements the ruling as issued made about the tree failed verification** and the ADR carries neither, a corrected count being the same kind of claim; **supersedes nothing** — ADR-0001's text stands unreworded, its `Status:` line gains no mark, and this ADR supplies the author that sentence never had; **ships no code, no migration, no column, no configuration key and no wire field** |
+| [0073](#adr-0073) | Channel 3b's wire surface is a **sub-route**, `POST /api/v1/services/{id}/sync/delta`, answering **`202 Accepted`** and naming **no `libsync` type** | **Accepted** — 2026-08-21; **it takes the decision [ADR-0070](#adr-0070) explicitly did not** — that ADR *"builds nothing, changes no migration, no column and no wire field"* — and **reopens none of its channel scope**: arrivals only, `books.addedAt`, server-side filtered; **the engine was BUILT, TESTED AND UNREACHABLE**, in `internal/libsync/doc.go`'s own words *"NOTHING USER-FACING CAN TRIGGER IT, BECAUSE THERE IS NO HTTP ROUTE"*, with the route named there as the next slice rather than as *"later, which is where a thing goes to be forgotten"*; 🚫 **`?mode=` on the existing sync route is REFUSED, and the precedent only corroborates it** — `(*Server).routes`' `/library` comment splits routes *"over the SHAPE OF THE QUERY"* so that folding them would make *"the simple statement an argument-dependent special case of the filtered one"*, ⚠️ **which transfers as a TEST and not as EVIDENCE** (that pair are reads with different plans and cursor codecs; this pair are writes returning the same started-body), so the rejection rests on **the default and the typo** — an omitted or misspelled mode runs the **full import**, minutes and a whole-catalogue rewrite, returning the same `202`, where a mistyped path is a `404` — plus a **contract** that would otherwise vary by query parameter and an **audit verb** that could no longer tell a cheap poll from a rewrite; 🚫 **`200` with the run's result is REFUSED on principle 1** — `cmd/usarr`'s `deltaSyncLocked` escalates to `fullImportLocked` and [ADR-0070](#adr-0070) Decision 13 makes escalation the **deliberate** answer for every ambiguous state, so the tail is the full import's, and `internal/httpapi/ports.go`'s `CatalogueImports` already rules that *"a handler that waited for it would be principle 1's violation, since an import is minutes"*; 🚫 **naming a `libsync` type on the wire is REFUSED** on `ports.go`'s consumer-declared-port rule (*"Nothing below names an \*Arr type"*), which **forecloses a report body without a port-local struct** and is preserved by a port signature that returns only `error` and this package's sentinels; ⚠️ **THE COST IS NAMED RATHER THAN WAVED OFF** — `Progress` is nil by `delta.go`'s own requirement and a delta never stamps `last_full_sync_at`, so **a walking delta publishes no progress frame and gives no completion signal**, only a liveness re-ask, ⚠️ **with one exception that is the wrong way round** — an ESCALATED walk runs `fullImportLocked` → `runImport` with a non-nil `Progress` and so publishes the ordinary `import.progress` frames, leaving the expensive case observable and the cheap one silent — and the outcome is legible **only** in the `delta_walk` `sync_report` row `recordDeltaWalk` writes, which at `dcf3f55` **no route reads and no screen renders**; a read surface over that journal is recorded as **owed, not scheduled**; **the wire error code is `not_a_delta_source` and NOT the stored `no_delta_channel`** `errorClass` DECLARES for the same condition, per [`DEVELOPMENT.md`](./DEVELOPMENT.md) §11's prohibition on repairing a collision *"by making the values agree"* — ⚠️ **declares, not writes**: `Importer.DeltaSync` returns at its `DeltaSource` assertion ahead of every `recordDeltaWalk`, so no row carries the stored class today and the two are separated **at declaration**, the only moment at which separating them is free — ⚠️ **measured at `dcf3f55`: the two vocabularies share NOTHING** (seven `errorClass` values against thirty-one wire codes, empty intersection), so this would have been the **first** shared value; **`internal/libsync/doc.go`'s UNREACHABLE paragraph is falsified by the route and retires in the SAME MOTION**, [`reference/http-api.md`](./reference/http-api.md) owes a section carrying the observability subsection §4 has no analogue for, and §4's own `import_in_progress` sentence is falsified too — the shared guard means a running DELTA produces it on the full-sync route; **it builds no timer, no channel 4 and no tie drain**, and adds no migration, no column and no configuration key |
 
 ---
 
@@ -11521,3 +11522,501 @@ stating reach instead of state.
 - **The gate attests nothing about any of this.** This ADR changes one Markdown file. No arm of
   `make check` reads `docs/` for content; gitleaks is the only arm that touches the diff at all, and
   it attests that the prose contains no credential — not that the prose is true.
+
+---
+
+<a id="adr-0073"></a>
+## ADR-0073 — Channel 3b's wire surface is a **sub-route**, `POST /api/v1/services/{id}/sync/delta`, answering **`202 Accepted`** and naming **no `libsync` type**
+
+**Status:** Accepted — 2026-08-21 ·
+**This is a WIRE-SHAPE decision, and it is the one [ADR-0070](#adr-0070) explicitly did not take.**
+That ADR's own status block disclaims it in as many words — *"it builds nothing, changes no
+migration, no column and no wire field"* — so the channel it decided had, when this was taken, no way
+to be asked for. **Nothing in this ADR reopens ADR-0070's channel scope**: the axis is still
+`books.addedAt`, the read is still server-side filtered, and edits and deletions are still channel
+4's ·
+**It decides three things and closes three alternatives** — a sub-route rather than a `?mode=`
+parameter, a fire-and-forget `202` rather than a synchronous `200` carrying the report, and a wire
+that names no `internal/libsync` type ·
+**It adds no migration, no column and no configuration key.** It adds one route, one error code and
+one response shape ·
+⚠️ **IT SHIPS A CHANNEL WITH NO PROGRESS STREAM OF ITS OWN, AND THAT COST IS IN THE DECISION RATHER
+THAN IN A FOOTNOTE.** `internal/libsync/delta.go`'s `DeltaSync` requires `Progress` to be nil, so a
+`202` here is **strictly less observable than the full import's `202`** — see *Consequences*, *"What
+the 202 costs"*, which names it, names the one case that is not silent, and names what a later slice
+owes ·
+⚠️ **The wire error code is `not_a_delta_source` and NOT `no_delta_channel`**, which is a
+consequence of [`DEVELOPMENT.md`](./DEVELOPMENT.md) §11 rather than a decision taken here ·
+⚠️ **This ADR attests nothing about the owner's running instance and nothing about BookOrbit.** It
+is a decision about UsArr's own HTTP surface; every upstream claim it leans on is
+[ADR-0070](#adr-0070)'s, read at that ADR's pinned commit, and unre-measured here.
+
+⚠️ **RECORDED BESIDE THE SLICE THAT IMPLEMENTS IT, AND EVERY MEASUREMENT BELOW IS READ AT `dcf3f55`,
+AFTER THAT SLICE AND ITS REVIEW PASS LANDED.** This is ADR-0070's own coupling rule applied one
+level down — ***a change that creates the condition another fix addresses must land with it*** — and
+it has one consequence for how the Context reads: two of the tree facts that *motivated* this
+decision were **falsified by the change the decision authorises**, so they are quoted from the
+retirement notes that now stand in their place rather than from prose that no longer exists. **The
+decision is not a description of the tree** ([`DEVELOPMENT.md`](./DEVELOPMENT.md) §11, *"A ruling
+states its reach, not the tree's current state"*); the Context is evidence, and evidence has to
+resolve.
+
+### Context
+
+#### 1 · The engine was built, tested, and unreachable — and the tree said so in its own voice
+
+`internal/libsync`'s package doc (`doc.go`) did not leave this to be inferred. Under *"What is here,
+and what is deliberately not"* it carried a heading of its own — **⚠️ quoted from the retirement note
+that same doc now carries, because the route this ADR decides is what falsified it**:
+
+> **THIS PARAGRAPH READ** *"NOTHING USER-FACING CAN TRIGGER IT, BECAUSE THERE IS NO HTTP ROUTE …
+> internal/httpapi never names DeltaSync … THE ROUTE IS THE NAMED NEXT SLICE"*, **AND THE NAMED NEXT
+> SLICE LANDED.**
+
+The paragraph it retires named the remedy and refused to defer it: the route was *"THE NAMED NEXT
+SLICE — not 'later', which is where a thing goes to be forgotten"*, and until it landed *"an engine
+nobody can reach is worth what an engine nobody wrote is worth"*.
+
+**This ADR is that slice's decision record.** It is worth saying why the paragraph is quoted rather
+than paraphrased: it was the only place in the tree that stated the gap, it was written by the lane
+that built the engine, and it pre-committed the project to the route being *next* rather than
+*eventually*. An ADR that closed the gap without citing it would leave the next reader unable to tell
+whether the route was planned or improvised. ⚠️ **And what survives the retirement is the half that
+was never about the route**: the same doc still records that **no timer calls it**, so channel 3b is
+on-demand and nothing else.
+
+#### 2 · ADR-0070 disclaimed the wire, so no decision covered it
+
+[ADR-0070](#adr-0070)'s status block reads *"**This is a CHANNEL-SCOPE decision, not an
+implementation decision** — it fixes what BookOrbit's channel 3b is answerable for and what it is
+not; it builds nothing, changes no migration, no column and no wire field."* Its
+*What this does NOT decide* §5 goes further and declines even the walk's direction and page
+geometry.
+
+**So the wire shape is not under-specified by ADR-0070; it is outside it.** That is why a new ADR
+is needed rather than an amendment: amending ADR-0070 to carry a wire decision would contradict the
+sentence quoted above, and this file's standing rule is *"An ADR body is a dated record of a
+decision as taken, so it is annotated, never rewritten"* — the rule [ADR-0072](#adr-0072) rejected
+an in-place rewrite of ADR-0001 on.
+
+#### 3 · This repo has litigated split-versus-parameter exactly once, and the record is in a route comment
+
+`internal/httpapi/server.go`'s `(*Server).routes` carries the argument for splitting
+`GET /api/v1/library` from `GET /api/v1/library/recent`, and it carries it as a correction of an
+earlier wrong reason:
+
+> ⚠️ **IT IS A SEPARATE ROUTE FROM /library/recent RATHER THAN A PARAMETER ON IT, AND §17.2 IS NOT
+> WHY.** … **The routes are split over the SHAPE OF THE QUERY**, and internal/store/browse.go owns
+> that argument: this read is three orders, two filters and a cursor codec per order, where
+> /library/recent is one unfiltered statement in one order, and **folding them together would make
+> the simple statement an argument-dependent special case of the filtered one.**
+
+**Two things in that comment matter here and they are not the same thing.** The *test* it states —
+split on the shape of the work, and refuse to make the simple case a special case of the complex
+one — is general. The *evidence* it applies the test to — orders, filters, cursor codecs, query
+plans — is specific to a pair of reads, and this pair are writes. **The transfer is therefore
+partial, and *Alternatives rejected* §A says exactly how far it goes and where it stops**, rather
+than citing the precedent as though it decided this case.
+
+#### 4 · A synchronous handler here would have an unbounded tail, and the tail is a full import
+
+`cmd/usarr/import.go`'s `deltaSyncLocked` does not merely run a walk. On
+`libsync.ErrEscalateToFullImport` it calls `fullImportLocked` and replaces the delta's inner report
+with the full import's:
+
+```go
+rep, err := g.runDelta(ctx, instanceID)
+if errors.Is(err, libsync.ErrEscalateToFullImport) {
+        …
+        full, ferr := g.fullImportLocked(ctx, instanceID)
+        rep.Report = full
+        return rep, ferr
+}
+```
+
+**A delta is therefore not bounded by the arrivals window.** [ADR-0070](#adr-0070) Decision 13 is
+why: an unbootstrapped instance, or a newly-bound container, escalates rather than walking
+unfiltered, and *"erring toward escalation is right … Every ambiguous state escalates"* is that
+decision's whole defence. The escalation is the **correct** behaviour and this ADR does not touch it
+— but it means the honest upper bound on one call is *the full import's*, which
+`internal/httpapi/imports.go`'s own header measures in *"minutes"* and which
+`internal/httpapi/ports.go`'s `CatalogueImports` already rules on:
+
+> **StartImport begins an import and RETURNS WITHOUT WAITING FOR IT.** A handler on a render path
+> may call it; **a handler that waited for it would be principle 1's violation, since an import is
+> minutes.**
+
+#### 5 · `internal/httpapi` declares its own ports and names no foreign type
+
+`internal/httpapi/ports.go`'s header states the rule the package is built on:
+
+> The interfaces here are the whole reason this package can obey "no handler holds an outbound HTTP
+> client". **Each one is declared by the consumer — this package — and implemented in cmd/usarr**,
+> which owns internal/servarr and internal/ssrf. **Nothing below names an \*Arr type.**
+
+`libsync.DeltaReport` (`internal/libsync/delta.go`) is a foreign type by exactly that test: it
+embeds `libsync.Report` and carries two `store.ArrivalsWatermark` values and a
+`libsync.DeltaObservation`. **Returning it on the wire is not a formatting question; it is a
+question about which package owns the wire contract.**
+
+### Decision
+
+**1 · THE ROUTE IS `POST /api/v1/services/{id}/sync/delta` — A SUB-ROUTE, NOT A MODE PARAMETER.**
+Channel 3b is reached at its own path. `POST /api/v1/services/{id}/sync` keeps its meaning, its
+documented contract ([`reference/http-api.md`](./reference/http-api.md) §4) and its error set
+**unchanged**, and no query parameter on it selects a different kind of run.
+
+⚠️ **THE DECIDING ARGUMENT IS THE DEFAULT, NOT THE PRECEDENT.** A `?mode=` parameter has a value it
+takes when the caller omits it or misspells it, and here the two candidate behaviours are not
+neighbours: one is a filtered read of the last few arrivals, the other rewrites every catalogue row
+the instance contributes and runs for minutes. **`?mode=detla` would run a full import**, silently
+and successfully, and the caller would receive the same `202` either way — the two responses differ
+in no field a client could branch on. A mistyped *path* is a `404`. ***Where two behaviours differ
+by orders of magnitude in cost and blast radius, the one that costs more must not be what a typo
+selects.***
+
+**2 · THE ANSWER IS `202 Accepted`, WRITTEN BEFORE THE WALK IS OBSERVED, AND THE HANDLER NEVER
+LEARNS THE OUTCOME.** The port starts the run and returns; the handler writes a small started-body
+and finishes. **It is not a `200` carrying the run's result**, and it makes no claim that the walk
+finished, that anything was applied, or that the watermark advanced.
+
+Every non-2xx is decided **before** anything upstream is touched — the instance lookup, the enabled
+check, the kind check, the delta-capability check and the in-progress claim all complete
+synchronously — so a non-2xx from this route means **no run started for this call**, on the same
+reading `internal/httpapi/imports.go`'s header already states for its neighbour. ⚠️ **That is not
+the same as "nothing is running"**, and the in-progress refusal says so.
+
+**3 · THE `202` BODY IS A STRUCT DECLARED IN `internal/httpapi`, AND `internal/httpapi` IMPORTS NO
+`libsync` TYPE.** The port method is declared by this package, takes an instance id, and returns
+either nil or one of this package's own sentinels. **No `libsync.DeltaReport`, no
+`store.ArrivalsWatermark`, no `libsync.DeltaObservation` crosses the boundary**, and the body is an
+allowlist on `importStartResponse`'s pattern rather than anything spread in from a report or a row.
+
+⚠️ **THIS DECISION IS WHAT MAKES DECISION 2 CHEAP, AND THE ORDER OF THE TWO IS NOT THE ORDER OF THE
+ARGUMENT.** Decision 2 stands on principle 1 alone and would stand if the port rule did not exist.
+But **the two constraints are mutually reinforcing in one direction only**: a `202` needs no report
+type, so obeying `ports.go`'s rule costs nothing; whereas a `200` carrying the run's result would
+need either a foreign type on the wire or a port-local mirror of it, which is the pair
+*Alternatives rejected* §C weighs.
+
+**4 · THE MUTUAL-EXCLUSION GUARD IS SHARED WITH THE FULL IMPORT, NOT DUPLICATED.** A delta and a
+full import over one instance are two writers over the same rows, so the existing per-instance guard
+covers both, and a delta asked for while an import runs is **refused** rather than queued — the same
+answer, for the same reason, that `internal/httpapi`'s `ErrImportInProgress` already gives: *"two
+concurrent writers over one instance would interleave batches for no gain"*. **This clause records
+that the guard is one guard; it invents no second one.** ⚠️ **It runs in both directions**, so a full
+sync asked for while a delta walks is refused by the same code — which is a fact about
+`POST /api/v1/services/{id}/sync`'s error table as much as about this route's.
+
+**5 · A SERVICE WITH NO DELTA CHANNEL IS REFUSED WITH ITS OWN CODE, DISTINCT FROM
+`not_a_catalogue_source`.** A Kavita is a catalogue source — a full sync of it works — and telling
+its owner *"this service is an indexer, not a catalogue source"* would be false. **The two refusals
+have different fixes, so they are different codes**, on the same reasoning
+`internal/httpapi/imports.go`'s `importStartError` already applies to its two 409s: *"the two fixes
+are opposite … a client that cannot tell them apart has to guess which sentence to show."* The code
+is `not_a_delta_source`; **why it is spelled that way and not the other way is in *Consequences*,
+because it follows from a rule rather than from a choice made here.**
+
+### Why
+
+**A route is the difference between a channel and a commit message.** §1 — the engine was built and
+tested and nothing user-facing could reach it. ADR-0070 decided what channel 3b *is*; until something
+can ask for it, that decision is unexercised in production and its residuals — the wedge, the
+measured-empty deviation, the five-minute lookbehind ADR-0070 Decision 9 records as **unmeasured** —
+stay unexercised with it. **The route is what turns those from arguments into observations.**
+
+**The `202` is not a compromise; it is the only shape principle 1 permits.** §4 — the tail is a full
+import, `ports.go` already ruled that a handler must not wait for one, and ADR-0070 Decision 13's
+*erring toward escalation is right* means the long path is the **safe** path and will therefore be
+taken, not avoided. A synchronous handler would hold an HTTP request open for the exact runs the
+design most wants to happen.
+
+**The sub-route is chosen on the blast radius of a typo, and the precedent only corroborates it.**
+Decision 1 — the `/library` split's *shape of the query* test transfers as a test and its evidence
+does not, so the load is carried by an argument specific to this pair: the two runs differ by orders
+of magnitude in cost, and a defaulted or misspelled mode parameter picks the expensive one silently.
+
+**The port rule is worth keeping precisely because nothing enforces it in the compiler.** §5 —
+`ports.go`'s *"Nothing below names an \*Arr type"* is prose, not a build constraint; `go build` is
+perfectly happy to let `internal/httpapi` import `internal/libsync`. **A rule that only holds while
+people follow it erodes at the first exception**, and "just this one report type" is what that
+exception looks like.
+
+### Alternatives rejected
+
+🚫 **A · `?mode=delta` on the existing `POST /api/v1/services/{id}/sync`.** REJECTED — and it is the
+live alternative, because it adds no route, no doc section and no error code, and the repo's own
+precedent has to be read carefully rather than cited to see that it does not save them.
+
+**What transfers from `(*Server).routes`' `/library` comment:** the test itself — *folding them
+together would make the simple statement an argument-dependent special case of the filtered one* —
+and it applies here at least as sharply. `internal/libsync/delta.go`'s `DeltaSync` doc calls a delta
+*"FullImport with five differences and no sixth"*, and the differences are not cosmetic: a filtered
+item stream, **no ANALYZE**, **no `StampFullSync`**, **`Progress` nil**, and a terminal watermark
+write *"declined more often than it is taken"*. Two runs whose observable behaviour, freshness
+effect, progress publication and failure vocabulary all differ are two behaviours, and a parameter
+would make one of them the other with a flag on it.
+
+**What does NOT transfer, stated because citing the precedent alone would overstate the case.** The
+`/library` split is between two **reads** with different query plans and different cursor codecs, and
+the comment names those artefacts as the reason. This pair are two **writes** that both start a
+goroutine and both return the same started-body. **The wire-visible difference between them is
+thinner than the wire-visible difference in the precedent**, and someone arguing for `?mode=` is not
+being unreasonable about the precedent; they are being wrong about a different thing.
+
+**What actually carries the rejection, independent of the precedent, is three things:**
+
+- **The default and the typo (Decision 1).** A parameter has a value when omitted. Omitting it, or
+  misspelling it, runs the expensive behaviour and returns success. This is not a hypothetical
+  shape: `?mode=` values are typed by humans into `curl` and into client code, and there is no
+  spelling of a query parameter that fails closed the way a path does.
+- **The error set.** `not_a_delta_source` is reachable only under the delta behaviour. Under a
+  parameter it becomes an error `POST /api/v1/services/{id}/sync` can emit, so
+  [`reference/http-api.md`](./reference/http-api.md) §4's documented error list either grows a code
+  that most calls can never see, or is silently wrong. **A route whose error set depends on a query
+  parameter has two contracts wearing one name.**
+- **The audit record.** `internal/httpapi`'s sync handler writes `service.sync` through `s.audit`.
+  Two behaviours on one route either share that verb — and the audit log then cannot distinguish a
+  cheap arrivals poll from a full catalogue rewrite — or branch on the parameter, which is the
+  parameter leaking into a second subsystem. **A separate route gets a separate verb for free.**
+
+🚫 **B · `200 OK` with the `DeltaReport` rendered into the body — the caller waits and gets the
+result.** REJECTED, and it is the *attractive* alternative rather than the naive one, because it is
+the shape that would give the caller something to render.
+
+- **The tail is unbounded, and unbounded is not rhetoric.** §4 — `deltaSyncLocked` escalates to
+  `fullImportLocked`, and ADR-0070 Decision 13 makes escalation the **deliberate** answer for every
+  ambiguous state. The synchronous handler's worst case is therefore the full import's worst case,
+  which `internal/httpapi/imports.go` states as minutes.
+- **`ports.go` already ruled it, for the same reason, one method up.** `CatalogueImports`'
+  `StartImport` — *"a handler that waited for it would be principle 1's violation, since an import is
+  minutes."* Taking the opposite decision for the delta would leave two adjacent handlers on one
+  screen obeying opposite rules about the same underlying run.
+- **It would need a report type on the wire**, which is *Alternatives rejected* §C's problem, and
+  the two are not independent: the only reason §C is cheap to obey is that §B was rejected first.
+
+⚠️ **AND WHAT IT WOULD HAVE BOUGHT IS STATED RATHER THAN SUPPRESSED, BECAUSE IT IS REAL.** A `200`
+carrying the report would give a caller the one thing the `202` cannot: **the outcome of the run it
+asked for** — whether the watermark advanced, why it declined, how many rows were applied, whether
+the walk hit the wedge. Under the `202` those facts exist only in a `sync_report` row (see
+*Consequences*). **This is a genuine loss and it is the price of principle 1**, not a defect of the
+alternative.
+
+🚫 **C · Keep the `202`, but let `internal/httpapi` name `libsync.DeltaReport` — in the port
+signature, in a future report body, or in a helper.** REJECTED.
+
+`ports.go`'s header is explicit that every interface there is **consumer-declared** and that
+*"Nothing below names an \*Arr type"*, and the reason is structural rather than stylistic: it is
+what lets this package hold no outbound client and lets `cmd/usarr` own the adapters. `libsync` is
+on the far side of that boundary — `cmd/usarr` is where `libsync.Importer` is constructed and where
+`DeltaSync` is called.
+
+**What this forecloses, said plainly rather than left as an implication:** a report body on this
+route **without** a port-local struct to carry it. If a later slice wants the caller to see what a
+run did, it declares its own type in `internal/httpapi` and the implementation in `cmd/usarr` fills
+it — it does not re-export `libsync`'s. That costs a mapping function, and the mapping function is
+the seam.
+
+**What preserves the seam is the port signature itself:** an instance id in, `error` out, sentinels
+declared here. **A port that returns nothing structural cannot leak a type**, which is why this
+decision is enforced by the shape of the interface rather than by a reviewer noticing an import.
+
+🚫 **D · Leave the engine unreachable and wait for the timer that would drive it.** REJECTED, and
+recorded because it is the path of least work. `internal/libsync/doc.go` named it and refused it:
+*"THE ROUTE IS THE NAMED NEXT SLICE — not 'later', which is where a thing goes to be forgotten."*
+**There is no timer**, ADR-0070 Decision 9 records that the absence of one is why the overlap
+formula's `+ poll interval` term had no value at all, and a channel whose only trigger is a
+subsystem nobody has started is a channel with no trigger. ⚠️ **A manual route is also what makes
+the wedge drill ADR-0070 Decision 12 requires performable by a person**, rather than only by a test.
+
+### ⚠️ What this does NOT decide
+
+**1 · It does not reopen [ADR-0070](#adr-0070)'s channel scope.** Arrivals only, on `books.addedAt`,
+asked for with a server-side filter. The axis, the `after` form and the exclusion of `between`, the
+five-minute lookbehind, the tie mitigation and the wedge stop are all ADR-0070's and are untouched.
+**Nothing here widens what channel 3b covers**; it only decides how a caller asks for it.
+
+**2 · It does not build a timer, and it is not the first half of one.** The route is invoked by a
+person or by a client that a person drove. Cadence, backoff, per-instance scheduling and the
+narrowing of the per-instance cover read that `DeltaSync`'s doc says *"is what the timer would owe if
+a timer ever shipped"* are all still unowned. ⚠️ **A later timer slice does not inherit a design from
+this ADR** — it inherits an engine and a route, and owes its own decision.
+
+**3 · It does not build channel 4 and does not move anything into it.** ADR-0070's hand-offs — edits,
+deletions, library moves, the credits-only class `remote_hash` cannot see — remain assigned to a
+channel that is **unbuilt**. ***Assignment is not resolution*** (ADR-0070 Decision 11), and shipping
+a route for 3b does not make 3b's residuals smaller.
+
+**4 · It does not decide the tie drain, which stays unbuilt.** ADR-0070 Decision 12 accepted the
+wedge on the ground that it fails loudly and left the drain deferred. Two things sharpen that here
+and neither of them is a decision: the owner stated on **2026-08-21** that he does not hand-set book
+added dates, which bears on how often a tie cluster large enough to wedge a page can occur at all;
+and **the wedge stops rather than loops, declines the advance and records the reason where it can be
+seen** — asserted by `internal/libsync`'s `TestAWedgeLeavesTheCursorUnchangedAndSaysSoWhereItCanBeSeen`
+and `internal/bookorbit`'s `TestArrivalsWalkWedgesOnAPageThatIsOneInstant`. ⚠️ **Neither of those is
+Decision 12's drill**, which asks for more than 200 rows sharing one instant run through a real walk
+with the noise observed, and neither is evidence about anyone else's install. **Neither retires the
+drain.** The route makes the wedge reachable by hand, which is what Decision 12's drill needs; it
+does not fix it.
+
+**5 · It does not decide what the Services screen renders.** No button, no polling interval, no
+freshness sub-line and no client-side state machine is ruled on here. `internal/store/arrivals.go`'s
+header records the *intended* source for a delta's rendered freshness instant — the latest
+`delta_walk` `sync_report` row's `created_at` — and that is a statement about a screen, not a
+decision this ADR takes.
+
+**6 · It does not state which of these already exist in the tree.** Per
+[`DEVELOPMENT.md`](./DEVELOPMENT.md) §11 *"A ruling states its reach, not the tree's current
+state"* — the rule [ADR-0072](#adr-0072) was written under. **This ADR states what is decided.**
+`internal/httpapi`, `internal/httpapi/errorcodes.go` and `web/src/routes` answer what is built.
+
+**7 · It attests nothing about the gate.** `make check` reads no `docs/` file for content. It can
+tell you the code compiles and the tests pass; it cannot tell you this document is true.
+
+### Consequences
+
+**THE WIRE CODE IS `not_a_delta_source` AND THE STORED CLASS STAYS `no_delta_channel`. THIS IS A
+CONSEQUENCE OF A RULE, NOT A DECISION TAKEN HERE, AND THE NEXT READER'S INSTINCT WILL BE TO "FIX"
+IT.**
+
+`internal/libsync/delta.go`'s `errorClass` already **declares** the literal `"no_delta_channel"` for
+this exact condition, against `ErrNoDeltaChannel`, as the class that would land in
+`sync_report.detail` under `SyncReportDeltaWalk`. **That is a storage vocabulary**: it belongs to a
+durable row, it is read back by whatever reads that journal, and it is free to change when the
+journal's needs change. `not_a_delta_source` is a **wire** vocabulary: it is a published contract, and
+`internal/httpapi/errorcodes.go`'s own header says of the code set *"Renaming one is a breaking
+change for any client that branches on it."*
+
+⚠️ **DECLARES, NOT WRITES — AND THE DIVERGENCE STILL HAS TO HOLD, WHICH IS THE WHOLE POINT.** That
+`errorClass` arm is unreachable from this route: `Importer.DeltaSync` returns `ErrNoDeltaChannel` at
+its `DeltaSource` type assertion, ahead of every `recordDeltaWalk` call site, and the port's
+implementation refuses the condition earlier still, before anything is launched. So **no
+`sync_report.detail` row carries `"no_delta_channel"` today** and the collision cannot be observed in
+the database. ***A vocabulary rule that only took effect once both values were live would be a rule
+that arrives after the identifier it governs has already been chosen*** — separating the two at
+declaration is the only moment at which separating them is free, and it is one edit to where that
+assertion sits before the string is written.
+
+[`DEVELOPMENT.md`](./DEVELOPMENT.md) §11, *"A wire vocabulary and a storage vocabulary never share a
+term"*, governs, and its closing clause is the operative one:
+
+> **When two vocabularies must coexist, prefix them distinctly** … so a mismatch is a build error
+> rather than a silent rebind. **Do not repair a collision by making the values agree instead: two
+> vocabularies that match today are free to diverge tomorrow, and one shared identifier turns a
+> change to an internal record into a change on the wire.**
+
+⚠️ **AND THE MEASUREMENT THAT MAKES THIS MORE THAN A STYLE POINT: THE TWO VOCABULARIES SHARE NOTHING
+AT ALL, SO `no_delta_channel` WOULD HAVE BEEN THE FIRST.** Enumerated at `dcf3f55` rather than
+asserted — the seven values `errorClass` can return (`""`, `escalated_to_full_import`,
+`no_delta_channel`, `walk_deadline_exceeded`, `cancelled`, `refused_to_null_the_cursor`,
+`walk_failed`) against the **thirty-one** wire codes in `internal/httpapi/errorcodes.go`'s
+`errorCodes` map, and **the intersection is empty**. The four `decline*` constants in the same file
+(`no_rows`, `library_failed`, `tie_wedge`, `unreadable_stamp`), which ride in the same `detail` blob,
+are likewise disjoint from it.
+
+**Zero overlap is the fact that gives the rule teeth here.** A convention already breached in a
+dozen places is a cleanup; a convention with **no** exceptions is an invariant, and the first
+exception is the expensive one, because it is what every subsequent reader cites. **§11's three
+recorded instances of this class all compiled clean**, which is why the guard is a convention and
+not a linter — and why the spelling is chosen at the moment the code is written rather than caught
+later.
+
+**The chosen spelling is also positively motivated, not merely different.** `not_a_delta_source`
+matches its sibling `not_a_catalogue_source` (`internal/httpapi/errorcodes.go`'s
+`CodeNotCatalogueSource`), which is the code a caller sees for the adjacent refusal on the adjacent
+route. **The wire set is internally consistent; it is not consistent with the journal, and it should
+not be.**
+
+**WHAT THE `202` COSTS, AND IT IS MORE THAN THE FULL IMPORT'S `202` COSTS.**
+⚠️ **THIS IS THE PART OF THE DECISION MOST LIKELY TO BE READ AS A NON-ISSUE, AND IT IS NOT ONE.**
+
+`internal/httpapi/imports.go`'s `importStartResponse` doc explains why the full import's `202` is
+acceptable, and its explanation has two limbs — one of which **holds for a delta in only one case**:
+
+- *"THERE IS DELIBERATELY NO PROGRESS FIELD … Progress, where a client wants it, is the
+  `import.progress` frame on the SSE stream."* ⚠️ **A delta that walks publishes no such frame.**
+  `internal/libsync/delta.go`'s `DeltaSync` requires `Progress` to be nil, and the reason is sound and
+  is not reopened here — a delta reusing the full import's phases would paint an IMPORT RUNNING on
+  the Services screen on every poll, with a stopped frame on failure, and a delta publishing new
+  phases would fail the browser's `CLIENT_PHASES` pin. **`cmd/usarr`'s delta path sets it to nil for
+  exactly that reason.** ⚠️ **The one exception is the escalation, and it is not a loophole**: an
+  escalated walk reaches `fullImportLocked` → `runImport`, which builds its importer with a **non-nil**
+  `Progress`, so it publishes the ordinary full import's frames because it **is** a full import. So
+  the escape hatch is open for the expensive case and closed for the cheap one — the opposite of
+  what a caller polling for "did my delta finish" needs, and their **absence** is never evidence a
+  walk failed (`reference/http-api.md` §5.1: silence means UNKNOWN).
+- *"`last_full_sync_at` … written on SUCCESS ONLY. It advancing is the only positive evidence an
+  import completed."* ⚠️ **A delta deliberately never stamps it** — difference (c) of `DeltaSync`'s
+  five, *"a delta must never touch the full-sync freshness claim"* — and
+  `service_instance.last_delta_sync_at` is **not** its substitute:
+  `internal/store/arrivals.go`'s header records that column as having no writer and no reader in Go,
+  claimed by channel 3, which is v0.2's and unbuilt.
+
+**So, stated without softening: a caller of this route gets a `202` and then nothing, unless the walk
+escalated.** The one observation that survives from the full import's pair in every case is the
+re-ask — an in-progress refusal means it is still running, and a fresh `202` means it is not — and
+that is a liveness signal, not an outcome.
+
+**The outcome is legible in exactly one place: the `delta_walk` `sync_report` row.**
+`internal/libsync/delta.go`'s `recordDeltaWalk` writes one row per run whose `detail` blob carries
+`window_from`, `watermark_before`, `watermark_after`, `advanced`, `advance_declined_reason`,
+`min_delivered_added_at`, `works_created`, `pages_read`, `rows_delivered`, `rows_applied`,
+`libraries_walked` / `libraries_total`, `window_items_skipped`, `window_comic_residue`, `wedge_at`,
+`escalated_to_full_import`, `escalation_reason` and `error_class`. ⚠️ **At `dcf3f55` no HTTP route
+reads that row and no screen renders it** — its `remote_kind` and `remote_id` are empty by
+construction, and the Libraries screen's per-container reads all carry a `remote_kind` predicate, so
+it is invisible to them deliberately.
+
+⚠️ **WHAT A LATER SLICE OWES, NAMED HERE SO IT IS OWED TO SOMETHING.** A read surface over the
+`delta_walk` journal — the last run's outcome for one instance, at minimum `advanced`,
+`advance_declined_reason`, `error_class` and the row's `created_at`. **It is not proposed here** and
+this ADR does not design it: it would be a new route or a new field on an existing one, with its own
+allowlist question (the `detail` blob carries upstream watermark values, and
+`reference/security.md` governs what reaches a browser). **It is recorded as owed, and as owed to
+the decision above rather than to a general wish for observability** — the `202` is what created the
+gap, so the `202` is what carries the obligation. ⚠️ **And it is owed, not scheduled**: nothing in
+this ADR blocks on it, which is precisely why writing it down is the only thing keeping it alive.
+
+**`internal/libsync/doc.go`'s UNREACHABLE paragraph is falsified by this route and retires in the
+same motion.** That paragraph is quoted in §1; the moment the route lands, *"NOTHING USER-FACING CAN
+TRIGGER IT, BECAUSE THERE IS NO HTTP ROUTE"* is false, and *"internal/httpapi never names DeltaSync"*
+is false as a measurement. **They land together on ADR-0070's own rule** — ***a change that creates
+the condition another fix addresses must land with it*** — because `main` must not carry a package
+doc telling a reader the channel is unreachable beside the route that reaches it. ⚠️ **Retiring it
+means replacing the measurement, not deleting the paragraph**: the reason it was written — *"the
+person who would otherwise write 'delta sync ships' is reading THIS DOC and not the git log"* —
+outlives the gap it recorded, and what that reader now needs to know is that the route exists **and
+that no timer does**.
+
+**[`reference/http-api.md`](./reference/http-api.md) owes this route a section, and it lands with the
+route for the same reason.** §4 owns `POST /api/v1/services/{id}/sync`, including its *"`202` does not
+mean 'imported'"* and *"A non-2xx never means 'an import you asked for is running'"* subsections. The
+delta route needs its own, **and it needs one subsection §4 has no analogue for**: what a caller can
+observe afterwards, which for this route is the honest answer given above. ⚠️ **Copying §4's
+structure without that subsection would publish the full import's observability story under the
+delta's name.** *(The section is §4a, mirroring §4's numbering; that placement is bookkeeping and not
+a decision this ADR takes.)*
+
+**The gating follows the neighbour, and this ADR treats that as conformance rather than as a
+ruling.** `(*Server).routes` records that the full sync is *"Gated exactly like every other write on
+this screen — CSRF, a session, and the sudo window — because a write on this screen that skipped sudo
+would be the odd one out rather than the reasonable exception."* **A delta is such a write**, so the
+same three gates apply by that sentence's own reasoning. ⚠️ **That comment counted its neighbours
+until 2026-08-21 and no longer does**, because this route falsified the count — which is
+[`DEVELOPMENT.md`](./DEVELOPMENT.md) §11's *no heading, subject line or preamble states a count of
+its own contents* arriving as a consequence of this decision rather than as a separate cleanup. *(The
+gating itself is conformance to the quoted rule, not a separate decision; if a future slice wants a
+delta to be cheaper to trigger than a full import, that is a change to the quoted rule and needs its
+own entry.)*
+
+**The mutual-exclusion refusal is now reachable from two routes, and the audit log distinguishes
+them.** Decision 4 shares one guard; Decision 1's separate route means the audit record for a delta
+is a separate verb, so *"who ran what, and was it the cheap one"* is answerable from the audit log
+without parsing a request body. ⚠️ **And the shared guard reaches back into §4's own error table**:
+`import_in_progress` on `POST /api/v1/services/{id}/sync` no longer means "an import is running", it
+means "an import **or a delta** is", so a sentence there that named only the import was falsified by
+this decision and lands corrected with it.
+
+**The gate attests nothing about any of the above.** No arm of `make check` reads `docs/` for
+content; gitleaks touches the diff and attests that the prose contains no credential, not that the
+prose is true.
