@@ -9,19 +9,42 @@
 > item below carries **a check you can run**, so the list is re-derived rather than trusted. If a
 > check disagrees with the box beside it, the check is right and the box is stale.
 >
-> **No dates and no estimates appear here, ever**, at the owner's standing instruction. Where a line
-> is inference rather than something read off §16, an ADR or the tree, it is marked 🔍.
+> ~~**No dates and no estimates appear here, ever**, at the owner's standing instruction.~~
+> 🔻 **SCOPED 2026-08-21, by the PM ruling of that date — *"scope it, and don't park it"*, and
+> *"say estimates, not dates"*.** The rule as it now stands: **no delivery dates and no time
+> estimates appear here, ever.** **Historical dates — when a claim was falsified, when a pass ran,
+> when a check was taken — are this file's own convention, and they are required rather than
+> tolerated**, because a correction that does not say when it was made cannot be re-checked against
+> the tree that falsified it. The struck sentence banned both kinds and the file kept writing one of
+> them throughout, which is how it came to be falsified by the page beneath it.
 >
-> ⚠️ **DATED RIDER, 2026-08-21 — THE SENTENCE ABOVE IS FALSIFIED BY THIS FILE'S OWN PRACTICE, AND
-> THE DIVERGENCE IS RECORDED HERE RATHER THAN RESOLVED.** Dates are throughout: every
+> ⚠️ **The attribution is deliberately narrow: the PM ruling of 2026-08-21 is the authority for the
+> SCOPING and for nothing else, and no wording is put in the owner's mouth here.** What he actually
+> instructed **is not recorded anywhere in this tree**, and that was searched rather than assumed:
+> the rule appears in exactly two places, this file and the message of
+> [`81e7310`](https://github.com/jdb3750/UsArr/commit/81e7310) (2026-08-18), the commit that created
+> this file, and **neither of them cites a source**; `docs/PROJECT-INSTRUCTIONS.md`, the canonical
+> copy of the instruction text applied to the project's own settings, carries no clause of this kind
+> in **any** version from v1.0 to v1.7. So the underlying instruction is referenced here exactly as
+> the struck sentence referenced it, and no fresher claim about its wording is made.
+>
+> Where a line is inference rather than something read off §16, an ADR or the tree, it is marked 🔍.
+>
+> ~~⚠️ **DATED RIDER, 2026-08-21 — THE SENTENCE ABOVE IS FALSIFIED BY THIS FILE'S OWN PRACTICE, AND
+> THE DIVERGENCE IS RECORDED HERE RATHER THAN RESOLVED.**~~ 🔻 **CLOSED 2026-08-21 by the ruling
+> above, the same day it was raised — the divergence is resolved rather than recorded, and the
+> heading is struck because it now says the opposite of what happened.** What the rider observed is
+> kept below, because it is the finding the ruling acted on. Dates are throughout: every
 > *"Extended 2026-08-…"* paragraph above carries one, every dated rider in §2 carries one, and the
 > 2026-08-21 pass added its own throughout. **The practice reads as scoped to DELIVERY dates and
 > estimates** — no line in this file predicts when anything will land — while **correction dates
 > are load-bearing**, because a rider that does not say when a claim was falsified cannot be
-> re-checked against the tree that falsified it. 🔍 **That reading is an inference and it is not a
+> re-checked against the tree that falsified it. ~~🔍 **That reading is an inference and it is not a
 > decision.** The sentence is the owner's standing instruction, so **scoping it is the owner's**,
 > and nothing here scopes it, rewrites it or acts on it. **No line above or below is changed on the
-> strength of this rider** — it records a divergence and decides nothing.
+> strength of this rider** — it records a divergence and decides nothing.~~ 🔻 **The struck clauses
+> are spent, every one of them: the reading is a decision now rather than an inference, the PM took
+> it, and the sentence above IS changed on the strength of it.**
 >
 > **Citation policy, applied 2026-08-19 to §2's per-type-grid item and the two items after it —
 > AND TO NOTHING ELSE:** prefer function and symbol names over `file:<n>` line citations for any
