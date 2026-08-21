@@ -24782,3 +24782,587 @@ Two gaps, both deliberate and both true at `52f2b28`:
 
 Neither is a defect of this slice, which was scoped to making channel 3b reachable. Both are named
 here so the next reader does not mistake the route's existence for a feature a user can press.
+
+---
+
+## LS-387 — `069b84e`'s commit message states a fragment count its own list falsifies, inside an argument against unbounded completeness claims
+
+**Date:** 2026-08-21. **Target:** `069b84e` (`docs: §16.1's own v0.1 entry still enumerated
+catalogue coverage`), an ancestor of `origin/main` at `b90b031`. **Id:** allocated to this lane and
+absent from `docs/` at the tip it was written for — re-checked here rather than taken on report:
+`git grep -c 'LS-387' HEAD -- docs/` returned nothing before this entry, which agrees with
+`LS-390`'s own observation that `LS-387`, `LS-388` and `LS-389` were held and unlanded.
+**Disposition: recorded. Nothing is edited, and nothing can be** — the subject is a merged commit
+message, and this entry is the correction.
+
+**The measurement.** That commit's message says the section was re-read *"flattened, against eleven
+fragments"* and then lists them: `"books and comics"`, `"comics and manga"`, `"books, comics"`,
+`"catalogue is"`, `"media types, which"`, `"covers books"`, `"comics/manga"`,
+`"books and comics/manga"`, `"yields"`, `"its media types"`. **That is ten.** Extracted rather than
+eyeballed — the quoted spans between *"against eleven fragments —"* and *"— and every surviving
+hit"*, joined across the message's line wraps, come back ten.
+
+**Why it is worth an id rather than a shrug.** The commit's own thesis is the one it broke. Its
+argument is that *"the rule is not 'sweep harder', it is: do not write 'entirely' until something
+has established the boundary"*, and that *"an unbounded completeness claim inside a change whose
+whole purpose was fixing an unbounded claim is the defect worth naming"* — and it then asserts a
+count of its own contents, which is the same defect one register down. **A number is a claim, and a
+claim in a commit message is unfixable**: `main` is immutable history, so the number stands and the
+only available correction is a record that points at it.
+
+**What the commit got right, and this entry does not disturb.** The bounding sentence immediately
+after the list — *"That is what was checked; it does not establish that the class is closed"* — is
+exactly the discipline the miscount undercuts, and it is the reason the search method is
+reconstructible at all. The strike itself was verified at this tip: §16.1's v0.1 entry no longer
+enumerates catalogue coverage, and the surviving occurrences of the struck phrasings are inside
+strikethroughs or quoted prior wordings.
+
+**The durable form.** State the method and the terms; do not state how many terms there were. A list
+is self-counting and a number beside it is a second copy that can drift — which is
+[`DEVELOPMENT.md`](./DEVELOPMENT.md) §11's rule and the rule `LS-392`
+below applies to a document that had gone stale the same way.
+
+---
+
+## LS-388 — `foldSkips` takes `Reason` from one container and drops the rest; the ruling is that it stays open, and this is the record of it
+
+**Date:** 2026-08-21. **Target:** `internal/store/libraries.go`'s `foldSkips`, re-located and
+re-measured at `wip/channel4-deletion`'s tip rather than at the tip the finding was raised against.
+**Id:** allocated to this lane and absent from `docs/` before this entry. **Disposition: RECORDED AS
+OPEN. No code changes.**
+
+**What the tree does, at this tip.** `attachLibrarySkips` reads one `sync_report{kind:
+"items_skipped"}` row per `(instance, container_ref)` pair through `containerReportSQL` and folds
+each into the library's running verdict with `foldSkips`. The fold accumulates `Items` across every
+container and appends a `LibrarySkipContainer` entry per row, so the **numbers** are complete. The
+**sentence** is not: `Reason` is assigned only `if into.Reason == ""`, so the first non-zero
+container to arrive supplies the reason and every later one is discarded. A library over two
+containers that skipped for different reasons shows one of them and gives no sign that the other
+exists.
+
+⚠️ **"FIRST" IS DETERMINISTIC AND THAT MAKES IT WORSE, NOT BETTER.** `containerReportSQL` closes with
+`ORDER BY ls.library_id, ls.id`, so the surviving reason is the one belonging to the lowest
+`library_source.id` — **the container that happened to be bound earliest**. It is stable across runs,
+which is why no test flickers, and it is a ranking by bind order rather than by count, recency or
+severity. Nothing about the row that wins makes it the row worth showing.
+
+**Why this is defect 2 and not defect 1.** [ADR-0069](./DECISIONS.md#adr-0069) is the ruling on the
+*number* — a library total that double-counts a shared container across sibling libraries, answered
+by publishing the per-container breakdown and refusing to apportion. That ADR's *What this does NOT
+decide* §4 names this one and separates them in as many words: *"`foldSkips` takes `Reason` from the
+**first** non-zero container only … That is a genuine defect, it is **separate** from this one — it
+is about which sentence is shown, not about which number is summed — and it is **explicitly still
+open**."* **This entry is that separation carried into the review log**, so the open state has a
+record a reader can find by searching for the defect rather than only by reading an ADR about a
+different one.
+
+**The ruling, and what it rests on.** It stays open, for this milestone, on three grounds:
+
+1. **The repair is a wire change, not a fold change.** Showing every reason means either a
+   `reasons[]` array on `skipped`, or a reason per `skipped.containers[]` entry. Both are additions
+   to a published response shape, and ADR-0069 §*What this does NOT decide* §2 already refused to put
+   the per-reason vocabulary on the wire at all — *"a second adapter will decline items for reasons
+   that are neither, and an API field named `comics` would then have to be lied to **or left at
+   zero**"*. **A second reason field inherits that refusal**; it is not a smaller version of it.
+2. **The screen has one line for it.** §17.8's row renders one sentence, so a `reasons[]` the
+   renderer must collapse moves the same choice one layer out and calls it fixed.
+3. **The information is not lost, only unrendered.** Every reason is still in
+   `sync_report.detail` for whoever reads the database, and the per-container breakdown ADR-0069
+   shipped is what lets a caller ask which container each count came from.
+
+⚠️ **WHAT WOULD REOPEN IT.** A source that declines items for more than one reason **within one
+library** on the ordinary path, rather than as a corner case — at which point the modal library shows
+a sentence that is true of a minority of its own skips. Today the only shipped decliners are the
+comic and unknown-kind arms, and a library that hits both is a comics library with an unmappable
+series in it.
+
+**Not fixed silently, and not fixed at all.** The behaviour is unchanged by this entry;
+`foldSkips`' doc comment describes the zero-row rule and the accumulation and does not describe this,
+which is a second thing the next slice on that function owes.
+
+---
+
+## LS-392 — channel 4's deletion slice reviewed twice, code and prose; 29 findings dispositioned, and the record re-derived at the branch tip rather than patched where it was known wrong
+
+**Date:** 2026-08-21. **Target:** `wip/channel4-deletion`, fourteen commits off `origin/main` at
+`b90b031` — the deletion pass, guard 1, their tests, and ADR-0074 with its conformance sites.
+**Input:** two independent adversarial reviews of that slice, **both taken at `0316091`**, the ninth
+commit: one over the code (13 findings), one over the prose and the decision record (16). **Scope:
+all 29. Nothing is dropped** — each is **applied** or **rebutted in writing** below.
+
+**Fix commits**, oldest first: `b23dac7`, `f458c83`, `6f4d06f`, `7256aef`, `6256a40`, `121235e`,
+`2263c6f`. The first five landed while the branch was still moving; the last two are this
+disposition's own.
+
+**The ids allocated to this lane, accounted for at this tip rather than on report.**
+`git grep -c 'LS-387\|LS-388\|LS-389' HEAD -- docs/` returned nothing before this opening, which
+agrees with `LS-390`'s own observation that all three were held and unlanded. `LS-387` and `LS-388`
+are written above, under their already-allocated ids. ⚠️ **`LS-389` IS RETIRED AS MOOT, 2026-08-21,
+AND THE RETIREMENT IS NOTED RATHER THAN THE ID LEFT AS AN UNEXPLAINED HOLE.** It was allocated for a
+rider on [ADR-0070](./DECISIONS.md#adr-0070), and ADR-0070's landed text already carries what the
+rider was for: `8335ad5` put a dated rider on its *What this does NOT decide* §1 — narrowing *"its
+two mandatory guards are §7.4's, unchanged"* to *"guard 1 is, wired; guard 2 is deferred for this
+source"* — and a second on the `RemoteUpdatedAt` reassurance, correcting the understatement **without**
+claiming the `remote_hash` hole is filled. Both were re-read at this tip and both are well-formed:
+dated, quoting the superseded text, narrowing rather than deleting. **Nothing further is owed under
+that id**, and what ADR-0070 *was* still missing — the index-row flag, the `Status:` flag and the
+dated block — is P-5 below, dispositioned under this opening rather than under a second id for the
+same document.
+
+### ⚠️ The rule this entry exists to record, before the table
+
+**A record written mid-slice describes the tree at the commit it was written against, and the
+commits after it are exactly the ones most likely to falsify it.** ADR-0074 was drafted at `dcf56f0`,
+the fifth commit of fourteen. By `0316091` two of the four hazards it lists as unguarded had guards,
+its Decision 11 named an owed constant extraction that had already been made, and its Decision 5
+described a guard shape the tree no longer had. **Five prose sites went stale inside one branch**,
+and for a stretch of it `main`-shaped history would have carried ADR-0074, `ARCHITECTURE.md` §7.4,
+`reference/sync.md` §4 and `internal/store/serviceinstance.go` all asserting that guard 1 *"passes a
+reused id through"* while the code hard-deleted for exactly that input.
+
+⚠️ **THE COUPLING RULE WAS NOT WRONG; IT WAS APPLIED TO A MOVING SUBJECT.** ADR-0070's *a change that
+creates the condition another fix addresses must land with it* is what put the conformance edits in
+the same motion as the ADR, and it worked — the edits landed. What no rule covered is the four
+commits **after** them. **The second clause this branch earns: a slice with prose in it re-derives
+that prose at its own tip before landing, from the tree, rather than trusting the pass that wrote
+it.** Every claim in `2263c6f` was re-located and re-measured at `6256a40`; none was taken from a
+reviewer's line number, from the drafts in scratch, or from the summaries handed to this lane. Two of
+those re-derivations found something neither reviewer had reported, and they are marked ⚠️ **beyond
+the brief** in the sections below.
+
+### Disposition
+
+**Applied: 26. Not applied: 3** — one accepted-with-reason, two recorded. The three are C-7, C-13 and
+P-16, and each carries its reasoning in full below rather than a verdict word.
+
+| # | Finding | Disposition | Commit |
+|---|---|---|---|
+| **C-1** | BLOCKING · guard 1 re-mints every unidentified item that comes back, orphaning owned rows, and four specifications say it does not | **Applied**, fired both ways | `b23dac7`, `2263c6f` |
+| **C-2** | The zero-read refusal is instance-scoped; the failure it guards is container-scoped | **Applied**, fired | `b23dac7` |
+| **C-3** | The seen-set is what the adapter MAPPED, not what the upstream REPORTED | **Applied**, fired | `b23dac7` |
+| **C-4** | §17.8's item count is the one user-facing read the work tombstone never reached | **Applied**, fired | `f458c83` |
+| **C-5** | `library.orphaned_at` cannot render, and the stale no-writer claims | **Applied**, and the sweep reached more sites than the finding named | `f458c83` |
+| **C-6** | A soft-deleted instance's retained `library_source` rows block orphaning forever | **Applied**, both halves, each fired | `7256aef` |
+| **C-7** | The sweep is one unbatched transaction on the single writer | **ACCEPTED WITH REASON — not applied.** The premise moved; see below | — |
+| **C-8** | The refusal's third observability claim is unguarded at the importer | **Applied**, fired against the surviving mutation | `6f4d06f` |
+| **C-9** | Three capitalised claims with no guard at all (M9, M12, M13) | **Applied**, all three | `b23dac7`, `6256a40` |
+| **C-10** | Two `IS NULL` clauses the comments credit with idempotence are inert | **Applied** to the comment; clauses kept | `121235e` |
+| **C-11** | `fedLibraries`' Unfiled exclusion cannot fire, and its assertion is vacuous | **Applied** to the comment; predicate kept as a named seam | `121235e` |
+| **C-12** | `seen` is a second unbounded allocation, larger than the budgeted one | **Applied** to the budget prose | `121235e` |
+| **C-13** | The plan guard covers two of the sweep's six statements | **RECORDED** as a bounded gap, in the ADR | `2263c6f` |
+| **P-1** | BLOCKING · four prose sites say the guard passes unidentified items through, and sync.md §4's pseudocode contradicts the shipped guard | **Applied**; precedence settled | `2263c6f` |
+| **P-2** | BLOCKING · gap 7d still describes the zero-read hazard as unguarded | **Applied**, re-derived at two grains | `2263c6f` |
+| **P-3** | BLOCKING · the scoping-rider sweep missed §16.1's v0.1 entry | **Applied**, dated narrowing rider | `2263c6f` |
+| **P-4** | BLOCKING · `reference/http-api.md` §2.4 tells clients two reachable states are unreachable | **Applied**, both rows, both writers named | `2263c6f` |
+| **P-5** | ADR-0012 and ADR-0070 got mark 4 and none of the three always owed | **Applied**, marks 1–3 to both | `2263c6f` |
+| **P-6** | The corrected `delta.go` vocabulary check is incomplete again | **Applied** — enumeration deleted, not extended | `121235e`, `2263c6f` |
+| **P-7** | Decision 11's own open gap was closed by the slice and not returned to | **Applied**, named by symbol | `2263c6f` |
+| **P-8** | `reference/http-api.md` §4a carries two sentences the slice corrected everywhere else | **Applied** | `2263c6f` |
+| **P-9** | Kavita's boundary is never named though the sweep is source-agnostic and runs for it | **Applied**, in the ADR and at the seam | `2263c6f`, `121235e` |
+| **P-10** | §7.4's heading dropped *"mandatory"* — a silent overwrite against Decision 14 | **Applied**, word restored | `2263c6f` |
+| **P-11** | Three counts in ADR-0074 falsified by its own slice | **Applied**, count-free | `2263c6f` |
+| **P-12** | `serviceinstance.go`'s annotation falsifies its own measurement; its precedent is a dead lead | **Applied**, both halves, plus `arrivals.go`'s copy | `121235e` |
+| **P-13** | `internal/libsync/doc.go` overstates the precondition's ownership | **Applied** | `121235e` |
+| **P-14** | §7.1a's Deletions row says *"on any instance"* where it means *"anywhere"* | **Applied** | `2263c6f` |
+| **P-15** | `ROADMAP.md`'s Kavita inventory names an item that no longer names Kavita | **Applied**, and de-counted | `2263c6f` |
+| **P-16** | The ADR-0071 holding row: column semantics, and an unverifiable date | **REBUTTED on the first, RECORDED on the second** | — |
+
+### C-1 — Guard 1 re-minted every unidentified item that came back. Applied, and the ruling is recorded rather than reversed twice in silence.
+
+At `c85fcb7` `guardOne` gained a fourth state and `firesGuard` returned true for it, so a tombstoned
+link whose item came back carrying **no external ids** was hard-deleted and the item resolved onto a
+fresh work — leaving the owner's `tag_assignment` and request rows on a work that keeps `deleted_at`.
+On BookOrbit that is not the edge case: `bookOrbitExternalIDs` writes one identifier,
+`hardcover_book`, and returns an empty slice for any book the operator has not matched.
+
+**The remedy taken was the second of the reviewer's, not the first.** The case now takes the **same
+action as a certified match** — the tombstone is revived — and the difference is **recorded** rather
+than silent: `store.SyncReportRevivedWithoutIdentity` and `BatchResult.RevivedWithoutIdentity`.
+`firesGuard` lost its first disjunct, `recordsRevival` is the third outcome's single collapse point,
+and `TestGuardOneSeparatesItsFourStates` asserts **both** answers for every state, so folding this
+case back into "revive silently" cannot pass by moving one arm.
+
+**The argument it replaced is quoted in `guardOneVerdict`'s doc rather than deleted**, because it is
+the argument the next reader reconstructs from first principles: *"a wrong revival MERGES
+(unrecoverable); a wrong fresh link SPLITS, and a later merge puts it back — the split is
+RECOVERABLE."* It fails on two grounds the original never weighed. **The remedy it names does not
+exist**: §6.4 defers `work_merge` and its un-merge machinery out of v0.1 and
+`TestDeferredTablesAreAbsent` fails a migration that creates the table early, so the split is
+permanent too. **And the two errors have different rates**: re-minting is certain on every ordinary
+resurrection of an unmatched book, while the merge it avoids needs a genuine id reuse ADR-0074
+measures void for this source.
+
+⚠️ **THE RESIDUE IS NAMED IN PLAIN WORDS, IN THE ADR AND IN §7.4: a genuine id reuse on an
+unidentified item is silently MERGED rather than split — chosen, not overlooked** — and **what
+reopens it is two conditions rather than a re-reading**: identity coverage improving, or a merge path
+existing. A `revived_without_identity` row is a record, and a record after the event is not a guard
+before it.
+
+### C-2 — Absence is only evidence inside a container the read observed. Applied.
+
+`SweepDeletions` now takes a `SweepScope` whose `Observed` field is the containers the caller vouches
+for having read **in full**; a live link outside one is retained and counted in
+`SweepResult.LinksUnobserved`. The two fields are a struct rather than two adjacent `[]string`
+parameters because transposing them is invisible to the compiler and to every fixture that observes
+everything it reports, while in production it tombstones the dark container and spares the read one.
+`ErrSweepRefusedEmptyRead` keeps the instance-wide case, and its doc now states the boundary between
+the two grains at the site. **Fired**: with the per-container predicate deleted, the items are
+tombstoned by identity again.
+
+### C-3 — The seen-set is what the upstream reported, not what the importer applied. Applied.
+
+BookOrbit drops a book with no primary file before it reaches `fn`, so a book the upstream listed in
+the very same read — counted in `rep.ItemsRead` — was absent from the seen-set and tombstoned as
+deleted. `UnmappedReporter` hands those keys back with their container and `sweepScope` unions them
+in; `CompletenessReporter` withholds a container the completeness pass has already **measured** as
+short, a verdict `cmd/usarr` had been reading *after* the sweep it contradicts had run.
+`sweepScope`'s doc states the property that makes it safe to extend: **every correction can only
+remove a container from `Observed` or add a key to the seen-set**, and both directions mean
+*tombstone less*.
+
+### C-4 — §17.8's item count. Applied.
+
+`work.deleted_at` became reachable for the first time in this slice, and every read of a work filters
+it — except the one that does not go through `work` at all. `listLibrariesSQL` counted
+`library_member` rows, so the Libraries screen told the **owner** a library still held two items
+after both were deleted upstream, and told a scoped user the truth, `0`, because the scope path's
+`EXISTS` carries `sil.deleted_at IS NULL`. The count now joins `work` by rowid and the plan guard
+pins that leg. ⚠️ **The two scopes still legitimately differ** — that is principle 4, not an
+inconsistency to flatten. `sweepItems`' comment, which had named three readers and was not the
+enumeration, now states the **rule**: a read that renders a work to a user filters
+`work.deleted_at`, including a read that reaches the work through a membership table.
+
+### C-5 — The orphaned state could not render, and the stale claims were eleven, not nine.
+
+The only arm reading `orphanedAt` required `sources.length === 0`, which the sweep **by design** never
+produces — it retains every `library_source` row and stamps `missing_since`. It has its own arm now,
+for the observation it is, and the empty array keeps its own.
+
+⚠️ **THE STALE-CLAIM SWEEP WENT PAST THE FINDING'S LIST, AND THE NUMBER IS RECORDED HERE ONLY
+BECAUSE IT IS THE SUBJECT.** The finding enumerated nine in-code claims that the two columns have no
+writer. `f458c83` corrected **eleven**: those nine, plus two in `web/src/lib/libraries.test.ts` that
+the finding's grep did not reach. Measured rather than counted by hand —
+`git show f458c83 | grep '^-'` over the no-writer phrasings returns eleven lines across
+`internal/httpapi/libraries.go`, `web/src/lib/libraries.ts`, `web/src/lib/libraries.test.ts` and
+`web/src/routes/libraries/+page.svelte`. Two more had already been corrected at `0adfe1f`, in
+`internal/store/libraries.go`. **Two of the eleven were the stated REASON the screen paints no
+positive state**; that conclusion survives on a different leg — both columns record an **absence**,
+and an unset absence is *"nothing was observed"*, never *"observed and fine"*.
+
+### C-6 — A source on a soft-deleted instance is not a source. Applied, both halves.
+
+The FK cascade fires on a **hard** delete only, so a soft-deleted instance keeps its `library_source`
+rows with `missing_since` NULL — invisible to `librarySourcesSQL`, which filters
+`si.deleted_at IS NULL`, and enough to satisfy `sweepOrphans`' `NOT EXISTS` forever, because no sweep
+ever runs for a deleted instance. **Each half covers a case the other cannot.** The `EXISTS` on
+`service_instance` makes the sweep and the screen use one definition of a source that counts —
+without it, a library fed by a second instance is never stamped even after that instance goes quiet.
+`SoftDeleteServiceInstance` calling `sweepOrphans` in its own transaction is what stamps a library
+whose **only** instance is deleted. Both were fired: dropping either turns a test red. Nothing is
+cached, so an instance restored later counts again on the next call.
+
+### C-7 — Batching the sweep transaction. ACCEPTED WITH REASON, and the reason is not the latency.
+
+**Not applied.** `SweepDeletions` holds the single writer for the whole pass, in one transaction,
+against `ApplyCatalogueBatch`'s documented `min(2000 rows, 100 ms)` sizing rule.
+
+⚠️ **THE ACCEPTANCE RESTS ON THE REACHABILITY CLAIM, NOT ON THE MEASUREMENTS.** With C-2 and C-3
+fixed, a library-scale absence is no longer reachable through a dark container or an unmapped item:
+it now requires a **genuine library-scale deletion**, which is a rare, deliberate upstream event
+rather than the ordinary consequence of a share going quiet. That changes what is being traded.
+**Atomicity is the property a deletion pass most needs** — a pass that half-committed leaves some
+links tombstoned, some works still visible, and no record of where it stopped — and giving it up in
+exchange for a latency ceiling on an event that now requires a real mass deletion is the wrong trade.
+
+⚠️ **AND THE FIGURES ARE SUPERSEDED IN PREMISE.** The finding measured 103 ms at 1,000 absent links,
+2.13 s at 20,000, and **37 ms for a no-op sweep over 20,000 live links** — all at `0316091`, and
+**none re-measured after C-2 and C-3 landed**. They are cited here with their commit and that mark
+because a reader who meets them later must not read them as current: the no-op figure says the scan
+is not the problem, and the deletion-heavy figures now describe a path whose reachability has changed
+underneath them. **If this is reopened it is reopened on a fresh measurement**, and the argument to
+beat is atomicity rather than the numbers.
+
+### C-8 — A refused sweep fails the import. Applied, and the mutation is on the record.
+
+`ErrSweepRefusedEmptyRead`'s doc claims three observabilities. Only the first was asserted anywhere:
+replacing `FullImport`'s `if err != nil` arm on the sweep call with `_ = err` ran the **whole suite
+green**, so an importer change that swallowed the refusal would have shipped and the refusal would
+have become a silent no-op at exactly the layer meant to surface it.
+`TestARefusedSweepFailsTheImportRatherThanCompletingIt` asserts the **effect**, not the error return:
+`rep.Completed` stays false, `last_full_sync_at` does not move — read against a later clock instant,
+so *"did not move"* is a real question — and no link is tombstoned. Fired against that mutation, all
+three assertions go red.
+
+### C-9 — Three capitalised claims with no guard. Applied, all three.
+
+`remote_identity_hash`'s first-sight rule, `absentSources`' `container_kind` filter, and `bindPhase`'s
+declined-container rule each had a mutation that survived the suite. All three now have guards, and
+the third is driven **through `FullImport`** rather than past it —
+`TestSweepDoesNotStampADeclinedContainerAsMissing` lives in `internal/store` and passes the container
+list to `SweepDeletions` directly, so it could not see the rule it is named for;
+`TestADeclinedContainerReachesTheSweepAsReported` runs `bindPhase`. The first claim's guard,
+`TestTheStoredIdentityHashMovesOnceFromEmptyAndNeverAgain`, then earned its keep immediately: the
+rule it pinned turned out to be wrong, and drilling it both ways is what made `6256a40` a narrowing
+rather than a guess.
+
+### C-10, C-11, C-12 — three comments that credited themselves with more than they do. Applied to the prose; no behaviour changed.
+
+- **C-10.** `sweepContainers` said the `IS NULL` clauses in the `UPDATE`s enforce first-observed-
+  absent. For the link tombstone and the container stamp they are **inert** — `absentLinksSQL` and
+  `absentSources` already exclude the stamped rows, and deleting either clause changes nothing
+  observable. `fedLibraries` does not pre-filter, so the library stamp's clause is the one doing the
+  work. **All three stay** as defence in depth against a SELECT that stops pre-filtering, which is the
+  "simplification" the corrected comment exists to stop. ADR-0074 Decision 9 carries the same
+  correction, because it made the same claim.
+- **C-11.** `fedLibraries`' `library_id <> UnfiledLibraryID` cannot fire: library 0 has no
+  `library_source` rows by construction, so `SELECT DISTINCT library_id FROM library_source` cannot
+  yield it, and the assertion that Unfiled was not orphaned passes over a subject the read never
+  produced. The predicate is kept and is now **described as an unreachable seam** rather than
+  presented as live protection.
+- **C-12.** `streamAndApply`'s budget paragraph calls `imported` *"THE ONE UNBOUNDED ALLOCATION IN THE
+  IMPORT"*. `readObservation.items`, accumulated by the same loop, spans children **and one parent
+  entry per child** with no dedupe at the append site — at §13's shape ~180,000 `LinkRef`s against
+  `imported`'s ~3,000. Not a hazard: `SweepDeletions` folds it into a map before the first write, so
+  the duplicates cost memory in one function and nothing downstream. **The budget paragraph now names
+  both**, rather than the dedupe being added, because the accurate statement is what was missing.
+
+### C-13 — The plan guard's coverage. RECORDED, no code change.
+
+`absentLinksSQL` and `linkLookupSQL` are the constants the tests EXPLAIN, and their firing arms fire.
+The sweep's other four statements — `liveLinkCount`, the two tombstone `UPDATE`s, `absentSources`'
+read and `fedLibraries`' read — are inline literals with no plan assertion. The reviewer EXPLAINed
+all six after `ANALYZE` and **all six are healthy**, so this is a bounded gap rather than a defect,
+and it is recorded in ADR-0074 Decision 11 where a reader of the plan-guard ruling will meet it.
+⚠️ **The mitigating fact is recorded with it**: the one degradation that matters on the link `UPDATE`
+— dropping `remote_kind` — is caught on **correctness** by
+`TestSweepDistinguishesTwoKindsSharingOneRemoteID`, which is a better guard than a plan assertion
+would be. Extending the guard to four more literals is a constant extraction per statement and is
+available whenever somebody wants it; nothing here is blocked on it.
+
+### P-1 — Four prose sites, and the specification the shipped guard contradicted. Applied, and precedence is settled rather than asserted.
+
+The four sites and the code annotation all said guard 1 does not fire for an unidentified item. At
+`c85fcb7` it fired hardest on exactly that item; at `b23dac7` it stopped firing again, by a different
+route, and neither commit returned to the prose. **Both halves are corrected at the tip**:
+`ARCHITECTURE.md` §7.4 states the four states and which one hard-deletes; its reach rider takes a
+dated correction quoting *"the guard passes a reused id through in silence. That is ADR-0074's third
+named gap and it has no guard either"*; `reference/sync.md` §4's equivalent takes the same; ADR-0074
+gap 7c is rewritten as **narrowed, not closed**; and `internal/store/serviceinstance.go`'s annotation
+had already been corrected by an earlier lane and was **verified rather than re-written** — it says
+the guard passes a reused id through, which is now true, and that a row after the fact is not a guard
+before it.
+
+⚠️ **THE SECOND HALF IS THE ONE WORTH THE ID.** `reference/sync.md` §4's guard-1 pseudocode says
+**clear** where the code hard-deletes, and it stayed unreconciled because ADR-0074 Decision 5 had
+already asserted the code *"follows [it] literally"* and that the pseudocode *"stays as written"*.
+**A decision record declaring another document's prose unchanged and binding is the mechanism that
+manufactured the contradiction.** Precedence is settled and is not novel:
+[`ARCHITECTURE.md`](./ARCHITECTURE.md) is the design and `docs/reference/` is its long-form
+companion, so **ARCHITECTURE carries the change and sync.md follows**. sync.md §4's block is now
+marked **illustrative**, with the shipped four-state shape written beside it and a sentence saying
+which document is authoritative. ADR-0074 Decision 5 carries the correction and the general rule: an
+ADR may record what the code does; it may not promote a paragraph elsewhere to a specification the
+code is then measured against.
+
+**Alternative 5 keeps its rejection and loses its consequence.** Widening `identityHash` is still
+refused for the reason given — it is the input to a value already stored on every row. But the
+discrimination problem was solved **without** widening it, by asking whether the incoming payload
+carries any identifiers **before** comparing hashes, so no stored value moved and no re-stamping
+story was needed. What remains open is narrower: the guard still cannot **certify sameness** for an
+unidentified item.
+
+### P-2 — Gap 7d. Applied, re-derived at two grains.
+
+*"The sweep cannot tell the two apart"* and *"an empty whole list is a valid whole list"* are false at
+the tip, and *"mitigated only by"* is no longer the only limit. The rewritten gap states what shipped
+— an instance-wide **refusal** that writes its own `sync_report` kind, commits it, and fails the
+import; and a per-container withholding through `SweepScope.Observed` — and states what did **not**:
+**no threshold is set, and the large-but-nonzero drop is unguarded**, which was the literally true
+half of the original and is kept as such. What shipped is a **contradiction check**, not a threshold.
+⚠️ **The cadence argument survives intact** and is restated rather than dropped: this is still the
+strongest single reason for answering the sweep's cadence question before a scheduler exists, because
+a scheduler multiplies every unguarded shape by the number of times it runs unattended. Decision 10
+now records that the arrow points both ways — the sweep can fail the import.
+
+### P-3 — §16.1's v0.1 entry. Applied as a dated narrowing rider, not a strike.
+
+Decision 14 stated its rule universally and then inventoried its sites **as a count**, and the count
+is what missed this one. §16.1's v0.1 entry reads *"Reconciliation with 7-day tombstones and both
+sweep guards **for everything**"*, and [`CLAUDE.md`](../CLAUDE.md) names §16 as authoritative for
+which milestone owns a thing — so it is the site where the discrepancy costs the most.
+
+⚠️ **WHAT IS WRONG THERE IS *"for everything"*, NOT THE GUARDS, so the original sentence stays and
+the rider narrows it.** v0.1 ships **guard 1 wired** and **guard 2 unbuilt**, deferred **for
+BookOrbit** on the void-premise measurement ADR-0074 records; **guard 2 remains v0.1's requirement
+for any source whose premise has not been measured void**, which is the \*Arrs and every source
+nobody has measured. **The deferral is a source-scoped exemption backed by a measurement, not a
+milestone cut**, which is what keeps ADR-0074's *"the amendment is conformance, not a scope change"*
+true. Decision 14's inventory is now a **list** — §2.2's *"Both mandatory"* sentence, §7.4's heading,
+§16.1's v0.1 entry, ADR-0012, ADR-0070's *What this does NOT decide* §1, and `reference/sync.md` §4's
+guard-2 block — because a count of sites is exactly what went stale.
+
+### P-4 — `reference/http-api.md` §2.4. Applied; the heading is count-free and both writers are named.
+
+§2.4 is a one-row table for `formats` now, with the two corrected rows carried as dated riders
+quoting what they said, because a client author who read the old table built against it.
+⚠️ **`items[].orphaned_at` has TWO writers**, and naming only the sweep would understate it:
+`sweepOrphans`, from the deletion pass, and `SoftDeleteServiceInstance`, which runs the same orphan
+pass in its own transaction because deleting an instance is the one orphaning event no sweep can
+reach. It also has a reader, and had one before this slice. `sources[].missing_since` has one, the
+sweep. ⚠️ **The section's conclusion is kept and clients must not invert it**: both columns record an
+**absence**, so an unset value means *nothing has been observed*, never *observed and fine*. The wire
+shape did not change; what changed is that the states are reachable.
+
+### P-5 — ADR-0012 and ADR-0070's amendment marks. Applied.
+
+Both had mark 4 — the falsified sentence's inline flag — and none of the three this file says are
+always owed. Both now carry the index-row flag, the `Status:` flag, and a dated block directly under
+`Status:` naming which claims no longer hold and which survive. The consequence the convention names
+is the one that had arrived: a reader landing on `#adr-0012` saw *"Accepted"* and was warned
+fifty-odd lines in.
+
+### P-6 — `delta.go`'s vocabulary check. Applied by deletion, not by extension.
+
+The list corrected at `8335ad5` named twelve members; `c85fcb7` and `b23dac7` then added
+`deletion_sweep_refused` and `revived_without_identity` without returning to it, so **the corrected
+list was incomplete before the branch it landed on was finished**. Omitting a member is the same
+defect class as naming one the tree does not have. The enumeration is **deleted** and replaced by a
+pointer to `cmd/usarr`'s `TestSyncReportKindsDoNotCollide`, which derives the vocabulary from the
+tree — the treatment `internal/store/reconcile.go`'s `SyncReportDeletionSweep` already had. **The
+`comic_residue` rider is kept**: that is history and it is correct.
+
+### P-7 — Decision 11's own open gap. Applied, and it is good news the record should carry.
+
+Both halves were closed inside this slice. `absentLinksSQL` is a package constant whose doc says why;
+`TestTheInstanceSweepIsAllowedToScan` EXPLAINs **that identifier**; and the missing positive control
+exists — `TestTheInstanceSweepAcceptanceFiresOnASortAndOnAJoin` asserts the shipped plan is clean
+first, so a pre-broken subject cannot fake a pass, then fires the acceptance against an `ORDER BY`
+and against a join. The paragraph is kept rather than deleted, because it is the record of an owed
+thing being paid inside its own slice.
+
+### P-8 — `reference/http-api.md` §4a. Applied, with the precision `import.go` had already found.
+
+*"A skip or a deletion"* loses *"or a deletion"*, struck rather than reworded, because the sweep
+repairs deletions now. *"Channel 4, which is not built"* is replaced by the accurate split: the
+deletion half is built and runs from every full import; the **drift** step — §7.4's `remote_hash`
+comparison and its refetch — is built for **no source at all**, and the drift step is the half that
+would carry the tag, genre and author edits that sentence is about. So the assignment remains an
+assignment and not a discharge.
+
+### P-9 — Kavita's boundary. Applied, and the re-derivation found more than the finding did.
+
+Every *"scoped to BookOrbit"* claim in ADR-0074 is a claim about **what the ADR decides**, never about
+**what the code runs**. Nothing in the deletion pass is scoped by source: `FullImport` calls
+`SweepDeletions` unconditionally, and Kavita is a live wired catalogue source. ADR-0074's *What this
+does NOT decide* now says so, and says the consequence: **no measurement anywhere in this repo covers
+Kavita's id allocator**, so the guard-2 deferral is not available to it and **guard 2's standing
+requirement holds for Kavita**. `reference/sync.md` §4's *"binding for the \*Arrs"* — binding on
+nothing that runs, since the \*Arrs have no adapter — becomes *"for every source but BookOrbit"* with
+its boundary stated. `cmd/usarr/import.go` stops saying the pass is built *"for BookOrbit"*.
+
+⚠️ **BEYOND THE BRIEF, AND IT SHARPENS THE FINDING RATHER THAN SOFTENING IT.** `KavitaSource`
+implements **neither** `UnmappedReporter` nor `CompletenessReporter`, so two of `sweepScope`'s three
+corrections are inert for it. The third — a container that delivered nothing is not vouched for — is
+structural in `readObservation`, which only ever records a container an item was observed in, so it
+applies to every source. And Kavita's item half is safe on the first correction **by construction
+rather than by coverage**: `KavitaSource.StreamItems`' only pre-`fn` drop is a series in a declined or
+unknown library, whose container is therefore never in `Observed` at all. The completeness arm has
+nothing to withhold because nothing measures Kavita's completeness, which is an **absence of
+measurement, not a vouch**. None of this is a defect today; it is the shape of what a Kavita sweep
+actually rests on, and it belongs in the record beside the boundary claim.
+
+### P-10 — §7.4's heading. Applied; the word is back.
+
+The heading read *"its two **mandatory** guards"* at `b90b031` and the conformance commit struck the
+word with no quoted original and no date — a silent overwrite, in the same motion as the decision
+that forbids exactly that (*"a SCOPING RIDER, **NOT A DELETION**"*). The word is restored and the
+narrowing lives in the parenthetical, with a dated note under the heading recording both the deletion
+and the restoration. **No cross-reference targeted the old anchor**, re-checked at this tip, so
+nothing dangled either way. Decision 14's own measurement is corrected with it.
+
+### P-11 — Three counts. Applied, count-free rather than re-counted.
+
+*"FOUR HAZARDS SURVIVE AS NAMED GAPS WITH NO GUARD"*, *"this slice adds **two** members to that
+vocabulary"*, and *"`id_reused` and `deletion_sweep` become written `sync_report.kind`s"* were all
+falsified by their own slice. Each goes **count-free** rather than getting a fresher number, and the
+hazard list is re-derived at the tip rather than patched at the two members known to be wrong — (a)
+and (b) were re-checked as carefully as (c) and (d) and each carries the date it was checked.
+
+### P-12 — `serviceinstance.go`'s self-falsifying measurement, and two dead leads. Applied.
+
+*"identity_fingerprint, identity_epoch and max_remote_id_seen have ZERO Go references of any kind"*
+names all three in a `.go` file, so re-running the measurement returns non-zero and a later reader
+cannot tell whether the state changed or whether they are reading the comment back to itself. It
+borrows `ROADMAP.md`'s durable phrasing — *a **reader** of* — which does come back empty. The
+annotation's precedent pointer at `libraries.go`'s `Library.OrphanedAt` is past-tensed for the reason
+ADR-0074 past-tensed its own copy: `0adfe1f` rewrote that annotation in this slice, so following the
+pointer today lands on a sentence saying the opposite of the form being borrowed.
+`internal/store/arrivals.go`'s copy of the same pointer, pre-existing and falsified by this slice,
+takes the same treatment.
+
+### P-13 — `internal/libsync/doc.go`. Applied.
+
+*"ONLY THIS PACKAGE CAN ENFORCE IT"* gains **"in general"**, with the exception named: `internal/store`
+refuses the zero-read shape itself and says in its own voice that it is one shape and only one. That
+file is the one [`CLAUDE.md`](../CLAUDE.md) names as the authority on what the sync core has and has
+not got, so being exact there is worth a clause.
+
+### P-14 and P-15 — the two nits. Applied.
+
+§7.1a's Deletions row said `work.deleted_at` follows *"only when a work loses its last live link **on
+any instance**"*, which reads instance-scoped and is the opposite of the rule; it says **anywhere**
+now and names the non-instance-scoped `NOT EXISTS` behind it. That row also gains the soft-deleted-
+instance clause from C-6, since it is the row that enumerates what the four stamps mean.
+`ROADMAP.md`'s Kavita-framing inventory drops **channel 4** — the rewritten item's only Kavita is
+inside a dated rider quoting what it used to say, which is history rather than staleness — and the
+inventory's *"ONE OF THE FIVE … The other four"* goes count-free with it, because removing a member
+from a counted list is how the next reader inherits two wrong numbers instead of one.
+
+### P-16 — the ADR-0071 holding row. REBUTTED on the column semantics, RECORDED on the date.
+
+The finding verified the row on every point that matters — bare `0071` with no anchor link so nothing
+dangles, the withheld subject unnamed, and no gate reading the file — and raised two small things.
+
+**The column semantics are rebutted.** The Status column carries a directive (*"do not reuse or
+renumber"*) where every other row carries a status, and the Decision column carries the status. That
+is true, and it is **not** a defect to repair here. The row is a **holding** row: it records an
+allocation rather than a decision, so it has no status in the sense the column means, and its wording
+is the coordinator's verbatim text fitted to three columns. ⚠️ **Editing the row of a held allocation
+is not a lane's to do** — a lane that cannot see the subject cannot know which words are load-bearing
+— and the cost of leaving it is that one reader scanning one column meets one oddity, against the
+risk of altering a record whose author deliberately withheld its content. **Recorded here so the next
+reader finds the reasoning instead of reopening it.**
+
+**The date is recorded, not disputed.** *"allocated 2026-08-20"* is coordinator-supplied and
+unverifiable inside this repo — the commit's own measurement is that `0071` appears nowhere else in
+the tree. Not a defect; noted so no later disposition treats it as measured.
+
+### Register — two items this slice deliberately does not own
+
+Neither is dropped and neither is fixed here. Both are named so the next reader finds them as
+recorded state rather than discovering them.
+
+1. ⚠️ **The `sync_report` vocabulary derivation rests on a naming convention nothing enforces.**
+   `TestSyncReportKindsDoNotCollide` finds its members by scanning non-test Go for string constants
+   matching `^[sS]yncReport[A-Z]`, which is why the derivation is honest about the tree rather than a
+   restated list — and it is also the whole of its reach. A kind declared under any other identifier
+   is invisible to it, and the test cannot tell that from there being no such kind. **The convention
+   is load-bearing and is stated as such at the site**; making it enforceable is a register item, not
+   this slice's work.
+2. ⚠️ **Nothing reaps tombstones, so §7.4's *"7-day tombstone"* has no far end.** No statement
+   anywhere in `internal/` hard-deletes a row on the age of its `deleted_at`; the only hard delete in
+   channel 4 is guard 1's. The window is a stamped column and a documented intent, and every hazard
+   whose exposure §7.4 bounds at seven days is in fact **unbounded in time**. **This is a real defect
+   and it is explicitly not this slice's**, which was scoped to the deletion half and guard 1;
+   ADR-0074 Decision 10 already records that there is no reaper, and `ROADMAP.md`'s channel-4 item
+   names it among what is still missing. It is held here as a register item so that "the tombstone
+   expires" is never assumed by a later reader of the guard-1 ruling, whose exposure it bounds.
+
+### What this disposition did not re-open
+
+The reviewers' *"checked and clean"* sections were not re-verified line by line, and are not restated
+here as though they had been. Two things in them were re-run because later commits could have moved
+them, and both hold at the tip: **`remote_hash` is still a permission taken and not spent** — no
+`SELECT` in non-test Go names it, so ADR-0074 Decision 2 and ADR-0070's rider remain accurate — and
+**`SweepDeletions` still has exactly one caller**, `FullImport`, so `ROADMAP.md`'s third replacement
+check still comes back empty.
