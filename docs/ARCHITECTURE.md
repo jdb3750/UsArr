@@ -4406,9 +4406,15 @@ Each is a named screen, not an accident.
   because an empty library with a healthy service means the import has not run and the user should
   see that, not a blank grid.
 - **Import in progress** → the populated-so-far sections plus the progress affordance.
-- **Instance degraded / backend offline** → a non-modal banner naming it ("Kavita is unreachable —
-  showing cached data from 14:02") linking to the Services screen. **The catalogue does not grey
-  out**; browse, search, sort and filter keep working from the replica. The banner names the
+- **Instance degraded / backend offline** → a non-modal banner **on the Library screen and on every
+  per-type grid**, naming it ("Kavita is unreachable — showing cached data from 14:02, 6 minutes
+  ago") and linking to the Services screen. **The catalogue does not grey
+  out**; browse, search, sort and filter keep working from the replica. Home is deliberately not in
+  that list and is not an omission: Block B is the attention block and a degraded instance is
+  already one of the things it reports (§17.2). ⚠️ **This bullet named no screen at all until
+  2026-08-21**, while both bullets under it named theirs — and a requirement that says what to draw
+  without saying where is one a screen can decline without contradicting it, which is what the tree
+  did. The screens are the catalogue's, and §16.1 funds the banner on them. The banner names the
   **instance**, by the name the user gave it (§17.3), never the kind — which is what makes it
   legible on a stack running two of the same thing. ⚠️ **The write half of this state keeps an \*Arr
   deliberately, and it is not an oversight**: writes to a media backend do not exist — §7.6's writes
@@ -4427,7 +4433,15 @@ Each is a named screen, not an accident.
   reassuring and wrong is worse than no banner, and it is the precise failure the replica
   principle's honesty rules exist to prevent. Where an instance has **no delta channel at all**
   (§7.1a), the number is its last full compare and the sentence says so: *"Komga is unreachable —
-  showing cached data from the last full compare at 09:12"*. ⚠️ **Kavita was this branch's exemplar
+  showing cached data from the last full compare at 09:12, 3 hours ago"*. ⚠️ **Both exemplars in
+  this bullet quoted a bare `HH:MM` until 2026-08-21**, and `design/DESIGN-DIRECTION.md` §9.1 bans
+  exactly that — naming *this* banner as its worked example, because *"showing cached data from
+  11:47"* is identical whether the instance has been down for six minutes or twenty-two hours. The
+  rule is that every user-facing timestamp carries the relative form, which on the one sentence whose
+  entire job is the number is not a formatting preference but the difference between a banner that
+  says something and a banner that does not. **This branch is not funded for v0.1** and §16.1 says
+  why: no v0.1 source reaches it, and telling it apart from the ordinary branch needs a per-channel
+  sync time the health response does not send. ⚠️ **Kavita was this branch's exemplar
   and is withdrawn, because the honest distinction is "no channel 3", not "no delta".**
   [ADR-0035](./DECISIONS.md#adr-0035) §2a verified against the owner's live instance that Kavita
   **has** a usable delta — channel 3b's ordered page walk (§7.1a) — and what it lacks is only a
