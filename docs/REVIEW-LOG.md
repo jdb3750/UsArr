@@ -25530,3 +25530,161 @@ cases, including a `\|\|` legitimately outside `RAISE()` (must not fire) and a `
 * **`CONFIGURATION.md` §6.2's operator note is a mitigation, not a guard.** Nothing checks that an
   operator's `sqlite3` is new enough, and nothing can: it is their binary, not UsArr's. The note tells
   them what the lie looks like. A `usarr backup` subcommand does exist and does not have this problem.
+
+---
+
+## LS-394 — §7.4's schedule reviewed: the routed trap is **unreachable at this tip and for four reasons**, the C-7 figures re-measure ~1.3× on different hardware with their ratio intact, and the `write_queue` precondition turns out to have **no operands** rather than no checker
+
+**Date:** 2026-08-21. **Target:** `wip/sweep-schedule`, branched from `origin/main` at
+`f87aef4442d453bf4697159f913c7dcf05328196` (`git rev-parse --is-shallow-repository` → `false`).
+**Id:** `LS-394`, allocated by the coordinator and re-checked at this tip rather than taken on
+report — `git grep -c 'LS-394' f87aef44 -- docs/` returned nothing and `LS-393` is the highest entry
+on `main`. **Scope:** `cmd/usarr/reconcile.go` and its tests, the `main.go` wiring, the comment
+corrections the timer falsifies, `reference/sync.md`'s three edits and
+[ADR-0076](./DECISIONS.md#adr-0076). Every finding below is **applied** or **rebutted in writing**.
+
+### LS-394.1 🚩 The routed trap does not exist at this tip — **rebutted as a hazard, applied as a guard anyway, and the four real barriers are now named where the next person will look**
+
+The slice was routed on the claim that copying `probeAll`'s `Scope{AllInstances: true}`
+(`cmd/usarr/services.go:1035`) would re-run `sweepOrphans` for **soft-deleted** instances and clear
+the `orphaned_at` stamps `SoftDeleteServiceInstance` sets (C-6), through the restore arm at
+`internal/store/reconcile.go:730-745`.
+
+**`Scope` cannot do that, and neither can anything else reachable from one edit.** `Scope` decides
+WHICH VISIBLE instance a caller may see; it never decides whether a tombstoned one is visible at all.
+`store.listServiceInstances` hard-codes `WHERE deleted_at IS NULL` into the statement **ahead of**
+the scope predicate, so `AllInstances: true` renders `1=1` over the live rows only. Four independent
+filters had to be removed, in this order, before the assertion could be made to fail:
+
+1. `store.listServiceInstances`' `WHERE deleted_at IS NULL` — bypassed by replacing the call with raw
+   `SELECT id, enabled FROM service_instance`. **Test still green.**
+2. `registry.entry`'s disabled refusal **and** `store.getServiceInstance`'s own `deleted_at IS NULL`.
+   **Test still green.**
+3. C-6's `si_orphan.deleted_at IS NULL` in `sweepOrphans`' restore arm. **Test still green.**
+4. `store.LastFullSyncAt`'s `deleted_at IS NULL` (`internal/store/catalogue.go:2522`) — which is what
+   actually kept a tombstoned instance from ever being **due**. **Test finally red:**
+   `a scheduled pass cleared the orphaned_at stamp SoftDeleteServiceInstance set.`
+
+**Applied**: `TestTheScheduleLeavesADeletedServicesLibraryOrphaned` ships, asserting the STAMP'S
+SURVIVAL rather than the predicate's text, with the four-site mutation and its verbatim failure
+recorded in its own doc comment. **Rebutted**: it is not the hazard it was routed as, and the comment
+says so — presenting a four-deep conjunction as "the thing standing between the stamp and a
+scheduler" would invite the next reader to delete the other three as redundant.
+
+### LS-394.2 🚩 The `enabled` half had the same shape, and the drill only fires on TWO sites — **applied**
+
+`reconcileOnce`'s `if !si.Enabled { continue }` looked like the load-bearing clause. It is not:
+`registry.entry` already refuses a disabled instance (`"%q is disabled"`, `cmd/usarr/services.go`) and
+is on `FullImport`'s path through `runImport`. **Removing the loop's filter alone left
+`TestTheScheduleDoesNotReadAServiceTheOperatorDisabled` GREEN.** Removing both turns it red:
+`the scheduled pass read an upstream the operator had disabled, and swept it`, with
+`links_tombstoned=1 works_tombstoned=1` in the captured process log.
+
+**Applied.** The test ships as an assertion on the **conjunction**, which is the honest subject, and
+the clause is kept for the two reasons it is actually worth its line: `entry`'s refusal arrives as an
+ERROR, which this loop logs at warn once per disabled instance per tick — a log that cries every half
+hour about a state the operator chose deliberately is a log an operator learns to skip — and it
+arrives only after a row read and a credential open. **Cheapness and quiet, not correctness**, and the
+comment now says exactly that.
+
+### LS-394.3 🚩 Two of the three tests would have passed against an empty function — **applied: a positive control and a negative control, both fired**
+
+`TestTheScheduleDoesNotRead…` and `TestTheScheduleLeaves…Orphaned` are both refusals. A
+`reconcileOnce` that did nothing at all satisfies both. Two controls were added and both were fired:
+
+* `TestTheScheduleReReadsAnAgedInstanceAndSweepsWhatVanished` — the pass runs AND sweeps. Fired by
+  making `reconcileOnce` return immediately: `the scheduled pass did not tombstone a series the
+  upstream stopped reporting.`
+* `TestTheScheduleLeavesAFreshlySyncedInstanceAlone` — the interval actually gates. Fired by making
+  `reconcileDue` return `true` unconditionally: `a pass ran against an instance whose last full sync
+  had not aged past reconcileInterval.`
+
+### LS-394.4 The C-7 re-measurement — **recorded, and it does not reopen C-7**
+
+C-7's figures were taken at `0316091` and never re-measured. Re-measured at this tip on x86-64
+(Intel Xeon @ 2.80 GHz, 4 cores, `go1.25.13`), over the sweep's own ANALYZEd corpus convention:
+**132 ms** at 1,000 absent links (C-7: 103 ms), **2.80 s** at 20,000 (C-7: 2.13 s), **57 ms** for a
+no-op over 20,000 live links (C-7: 37 ms). All three cells moved by ~1.3× and **their ratio is
+unchanged**, which is a different machine and not a regression.
+
+**C-7 stays as decided.** The argument to beat was always atomicity, not the numbers, and nothing
+here touches it. What ADR-0076 adds is the observation C-7 could not make: the recurring cost of a
+TIMER is the **no-op** cell, and the deletion-heavy cells describe an event that costs the same
+whether a timer or an operator discovers it. The measurement harness was temporary and is **not** in
+the tree — a wall-clock benchmark is `make bench`'s, never the gate's — so the figures are cited with
+their corpus, their hardware and their tree, and are re-runnable from that description.
+
+### LS-394.5 🚩 The `write_queue` precondition has no operands, which is a stronger answer than "nobody enumerates it" — **applied**
+
+Routed as *"can the sweep honour the precondition on a timer, when nothing enumerates that queue?"*
+Both operands are missing, not one:
+
+* **The sweep has no write-back.** The precondition gates *"correct an item **toward the \*Arr**"*.
+  Every stamp `SweepDeletions` writes is local; there is no upstream write in the pass to gate.
+* **Nothing in the production binary creates a `write_queue` row.** `internal/store/writequeue.go`
+  holds the state vocabulary and `ValidWriteQueueState` and issues **no SQL at all**. **Scope
+  searched:** every occurrence of `write_queue`/`WriteQueue` in non-test Go under `internal/` and
+  `cmd/`. The only SQL naming the table in non-test Go is `internal/db/spike` — `//go:build bench`,
+  `package main`, imported by nothing.
+
+So a guard on the timer would read an always-empty table on behalf of a pass that never writes
+upstream: a check that cannot fail. **Applied** as a rider at the precondition's own site in
+`reference/sync.md` and as ADR-0076 Decision 3, phrased as **not applicable rather than violated** —
+the precondition stands for the milestone that builds the write-back and must not be recorded as
+"satisfied" by this schedule.
+
+### LS-394.6 🚩 The corrected sentence promised deletions from two tables that do not exist — **applied**
+
+`reference/sync.md` §4 promised that after seven days the sweep would *"delete the user's tags,
+requests and playback state."* Measured against the migrations: **there is no `request` table, no
+`playback_state` table and no `play_history` table** in any migration. The one named table that does
+exist, `tag_assignment`, is the one a reaper gets WRONG — its `work_id` has no foreign key
+(`00001_initial.sql:264-265`, restore deferred at `00005_library_sync.sql:51-65`), so a naive reaper
+**orphans** the user's tags rather than deleting them.
+
+**Applied**: the sentence is corrected to a restoration window, and the reaper note in ADR-0076
+carries the full column list.
+
+### LS-394.7 🚩 Reading the migration SQL got the FK census wrong; the built schema was the primary source — **applied, and the method is recorded because it caught the reviewer**
+
+The first census was a `grep` for `REFERENCES work(id)` over the migration files, and it reported
+`write_queue.work_id` as having **no** FK — which would have put a false row in ADR-0076's reaper
+table. `write_queue`'s rebuild carries the constraint at **table level**, below the column list, and
+the grep could not see it. Re-measured with `PRAGMA foreign_key_list` over every table carrying a
+`work_id` in a **built** database at migration 13: `write_queue.work_id → work(id) ON DELETE CASCADE`.
+Exactly five columns name a work with no FK, and three of those five are **deliberate** with the
+reason written in `00005` (`sync_report`, and `library_override` twice).
+
+**Applied.** ADR-0076's table is the measured one and says which instrument produced it. Recorded
+because the failure mode generalises: a schema claim read out of migration text is a claim about text.
+
+### LS-394.8 Rebutted findings
+
+* **"Follow `RunProber`'s shape and give the reconciler an on-demand request channel — that is §7.4's
+  *plus on demand*."** **Rebutted.** §7.4's on-demand pass is already built and already wired:
+  `POST /api/v1/services/{id}/sync` → `StartImport` runs the identical pass through the identical
+  guard. A second channel would have no caller, and `import.go`'s header enumerates triggers
+  explicitly — an unreachable fourth entry makes that list wrong in the direction hardest to notice.
+  The loop follows `startCandidateSweeper`'s shape instead, and ADR-0076 *Alternatives* records why.
+* **"A bare six-hour ticker is simpler; drop the `last_full_sync_at` due-check."** **Rebutted.** It
+  makes reconciliation a function of uptime. A self-hosted binary restarted on every update would
+  reconcile never, and the failure is silent.
+* **"The 2.8 s single-writer hold is a principle-1 violation for an unattended run."** **Rebutted.**
+  `internal/db` runs WAL with a read pool and one writer, so a write transaction blocks other WRITES
+  and never a render path; and the cell a tick actually lands in is the 57 ms no-op.
+
+### LS-394.9 Named and not fixed
+
+* **`ROADMAP.md:486`'s "done when" check cannot detect this scheduler.** It reads *"any caller of
+  `SweepDeletions` other than `FullImport` (there is no scheduler …)"*. The schedule that shipped
+  calls **`FullImport`**, precisely because `SweepDeletions`' precondition is satisfiable only by a
+  real upstream read — so that grep still comes back empty while a scheduler exists, and the
+  parenthetical is now false. **Out of this slice's allocation** (which was ADR-0076 and LS-394 and
+  nothing else) and deliberately left alone; recorded so it is not re-found from scratch. The check
+  that would work is a caller of `FullImport` on a ticker, or simply the presence of
+  `cmd/usarr/reconcile.go`.
+* **§7.4 step 6's "low priority with a bounded rate" is honoured as serialisation only.** One instance
+  at a time; no priority class, no request-rate limiter. Named in ADR-0076 Decision 2 and in
+  `reference/sync.md` §4 rather than closed.
+* **`reference/sync.md` §4 step 4's drift comparison is still built for nobody**, and the schedule
+  does not change that. It is [ADR-0074](./DECISIONS.md#adr-0074)'s, unchanged.
