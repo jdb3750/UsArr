@@ -35,11 +35,22 @@ which is a different question from whether it is built. Read the code before des
 
 **1. Replica, not proxy.** Every user-facing read renders from local SQLite. No screen ever
 blocks on an *Arr or a metadata provider. The *Arrs are replication sources and command sinks,
-not a live backend. Perceived speed is the owner's number-one requirement: a change that puts
-a synchronous upstream call on a render path is wrong by default, and needs an explicit
-argument to survive review. The single deliberate exception is byte streams on UsArr's own
-protocol surfaces, and those are documented as exceptions where they occur. See
+not a live backend. Perceived speed is ~~the owner's number-one requirement~~ **a top-rank owner
+requirement**: a change that puts a synchronous upstream call on a render path is wrong by default,
+and needs an explicit argument to survive review. The single deliberate exception is byte streams on
+UsArr's own protocol surfaces, and those are documented as exceptions where they occur. See
 `docs/ARCHITECTURE.md` §2 and ADR-0004.
+
+ℹ️ **Source and one correction, 2026-08-21.** Well sourced: speed is the **first** thing Joe names
+about what the product must do — *"What this needs to do - it needs to be fast."* — in the opening
+message (`cmsg_01S5UQT5yPAMR4PFkxyLGSj9RXhqeDFjfm9b6JCFa9jyab`, 2026-08-16T00:09:09Z), grounded
+there in a named example, and returned to unprompted in
+`cmsg_01S5UQT5yPAMR4PFkxyLGSj97tLfzeUxKQNyk7iG9NtNSa`: *"i want the end usarr to not dread having to
+come to the website, click on something and wait 5 minutes for it load"*. ⚠️ **What is corrected is
+the ranking, not the importance.** *"Number-one"* is this file's ordering, not his. The only
+explicit superlative Joe uses in either message is *"the absolute UTMOST importance"*, and he
+attaches it to **not making it look like AI slop** — which is §17.1's and ADR-0025's subject, not
+this principle's. **Speed is not demoted**; it stops being ranked above the one thing he did rank.
 
 **2. Not a player.** UsArr never transcodes, never depends on FFmpeg, and does not implement
 video playback. It routes and links out to the media server that owns the bytes. Do not
@@ -80,6 +91,18 @@ research or synthesis gets an adversarial reviewer pass against strict standards
 treated as final — a reviewer that attacks assumptions, hunts for gaps and omissions, and
 verifies factual claims against primary sources. Every finding is either applied or rebutted
 in writing in `docs/REVIEW-LOG.md`. Findings are never silently dropped.
+
+ℹ️ **Source, added 2026-08-21.** Joe, project chat
+`cmsg_01S5UQT5yPAMR4PFkxyLGSj9RXhqeDFjfm9b6JCFa9jyab` (2026-08-16T00:09:09Z), the closing sentence
+of the project's opening message: *"we should have an adversarial agent with strict quality
+restrictions for providing feedback to other workers."* He raised it unprompted, so *"asked for this
+explicitly"* is exact. ⚠️ **Two things above are this file's rendering, not his words.**
+*"Mandatory"* hardens *"we should have"*; and the scope — all substantive design, research and
+synthesis — is wider than the *feedback to other workers* he named. Ruled on by Joe, 2026-08-21:
+*"i mentioned those things for sure. i don't know if i used the words "mandatory", but i do think
+they're pretty important components of the build."* **The practice stands on that ratification. The
+word is the repo's and he has flagged it as such** — so treat the pass as a strong default with a
+statable reason to skip, not as a gate he imposed.
 
 **Verify, don't assert.** Every claim about an external API, rate limit, licensing term, port,
 endpoint or field name cites a primary source: official docs, the OpenAPI spec, or the
