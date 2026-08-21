@@ -522,7 +522,10 @@ migration. That migration instead **dropped the `CHECK`**, and both open questio
 closed —
 [ADR-0039](./DECISIONS.md#adr-0039) carries the argument and the alternatives, `reference/schema.md`
 §10 carries the corrected four-step list, and `internal/db/migrations/00005_library_sync.sql`'s
-header carries it next to the SQL. `'awaiting_choice'` is excluded from `ix_wq_runnable`'s partial
+header carries it next to the SQL **as it stood when 0005 landed** — provenance rather than a current
+summary, since a merged migration is never edited. **ADR-0039 is authoritative for where the reasoning
+stands now, and its Status line is where the divergence is explained**; this section does not keep a
+second account of it. `'awaiting_choice'` is excluded from `ix_wq_runnable`'s partial
 predicate, as the lean here said it should be. The consequence for this section: the state is
 expressible with no further migration at all, but it is enforced nowhere but Go — so the seam is
 **wider and less self-policing** than the `CHECK` would have been, which is the trade ADR-0039 makes

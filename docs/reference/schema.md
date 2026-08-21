@@ -1318,8 +1318,11 @@ worth it while nothing is released. **`00001_initial.sql` is not to be edited fo
 ⚠️ **The rebuild that instruction was written for has since been decided, and not as step 1
 specified.** [ADR-0039](../DECISIONS.md#adr-0039) supersedes step 1 and carries the argument, the
 rejected alternatives and the two things the list did not name;
-`internal/db/migrations/00005_library_sync.sql`'s header carries the same reasoning beside the SQL,
-and `internal/db/testdata/schema.sql` is the current shape. Read those, not a summary here — this
+`internal/db/migrations/00005_library_sync.sql`'s header carries that reasoning **as it stood when
+0005 landed** — provenance rather than a current summary, since a merged migration is never edited and
+the ADR has gained riders since — and `internal/db/testdata/schema.sql` is the current shape. **ADR-0039
+is authoritative for where the reasoning stands now, and its Status line is where the divergence is
+explained**; this file does not keep a second account of it. Read those, not a summary here — this
 file does not own what a migration did.
 
 ⚠️ **Still owed, and not by 0005.** 0001 also drops `tag_assignment.work_id` / `.edition_id` /

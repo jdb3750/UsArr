@@ -4236,7 +4236,16 @@ lever.**
 [`FUTURE.md`](./FUTURE.md) §11 and §11.1, all three of which said the `CHECK` would *gain*
 `'awaiting_choice'`. **Closes** `REVIEW-LOG.md` **WQ-05**, recorded there as "a lean, not a
 decision". Both decisions landed in `internal/db/migrations/00005_library_sync.sql`, whose header
-carries the same reasoning next to the SQL. · ⚠️ **amended 2026-08-19** — see the block below:
+carries **the reasoning as it stood when 0005 landed**; **this ADR is authoritative for where that
+reasoning stands now.** · ⚠️ **The pointer used to claim the header carries *the same* reasoning, and
+that claim was stale by construction.** A merged migration is never edited, so 0005's header restates
+all three of decision 3's grounds unqualified — including the one struck 2026-08-17 and the one
+recorded vacuous 2026-08-21 — and it falls further behind each time this ADR gains a rider. **The
+header is therefore cited as PROVENANCE, which is permanently true and needs no maintenance, and
+never as a current summary.** ⚠️ **This Status line is the single home for that explanation.**
+[`reference/schema.md`](./reference/schema.md) §10 and [`FUTURE.md`](./FUTURE.md) §11 point here
+rather than each keeping an account of their own: four copies of an explanation are four things that
+can drift, which is exactly how this pointer came to be wrong. · ⚠️ **amended 2026-08-19** — see the block below:
 decision 1's Go declaration is **discharged** by `007e58e`, its runtime validation is **not**, and
 the obligation on *"whoever writes the first `write_queue` writer"* is **not released but made
 unavoidable**. **No decision changes**; the `CHECK` is still dropped and `work_id` still gains its
