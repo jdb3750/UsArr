@@ -261,10 +261,13 @@ func TestListLibrariesCarriesItsSources(t *testing.T) {
 	}
 }
 
-// missing_since is read, even though nothing in the tree SETS it — see
-// LibrarySource's own comment. This writes the column directly, which is the
-// only way to reach the state today, so that the field is proven to travel
-// rather than assumed to.
+// ⚠️ THIS COMMENT READ *"missing_since is read, even though nothing in the tree
+// SETS it … the only way to reach the state today"*. reconcile.go's
+// sweepContainers sets it now. The direct write below STAYS: this test is about
+// whether the column travels out of ListLibraries, and driving a whole
+// reconciliation sweep to produce one value would make a read test depend on the
+// write path it is meant to be independent of. The sweep's own stamping is
+// asserted in reconcile_test.go.
 func TestListLibrariesReportsAMissingSource(t *testing.T) {
 	s := newTestStore(t)
 	seedLibrariesCorpus(t, s)

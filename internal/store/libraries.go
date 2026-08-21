@@ -108,11 +108,20 @@ type Library struct {
 	// last library_source goes away, the row kept rather than deleted because
 	// it carries owned corrections.
 	//
-	// ⚠️ NOTHING WRITES IT. Measured over the tree: `orphaned_at` has no writer
-	// and no reader in non-test Go. It is read here because the state is
-	// §17.8's and the read is the place it becomes visible, not because the
-	// state is reachable today — a renderer that shows an "orphaned" chip is
-	// showing a state nothing can currently produce.
+	// ⚠️ THIS COMMENT READ *"NOTHING WRITES IT … a renderer that shows an
+	// 'orphaned' chip is showing a state nothing can currently produce"*, and
+	// that measurement is now false rather than merely dated. reconcile.go's
+	// sweepOrphans sets it, and clears it again when a source of the library is
+	// reported once more. WHAT IT MEANS IS NARROWER THAN "zero sources": the row
+	// count never changes, because a source that stops being reported is
+	// RETAINED and stamped missing_since. A library is orphaned when no source of
+	// it — on any instance — is still being reported.
+	//
+	// ⚠️ AND ONE CALLER STILL PRODUCES THE STATE WITHOUT THE COLUMN. See
+	// librarySourcesSQL: soft-deleting an instance hides its library_source rows
+	// from this response while the rows themselves remain, so such a library
+	// renders with no sources and an unset orphaned_at. The sweep does not run
+	// for a deleted instance and that path is not channel 4's.
 	OrphanedAt sql.NullString
 
 	// ItemCount is the number of library_member rows in this library that the
@@ -337,14 +346,16 @@ type LibrarySource struct {
 	// MissingSince is §17.8's per-source health: the upstream stopped reporting
 	// this container, and the row is retained and shown rather than dropped.
 	//
-	// ⚠️ NOTHING SETS IT. Measured: the only two statements in non-test Go that
-	// touch the column both CLEAR it — `insertLibrarySource`'s ON CONFLICT and
-	// catalogue.go's rebind both write `missing_since = NULL` — and no code
-	// path anywhere sets a non-NULL value. So the "source has gone missing"
-	// state is specified, storable, cleared on rebind, and unreachable. It is
-	// carried on this read because the sweep that sets it is the next commit
-	// and the field is the seam; it is documented as unreachable so nobody
-	// reads a screen with no missing sources as evidence that none are missing.
+	// ⚠️ THIS COMMENT READ *"NOTHING SETS IT … the 'source has gone missing'
+	// state is specified, storable, cleared on rebind, and unreachable"*. The
+	// sweep it called "the next commit" is reconcile.go's sweepContainers, and
+	// the state is now reachable. The two clearing statements it named —
+	// `insertLibrarySource`'s ON CONFLICT and catalogue.go's rebind — are
+	// unchanged and are still the only things that clear it.
+	//
+	// IT IS FIRST-OBSERVED-ABSENT, never last: the sweep stamps only a row whose
+	// missing_since is NULL, so a container missing for a week reads a week old
+	// rather than one sweep old.
 	MissingSince sql.NullString
 }
 

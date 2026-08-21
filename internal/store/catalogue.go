@@ -386,6 +386,12 @@ type BatchResult struct {
 	// Members counts library_member writes, one per applied item, on the same
 	// terms as SearchDocs.
 	Members int
+
+	// IDsReused counts §7.4 guard 1 firings: a tombstoned link whose upstream id
+	// came back carrying a DIFFERENT identity, hard-deleted rather than
+	// resurrected. It is not an error and does not fail an import; it is the one
+	// event whose absence from a report means the guard never had to act.
+	IDsReused int
 }
 
 func (r *BatchResult) add(o BatchResult) {
@@ -397,6 +403,7 @@ func (r *BatchResult) add(o BatchResult) {
 	r.Unidentified += o.Unidentified
 	r.SearchDocs += o.SearchDocs
 	r.Members += o.Members
+	r.IDsReused += o.IDsReused
 }
 
 // Add merges another result into r. Exported so an importer can accumulate
@@ -1349,6 +1356,24 @@ func (s *Store) ApplyCatalogueBatch(
 	return res, err
 }
 
+// linkLookupSQL is applyOneItem's step-1 read: which work an upstream id is
+// already bound to, and — for guard 1 — whether that binding is a tombstone and
+// what identity it was made under.
+//
+// ⚠️ IT IS A CONSTANT SO THE PLAN GUARD MEASURES THE SHIPPED STATEMENT. A test
+// that EXPLAINs its own copy of a query is green while the copy is faithful and
+// silent the moment it stops being — which is the very failure a plan guard
+// exists to catch, reproduced inside the guard. reconcile_test.go's
+// TestResurrectionLookupSeeksUxSilInFull reads this identifier, not a literal.
+//
+// `remote_kind` is the middle column of ux_sil, and dropping it degrades the
+// three-column seek to a skip-scan over every link on the instance — migration
+// 0005 sizes that at ~400k rows for a 2k-series Sonarr. It is not redundant
+// because this adapter writes only two kinds; it is what makes the index usable.
+const linkLookupSQL = `
+	SELECT work_id, deleted_at, remote_identity_hash FROM service_item_link
+	 WHERE service_instance_id = ? AND remote_kind = ? AND remote_id = ?`
+
 // applyOneItem writes one replicated item.
 //
 // It is one linear sequence of ten dependent writes, and it is deliberately not
@@ -1433,12 +1458,74 @@ func applyOneItem(
 	// ── 1. An existing link pins the work. The upstream id is authoritative for
 	// which work this is, so identity resolution does not re-run for it.
 	var workID int64
-	err := tx.QueryRowContext(ctx, `
-		SELECT work_id FROM service_item_link
-		 WHERE service_instance_id = ? AND remote_kind = ? AND remote_id = ?`,
-		instanceID, it.RemoteKind, it.RemoteID).Scan(&workID)
+	var linkDeletedAt, storedIdentity sql.NullString
+	// `remote_kind` IS IN THE WHERE CLAUSE AND MUST STAY THERE. It is the middle
+	// column of ux_sil (service_instance_id, remote_kind, remote_id); drop it and
+	// the three-column seek collapses to the leading column alone, which after
+	// ANALYZE is a range scan over every link on the instance — migration 0005's
+	// own comment sizes that at ~400k rows for a 2k-series Sonarr.
+	// TestResurrectionLookupSeeksUxSilInFull pins the plan.
+	err := tx.QueryRowContext(ctx, linkLookupSQL,
+		instanceID, it.RemoteKind, it.RemoteID).Scan(&workID, &linkDeletedAt, &storedIdentity)
 	if err != nil && !errors.Is(err, sql.ErrNoRows) {
 		return workID, res, fmt.Errorf("look up link: %w", err)
+	}
+
+	// ── 1a. GUARD 1, ID RESURRECTION (ARCHITECTURE.md §7.4, reference/sync.md §4).
+	//
+	// This upsert is about to clear `deleted_at` on a tombstoned link, which is
+	// the exact moment the 7-day window becomes a hazard rather than a safety
+	// net: the upstream reuses an id, ux_sil still matches, and an idempotent
+	// upsert rebinds NEW content onto the OLD work — poster, tags, requests,
+	// provenance and the northbound id all now naming the wrong thing.
+	//
+	// The comparison is against `remote_identity_hash`, recorded at first sight
+	// and never overwritten (see step 7), which is what makes it O(1). On a
+	// mismatch sync.md §4's pseudocode is followed literally: hard-delete the
+	// tombstone, let the item resolve as a fresh one, report it. THE TOMBSTONE
+	// CANNOT BE KEPT ALONGSIDE A NEW ROW — ux_sil is a plain UNIQUE index, not a
+	// partial one, so (instance, kind, id) admits exactly one row whatever its
+	// deleted_at says.
+	//
+	// ⚠️ A NULL STORED HASH IS "UNKNOWN", NOT "MISMATCHED", and the difference is
+	// the nightmare bug. No shipped writer can produce one — step 7 always writes
+	// the column — but treating an unreadable identity as proof of reuse would
+	// make every reappearing item a fresh work, which duplicates the library
+	// rather than corrupting one row of it.
+	//
+	// ⚠️ AND THE BLIND SPOT IS STATED RATHER THAN HIDDEN: identityHash over an
+	// item with NO external ids is the hash of an empty list, which every
+	// unidentified item shares. On a source whose ordinary state is unidentified
+	// (§6.4, ADR-0035 §1) the guard therefore certifies nothing for those items —
+	// it discriminates exactly as far as the upstream identifies its content.
+	// Widening it means widening what identityHash covers, which is a change to a
+	// value already stored on every row.
+	if workID != 0 && linkDeletedAt.Valid && storedIdentity.Valid &&
+		storedIdentity.String != it.identityHash() {
+		if _, err := tx.ExecContext(ctx, `
+			DELETE FROM service_item_link
+			 WHERE service_instance_id = ? AND remote_kind = ? AND remote_id = ?`,
+			instanceID, it.RemoteKind, it.RemoteID); err != nil {
+			return workID, res, fmt.Errorf("hard-delete resurrected link: %w", err)
+		}
+		detail, err := json.Marshal(map[string]any{
+			"abandoned_work_id":      workID,
+			"stored_identity_hash":   storedIdentity.String,
+			"incoming_identity_hash": it.identityHash(),
+			"resolution": "the tombstoned link was hard-deleted and the id resolved as a fresh item; " +
+				"the previous work keeps its own tombstone and its owned corrections",
+		})
+		if err != nil {
+			return workID, res, fmt.Errorf("encode id reuse: %w", err)
+		}
+		if err := recordSyncReport(ctx, tx, instanceID,
+			SyncReportIDReused, it.RemoteKind, it.RemoteID, string(detail)); err != nil {
+			return workID, res, err
+		}
+		res.IDsReused++
+		// The old work is NOT adopted. Everything below runs as it does for an
+		// id this instance has never reported.
+		workID = 0
 	}
 
 	// ── 2. Tier 1 of the §6.4 cascade: an exact strong external id, SAME KIND.
@@ -2511,6 +2598,15 @@ func (s *Store) Analyze(ctx context.Context) error {
 // carries no CHECK (migration 00005 says why), so a typo on either side is not a
 // constraint violation, it is a count that silently reads zero.
 const SyncReportFileWalkFailed = "file_walk_failed"
+
+// SyncReportIDReused is sync_report.kind for §7.4 guard 1: an upstream id that
+// came back after being tombstoned, carrying an identity that is not the one
+// recorded at first sight. reference/sync.md §4 names this exact spelling.
+//
+// It is NOT `identity_conflict`, which is the different event two works sharing
+// one external id produce (see IdentityConflict). Two kinds because they are two
+// facts: one says an id was reused, the other says an identifier was.
+const SyncReportIDReused = "id_reused"
 
 // RecordSyncReport appends one operational note about a sync.
 //
