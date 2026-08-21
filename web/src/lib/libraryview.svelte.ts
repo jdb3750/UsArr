@@ -21,14 +21,25 @@
  * reader from one media type to the next and then be written back under the
  * wrong one. The key is therefore a getter, read on every access.
  *
- * WHY THE KEY AND THE PARSER LIVE IN `$lib/librarygrid` AND NOT HERE. This file
- * is a `.svelte.ts` and carries runes, so `vitest.config.ts` — `environment:
- * 'node'`, no Svelte plugin — cannot import it at all. Everything a test needs
- * to hold is next door in a plain module, and what is left here is the reactive
- * holder and the two storage calls.
+ * WHY THE KEY, THE PARSER AND ⚠️ THE DECISION ITSELF LIVE IN `$lib/librarygrid`
+ * AND NOT HERE. This file is a `.svelte.ts` and carries runes, so
+ * `vitest.config.ts` — `environment: 'node'`, no Svelte plugin — cannot import
+ * it at all, and anything held in here is held by nothing. That was not a
+ * hypothetical: the getter rule above was stated as a MUST in this very comment
+ * and enforced by no test, so replacing it with a closure over a captured value
+ * left the whole gate green. `readLibraryView` and `chooseLibraryView` are next
+ * door and are unit-tested there; what is left here is the reactive holder and
+ * the two `window.localStorage` calls, which is the whole of what a rune file
+ * has to own.
  */
 import { browser } from '$app/environment';
-import { parseLibraryView, type LibraryView } from '$lib/librarygrid';
+import {
+	chooseLibraryView,
+	readLibraryView,
+	type LibraryView,
+	type LibraryViewChoice,
+	type LibraryViewStorage
+} from '$lib/librarygrid';
 
 function read(key: string): string | null {
 	if (!browser) return null;
@@ -49,6 +60,9 @@ function write(key: string, value: string): void {
 	}
 }
 
+/** The two calls, behind the port the rules next door are written against. */
+const STORAGE: LibraryViewStorage = { read, write };
+
 /**
  * The view a catalogue screen is drawing, and the setter that remembers it.
  *
@@ -58,28 +72,24 @@ function write(key: string, value: string): void {
  * so one instance is correct for them; this belongs to one screen, and a
  * singleton would outlive the component that owns it for no benefit.
  *
- * `key` IS A GETTER AND NOT A STRING. See the header: the per-type screen's key
- * changes without the component remounting.
+ * ⚠️ `key` IS A GETTER AND NOT A STRING, AND IT IS PASSED ON RATHER THAN
+ * RESOLVED HERE. See the header: the per-type screen's key changes without the
+ * component remounting, so resolving it once in this factory is the same defect
+ * as a caller passing `() => capturedKey`. Both rules are `readLibraryView`'s
+ * and `chooseLibraryView`'s, where a test can reach them.
  */
 export function createLibraryView(key: () => string) {
-	// The choice made in THIS page view, and the key it was made under. Storage
-	// answers for every other key, so a reader who switches media type sees what
-	// they last chose there rather than what they chose here.
-	let chosenKey = $state<string | undefined>(undefined);
-	let chosen = $state<LibraryView | undefined>(undefined);
+	// The choice made in THIS page view, and the key it was made under, as one
+	// `$state` object so the pair cannot be updated apart.
+	const chosen = $state<LibraryViewChoice>({ key: undefined, view: undefined });
 
 	return {
 		get current(): LibraryView {
-			const k = key();
-			if (k === chosenKey && chosen !== undefined) return chosen;
-			return parseLibraryView(read(k));
+			return readLibraryView(key, chosen, STORAGE);
 		},
 
 		set(value: LibraryView): void {
-			const k = key();
-			chosenKey = k;
-			chosen = value;
-			write(k, value);
+			chooseLibraryView(value, key, chosen, STORAGE);
 		}
 	};
 }

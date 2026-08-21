@@ -174,6 +174,83 @@ export function parseLibraryView(raw: string | null): LibraryView {
 	return LIBRARY_VIEWS.includes(raw as LibraryView) ? (raw as LibraryView) : LIBRARY_VIEW_DEFAULT;
 }
 
+/**
+ * WHAT THE SCREEN'S TOGGLE HAS BEEN SET TO IN *THIS* PAGE VIEW, AND THE KEY IT
+ * WAS SET UNDER.
+ *
+ * The key is carried WITH the value and not implied by it, because that pairing
+ * is the whole rule: a choice made on `/library/movies` answers for `movies` and
+ * for nothing else. `$lib/libraryview.svelte` holds one of these in `$state`.
+ */
+export interface LibraryViewChoice {
+	key: string | undefined;
+	view: LibraryView | undefined;
+}
+
+/**
+ * localStorage, narrowed to the two calls this needs.
+ *
+ * A PORT RATHER THAN A DIRECT CALL, so the rules below are plain functions that
+ * `vitest.config.ts`'s node environment can run. `window.localStorage` is not
+ * the interesting part of any of this — which key is read and which key is
+ * written is.
+ */
+export interface LibraryViewStorage {
+	read(key: string): string | null;
+	write(key: string, value: string): void;
+}
+
+/**
+ * THE VIEW A CATALOGUE SCREEN SHOULD DRAW, AND ⚠️ THE KEY IS A GETTER FOR A
+ * REASON THAT NOTHING USED TO ENFORCE.
+ *
+ * SvelteKit REUSES `routes/library/[type]/+page.svelte` across
+ * `/library/movies` → `/library/ebooks` rather than remounting it, so the key
+ * moves under a live component. A key resolved once at construction would then
+ * serve — and, through `chooseLibraryView`, WRITE — under the media type the
+ * reader has just left. The getter is called on every access so that cannot
+ * happen.
+ *
+ * ⚠️ THIS LIVES HERE, IN A PLAIN MODULE, BECAUSE THAT IS WHAT MAKES IT
+ * TESTABLE. It used to sit inside `$lib/libraryview.svelte.ts`, which carries
+ * runes and therefore cannot be imported by the node-environment suite at all —
+ * so the rule its own comment marked MUST was held by nothing, and replacing the
+ * getter with a closure over a captured value left the whole gate green. What is
+ * left in that file is the `$state` holder and the two `window.localStorage`
+ * calls.
+ *
+ * THE CHOICE WINS ONLY UNDER ITS OWN KEY. Storage answers for every other one,
+ * so a reader who switches media type sees what they last chose *there* rather
+ * than what they chose here.
+ */
+export function readLibraryView(
+	key: () => string,
+	chosen: LibraryViewChoice,
+	storage: LibraryViewStorage
+): LibraryView {
+	const k = key();
+	if (k === chosen.key && chosen.view !== undefined) return chosen.view;
+	return parseLibraryView(storage.read(k));
+}
+
+/**
+ * REMEMBER A CHOICE, UNDER THE KEY THAT IS CURRENT AT THE MOMENT OF THE CLICK.
+ *
+ * Both the in-memory pairing and the stored value take the SAME resolution of
+ * the getter, so the two cannot disagree about which media type was on screen.
+ */
+export function chooseLibraryView(
+	value: LibraryView,
+	key: () => string,
+	chosen: LibraryViewChoice,
+	storage: LibraryViewStorage
+): void {
+	const k = key();
+	chosen.key = k;
+	chosen.view = value;
+	storage.write(k, value);
+}
+
 /* ── 1. the three orders, and the fourth that is refused ──────────────────── */
 
 /**
