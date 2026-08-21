@@ -39,12 +39,11 @@
  * when it was written: `internal/httpapi/server.go` registers `GET /img/{key}`
  * behind the same session auth as the JSON API, and `$lib/library.posterUrl`
  * has always built that URL. What was missing was a CALLER, which is a fact
- * about `web/src` rather than about the mux — and one commit later it is a
- * different fact again, which is why the corrected sentence is a pointer and
- * not a second inventory: **read the templates.** As of this writing Home's
- * Block C draws covers in its Posters view and nothing else in `web/src` calls
- * `posterUrl` at all, so the all-types view and the six per-type grids are
- * still text.
+ * about `web/src` rather than about the mux — and it has since changed twice,
+ * which is why the corrected sentence is a pointer and not a second inventory:
+ * **read the templates.** `$lib/PosterGrid` is the one card and the one grid,
+ * and grepping its importers answers who draws covers far better than a
+ * sentence here can.
  *
  * WHY THE COPY LIVES HERE RATHER THAN IN THE TEMPLATE. `vitest.config.ts` is
  * `environment: 'node'` with no Svelte plugin, so a rule inside an `{#if}` in a

@@ -111,6 +111,69 @@ import { recentEmptyState, type RecentEmptyState } from './libraryscreen';
  * superset of `/library/recent` and shares no cursor with it (§7 preamble). */
 export const LIBRARY_BROWSE_URL = '/api/v1/library';
 
+/* ── 0. the view toggle, and the key it is remembered under ───────────────── */
+
+/**
+ * THE TWO VIEWS THE CATALOGUE SCREENS DRAW, and they are Home's two by design
+ * rather than by copying.
+ *
+ * DESIGN-DIRECTION §9.1's last bullet is the specification: *"View toggle in the
+ * toolbar, persisted client-side per media type"*, and it names the pair —
+ * Sonarr and Radarr define posters / overview / table, Navidrome offers grid and
+ * table, and *"UsArr ships table and posters in v0.1"*. `overview` is the wide
+ * row with a thumbnail beside a synopsis; that shape would put a cover inside a
+ * table row, and the same bullet says it is not required to ship first. So there
+ * is no third value here.
+ */
+export const LIBRARY_VIEWS = ['table', 'posters'] as const;
+
+export type LibraryView = (typeof LIBRARY_VIEWS)[number];
+
+/**
+ * TABLE, AND THE DEFAULT IS THE HALF OF THIS THAT IS A RULE RATHER THAN A
+ * PREFERENCE. DESIGN-DIRECTION §5.4: *"Rows and tables are the default
+ * container; a card is the exception, justified only when the item's primary
+ * content is cover art."* A grid of art is the exception a reader chooses, not
+ * the thing a catalogue opens as — and it is also the honest default while
+ * `image_asset` is written by one adapter's import pass alone, because a poster
+ * grid over a mostly keyless catalogue is mostly empty tiles.
+ */
+export const LIBRARY_VIEW_DEFAULT: LibraryView = 'table';
+
+/**
+ * ⚠️ ONE KEY PER MEDIA TYPE, WHICH IS WHAT §9.1 ASKS FOR AND WHAT HOME COULD NOT
+ * DO. `$lib/home`'s `HOME_VIEW_KEY` is a single key and says so: Home is the
+ * all-types view and there is no type to key it on. These screens are where that
+ * sentence applies — a reader who browses films as art and audiobooks as rows is
+ * expressing two settings, not changing their mind twice.
+ *
+ * THE ALL-TYPES SCREEN TAKES ITS OWN MEMBER RATHER THAN HOME'S KEY. `/library`
+ * has no media type either, but it is a different screen from Home with a
+ * different toolbar, and sharing one key would make a choice made on Home change
+ * a screen the reader was not looking at. `all` is not a `MediaType`, so it
+ * cannot collide with one.
+ *
+ * KEYS ARE CONTRACT. Renaming one silently resets every browser that has already
+ * stored a choice, exactly as `$lib/prefs.svelte` says of its three.
+ */
+export const LIBRARY_VIEW_KEY_PREFIX = 'usarr.library.view.';
+
+export function libraryViewKey(mediaType: MediaType | undefined): string {
+	return `${LIBRARY_VIEW_KEY_PREFIX}${mediaType ?? 'all'}`;
+}
+
+/**
+ * A stored view, or the default for anything that is not one of the two.
+ *
+ * ANYTHING UNRECOGNISED FALLS BACK RATHER THAN THROWING. localStorage is
+ * writable by anything running on this origin and survives a version that spelt
+ * the value differently, so an unparseable preference must not be able to take
+ * the screen down.
+ */
+export function parseLibraryView(raw: string | null): LibraryView {
+	return LIBRARY_VIEWS.includes(raw as LibraryView) ? (raw as LibraryView) : LIBRARY_VIEW_DEFAULT;
+}
+
 /* ── 1. the three orders, and the fourth that is refused ──────────────────── */
 
 /**
