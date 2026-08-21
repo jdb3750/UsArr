@@ -130,7 +130,7 @@ because no ADR ever decided it. Annotating leaves that failure mode nowhere to h
 | [0067](#adr-0067) | A pasted BookOrbit **magic link is accepted and reduced to its token**; the refusal becomes the fallback | **Accepted** — 2026-08-19; **reverses a ruling taken the same morning and records both**, because the first one was correct reasoning on a premise that turned out to be false — `ab9e0f3` refused a pasted magic-link URL on the belief that BookOrbit's copy button *"yields a URL, while POST /api/v1/auth/magic-links/login wants the bare token"*, read as *an artefact its own API cannot consume*; **reading the consumer falsified it** — `client/src/router/index.ts` declares a public `/magic` route, `MagicLinkLoginView.vue` takes `route.query.token` and strips it from history, and `useAuth.loginWithMagicLink` POSTs `{"token": raw}`, so **URL in / bare token out is an adapter BookOrbit already implements**, and `MagicLinksSettings.vue` offers the operator nothing else (the table renders the label, the account, the expiry and the use count, never the raw value); **measured at `73b7877d2fede2221b0ca360af9bfced7c3797f3`, cited as a commit because the tag `v2.6.0` was NOT verified to point at it**; **found by a live failure on the owner's install**, not by review; **leaves [ADR-0060](#adr-0060) standing and unreworded**; the price is named rather than buried — the accept rule is a **whitelist**, so an upstream token-format change would have UsArr refuse a valid credential |
 | [0068](#adr-0068) | A BookOrbit comic is an **issue**, and issues are **minted under series works**; `seriesId` null synthesizes a one-shot series, extra memberships are **recorded, not resolved** | **Accepted** — 2026-08-19; **this is the "unit of work" [ADR-0066](#adr-0066) decision 5 was waiting for** — *"The kind stays `book` until comics have a unit of work"* — so it activates that decision's two-library split rather than reopening it; **[ADR-0030](#adr-0030)'s model is applied, not amended**: `comic` is the series, `comic_issue` the issue, verified at migration `00005_library_sync.sql:256` (*"'comic' is the SERIES, 'comic_issue' the issue or chapter"*) and `00006_kavita_subtypes.sql`'s header; **the parent binding is MEASURED, not inferred** — `BookCard.seriesId` is not an arbitrary `memberships[0]` and is not null under multi-membership, it is BookOrbit's own maintained **primary** (`series-membership.service.ts`, `displayOrder = 0`, round-tripped by `syncPrimaryMetadata` and `syncPrimaryFromMetadata`, at commit `73b7877d2fede2221b0ca360af9bfced7c3797f3`); **`seriesMemberships[]` beyond the primary is RECORDED and not acted on**, on [ADR-0063](#adr-0063)'s precedent, the fuzzy tier that would resolve it staying v0.3 via `work_relation`; **`is_oneshot` is WRITTEN rather than merely tolerated** — *"a column with a DEFAULT 0 and no writer is a deaf column"*; **both residue defaults emit a `sync_report` row**, so sizing comes from instrumentation rather than from estimates; **no migration, no column, no DDL and no new wire field** — `sync_report.kind` carries no `CHECK` by design and `library.kind` already permits `'comic'`; ⚠️ **the done-check FAILS if series count equals issue count**, because that is the per-row shape [ADR-0066](#adr-0066) already pre-emptively refused |
 | [0069](#adr-0069) | The library-skips payload carries a **per-container breakdown** beside the library total; **apportioning** a library's total across its containers is refused | **Accepted** — 2026-08-20; **does not reverse [ADR-0063](#adr-0063)'s decisions** — that is a write rule and nothing in the writer, the schema or `SkipState` is touched — ⚠️ **but it DOES invalidate one of ADR-0063's recorded consequences**, *"no SQL and no plan changes"*, whose first half is now false and which carries a dated supersession in its own text; **the breakdown is keyed on the `(service_instance_id, container_kind, container_ref)` triple `sources[]` already publishes**, and the authoritative wire contract is [`reference/http-api.md`](./reference/http-api.md) §2.6a, **already amended** to a five-row field table saying the count breaks down by **container, never by reason**; **the shared statement is WIDENED, not forked** — `containerReportSQL` selects the three identity columns for both callers and the completeness caller scans and discards them, chosen on the plan guard rather than on the wasted scan, and **both guards were fired deliberately** (a fork reddens the skips plan assertion while the completeness one stays green); **`containers` is absent under `none`** and a **zero-count entry is dropped** even under `left_out`, on `items`'s own reasoning, so the entries always sum to `items`; ⚠️ **`skipMarks`' `alsoReporting` has the SAME defect on the per-row axis and is recorded OPEN, not fixed**; the measured pair is ground truth **2** / `main` **4** / the fix **2**, with the topology that produces it stated so the numbers are hand-checkable |
-| [0070](#adr-0070) | BookOrbit's **channel 3b carries arrivals only**, server-side filtered on `addedAt`; **edits and deletions are channel 4's** | **Accepted** — 2026-08-20; **scoped to BookOrbit's 3b** — [ADR-0035](#adr-0035) §2a's Kavita result is untouched and no other 3b source is re-answered, and what a later adapter inherits is the **method, not the field**: *build the delta on the field the source can actually serve, and assign what it cannot see to channel 4*; **the `updatedAt` client-side-stop shape is REFUSED**, not merely unused; **channel 4 is the same milestone**, so the reassignment defers nothing; **no migration, no column, no wire field and no code**; ⚠️ **the hand-off to channel 4 is an ASSIGNMENT, not a discharge, and is recorded OPEN** — `remote_hash` hashes nine values and credits are not among them, so the sweep as built is deaf to the same credits-only edit 3b is deaf to; ⚠️ **[`ARCHITECTURE.md`](./ARCHITECTURE.md) §7.1a is amended in the SAME MOTION, as conformance** — two sites, the client-side-stop paragraph's unstated boundary and the Watermark row's second load — and landing either without the other is not permitted; **§16.1's amendment is owed separately**; ⚠️ **every measurement is against the pinned commit `73b7877d`, read from server source this repo does not vendor**, so **nothing here is a claim about the owner's running instance**; ⚠️ **AMENDED 2026-08-20 by the slice that implements it, and the coupling is a DEPENDENCY rather than convenience batching** — Decision 1 names `after` and **excludes `between`** with its reason, the capability claim is **bounded to `73b7877d` and `v2.6.0`** with the owner's version unrecorded, and **Decisions 8-13 are added**: the **representation dependency** (sub-second precision must survive to the boundary; `internal/store/store.go:41`'s second-resolution layout would make `>` redeliver forever), §7.1a's **overlap formula RETIRED** for this source with the surviving **5 minutes recorded as a NEW, UNMEASURED constant safe in the large direction**, the **page-walk guard replaced** with its count-blind compensating-pair residual named and the phrase *"strictly better"* **banned** as an unchecked containment, ***assignment is not resolution*** stated at **every** channel-4 hand-off because **channel 4 is unbuilt**, the **wedge drill** required as a measurement rather than an intention, and the **measured-empty deviation** defended by its safe direction; the keyset verdict **keeps its conclusion and replaces its reason** — one missing filter field, `id`, not a grammar gap — and its **do-not-revisit clause is STRUCK** |
+| [0070](#adr-0070) | BookOrbit's **channel 3b carries arrivals only**, server-side filtered on `addedAt`; **edits and deletions are channel 4's** | **Accepted** — 2026-08-20; **scoped to BookOrbit's 3b** — [ADR-0035](#adr-0035) §2a's Kavita result is untouched and no other 3b source is re-answered, and what a later adapter inherits is the **method, not the field**: *build the delta on the field the source can actually serve, and assign what it cannot see to channel 4*; **the `updatedAt` client-side-stop shape is REFUSED**, not merely unused; **channel 4 is the same milestone**, so the reassignment defers nothing; **no migration, no column, no wire field and no code**; ⚠️ **the hand-off to channel 4 is an ASSIGNMENT, not a discharge, and is recorded OPEN** — `remote_hash` hashes nine values and credits are not among them, so the sweep as built is deaf to the same credits-only edit 3b is deaf to; ⚠️ **[`ARCHITECTURE.md`](./ARCHITECTURE.md) §7.1a is amended in the SAME MOTION, as conformance** — two sites, the client-side-stop paragraph's unstated boundary and the Watermark row's second load — and landing either without the other is not permitted; **§16.1's amendment is owed separately**; ⚠️ **every measurement is against the pinned commit `73b7877d`, read from server source this repo does not vendor**, so **nothing here is a claim about the owner's running instance**; ⚠️ **AMENDED 2026-08-20 by the slice that implements it, and the coupling is a DEPENDENCY rather than convenience batching** — Decision 1 names `after` and **excludes `between`** with its reason, the capability claim is **bounded to `73b7877d` and `v2.6.0`** with the owner's version unrecorded, and **Decisions 8-13 are added**: the **representation dependency** (sub-second precision must survive to the boundary; `internal/store/store.go`'s `timeLayout`, a second-resolution layout, would make `>` redeliver forever), §7.1a's **overlap formula RETIRED** for this source with the surviving **5 minutes recorded as a NEW, UNMEASURED constant safe in the large direction**, the **page-walk guard replaced** with its count-blind compensating-pair residual named and the phrase *"strictly better"* **banned** as an unchecked containment, ***assignment is not resolution*** stated at **every** channel-4 hand-off because **channel 4 is unbuilt**, the **wedge drill** required as a measurement rather than an intention, and the **measured-empty deviation** defended by its safe direction; the keyset verdict **keeps its conclusion and replaces its reason** — one missing filter field, `id`, not a grammar gap — and its **do-not-revisit clause is STRUCK** |
 | [0072](#adr-0072) | The project-manager thread **ratifies** the arm64 RSS spike's re-scope: the `make bench-rss` run gates **claiming arm64 support**, not v0.1 | **Accepted** — 2026-08-20; **ratifies a re-scope that [ADR-0001](#adr-0001) states in an agentless passive** — *"the requirement is re-scoped"*, no agent, no limit clause, no application line — and whose only record was a review-log disposition that names no ruler either, under *"Round 2 — the first code drop"*, *"6. A documented prerequisite was re-scoped, not dropped"* (⚠️ **the round qualifier is load-bearing**: that file opens a second *"6."* under Round 6); **the venue follows from the argument and not from who made it** — a review-log entry records a **disposition** and an ADR records a **decision**, so recording the ratification as a disposition would reproduce the defect one level up, a second entry asserting a thing is settled and containing nothing that settles it; ⚠️ **it quotes the ruling NARROWLY on purpose** — the limit clause drifted by two words in one relay on the day of the ruling (*"nothing **about** it"* for *"nothing **in** it"*), so the entry carries the arguments and quotes only what it verified; **the decision**: the arm64 `make bench-rss` run is *"a prerequisite to claiming arm64 support, not a prerequisite to v0.1"*, and ⚠️ **the limit clause is not optional** — *"the arm64 run remains owed before any claim of arm64 support. This moves the gate; it does not discharge the obligation, and nothing in it says arm64 works or that the x86-64 figures transfer"*, page size and core count both moving these numbers, so an arm64 result is a **second row** in ADR-0001 and never a replacement; 🚫 **the live alternative it closes** is *"the re-scope was never ratified, so the original gate stands"*, read at roughly **70/30** on 2026-08-20 and **right about the record, wrong about what to do with it** — v0.1 deploys to x86-64, the original clause gated the schema and *"the gate had already been passed unmet"* with eleven migrations since landed, and the project has operated on the re-scoped reading since 2026-08-16; **rejecting it costs no rigour** because *"the measurement stays owed against the claim it actually supports"*; **the reach is bounded by the ruling itself** — *"it covers sites carrying the pre-re-scope framing of the arm64 spike, wherever they are, and nothing else. A lane editing a sentence that is not about that has left the chain"*; ⚠️ **it states its reach and NOT which sites conform**, per `DEVELOPMENT.md` §11 *"A ruling states its reach, not the tree's current state"*, the rule this very ruling produced — **two statements the ruling as issued made about the tree failed verification** and the ADR carries neither, a corrected count being the same kind of claim; **supersedes nothing** — ADR-0001's text stands unreworded, its `Status:` line gains no mark, and this ADR supplies the author that sentence never had; **ships no code, no migration, no column, no configuration key and no wire field** |
 | [0073](#adr-0073) | Channel 3b's wire surface is a **sub-route**, `POST /api/v1/services/{id}/sync/delta`, answering **`202 Accepted`** and naming **no `libsync` type** | **Accepted** — 2026-08-21; **it takes the decision [ADR-0070](#adr-0070) explicitly did not** — that ADR *"builds nothing, changes no migration, no column and no wire field"* — and **reopens none of its channel scope**: arrivals only, `books.addedAt`, server-side filtered; **the engine was BUILT, TESTED AND UNREACHABLE**, in `internal/libsync/doc.go`'s own words *"NOTHING USER-FACING CAN TRIGGER IT, BECAUSE THERE IS NO HTTP ROUTE"*, with the route named there as the next slice rather than as *"later, which is where a thing goes to be forgotten"*; 🚫 **`?mode=` on the existing sync route is REFUSED, and the precedent only corroborates it** — `(*Server).routes`' `/library` comment splits routes *"over the SHAPE OF THE QUERY"* so that folding them would make *"the simple statement an argument-dependent special case of the filtered one"*, ⚠️ **which transfers as a TEST and not as EVIDENCE** (that pair are reads with different plans and cursor codecs; this pair are writes returning the same started-body), so the rejection rests on **the default and the typo** — an omitted or misspelled mode runs the **full import**, minutes and a whole-catalogue rewrite, returning the same `202`, where a mistyped path is a `404` — plus a **contract** that would otherwise vary by query parameter and an **audit verb** that could no longer tell a cheap poll from a rewrite; 🚫 **`200` with the run's result is REFUSED on principle 1** — `cmd/usarr`'s `deltaSyncLocked` escalates to `fullImportLocked` and [ADR-0070](#adr-0070) Decision 13 makes escalation the **deliberate** answer for every ambiguous state, so the tail is the full import's, and `internal/httpapi/ports.go`'s `CatalogueImports` already rules that *"a handler that waited for it would be principle 1's violation, since an import is minutes"*; 🚫 **naming a `libsync` type on the wire is REFUSED** on `ports.go`'s consumer-declared-port rule (*"Nothing below names an \*Arr type"*), which **forecloses a report body without a port-local struct** and is preserved by a port signature that returns only `error` and this package's sentinels; ⚠️ **THE COST IS NAMED RATHER THAN WAVED OFF** — `Progress` is nil by `delta.go`'s own requirement and a delta never stamps `last_full_sync_at`, so **a walking delta publishes no progress frame and gives no completion signal**, only a liveness re-ask, ⚠️ **with one exception that is the wrong way round** — an ESCALATED walk runs `fullImportLocked` → `runImport` with a non-nil `Progress` and so publishes the ordinary `import.progress` frames, leaving the expensive case observable and the cheap one silent — and the outcome is legible **only** in the `delta_walk` `sync_report` row `recordDeltaWalk` writes, which at `dcf3f55` **no route reads and no screen renders**; a read surface over that journal is recorded as **owed, not scheduled**; **the wire error code is `not_a_delta_source` and NOT the stored `no_delta_channel`** `errorClass` DECLARES for the same condition, per [`DEVELOPMENT.md`](./DEVELOPMENT.md) §11's prohibition on repairing a collision *"by making the values agree"* — ⚠️ **declares, not writes**: `Importer.DeltaSync` returns at its `DeltaSource` assertion ahead of every `recordDeltaWalk`, so no row carries the stored class today and the two are separated **at declaration**, the only moment at which separating them is free — ⚠️ **measured at `dcf3f55`: the two vocabularies share NOTHING** (seven `errorClass` values against thirty-one wire codes, empty intersection), so this would have been the **first** shared value; **`internal/libsync/doc.go`'s UNREACHABLE paragraph is falsified by the route and retires in the SAME MOTION**, [`reference/http-api.md`](./reference/http-api.md) owes a section carrying the observability subsection §4 has no analogue for, and §4's own `import_in_progress` sentence is falsified too — the shared guard means a running DELTA produces it on the full-sync route; **it builds no timer, no channel 4 and no tie drain**, and adds no migration, no column and no configuration key |
 
@@ -10636,6 +10636,33 @@ any version outside them, and **the owner's running version is unrecorded**. The
 the one that survives someone running something else; the unbounded one quietly becomes a claim about
 a build nobody measured.
 
+✅ **Rider 2026-08-21 — this ADR's six in-repo Go citations are converted from bare line numbers to
+file-and-symbol form. Nothing it decided moves.** The six sites, by what they now name:
+`internal/bookorbit/catalogue.go`'s `fullWalkSort` (Context §5); `internal/store/store.go`'s
+`timeLayout` (Decision 8, and the same citation in this ADR's index row, converted with it);
+`internal/libsync/bookorbit.go`'s `mapBook` and `mapComic`, and `internal/store/catalogue.go`'s
+`applyOneItem` — its step 7 `service_item_link` upsert — in the *Consequences* paragraph on
+`remote_updated_at`; that same `applyOneItem` step again in the idempotent-upsert paragraph; and
+`internal/store/catalogue.go`'s `remoteHash`, cited twice.
+
+⚠️ **The old line numbers are NOT quoted here, and that is this file's own rule rather than
+brevity** — its opening convention records a correction that *"deliberately carried **no**
+struck-quote rider, because quoting the old wording directly above the fix would have put the very
+number the correction exists to remove straight back into the file"*, on the test of *"what the
+quotation does in the document it lands in"*. **`git log -p` is where the previous form is read.**
+
+⚠️ **Most of them had already rotted, and only one still landed on its symbol** — the `timeLayout`
+citation, converted anyway, because the point is the form and not today's accuracy. **A rotted line
+number does not announce itself; it keeps resolving, just to the wrong place**, which is
+[`DEVELOPMENT.md`](./DEVELOPMENT.md) §11's own account of what this style has cost this tree.
+
+**This is a factual-form fix to a dated record, so it takes a rider and not a status mark.** Nothing
+below is reworded, no argument changes, no clause is struck, and **this ADR's `Status:` line gains
+nothing** — the citations point at the same code they always pointed at, named by an anchor a later
+edit cannot move. **The migration citation in *Consequences* — `clock_skew_secs`
+in `00001_initial.sql` — is deliberately left alone**: §11 keeps line numbers for files that are
+never edited, and a merged migration is that file.
+
 ### Context
 
 #### 1 · §7.1a does not require channel 3b to detect edits, and its own verified exemplar does not
@@ -10750,15 +10777,15 @@ keyset, cursor or `after` parameter anywhere in `BookQuery`** (`packages/types/s
 — filter, sort, pagination{page,size}, collapseSeries, q). `total` is `count(*) over()` recomputed per
 page (`:571`), so it moves under a running walk.
 
-This is §7.1a's **Page-walk stability** property meeting a concrete API: *"An ordering key that mutates
-while the walk runs reorders the result set under the cursor, so an item can be skipped."* Under pure
-offset paging that property has teeth, and **the tree already worked out which ordering survives it**
-— `fullWalkSort`'s comment at `internal/bookorbit/catalogue.go:198-228` reasons that under
-`updatedAt DESC` a book updated mid-walk moves to index 0 and shifts every later row, and any deletion
-ahead of the cursor skips a row, whereas under `addedAt ASC` a book added mid-walk *"lands at the END,
-behind the cursor, and disturbs nothing at all."* That comment is labelled *"NOT the ordering a delta
-walk will ask for"*; this ADR is the decision that makes it the ordering a delta walk asks for after
-all, on the same reasoning it already contains.
+This is §7.1a's **Page-walk stability** property meeting a concrete API: *"An ordering key that
+mutates while the walk runs reorders the result set under the cursor, so an item can be skipped."*
+Under pure offset paging that property has teeth, and **the tree already worked out which ordering
+survives it** — `fullWalkSort`'s comment in `internal/bookorbit/catalogue.go` reasons that under
+`updatedAt DESC` a book updated mid-walk moves to index 0 and shifts every later row, and any
+deletion ahead of the cursor skips a row, whereas under `addedAt ASC` a book added mid-walk *"lands
+at the END, behind the cursor, and disturbs nothing at all."* That comment is labelled *"NOT the
+ordering a delta walk will ask for"*; this ADR is the decision that makes it the ordering a delta
+walk asks for after all, on the same reasoning it already contains.
 
 #### 6 · Deletion is unrecoverable by any delta shape, so it was never 3b's to carry
 
@@ -10850,7 +10877,8 @@ own text.*** **Why that is binding rather than tidy:** otherwise the next helper
 faith by someone who never opened this ADR — re-breaks it, **and every test still passes**, because
 tests written against that helper agree with it.
 
-**The hazard is concrete and it is already in this tree**, at `internal/store/store.go:41`:
+**The hazard is concrete and it is already in this tree**, in `internal/store/store.go`'s
+`timeLayout`:
 
 ```go
 const timeLayout = "2006-01-02 15:04:05"
@@ -11134,13 +11162,14 @@ absence.**
 
 **The `remote_updated_at` column keeps its meaning and gains no reader from this, and the
 distinction between the column and the field is where a reader goes wrong.** The BookOrbit adapter
-fills `RemoteUpdatedAt` from `b.UpdatedAt` (`internal/libsync/bookorbit.go:873` for prose, `:964` for
-comics), and the link upsert writes it (`internal/store/catalogue.go:1532-1546`). **The COLUMN has no
-reader**: no `SELECT` anywhere in Go names `remote_updated_at`, so nothing reads back what was
-stored. **The FIELD does have one, and it is not incidental** — `CatalogueItem.RemoteUpdatedAt` is one
-of the nine values `remoteHash()` hashes (`internal/store/catalogue.go:2154-2160`), which is channel
-4's drift comparator. This ADR does not make either of them a delta cursor, and a later reader should
-not assume the column's presence implies the axis.
+fills `RemoteUpdatedAt` from `b.UpdatedAt` (`internal/libsync/bookorbit.go`'s `mapBook` for prose,
+its `mapComic` for comics), and the link upsert writes it — `internal/store/catalogue.go`'s
+`applyOneItem`, its step 7 `service_item_link` upsert. **The COLUMN has no reader**: no `SELECT`
+anywhere in Go names `remote_updated_at`, so nothing reads back what was stored. **The FIELD does
+have one, and it is not incidental** — `CatalogueItem.RemoteUpdatedAt` is one of the nine values
+`remoteHash()` hashes (`internal/store/catalogue.go`'s `remoteHash`), which is channel 4's drift
+comparator. This ADR does not make either of them a delta cursor, and a later reader should not
+assume the column's presence implies the axis.
 
 **§7.1a's overlap-window formula is RETIRED for this source, and this paragraph is what it
 replaced.** It read *"still has no input, and that is unchanged and still open … so the implementing
@@ -11234,14 +11263,14 @@ defensive.
 
 **⚠️ THE IDEMPOTENT UPSERT IS NOW A LOAD-BEARING DEPENDENCY OF THIS CHANNEL, NOT AN INCIDENTAL
 PROPERTY OF THE WRITE PATH.** Over-delivery is benign **only** because re-applying an item is a
-no-op. The write is
-`INSERT INTO service_item_link (…) … ON CONFLICT (service_instance_id, remote_kind, remote_id) DO
-UPDATE SET …` (`internal/store/catalogue.go:1531-1546`), and that `ON CONFLICT` clause is what absorbs
-the boundary re-read and the overlap window alike. ⚠️ **A future change to that write path — making
-the apply non-idempotent, moving it to a plain `INSERT`, or hanging a side effect off it that fires
-per apply rather than per change — would make this residual bite**, and it would bite quietly, as
-duplicated work or a duplicated side effect rather than as an error. **The dependency is written down
-here so that change is made deliberately.**
+no-op. The write is `INSERT INTO service_item_link (…) … ON CONFLICT (service_instance_id,
+remote_kind, remote_id) DO UPDATE SET …` — `internal/store/catalogue.go`'s `applyOneItem`, its step
+7 — and that `ON CONFLICT` clause is what absorbs the boundary re-read and the overlap window alike.
+⚠️ **A future change to that write path — making the apply non-idempotent, moving it to a plain
+`INSERT`, or hanging a side effect off it that fires per apply rather than per change — would make
+this residual bite**, and it would bite quietly, as duplicated work or a duplicated side effect
+rather than as an error. **The dependency is written down here so that change is made
+deliberately.**
 
 **⚠️ AND §7.1a's WATERMARK RULE NOW CARRIES A SECOND LOAD, WHICH IS WHY IT IS ALSO RECORDED AT §7.1a
 ITSELF RATHER THAN ONLY HERE.** The floor guarantee above holds **only** because the watermark is the
@@ -11326,22 +11355,21 @@ than as what exists.
 the residual with the sharpest teeth, because it is the one shaped like the defect this ADR refuses.
 `remoteHash()` hashes exactly nine values — `Title`, `SortTitle`, `OriginalTitle`, `Kind`,
 `ContainerID`, `RemotePath`, `RemoteSubtype`, `RemoteUpdatedAt`, `HasFile`
-(`internal/store/catalogue.go:2154-2160`) — and **authors, narrators, tags and genres are not among
-them**. §7.4's sweep compares `remote_hash` and refetches only the rows that drifted. So for a
-BookOrbit **credits-only edit**, the one hashed field that could have moved is `RemoteUpdatedAt`, and
-§2 is the measurement that it **does not move** on exactly those write paths. 🚩 **The sweep is
+(`internal/store/catalogue.go`'s `remoteHash`) — and **authors, narrators, tags and genres are not
+among them**. §7.4's sweep compares `remote_hash` and refetches only the rows that drifted. So for a
+BookOrbit **credits-only edit**, the one hashed field that could have moved is `RemoteUpdatedAt`,
+and §2 is the measurement that it **does not move** on exactly those write paths. 🚩 **The sweep is
 therefore deaf to the same class 3b is deaf to**, and saying "channel 4 has it" without saying this
 would reproduce, one channel over, the confident-wrong-answer shape *Alternatives rejected* §1 turns
 down. **It is recorded as OPEN and is not fixed here**: this ADR assigns the class to channel 4 and
 does not design channel 4 (*What this does NOT decide* §1), and the repair — whether `remote_hash`
-grows the credit fields, or the credit pass re-applies unconditionally on refetch, or something
-else — is channel 4's slice to take, on its own evidence. ⚠️ **AND THE ASSIGNMENT IS TO NOTHING, WHICH
-IS SAID HERE AND NOT ONLY IN DECISION 11.** ***Assignment is not resolution***, and **channel 4 is
-unbuilt**: no sweep runs, so a credits-only edit is not caught late, it is not caught. The only thing
-that repairs one today is the **manual, unprompted full import**, which is the second reason it must
-stay reachable. ⚠️ **Nothing above should be read as having
-closed it**, and a later reader who finds credits going stale has found this paragraph rather than a
-surprise.
+grows the credit fields, or the credit pass re-applies unconditionally on refetch, or something else
+— is channel 4's slice to take, on its own evidence. ⚠️ **AND THE ASSIGNMENT IS TO NOTHING, WHICH IS
+SAID HERE AND NOT ONLY IN DECISION 11.** ***Assignment is not resolution***, and **channel 4 is
+unbuilt**: no sweep runs, so a credits-only edit is not caught late, it is not caught. The only
+thing that repairs one today is the **manual, unprompted full import**, which is the second reason
+it must stay reachable. ⚠️ **Nothing above should be read as having closed it**, and a later reader
+who finds credits going stale has found this paragraph rather than a surprise.
 
 **A later reader gets the boundary in one sentence.** *Arrivals are 3b's. Everything else is the
 sweep's.* Anything that arrives at UsArr about an existing BookOrbit book — an edit, a move, a
