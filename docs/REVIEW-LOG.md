@@ -26294,8 +26294,12 @@ the reason this entry exists rather than a commit message.
 resting on it says so.** The project's opening thread was fetched **end to end at source** on
 2026-08-21 — 38 messages, 2026-08-16T00:09:09Z → 06:07:35Z, **`has_more: false`** — by the lane
 holding project-chat access. **Neither reviewer could reach it**, and the five raw dumps on disk do not
-contain it (checked by id). **That read is first-hand and is recorded as such**: a later lane without
-chat access may neither extend it nor contradict it, per this file's own division-of-labour rule in
+contain **the thread** — no reply of it appears in any of them, checked by id. ⚠️ **Its root message
+does appear**, because a thread carries its opening message's id: `cmsg_…9RXhqeDFjfm9b6JCFa9jyab`,
+2026-08-16T00:09:09Z, is on the first timeline page, and every sentence in this entry that says *the
+thread* means the fetched unit and its replies rather than that message. **That read is first-hand and
+is recorded as such**: a later lane without chat access may neither extend it nor contradict it, per
+this file's own division-of-labour rule in
 [`DEVELOPMENT.md`](./DEVELOPMENT.md)'s *An attribution to the owner carries a locator*.
 
 **Both reviewers found the same blocking defect independently (P1 = C1).** The register bullet in
@@ -26305,11 +26309,16 @@ That is amended in place above, with the mechanism that hid it — the phrase wr
 line-oriented grep misses it — and the flattened recount that found it.
 
 **Applied, with where each landed.** P1/C1, the fifth marks site, and the register's count and method:
-`DECISIONS.md` ADR-0026 §E and `LS-394.26` above. **C2**, three tellings of *"recorded once because the
+`DECISIONS.md` ADR-0026 §E and `LS-394.26` above. **P2**, `docs/PROJECT-INSTRUCTIONS.md` dismissed as a
+*"dated archive of superseded texts"* when its eighth block is the **live** settings text: amended in
+place in `LS-394.26` above, which carries the seven-superseded/one-live measurement, the better ground
+for still not editing v1.7 (it is an md5-gated verbatim copy of what was applied), and the trigger that
+closes it at the next settings revision. **C2**, three tellings of *"recorded once because the
 mechanism recurs"*: one account of record now lives in `DEVELOPMENT.md`, and ADR-0026's two copies are
 pointers with the self-refuting phrase removed. **C3**, the contradiction over whether the opening
 thread's replies were read: resolved by the source read above — the thread **was** read end to end and
-the five dumps do **not** contain it — and all four sites now name the two corpora separately.
+the five dumps do **not** contain that thread, on the carve-out above — and all four sites now name the
+two corpora separately.
 **P3/C13**, the ratification's missing address: `cmsg_…92mKCuvky88RRwSk9jLq8vE`, 2026-08-21T19:44:07Z,
 now in `CLAUDE.md` where the practice rests on it. **C4**, *"the only explicit superlative"*: bounded,
 and the counterexample (*"number one priority"*, about an agent's priority) is named in the rider a
@@ -26348,8 +26357,9 @@ and the register lead overstating their own bodies: both amended above, per file
 strike — which both reviewers named as the best-formed absence claim in the diff — overstated its own
 corpus in two places, and both are corrected.** Its method sentence said the project's opening thread
 was *"read end to end from raw tool output on disk"*; **the opening thread is not among the five dumps
-on disk at all**, checked by id. And its positive control listed *"the custom-CSS approval quoted in
-ADR-0025's Amendment"* as one of the statements the instrument surfaced; **that message
+on disk at all** — the fetched unit, per the carve-out at the top of this entry — checked by id. And
+its positive control listed *"the custom-CSS approval quoted in ADR-0025's Amendment"* as one of the
+statements the instrument surfaced; **that message
 (`cmsg_…94bkQrhhPJ4dPNrpWctD3DU`) and its text (`/super matter/i`) appear in none of the five dumps**,
 so it was never a control this instrument fired — it was resolved by a lane reading at source. Both
 sentences are corrected at the site, the two surviving controls are named with the exact patterns that
@@ -26358,8 +26368,18 @@ return them, and a **negative** control is now recorded alongside them.
 **Rebutted, and the reason recorded (C5).** The reviewer argues that `CLAUDE.md`'s replacement wording,
 *"a top-rank owner requirement"*, is **still an unsourced ranking attributed to the owner**, in a sweep
 whose subject is unsourced owner rankings. ⚠️ **The finding is correct on its merits and the wording
-stays anyway.** That exact phrase is what the owner was shown and what he approved on 2026-08-21;
-**substituting a synonym would land wording he did not sign off on**, which is the same defect this
+stays anyway.** That exact phrase is what the owner was shown and what he approved on 2026-08-21, and
+both ends of that exchange have addresses. **The question**:
+`cmsg_01S5UQT5yPAMR4PFkxyLGSj9PTp1kVLvsx5A9bWRLM3Fia`, **2026-08-21T19:41:54Z**, author **agent**,
+whose item 2 reads verbatim — bold the message's own — *"**CLAUDE.md wording, yes or no**: cite your
+opening message for "mandatory" (with a note you confirmed the substance, not that word), and soften
+"number-one" to "a top-rank owner requirement". Either answer works"*, so the replacement string was in
+front of him rather than chosen after his answer. **The answer**:
+`cmsg_01S5UQT5yPAMR4PFkxyLGSj92mKCuvky88RRwSk9jLq8vE`, **2026-08-21T19:44:07Z**, author **user**, whose
+item 2 is *"yes"*. ⚠️ **Both messages were read at source on 2026-08-21 by a lane holding project-chat
+access, and are not independently confirmed from this repository** — the same limit the top of this
+entry states, and the reason the claim gets its addresses rather than a softening.
+**Substituting a synonym would land wording he did not sign off on**, which is the same defect this
 register's neighbouring bullet exists to prevent, one step down. Applying the finding would fix a
 weaker problem by committing a stronger one. ✅ **What the finding legitimately exposes is applied**:
 the rider claiming *"What is corrected is the ranking, not the importance"* was inconsistent with a
@@ -26394,3 +26414,93 @@ closed by stating the rule rather than by changing the instrument**: *strike a c
 misquotation* — a claim survives being read through a strike, a misattributed quotation does not, and a
 struck line that still looks like a quotation of a named person is the artefact that gets re-copied.
 The withdrawn rendering is preserved under its own label, so nothing is hidden either way.
+
+### LS-394.28 The verification pass over the fix commit, and the five sentences it corrected
+
+**Verified 2026-08-21**, one pass over `b93f117..3792a2c` — the single docs-only commit that applied
+`LS-394.27`'s dispositions — re-measuring each recorded fix against the tree rather than against the
+register that claims it. ✅ **The pass found nothing blocking, and that is a result rather than an
+absence of one.** Every fix `LS-394.27` records as applied was found applied: the fifth *"four marks"*
+site (`DECISIONS.md` ADR-0026 §E) re-measures **3** on whitespace-flattened `re.findall(r'four\s+marks',
+…)`, all three of them the pre-existing sites that bullet names by text; the ratification address is in
+`CLAUDE.md`; the superlative bound holds when the two named messages are searched for ranking
+expressions; the register's corrected `git grep -nE` command reproduces its stated per-file counts
+**exactly** when re-run at the pin `b93f117`; both *"false as written"* attributions are struck; and
+both `DESIGN-DIRECTION.md` OQ-7 defects verify against the five dumps, with the repaired controls
+returning real hits and the withdrawn one returning zero. **No entry was found claiming a fix the tree
+does not show.**
+
+**What it filed, and where each landed in this commit.** ⚠️ **`LS-394.27`'s roster omitted P2.** The
+finding itself was applied — `LS-394.26` carries the full amendment about `docs/PROJECT-INSTRUCTIONS.md`
+being an archive **plus the live text**, with its trigger — but the roster that opens *"every finding is
+applied or rebutted here"* and *"**Nothing is dropped silently**"* had no `P2`, no `PROJECT-INSTRUCTIONS`
+and no `v1.7` anywhere in its span. 📌 **This is small and it matters**: the round's own blocking finding
+was a register claiming a completeness it did not have, and an index gap in the entry that records that
+finding is the same defect one level up. **Fixed:** the clause is in the *Applied* paragraph above,
+pointing at `LS-394.26`.
+
+⚠️ **`DEVELOPMENT.md`'s coverage statement carried a count produced by the instrument it forbids.** Its
+Corpus B paragraph gave the second timeline page as **103 messages**; the page holds **100**. The 103 is
+what `grep -o '"id":"cmsg_' | wc -l` returns over that dump, and three of the ids it counts sit inside
+status-message bodies rather than being messages of the page. ⚠️ **The pass filed this as *"§11 rule 8's
+exact prohibition"* and that over-reads the rule, so it is recorded here as what it is:** rule 8
+prohibits a count *from recollection* and explicitly endorses `wc`/`grep`, and this figure was measured.
+What it violates is rule 8's ground rather than its letter — *"the list is the instrument"*, and a
+substring scan of the file the list arrived in is not that list. **The rule it lands on squarely is the
+one in the same section**: treat a guard you just repaired as the least trustworthy thing in the file —
+this was in the paragraph written to *fix* a coverage defect. **Re-measured by parsing each dump's JSON
+and counting distinct `id` values in its `messages` array**, the five are **100 · 100 · 100 · 100 ·
+120**; every other figure in that statement — the five date ranges, `has_more: true` on all five, and the 55
+owner-authored messages across 517 unique — reproduces exactly. **Fixed at the site**, with the method
+now stated in the paragraph so the figure is checkable as what it is, and the wrong figure amended in
+place rather than quietly overwritten.
+
+⚠️ **`docs/RESEARCH.md` asserted an absence that one of its own cited messages falsifies.** Its ADR-0018
+note ended *"The five raw dumps this pass otherwise worked from **do not contain these messages**,
+checked by id."* Three of the four messages it cites are genuinely absent from all five
+(`…99DU68pDLpWRo5VyXgRpsyL` @ 00:26:22Z, `…92Dqyabew65JDg6cs9i4ZA8` @ 00:31:11Z,
+`…9V6REyb72SabqnJajSc3NUB` @ 00:35:12Z). The fourth — the coordinator post at **00:27:24Z**,
+`cmsg_01S5UQT5yPAMR4PFkxyLGSj94ApnBSR6BhUEnTgEcEcUNP`, whose *"before it writes the architecture docs"*
+the note quotes — **is present**, on the first timeline page, as is the opening message the note quotes
+at 00:09:09Z. ⚠️ **`DEVELOPMENT.md` and all three `DECISIONS.md` sites get this right in the same
+commit**; only `RESEARCH.md` generalised. **Fixed:** the sentence now names the three replies and the
+recommendation that are absent, says the other two are on disk, and matches the phrasing the other four
+sites already use. The coordinator post gained its address in passing, since the corrected sentence
+names it as present.
+
+⚠️ **The C5 rebuttal's ground was true, unaddressed, and unmarked.** Both the rebuttal above and the
+`CLAUDE.md` rider rested on the owner having been shown *"a top-rank owner requirement"* and having
+approved it on 2026-08-21, with **no `cmsg_` id** and without the *read at source* marker every
+neighbouring sentence of that class carries — so the one load-bearing sentence of the round's one
+rebuttal had the date only, under this commit's own rule that a locator is a date, a verbatim quotation
+and an address. ✅ **The remedy is the addresses, not a softening, because the claim is supportable:**
+the question (`cmsg_…9PTp1kVLvsx5A9bWRLM3Fia`, 19:41:54Z, author agent) puts the replacement string to
+him verbatim in its item 2, and his answer (`cmsg_…92mKCuvky88RRwSk9jLq8vE`, 19:44:07Z, author user)
+answers that item *"yes"*. **Both are attached at both sites, with the provenance marker**: read at
+source by a lane holding project-chat access, not independently confirmed from this repository.
+
+⚠️ **A NOTE, applied rather than registered: `DESIGN-DIRECTION.md`'s OQ-7 and this file said the opening
+thread is not on disk in the five dumps, and the thread's root message is.** The claim is true of every
+reply and of the thread as a fetched unit, and false of the root message — which is the very message
+OQ-7's own `/adversarial agent/i` positive control returns two sentences later, so the cell contradicted
+itself within a paragraph. 📌 **The commit already supplied the rule and did not apply it here**:
+[`DEVELOPMENT.md`](./DEVELOPMENT.md)'s *a thread carries its opening message's id, so the same string is
+both the opening message and the opening thread. Where this pass means the thread it says so in the same
+breath.* **Applied to both sentences, and to the two sibling sentences in `LS-394.27` that carried the
+same looseness** — leaving those loose while fixing the one the pass quoted would have been the same
+defect with a narrower blast radius.
+
+**Not actioned, with the reason.** The pass also noted **10 added lines exceeding 140 characters**. Not
+a class this repo gates on, and **the six files that commit touched already carried 1,700 such lines at
+`b93f117`, before it** — `git show b93f117:$f | awk 'length($0)>140' | wc -l`, summed per file, and the
+10 is the same test over the diff's added lines. So a fix here would be cosmetic churn against an
+unenforced convention rather than a regression repaired.
+
+⚠️ **Nothing in this entry is measured by `make check`.** Stated precisely, because the loose
+version — *"the gate reads no file under `docs/`"* — is false: `secrets` runs `gitleaks dir .` over the
+whole working tree, so it does open every Markdown file here, and `provenance` reads
+`docs/design/mockups/*` (`.html`, `.css`, `.js` — no Markdown, per `docs/design/provenance.mjs`'s input
+list). **Neither reads a claim.** One scans for credential patterns and the other compares input digests
+against a stamp; no target in `check` parses prose, checks a citation or resolves a `cmsg_` id. So a
+green gate over this commit is real and says nothing about it, and the instruments named in this entry
+are the whole evidence — each one named so a later lane can re-run it.

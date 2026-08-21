@@ -1747,12 +1747,22 @@ without that access may neither extend it nor contradict it.
 **Corpus B — five raw dumps of tool output captured 2026-08-21 and read off disk**, carrying **55
 owner-authored messages** between them. They are two pages of the top-level project timeline
 (**2026-08-15T23:58:04Z → 2026-08-17T14:57:30Z**, 100 messages; **2026-08-17T15:21:18Z →
-2026-08-19T20:34:30Z**, 103 messages) and three whole-thread fetches — thread
+2026-08-19T20:34:30Z**, 100 messages) and three whole-thread fetches — thread
 `cmsg_01S5UQT5yPAMR4PFkxyLGSj9J6UvMkpeCcQZWPM3YLjjQ2` (**2026-08-16T03:39:38Z → 18:58:07Z**, 100
 messages), thread `cmsg_01S5UQT5yPAMR4PFkxyLGSj9GmAPi2ZBTaTFSRKrTCaohN` (**2026-08-16T05:52:20Z →
 17:35:19Z**, 100), and thread `cmsg_01S5UQT5yPAMR4PFkxyLGSj97Xwu72fVNeDn9cNXaioNno`
-(**2026-08-16T16:17:03Z → 2026-08-17T03:43:30Z**, 120). ⚠️ **Every one of the five returned
-`has_more: true`, and none of them contains the opening thread's replies** — checked by id: the
+(**2026-08-16T16:17:03Z → 2026-08-17T03:43:30Z**, 120). 📌 **Every count above is the number of
+distinct `id` values in that dump's parsed JSON `messages` array** — the artefact, not a scan of it,
+per §11 rule 8. ⚠️ **AMENDED 2026-08-21: the second timeline page was written here as 103 and holds
+100.** The 103 came from `grep -o '"id":"cmsg_' | wc -l` over that dump, and three of the ids it counts
+sit inside status-message bodies rather than being messages of the page. 📌 **Rule 8's letter was met
+and its instrument clause was not** — the figure was measured rather than recalled, which is the
+prohibition rule 8 names, but the rule's own ground is *"the list is the instrument"*, and a substring
+scan of the file the list arrived in is not that list. **This happened in the paragraph written to fix a
+coverage defect**, which is the same rule's warning about treating a guard you just repaired as the
+least trustworthy thing in the file. Re-parsed, the five are **100 · 100 · 100 · 100 · 120**, and only
+the second timeline page moved. ⚠️ **Every one of the five returned `has_more: true`, and none of them contains
+the opening thread's replies** — checked by id: the
 00:26:22Z, 00:35:12Z and 02:31:23Z messages of that thread appear in none of the five. **Corpus B is
 therefore bounded and Corpus A is not, which is why the two are never covered by one sentence.**
 

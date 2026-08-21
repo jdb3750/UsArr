@@ -55,7 +55,11 @@ narrower claim is the one that measures.
 removed.** *"Number-one"* was this file's ordering rather than his, and **the replacement, *"a
 top-rank owner requirement"*, is still a ranking and is still attributed to him.** It is not a
 measurement and is not offered as one: **it is the exact wording the owner was shown and approved on
-2026-08-21**, which is why a milder synonym is not substituted for it here. The honest reading is that
+2026-08-21** — put to him verbatim in `cmsg_01S5UQT5yPAMR4PFkxyLGSj9PTp1kVLvsx5A9bWRLM3Fia`,
+**19:41:54Z**, whose item 2 names the replacement string itself, and answered *"yes"* at item 2 of
+`cmsg_01S5UQT5yPAMR4PFkxyLGSj92mKCuvky88RRwSk9jLq8vE`, **19:44:07Z** — which is why a milder synonym is
+not substituted for it here. ⚠️ **Both messages read at source on 2026-08-21 by a lane holding
+project-chat access, and not independently confirmed from this repository.** The honest reading is that
 speed's standing rests on his sign-off of this wording, not on a phrase of his that ranks it. **Speed
 is not demoted.**
 

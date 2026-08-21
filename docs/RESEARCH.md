@@ -973,7 +973,7 @@ transcoder."*
 > FFmpeg argument-injection RCE last year that was itself a bypass of an earlier fix)."*, and concluding
 > *"The recommendation is to delegate video playback to Jellyfin and own the hub, the unified library,
 > and identity."* A coordinator post at **00:27:24Z** explicitly invited him to object *"before it writes
-> the architecture docs"*.
+> the architecture docs"* — `cmsg_01S5UQT5yPAMR4PFkxyLGSj94ApnBSR6BhUEnTgEcEcUNP`.
 >
 > ⚠️ **What he did next is recorded as two replies rather than as a silence**, because an absence over a
 > gap and a pair of non-objecting answers are different evidence. `cmsg_01S5UQT5yPAMR4PFkxyLGSj92Dqyabew65JDg6cs9i4ZA8`
@@ -987,8 +987,12 @@ transcoder."*
 > thread was fetched end to end at source on 2026-08-21 — 38 messages, 2026-08-16T00:09:09Z →
 > 06:07:35Z, **`has_more: false`** — by a lane holding project-chat access. **That read is first-hand
 > and is not independently confirmed by anything in the tree**, and no repository-only lane can re-run
-> it or contradict it. The five raw dumps this pass otherwise worked from **do not contain these
-> messages**, checked by id.
+> it or contradict it. ⚠️ **The five raw dumps this pass otherwise worked from contain neither of his
+> two replies nor the recommendation they answer** — the 00:26:22Z, 00:31:11Z and 00:35:12Z messages of
+> that thread appear in none of the five, checked by id. **Two of the messages cited above are not in
+> that set**: the opening message at 00:09:09Z and the 00:27:24Z coordinator post are both on the first
+> timeline page, so the absence is of the thread's replies and its recommendation, not of everything
+> quoted here.
 >
 > ⚠️ **One consequence stated so it is not later mistaken for a discrepancy — and it is decided elsewhere,
 > in ADR-0018 Revision 2, which is not in question here and is not reopened by this note.** Read strictly,
