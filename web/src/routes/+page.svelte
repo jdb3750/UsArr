@@ -114,24 +114,27 @@
 	 *                    Block C is drawn off. See $lib/home, whose own note
 	 *                    records the day this stopped being hypothetical.
 	 *
-	 * AND THE FOUR THAT ARE NOT. `partial` (an import in progress) and `stale`
-	 * (an instance degraded, "showing cached data from 11:47") are both claims
-	 * about a catalogue and a per-instance sync clock.
-	 *
-	 * ⚠️ THIS USED TO READ "and neither exists". THE CLOCK HALF IS NO LONGER
-	 * TRUE, and the note is corrected rather than deleted because it is the
-	 * record of why the banner was not built. The per-instance clock is
+	 * AND THE STATES THAT ARE NOT DRAWN, WHICH IS A NARROWER SET THAN THE ONES
+	 * WITH NO DATA BEHIND THEM. `partial` (an import in progress) IS drawn, off
+	 * `$lib/home`'s `countBasis` — Block A's rows carry it as `first import
+	 * running` with no number beside it — so it is not in the set. `stale` (an
+	 * instance degraded, "showing cached data from 11:47") is, and what it wants
+	 * is the rendering rather than the clock. The clock is
 	 * `ServiceHealth.lastFullSyncAt` off GET /api/v1/services/health — which
 	 * this screen already fetches for Block B — and it is a specified instant
 	 * rather than a plausible one: the run's START, never its finish and never a
 	 * row's local write time (docs/reference/http-api.md §3.5). `null` is
-	 * "never synced" and must not be rendered as a time. What is still not
-	 * decided here is the banner itself: §17.7 wants it non-modal, naming the
-	 * instance by the user's own name, linking to Services, and NOT greying the
-	 * catalogue. Read the field off the same row as the name that goes in the
-	 * sentence — the number is per instance and there is deliberately no global
-	 * one. The
-	 * unreachable-instance FACT is real and is reported, in Block B, where it
+	 * "never synced" and must not be rendered as a time.
+	 *
+	 * ⚠️ NOTHING IN `web/` DRAWS THAT BANNER, AND IT IS BACKLOG RATHER THAN A
+	 * DECISION TAKEN HERE. §17.7 specifies the whole of it — non-modal, naming
+	 * the instance by the user's own name, linking to Services, and NOT greying
+	 * the catalogue — and none of that reaches the tree: `$lib/List.svelte`
+	 * carries a `staleNote` slot and no route passes one. Whoever builds it takes
+	 * the field off the same row as the name that goes in the sentence, because
+	 * the number is per instance and there is deliberately no global one.
+	 *
+	 * THE UNREACHABLE-INSTANCE FACT IS REAL and is reported, in Block B, where it
 	 * has a source. `scope-empty` is unreachable — ⚠️ but NOT because there is
 	 * no `library` table, which is what this said until migration 00005 created
 	 * one and `?lib=` landed on `GET /api/v1/library` (`http-api.md` §7.3). The
