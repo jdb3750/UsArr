@@ -1014,8 +1014,8 @@ Items marked 🛑 **STOPPED** are the different case: those are stopped by the d
       `content-visibility` on grid rows with explicit ARIA roles~~.** All three primitives ship.
       Home's Block C walks keyset pages of 200 — `LOAD_MORE_PAGE_SIZE`
       (`web/src/lib/list.ts:434`) against `RecentWorksMaxLimit` (`internal/store/recent.go:82-83`),
-      driven from `web/src/routes/+page.svelte:474` — with the stop rule tested: a short *or* empty
-      page that still carries a cursor does not stop the walk
+      driven from `loadRecent` (`web/src/routes/+page.svelte:798`, read at `5642d16`) — with the
+      stop rule tested: a short *or* empty page that still carries a cursor does not stop the walk
       (`web/src/lib/library.test.ts:453-466`). `web/src/lib/List.svelte` carries
       `content-visibility` with `role="table"`, `aria-rowcount` and `aria-rowindex`.
       ⚠️ The item read *"`GET /api/v1/library/recent` is the only catalogue read on the wire"* and

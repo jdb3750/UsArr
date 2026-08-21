@@ -4474,7 +4474,7 @@ asserted:
   `handleSyncService` (`internal/httpapi/imports.go:68`), which reaches `fullImportLocked` through
   `registry.StartImport` (`cmd/usarr/import.go`). It is §17.3's **Run full sync now**; its wire
   contract is `docs/reference/http-api.md` §4; and the Services screen calls it —
-  `syncService` (`web/src/lib/api.ts:1508`) from `runFullSync`
+  `syncService` (`web/src/lib/api.ts:1530`, read at `5642d16`) from `runFullSync`
   (`web/src/routes/services/+page.svelte:738`). So "sync now" exists, on the screen and on the wire.
   **There is still NO CLI subcommand.** `internal/config/flags.go` accepts exactly one positional
   form — `usarr key rotate` — and errors on every other positional, so nothing on the command line
