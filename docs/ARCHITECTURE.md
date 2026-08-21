@@ -3092,8 +3092,8 @@ is not to delete the requirement but to fund the honest, small version of it.
 **The honest, small version is the branch where the instance has a sync time**, and §17.7's other
 branch is **excluded here on purpose, so that the boundary is a scoping decision recorded now rather
 than a gap discovered later**. That branch is the instance with **no change feed at all**, whose
-sentence reads *"showing cached data from the last full compare at 09:12"*. Two reasons, and either
-alone would carry it. **No v0.1 source is in that state** — §17.7 says so in terms, in the paragraph
+sentence reads *"showing cached data from the last full compare at 09:12, 3 hours ago"*. Two
+reasons, and either alone would carry it. **No v0.1 source is in that state** — §17.7 says so in terms, in the paragraph
 that specifies the branch — so it would ship as copy no source this milestone can run is able to
 produce, which is the invented status CLAUDE.md forbids, expressed as a sentence rather than as a
 number. And telling the two branches apart on the client needs a **per-channel sync time the health
