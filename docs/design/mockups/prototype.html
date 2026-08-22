@@ -2016,8 +2016,8 @@ select[multiple] { min-height: 88px; padding: var(--sp-2); }
        fonts.css  sha256:0dc70891b71e54a747dbc1a3bebb08429fcebbfe5420836fe3e1617a834a5fc2
        index.html  sha256:650ac683cb3c6fd36efe2fd582818dee1206d2123571f6c07271d662df480b12
        libraries.html  sha256:09262b5ea637f51ed53af48ba44ef7af79e0555795492a4229936d620e298a80
-       requests.html  sha256:66fb630bda12191934ca07af673379cfc9b9fcd476562a36180e52865a9abf9b
-       search.html  sha256:835df09c4ce93750f3fa864cc985bba9e0e340a0d7e230106c94783920b64aaf
+       requests.html  sha256:720ee52a6667c805ecf070ce368eada386bd6beb8aaca5ccd5d6f2123e797276
+       search.html  sha256:edfc5dbb4e05ca3991bbcb40c259086183a7d354f92b7a0d2e40495ec3ac689f
        services.html  sha256:5690f1cb12739b7808de4f395ec1d38f466ad2f70cb203107bb7b7c11b5ef6bb
        usarr.css  sha256:382db156c560ebf75497fe6424fe4b5b56f809bd9d7ef55b38bda595299f91f9
        usarr.js  sha256:b222a9db21469126e99def655146793864d93570e7bbb130f4d72ef04003a7ee
@@ -5069,7 +5069,7 @@ aniListId, malId and comicVineId are null on every series: those fields are a Ka
             <tr role="row" aria-rowindex="2">
               <td data-col="series" class="cell-title" role="cell" aria-colindex="1"><span class="stacklabel" aria-hidden="true">Series</span>Dune: House Atreides <span class="st st--warn"><svg class="i i--sm" aria-hidden="true"><use href="#i-alert"/></svg>no identifier</span>
                 <div class="cell-sub">Kavita+ writes the identifier fields, so this series cannot be linked to another source's copy.</div></td>
-              <td data-col="publisher" role="cell" aria-colindex="2"><span class="stacklabel" aria-hidden="true">Publisher</span>BOOM! Studios</td>
+              <td data-col="publisher" role="cell" aria-colindex="2" data-copy="data"><span class="stacklabel" aria-hidden="true">Publisher</span>BOOM! Studios</td>
               <td data-col="year" class="num" role="cell" aria-colindex="3"><span class="stacklabel" aria-hidden="true">Year</span>2020</td>
               <td data-col="issues" role="cell" aria-colindex="4"><span class="stacklabel" aria-hidden="true">Issues</span><span class="avail avail--part">11 issues · #7 missing</span></td>
               <td data-col="library" role="cell" aria-colindex="5"><span class="stacklabel" aria-hidden="true">Library</span>the <strong>Comics</strong> library</td>
@@ -5364,7 +5364,7 @@ aniListId, malId and comicVineId are null on every series: those fields are a Ka
             <tr role="row" aria-rowindex="2">
               <td data-col="series" class="cell-title" role="cell" aria-colindex="1"><span class="stacklabel" aria-hidden="true">Series</span>Dune: House Atreides
                 <div class="cell-sub"><span class="st st--warn"><svg class="i i--sm" aria-hidden="true"><use href="#i-alert"/></svg>no identifier</span> Kavita+ writes the identifier fields, so this series cannot be linked to another source's copy.</div></td>
-              <td data-col="publisher" role="cell" aria-colindex="2"><span class="stacklabel" aria-hidden="true">Publisher</span>BOOM! Studios</td>
+              <td data-col="publisher" role="cell" aria-colindex="2" data-copy="data"><span class="stacklabel" aria-hidden="true">Publisher</span>BOOM! Studios</td>
               <td data-col="year" class="num" role="cell" aria-colindex="3"><span class="stacklabel" aria-hidden="true">Year</span>2020</td>
               <td data-col="issues" role="cell" aria-colindex="4"><span class="stacklabel" aria-hidden="true">Issues</span><span class="avail avail--part">11 issues · #7 missing</span></td>
               <td data-col="format" role="cell" aria-colindex="5"><span class="stacklabel" aria-hidden="true">Format</span><span class="mono">CBZ</span></td>
@@ -5822,7 +5822,7 @@ aniListId, malId and comicVineId are null on every series: those fields are a Ka
             <td data-col="indexer" class="mono" role="cell" aria-colindex="5"><span class="stacklabel" aria-hidden="true">Indexer</span>TorrentLeech</td>
             <td data-col="size" class="is-num" role="cell" aria-colindex="6"><span class="stacklabel" aria-hidden="true">Size</span>63.7 <span class="unit unit--size">GiB</span></td>
             <td data-col="grabs" class="is-num" role="cell" aria-colindex="7"><span class="stacklabel" aria-hidden="true">Grabs</span>214</td>
-            <td data-col="peers" class="is-num" role="cell" aria-colindex="8"><span class="stacklabel" aria-hidden="true">Peers</span>41 / 9<span class="sr"> — 41 seeders, 9 leechers</span></td>
+            <td data-col="peers" class="is-num" role="cell" aria-colindex="8"><span class="stacklabel" aria-hidden="true">Peers</span>41 / 9<span class="sr">. 41 seeders, 9 leechers</span></td>
             <td data-col="category" role="cell" aria-colindex="9" title="TorrentLeech files this release under Movies/UHD"><span class="stacklabel" aria-hidden="true">Category</span>movie</td>
             <td data-col="indexer-flags" role="cell" aria-colindex="10"><span class="stacklabel" aria-hidden="true">Indexer flags</span><span class="chip">internal</span> <span class="chip chip--leech">freeleech</span></td>
             <td data-col="actions" role="cell" aria-colindex="11"><span class="stacklabel" aria-hidden="true">Actions</span><div class="cell-actions">
@@ -5841,7 +5841,7 @@ aniListId, malId and comicVineId are null on every series: those fields are a Ka
             <td data-col="indexer" class="mono" role="cell" aria-colindex="5"><span class="stacklabel" aria-hidden="true">Indexer</span>TorrentLeech</td>
             <td data-col="size" class="is-num" role="cell" aria-colindex="6"><span class="stacklabel" aria-hidden="true">Size</span>63.7 <span class="unit unit--size">GiB</span></td>
             <td data-col="grabs" class="is-num" role="cell" aria-colindex="7"><span class="stacklabel" aria-hidden="true">Grabs</span>214</td>
-            <td data-col="peers" class="is-num" role="cell" aria-colindex="8"><span class="stacklabel" aria-hidden="true">Peers</span>41 / 9<span class="sr"> — 41 seeders, 9 leechers</span></td>
+            <td data-col="peers" class="is-num" role="cell" aria-colindex="8"><span class="stacklabel" aria-hidden="true">Peers</span>41 / 9<span class="sr">. 41 seeders, 9 leechers</span></td>
             <td data-col="category" role="cell" aria-colindex="9" title="TorrentLeech files this release under Movies/UHD"><span class="stacklabel" aria-hidden="true">Category</span>movie</td>
             <td data-col="indexer-flags" role="cell" aria-colindex="10"><span class="stacklabel" aria-hidden="true">Indexer flags</span><span class="chip">internal</span> <span class="chip chip--leech">freeleech</span></td>
             <td data-col="actions" role="cell" aria-colindex="11"><span class="stacklabel" aria-hidden="true">Actions</span><div class="cell-actions">
@@ -5892,7 +5892,7 @@ aniListId, malId and comicVineId are null on every series: those fields are a Ka
             <td data-col="indexer" class="mono" role="cell" aria-colindex="5"><span class="stacklabel" aria-hidden="true">Indexer</span>TorrentDay</td>
             <td data-col="size" class="is-num" role="cell" aria-colindex="6"><span class="stacklabel" aria-hidden="true">Size</span>11.3 <span class="unit unit--size">GiB</span></td>
             <td data-col="grabs" class="is-num" role="cell" aria-colindex="7"><span class="stacklabel" aria-hidden="true">Grabs</span>512</td>
-            <td data-col="peers" class="is-num" role="cell" aria-colindex="8"><span class="stacklabel" aria-hidden="true">Peers</span>122 / 18<span class="sr"> — 122 seeders, 18 leechers</span></td>
+            <td data-col="peers" class="is-num" role="cell" aria-colindex="8"><span class="stacklabel" aria-hidden="true">Peers</span>122 / 18<span class="sr">. 122 seeders, 18 leechers</span></td>
             <td data-col="category" role="cell" aria-colindex="9" title="TorrentDay files this release under Movies/HD"><span class="stacklabel" aria-hidden="true">Category</span>movie</td>
             <td data-col="indexer-flags" class="muted" role="cell" aria-colindex="10"><span class="stacklabel" aria-hidden="true">Indexer flags</span><span class="sr">Flags are </span>none reported<span class="sr">: the indexer sent an empty list, which is not a claim that the download counts fully toward ratio</span></td>
             <td data-col="actions" role="cell" aria-colindex="11"><span class="stacklabel" aria-hidden="true">Actions</span><div class="cell-actions">
@@ -5931,7 +5931,7 @@ aniListId, malId and comicVineId are null on every series: those fields are a Ka
             <td data-col="indexer" class="mono" role="cell" aria-colindex="5"><span class="stacklabel" aria-hidden="true">Indexer</span>IPTorrents</td>
             <td data-col="size" class="is-num" role="cell" aria-colindex="6"><span class="stacklabel" aria-hidden="true">Size</span>8.0 <span class="unit unit--size">GiB</span></td>
             <td data-col="grabs" class="is-num" role="cell" aria-colindex="7"><span class="stacklabel" aria-hidden="true">Grabs</span>98</td>
-            <td data-col="peers" class="is-num" role="cell" aria-colindex="8"><span class="stacklabel" aria-hidden="true">Peers</span>64 / 5<span class="sr"> — 64 seeders, 5 leechers</span></td>
+            <td data-col="peers" class="is-num" role="cell" aria-colindex="8"><span class="stacklabel" aria-hidden="true">Peers</span>64 / 5<span class="sr">. 64 seeders, 5 leechers</span></td>
             <td data-col="category" role="cell" aria-colindex="9" title="IPTorrents files this release under Movies/HD"><span class="stacklabel" aria-hidden="true">Category</span>movie</td>
             <td data-col="indexer-flags" role="cell" aria-colindex="10"><span class="stacklabel" aria-hidden="true">Indexer flags</span><span class="chip chip--leech">halfleech</span></td>
             <td data-col="actions" role="cell" aria-colindex="11"><span class="stacklabel" aria-hidden="true">Actions</span><div class="cell-actions">
@@ -5950,7 +5950,7 @@ aniListId, malId and comicVineId are null on every series: those fields are a Ka
             <td data-col="indexer" class="mono" role="cell" aria-colindex="5"><span class="stacklabel" aria-hidden="true">Indexer</span>PassThePopcorn</td>
             <td data-col="size" class="is-num" role="cell" aria-colindex="6"><span class="stacklabel" aria-hidden="true">Size</span>22.6 <span class="unit unit--size">GiB</span></td>
             <td data-col="grabs" class="is-num" role="cell" aria-colindex="7"><span class="stacklabel" aria-hidden="true">Grabs</span>77</td>
-            <td data-col="peers" class="is-num" role="cell" aria-colindex="8"><span class="stacklabel" aria-hidden="true">Peers</span>19 / 2<span class="sr"> — 19 seeders, 2 leechers</span></td>
+            <td data-col="peers" class="is-num" role="cell" aria-colindex="8"><span class="stacklabel" aria-hidden="true">Peers</span>19 / 2<span class="sr">. 19 seeders, 2 leechers</span></td>
             <td data-col="category" role="cell" aria-colindex="9" title="PassThePopcorn files this release under Movies/UHD"><span class="stacklabel" aria-hidden="true">Category</span>movie</td>
             <td data-col="indexer-flags" role="cell" aria-colindex="10"><span class="stacklabel" aria-hidden="true">Indexer flags</span><span class="chip">internal</span> <span class="chip">golden</span></td>
             <td data-col="actions" role="cell" aria-colindex="11"><span class="stacklabel" aria-hidden="true">Actions</span><div class="cell-actions">
@@ -5984,7 +5984,7 @@ aniListId, malId and comicVineId are null on every series: those fields are a Ka
             <td data-col="indexer" class="mono" role="cell" aria-colindex="5"><span class="stacklabel" aria-hidden="true">Indexer</span>TorrentLeech</td>
             <td data-col="size" class="is-num" role="cell" aria-colindex="6"><span class="stacklabel" aria-hidden="true">Size</span>8.6 <span class="unit unit--size">GiB</span></td>
             <td data-col="grabs" class="is-num" role="cell" aria-colindex="7"><span class="stacklabel" aria-hidden="true">Grabs</span>402</td>
-            <td data-col="peers" class="is-num" role="cell" aria-colindex="8"><span class="stacklabel" aria-hidden="true">Peers</span>88 / 11<span class="sr"> — 88 seeders, 11 leechers</span></td>
+            <td data-col="peers" class="is-num" role="cell" aria-colindex="8"><span class="stacklabel" aria-hidden="true">Peers</span>88 / 11<span class="sr">. 88 seeders, 11 leechers</span></td>
             <td data-col="category" role="cell" aria-colindex="9" title="TorrentLeech files this release under Movies/HD"><span class="stacklabel" aria-hidden="true">Category</span>movie</td>
             <td data-col="indexer-flags" class="muted" role="cell" aria-colindex="10"><span class="stacklabel" aria-hidden="true">Indexer flags</span><span class="sr">Flags are </span>none reported<span class="sr">: the indexer sent an empty list, which is not a claim that the download counts fully toward ratio</span></td>
             <td data-col="actions" role="cell" aria-colindex="11"><span class="stacklabel" aria-hidden="true">Actions</span><div class="cell-actions">
@@ -6002,7 +6002,7 @@ aniListId, malId and comicVineId are null on every series: those fields are a Ka
             <td data-col="indexer" class="mono" role="cell" aria-colindex="5"><span class="stacklabel" aria-hidden="true">Indexer</span>HDBits</td>
             <td data-col="size" class="is-num" role="cell" aria-colindex="6"><span class="stacklabel" aria-hidden="true">Size</span>69.8 <span class="unit unit--size">GiB</span></td>
             <td data-col="grabs" class="is-num" role="cell" aria-colindex="7"><span class="stacklabel" aria-hidden="true">Grabs</span>12</td>
-            <td data-col="peers" class="is-num" role="cell" aria-colindex="8"><span class="stacklabel" aria-hidden="true">Peers</span>6 / 1<span class="sr"> — 6 seeders, 1 leechers</span></td>
+            <td data-col="peers" class="is-num" role="cell" aria-colindex="8"><span class="stacklabel" aria-hidden="true">Peers</span>6 / 1<span class="sr">. 6 seeders, 1 leechers</span></td>
             <td data-col="category" role="cell" aria-colindex="9" title="HDBits files this release under Movies/UHD"><span class="stacklabel" aria-hidden="true">Category</span>movie</td>
             <td data-col="indexer-flags" role="cell" aria-colindex="10"><span class="stacklabel" aria-hidden="true">Indexer flags</span><span class="chip">internal</span></td>
             <td data-col="actions" role="cell" aria-colindex="11"><span class="stacklabel" aria-hidden="true">Actions</span><div class="cell-actions">
@@ -6237,7 +6237,7 @@ aniListId, malId and comicVineId are null on every series: those fields are a Ka
             <td data-col="indexer" class="mono" role="cell" aria-colindex="5"><span class="stacklabel" aria-hidden="true">Indexer</span>MyAnonaMouse</td>
             <td data-col="size" class="is-num" role="cell" aria-colindex="6"><span class="stacklabel" aria-hidden="true">Size</span>650 <span class="unit unit--size">MiB</span></td>
             <td data-col="grabs" class="is-num" role="cell" aria-colindex="7"><span class="stacklabel" aria-hidden="true">Grabs</span>1,904</td>
-            <td data-col="peers" class="is-num" role="cell" aria-colindex="8"><span class="stacklabel" aria-hidden="true">Peers</span>62 / 3<span class="sr"> — 62 seeders, 3 leechers</span></td>
+            <td data-col="peers" class="is-num" role="cell" aria-colindex="8"><span class="stacklabel" aria-hidden="true">Peers</span>62 / 3<span class="sr">. 62 seeders, 3 leechers</span></td>
             <td data-col="category" role="cell" aria-colindex="9" title="MyAnonaMouse files this release under Audio/Audiobook"><span class="stacklabel" aria-hidden="true">Category</span>book · audiobook</td>
             <td data-col="actions" role="cell" aria-colindex="10"><span class="stacklabel" aria-hidden="true">Actions</span><div class="cell-actions">
               <button type="button" class="btn btn--sm" aria-disabled="true"><svg class="i i--sm" aria-hidden="true"><use href="#i-download"/></svg>Grab</button>
@@ -6267,7 +6267,7 @@ aniListId, malId and comicVineId are null on every series: those fields are a Ka
             <td data-col="indexer" class="mono" role="cell" aria-colindex="5"><span class="stacklabel" aria-hidden="true">Indexer</span>MyAnonaMouse</td>
             <td data-col="size" class="is-num" role="cell" aria-colindex="6"><span class="stacklabel" aria-hidden="true">Size</span>230 <span class="unit unit--size">MiB</span></td>
             <td data-col="grabs" class="is-num" role="cell" aria-colindex="7"><span class="stacklabel" aria-hidden="true">Grabs</span>612</td>
-            <td data-col="peers" class="is-num" role="cell" aria-colindex="8"><span class="stacklabel" aria-hidden="true">Peers</span>18 / 1<span class="sr"> — 18 seeders, 1 leechers</span></td>
+            <td data-col="peers" class="is-num" role="cell" aria-colindex="8"><span class="stacklabel" aria-hidden="true">Peers</span>18 / 1<span class="sr">. 18 seeders, 1 leechers</span></td>
             <td data-col="category" role="cell" aria-colindex="9" title="MyAnonaMouse files this release under Audio/Audiobook"><span class="stacklabel" aria-hidden="true">Category</span>book · audiobook</td>
             <td data-col="actions" role="cell" aria-colindex="10"><span class="stacklabel" aria-hidden="true">Actions</span><div class="cell-actions">
               <button type="button" class="btn btn--sm" data-act="grab"><svg class="i i--sm" aria-hidden="true"><use href="#i-download"/></svg>Grab</button>
@@ -6300,7 +6300,7 @@ aniListId, malId and comicVineId are null on every series: those fields are a Ka
             <td data-col="indexer" class="mono" role="cell" aria-colindex="5"><span class="stacklabel" aria-hidden="true">Indexer</span>Bibliotik</td>
             <td data-col="size" class="is-num" role="cell" aria-colindex="6"><span class="stacklabel" aria-hidden="true">Size</span>4.0 <span class="unit unit--size">MiB</span></td>
             <td data-col="grabs" class="is-num" role="cell" aria-colindex="7"><span class="stacklabel" aria-hidden="true">Grabs</span>241</td>
-            <td data-col="peers" class="is-num" role="cell" aria-colindex="8"><span class="stacklabel" aria-hidden="true">Peers</span>9 / 0<span class="sr"> — 9 seeders, 0 leechers</span></td>
+            <td data-col="peers" class="is-num" role="cell" aria-colindex="8"><span class="stacklabel" aria-hidden="true">Peers</span>9 / 0<span class="sr">. 9 seeders, 0 leechers</span></td>
             <td data-col="category" role="cell" aria-colindex="9" title="Bibliotik files this release under Books/EBook"><span class="stacklabel" aria-hidden="true">Category</span>book · ebook</td>
             <td data-col="actions" role="cell" aria-colindex="10"><span class="stacklabel" aria-hidden="true">Actions</span><div class="cell-actions">
               <button type="button" class="btn btn--sm" data-act="grab"><svg class="i i--sm" aria-hidden="true"><use href="#i-download"/></svg>Grab</button>
