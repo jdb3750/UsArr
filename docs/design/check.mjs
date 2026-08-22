@@ -2158,34 +2158,83 @@ head('1b. §13 copy bans, over rendered chrome text, cells included');
    *   declared as `hidden` on an element the sweep does not draw.
    *
    *   The rendering test cuts INSIDE `aria-hidden="true"`, which is gated on
-   *   the text side: only the markings over text the walk would have read are
-   *   counted, and on 2026-08-22 that was 5 of 1,123. The other 1,118
-   *   are the `.stacklabel` responsive-table duplicates, every one of them
-   *   `display: none` at the width this sweep runs at, and every one of them a
-   *   label already read once from the `<th>` it duplicates. Putting that
-   *   population under a ceiling would be putting the mockup's TABLE-CELL
-   *   COUNT under a ceiling -- it rises by about five with every row anybody
-   *   adds, so the line would go red on ordinary authoring and the number
-   *   would get raised without thought, which is worse than not gating it and
-   *   is the practice the floor block above exists to end. On the ATTRIBUTE
+   *   the text side: only the markings whose DECLARING ELEMENT draws a box are
+   *   counted, and on 2026-08-22 that was 5 of 1,123.
+   *
+   *   ⚠️ THAT IS NOT A TEST OF WHETHER THE WALK WOULD HAVE READ THE TEXT, and
+   *   the pass line used to say it was -- "cut only text the rendered walk was
+   *   never going to read". FALSE, and falsified from inside this file: the
+   *   walk attributes a text node to its nearest BLOCKISH ancestor and tests
+   *   that ancestor's visibility, never the node's own inline chain, which is
+   *   the welding defect the run-cutting comment in the text collector
+   *   describes at length. FIRED 2026-08-22: lifting `aria-hidden` off the one
+   *   `.stacklabel` in requests.html's "What Prowlarr reports" cell took the
+   *   corpus from 13411 to 13413. Those 1,118 markings removed 4,464 strings
+   *   the walk would otherwise have read, and that figure is now measured and
+   *   printed beside THEM rather than folded into the counted elements' total,
+   *   where it made 1,206 read as 5,670.
+   *
+   *   THEY ARE STILL OUTSIDE THE CEILING, on the reason below rather than on
+   *   that one. All 1,118 are `.stacklabel` responsive-table duplicates --
+   *   measured, not assumed: every unseen marking recorded over the whole
+   *   sweep was a `span.stacklabel` -- every one `display: none` at the width
+   *   this sweep runs at, and 1,108 of them a label already read once from the
+   *   `<th>` it duplicates. ⚠️ NOT ALL 1,118: the other ten read "Accept" in a
+   *   table whose first column header reads "Decision", each beside a `.sr`
+   *   label the corpus does read. Putting that population under a ceiling
+   *   would be putting the mockup's TABLE-CELL COUNT under a ceiling -- the
+   *   1,118 spans are one apiece on 1,118 of the 1,148 cells in the 34 tables
+   *   that use them, so the count rises by one per cell added. FIRED
+   *   2026-08-22: duplicating one four-column row in requests.html took it from
+   *   1,118 to 1,122. The line would go red on ordinary authoring and the
+   *   number would get raised without thought, which is worse than not gating
+   *   it and is the practice the floor block above exists to end. On the ATTRIBUTE
    *   side there is no such population and no such test: every marking that
    *   took a string is counted, drawn or not, which is what makes the
    *   `[placeholder]` drill above red.
    *
    *   5. THE §17 FLOOR GUARDS A NET COUNT, so compensated removal is
    *   invisible to it: a commit deleting two specified strings and adding two
-   *   others moves the population by zero. ENUMERATED HERE 2026-08-22 rather
-   *   than reasoned, over the 486 commit/parent pairs reachable from `git log
-   *   --full-history -- docs/ARCHITECTURE.md` (303 commits): 29 pairs carry a
-   *   §17 span present in the parent and absent in the child, 77 spans are
-   *   removed across the whole history, and there is NOT ONE net decrease --
-   *   `9fb64fa51` <- `512bbb605` removed 3 at 73 -> 73, `809f13d9b` <-
-   *   `3c0e7f91e` removed 2 at 57 -> 57, `34e9322e0` <- `574154103` removed 2
-   *   at 57 -> 57. This is a limit on what the floor SEES and not a
-   *   falsification of why it sits at 75: the conclusion hole 3 rests on was
-   *   control-validated in the same enumeration, and across those same 486
-   *   pairs a §17 SUBSECTION NUMBER present in the parent and absent in the
-   *   child happens 0 times.
+   *   others moves the population by zero. ENUMERATED rather than reasoned, and
+   *   RE-DERIVED 2026-08-22 under a rule that is now written down -- the figures
+   *   below used to stand without one, which is the same defect this hole goes
+   *   on to name for the control: an enumeration whose keying is unstated is an
+   *   enumeration nobody can re-run, and two people re-running it got two
+   *   answers.
+   *
+   *   THE RULE, in full, so it replays. COMMITS: `git log --full-history
+   *   --format='%H %P' -- docs/ARCHITECTURE.md` from the branch tip -- 303
+   *   commits, 118 with one parent and 185 merges with two, so 488
+   *   commit/parent pairs. COMPARABLE PAIRS: 486. The two dropped have a parent
+   *   with no §17 to compare against -- `7fe2060e6` <- `a632ae1e5`, whose
+   *   parent has no ARCHITECTURE.md at all, and `7dbfbcc46` <- `30faf2353`,
+   *   whose parent has the file without the section. SPANS: exactly what the
+   *   live sweep extracts, slice from the first `\n## 17. ` to the next
+   *   `\n## `, match the italic-quoted form with `\*"([^"]+)"\*` over that
+   *   slice, collapse each capture's whitespace, drop empties. COMPARISON:
+   *   multiset, parent minus child.
+   *
+   *   WHAT THAT RULE PRODUCES: 29 pairs carry a §17 span present in the parent
+   *   and absent in the child, 77 spans are removed across the whole history,
+   *   and there is NOT ONE net decrease -- `9fb64fa51` <- `512bbb605` removed 3
+   *   at 73 -> 73, `809f13d9b` <- `3c0e7f91e` removed 2 at 57 -> 57,
+   *   `34e9322e0` <- `574154103` removed 2 at 57 -> 57. It is stable under the
+   *   variations worth trying: set instead of multiset, and the `### 17.x`
+   *   subsections instead of the whole section, return 29 and 77 as well.
+   *
+   *   ⚠️ ONE VARIATION DOES NOT, AND IT IS THE ONE THAT LOOKS HARMLESS.
+   *   Dropping the whitespace collapse returns 30 and 78. The extra pair is
+   *   `53ff58048` <- `74ea1e569`, where the span *"this count may be short"*
+   *   was RE-WRAPPED across a line break and nothing else -- a removal and an
+   *   addition of the same sentence. The collapse is in the live extractor, so
+   *   29 and 77 are the figures for the population this floor actually counts,
+   *   and an independent re-derivation returning 30 and 78 is that pair and
+   *   only that pair.
+   *
+   *   This is a limit on what the floor SEES and not a falsification of why it
+   *   sits at 75: the conclusion hole 3 rests on was control-validated in the
+   *   same enumeration, and across those same 486 pairs a §17 SUBSECTION NUMBER
+   *   present in the parent and absent in the child happens 0 times.
    *
    *   ⚠️ THE CONTROL IS KEYED ON THE NUMBER, AND IT MATTERS WHICH. Keyed on
    *   the heading TEXT the same enumeration returns 4 pairs, not 0 -- and all
@@ -2367,16 +2416,26 @@ head('1b. §13 copy bans, over rendered chrome text, cells included');
      declares it. Sets, not counters: one marking is recorded once however many
      of the combinations render it. `unseen` holds the markings that sit on an
      element rendering no box, which are reported and not gated. See
-     OPTOUT_CEILING below for both decisions. */
+     OPTOUT_CEILING below for both decisions.
+
+     THE STRINGS ARE SPLIT THE SAME WAY THE ELEMENTS ARE, and that is the whole
+     reason `optoutUnseenStrings` exists. A single total over both populations
+     gets printed beside the COUNTED elements and reads as theirs: on
+     2026-08-22 it printed 5670 next to "12 element(s)" that had removed 1206,
+     with 4464 of the difference belonging to the 1118 markings the same
+     sentence calls "further". Two populations, two totals, each printed where
+     it belongs. */
   const MECHS = ['data', 'statebar', 'ariaHidden'];
   const optoutEls = { data: new Set(), statebar: new Set(), ariaHidden: new Set() };
   const optoutUnseen = { data: new Set(), statebar: new Set(), ariaHidden: new Set() };
   const optoutStrings = { data: 0, statebar: 0, ariaHidden: 0 };
+  const optoutUnseenStrings = { data: 0, statebar: 0, ariaHidden: 0 };
   const absorb = (res) => {
     for (const m of MECHS) {
       for (const q of res.marks[m]) optoutEls[m].add(q);
       for (const q of res.unseen[m]) optoutUnseen[m].add(q);
       optoutStrings[m] += res.skipped[m];
+      optoutUnseenStrings[m] += res.skippedUnseen[m];
     }
   };
   /* §17's copy is counted apart from `strings` on purpose. STRING_FLOOR's
@@ -2663,6 +2722,7 @@ head('1b. §13 copy bans, over rendered chrome text, cells included');
       const attrsRead = await page.evaluate(({ s, ATTRS }) => {
         const out = [];
         const skipped = { data: 0, statebar: 0, ariaHidden: 0 };
+        const skippedUnseen = { data: 0, statebar: 0, ariaHidden: 0 };
         const marks = { data: [], statebar: [], ariaHidden: [] };
         const unseen = { data: [], statebar: [], ariaHidden: [] };
         const path = window.__usarrMarkPath;
@@ -2679,7 +2739,7 @@ head('1b. §13 copy bans, over rendered chrome text, cells included');
            ceiling stayed green at 12. `unseen` is kept -- the shape is shared
            with the text collector, where the test IS right -- and stays empty
            on this side. */
-        const mark = (m, el) => { marks[m].push(path(el)); };
+        const mark = (m, el) => { marks[m].push(path(el)); return true; };
         const root = document.querySelector('#pg-' + s);
         const chrome = [root, document.querySelector('.topbar'), document.querySelector('.sidebar')]
           .filter(Boolean);
@@ -2718,7 +2778,7 @@ head('1b. §13 copy bans, over rendered chrome text, cells included');
             out.push(...mine);
           });
         }
-        return { attrs: out, skipped, marks, unseen };
+        return { attrs: out, skipped, skippedUnseen, marks, unseen };
       }, { s: screen, ATTRS });
       absorb(attrsRead);
       for (const a of attrsRead.attrs) {
@@ -2775,13 +2835,24 @@ head('1b. §13 copy bans, over rendered chrome text, cells included');
          * walk tests each node's own ancestry, so the variants stay apart. */
         const out = [];
         const skipped = { data: 0, statebar: 0, ariaHidden: 0 };
+        const skippedUnseen = { data: 0, statebar: 0, ariaHidden: 0 };
         const marks = { data: [], statebar: [], ariaHidden: [] };
         const unseen = { data: [], statebar: [], ariaHidden: [] };
         const path = window.__usarrMarkPath;
         if (!path) throw new Error('the mark-path helper is not installed on this page');
         /* Same split as the attribute collector above, and for the same
-           reason: the ceiling is on markings a sighted user is looking at. */
-        const mark = (m, el) => { (el.getClientRects().length ? marks : unseen)[m].push(path(el)); };
+           reason: the ceiling is on markings a sighted user is looking at.
+           IT RETURNS WHICH SIDE IT PUT THE MARKING ON, because the strings the
+           marking removed have to be split the same way the markings are: a
+           total that pools both and is then printed beside the counted
+           elements attributes the unseen population's strings to elements that
+           did not remove them. That was the defect: on 2026-08-22 it printed
+           5670 beside 12 elements that removed 1206. */
+        const mark = (m, el) => {
+          const seen = el.getClientRects().length > 0;
+          (seen ? marks : unseen)[m].push(path(el));
+          return seen;
+        };
         const root = document.querySelector('#pg-' + s);
         const BLOCKISH = /^(block|flex|grid|list-item|table-caption)$/;
         const blockOf = (n) => {
@@ -2810,7 +2881,17 @@ head('1b. §13 copy bans, over rendered chrome text, cells included');
         const flush = () => {
           const t = run.replace(/\s+/g, ' ').trim();
           if (t) {
-            if (isData) { skipped.data++; for (const el of runData) mark('data', el); }
+            if (isData) {
+              /* A run can lie under more than one declaring element, so the
+                 string goes to the counted side if ANY of them is counted --
+                 the run WAS removed by a counted marking then. `runData` is
+                 never empty while `isData` holds; the fallback keeps a string
+                 on the counted side rather than losing it if that ever
+                 changes. */
+              let seen = runData.length === 0;
+              for (const el of runData) { if (mark('data', el)) seen = true; }
+              (seen ? skipped : skippedUnseen).data++;
+            }
             else out.push(t);
           }
           run = ''; runData = [];
@@ -2825,7 +2906,7 @@ head('1b. §13 copy bans, over rendered chrome text, cells included');
           if (p.closest('[hidden]')) continue;
           const bar = p.closest('.statebar');         /* the mockup's own scaffolding */
           if (bar) {
-            if (n.nodeValue.trim() && shows(n)) { mark('statebar', bar); skipped.statebar++; }
+            if (n.nodeValue.trim() && shows(n)) { (mark('statebar', bar) ? skipped : skippedUnseen).statebar++; }
             continue;
           }
           /* CUT THE RUN AT A DECORATIVE DUPLICATE, and do not merely drop it.
@@ -2843,7 +2924,7 @@ head('1b. §13 copy bans, over rendered chrome text, cells included');
              `continue` so the sides do not weld to each other either. */
           const ah = p.closest('[aria-hidden="true"]');
           if (ah) {
-            if (n.nodeValue.trim() && shows(n)) { mark('ariaHidden', ah); skipped.ariaHidden++; }
+            if (n.nodeValue.trim() && shows(n)) { (mark('ariaHidden', ah) ? skipped : skippedUnseen).ariaHidden++; }
             flush(); continue;
           }
           /* The declared opt-out. It cuts the run for the same reason: a
@@ -2861,7 +2942,7 @@ head('1b. §13 copy bans, over rendered chrome text, cells included');
           run += n.nodeValue;
         }
         flush();
-        return { text: out, skipped, marks, unseen };
+        return { text: out, skipped, skippedUnseen, marks, unseen };
       }, screen);
       absorb(r);
       for (const t of r.text) checkCopy(where, t);
@@ -2877,6 +2958,7 @@ head('1b. §13 copy bans, over rendered chrome text, cells included');
   const markedEls = MECHS.reduce((a, m) => a + optoutN[m], 0);
   const markedStrings = MECHS.reduce((a, m) => a + optoutStrings[m], 0);
   const unrenderedEls = MECHS.reduce((a, m) => a + optoutUnseen[m].size, 0);
+  const unrenderedStrings = MECHS.reduce((a, m) => a + optoutUnseenStrings[m], 0);
   const uniq = [...new Set(bad)];
   if (uniq.length) {
     fail(`§13 copy: ${uniq.length} violation(s) in user-visible text`);
@@ -2914,7 +2996,7 @@ head('1b. §13 copy bans, over rendered chrome text, cells included');
     ok(`§13 copy opt-outs: ${markedEls} element(s) carry a declared exclusion that removed copy (ceiling ${OPTOUT_CEILING}, so one more fails) — ` +
       `${optoutN.data} data-copy="data", ${optoutN.statebar} .statebar, ${optoutN.ariaHidden} aria-hidden="true", removing ${markedStrings} string(s) between them; ` +
       `the cap is on the MARKING and not on the strings it took, so it holds at every granularity down to one combination ` +
-      `(${unrenderedEls} further marking(s) cut only text the rendered walk was never going to read, and are outside this ceiling by construction — the block comment says why)`);
+      `(${unrenderedEls} further marking(s) removed ${unrenderedStrings} string(s) more, kept out of the figure above; the walk WOULD have read that text — lift one marking and the corpus grows — but each sits on a .stacklabel table duplicate that draws no box, a population tracking the mockup's cell count, so a ceiling over it would go red on ordinary authoring; the block comment says why)`);
   }
   /* Reported separately from the line above because it is a separate corpus
      with a separate exemption, and one combined number would hide which of the
