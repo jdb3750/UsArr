@@ -873,18 +873,15 @@ re-sectioned on the strength of this note**, and none of the three is thereby pl
       `GET /api/v1/libraries` is drawn; the proposal step is not, and its storage question is now
       answered: a proposal is **not** a `library` row, and a row is created only on Accept.
       *Authority:* §17.8, [ADR-0026](./DECISIONS.md#adr-0026), [ADR-0048](./DECISIONS.md#adr-0048).
-      *Done when:* an Accept path exists that creates a `library` row, and the proposal has a home
-      that is not that table.
-      ⚠️ **THE WRITTEN CRITERION IS MET AND THE BOX STAYS OPEN, WHICH IS A GAP IN THE CRITERION
-      RATHER THAN A JUDGEMENT ABOUT THE WORK.** Both clauses closed: `internal/store/proposals.go`
-      is the Accept path (`AcceptLibraries` creates or joins a `library` row) and the proposal's home
-      is `container_observed` rows in `sync_report`, recomputed by `ProposedContainers`;
-      `internal/httpapi/proposals.go` puts both on the wire as
-      `GET /api/v1/libraries/proposals` and `POST /api/v1/libraries/accept`
-      (`docs/reference/http-api.md` §2a, §2b). What the criterion never named is the half the
-      heading does — **the FLOW**: no screen calls either route, and `web/src/routes` is
-      authoritative for that, not this line. The box waits on the flow, because ticking on the
-      clause as written would claim one that a route table alone does not give.
+      *Done when:* an Accept path exists that creates a `library` row; the proposal has a home that
+      is not that table; and a screen under `web/src/routes` calls both routes —
+      `grep -rn 'libraries/proposals\|libraries/accept' web/src` returns a hit outside a test, a
+      fixture, or a comment.
+      ⚠️ **The criterion was amended 2026-08-22, and the reason is worth keeping visible: it never
+      named the flow.** Both of the clauses it did carry had closed — the Accept path, and the
+      proposal's home off that table — while the box stayed open on the half the heading names, so
+      for a stretch the written criterion read as met on an item that was not. It no longer carries
+      that argument, because the third clause now makes the check.
       ⚠️ **This item also said `the bootstrap import still creates libraries unconditionally`, as a
       second thing the box was waiting on.** That was written one commit after `a83ff9c` removed the
       create from `bindOneContainer`; do not restore it, and do not write a fresher sentence in its
