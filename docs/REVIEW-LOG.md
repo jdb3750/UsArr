@@ -26379,12 +26379,15 @@ them was found while verifying them and is new here.
   quoting this week is worth doing once, in a commit that runs the check and pastes the new line,
   and this restore runs it without changing it. A grep for the word alone does not fire this.
 
-  ✅ **Closed 2026-08-22 by the motion this trigger names.** The column now reads `commit`, which is
-  what `git rev-parse HEAD` returns, and the entry's own prediction held exactly: the repair was the
-  one string literal, the five body strings are byte-identical, and the three quoted above are
-  therefore still quoted true. Landed in *"fix: the copy-corpus floors are derived from a regression,
-  not rounded"*, whose run pastes the new line. The worked example above was re-verified rather than
-  taken on trust.
+  ✅ **Closed 2026-08-22 by the motion this trigger names.** The column now reads `HEAD`, and the
+  value is what `git rev-parse HEAD` returns — the label names **the revision that was resolved**
+  rather than asserting what kind of object came back, which is the distinction this entry was
+  written about, and the object kind stays where it was already correct: in the body prose. The
+  entry's own prediction held exactly: the repair was the one string literal, the five body strings
+  are byte-identical, and the three quoted above are therefore still quoted true. Landed across this
+  motion's two commits — the first titled *"fix: the copy-corpus floors are derived from a
+  regression, not rounded"*, the second carrying this relabel — and the run pastes the new line. The
+  worked example above was re-verified rather than taken on trust.
 
 ### LS-394.27 The two adversarial reviews of the owner-attribution slice, and where each finding landed
 

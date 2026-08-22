@@ -149,7 +149,7 @@ const URL = 'file://' + join(MOCKUPS, 'prototype.html');
  * is a fact about provenance and not a design defect, so it is reported in the
  * same line rather than raised as a failure this file has no standing to make.
  * ------------------------------------------------------------------------- */
-console.log('commit' + (() => {
+console.log('HEAD  ' + (() => {
   let git;
   try { git = createRequire(import.meta.url)('node:child_process'); } catch { git = null; }
   if (!git) return 'no child_process: this run names no commit, so its result is evidence about no particular tree';
@@ -1350,11 +1350,14 @@ head('6. Availability glyphs carry a word');
      failure mode a floor that restates a count invites: 320 still passed, so
      nothing turned red.
 
-     THE REGRESSION THIS FLOOR IS SIZED AGAINST. Losing a screen from SCREENS
-     or losing panel traversal trips COMBO_FLOOR (104 against 110) first, so
-     neither is this floor's job. What only this floor can catch is the .avail
-     population itself shrinking while the traversal still runs in full, and
-     the cheapest such loss is the whole of Search's contribution. Measured
+     THE REGRESSION THIS FLOOR IS SIZED AGAINST. A screen leaving SCREENS, or
+     panel traversal going away, shows up in the combination count COMBO_FLOOR
+     watches -- 104 against a live 110 -- so this floor is not sized against
+     either. What it is sized against is the .avail population shrinking while
+     the traversal still runs in full, which the combination count cannot see
+     because the count does not change. That much WAS fired: the drill below
+     left all 110 combinations intact and COMBO_FLOOR green. The cheapest such
+     loss is the whole of Search's contribution. Measured
      2026-08-22 by attributing every reading to its install and screen: Search
      contributes 40 readings, 27 in the full install and 13 in v01; Home
      carries the rest and Services, Libraries and Requests contribute none.
@@ -1927,23 +1930,42 @@ head('1b. §13 copy bans, over rendered chrome text, cells included');
    * Per-source floors, EACH DERIVED FROM A NAMED REGRESSION rather than
    * rounded down from whatever the corpus happened to measure that day.
    *
-   * WHAT THESE FLOORS ARE NOT THE GUARD FOR. Structural loss is caught louder
-   * and earlier by COMBO_FLOOR, which is 104 against 110 combinations: losing
-   * the smallest screen costs 8 combinations, losing panel traversal costs 36,
-   * and losing an install costs 55. Every one of those trips that check first,
-   * so none of them is the regression these floors have to be sized against --
-   * and sizing them against a loss something else already catches is how a
-   * floor ends up too slack to fire on anything short of total loss.
+   * WHAT THESE FLOORS ARE NOT THE GUARD FOR. A sweep that stops visiting
+   * combinations is COMBO_FLOOR's business, not this block's: that floor is
+   * 104 against a live 110 the pass line prints on every run, and it watches
+   * the sweep's EXTENT where these watch the collector's SCOPE. Losing a
+   * screen, losing panel traversal or losing an install each drops the count
+   * under 104 -- by arithmetic over the decomposition measured 2026-08-22,
+   * where libraries is the smallest screen at 8 of the 110, panel traversal
+   * accounts for 56, and an install is half. THAT ARITHMETIC IS NOT A FIRED
+   * DRILL and is not offered as one; the only claims in this block resting on
+   * a drill are the four ceilings below and the two results in the next
+   * paragraph, both of which were run.
    *
-   * WHAT ONLY THESE CAN CATCH is a change inside the attribute collector
-   * itself: the scope list below losing one of its three elements
-   * (`#pg-<screen>`, `.topbar`, `.sidebar`), or one of its exclusions
-   * widening. Nothing else in this file would notice -- the sweep still visits
-   * every combination, every screen still renders, and the only symptom is
-   * that a source quietly returns fewer strings.
+   * WHAT THESE ADD, over a corpus floor that counts the very same strings.
+   * STRING_FLOOR reads attribute strings too, so it is NOT blind to the scope
+   * list below losing one of its three elements (`#pg-<screen>`, `.topbar`,
+   * `.sidebar`) or to an exclusion widening -- but it has 211 of slack, and
+   * that is what decides which of those losses it can see. Both halves were
+   * fired 2026-08-22:
    *
-   * THE CEILING, THEREFORE. The cheapest measurable member of that class is
-   * losing the chrome element a source draws from, and it costs that source's
+   *   TOO SMALL TO MOVE IT. Dropping .sidebar from the scope list cost 110
+   *   strings. STRING_FLOOR stayed GREEN, 110 sitting well inside its 211,
+   *   and `title` was the only failure in the run. Without a floor of its own
+   *   on that source, the regression ships green.
+   *
+   *   BIG ENOUGH TO MOVE IT, BUT UNLOCALIZED. Dropping .topbar cost 880.
+   *   STRING_FLOOR did fire, 12531 against 13200 -- but all it can report is
+   *   that something lost 880 strings. The three per-source lines that failed
+   *   beside it named aria-label, placeholder and option, and THAT is what
+   *   identifies .topbar as the element that went.
+   *
+   * So these floors catch the losses too small to move the corpus floor past
+   * its own slack, and they localize the ones large enough to move it.
+   *
+   * THE CEILING, THEREFORE. Of the scope-list and exclusion losses just
+   * described, the cheapest measurable one for a given source is losing the
+   * chrome element it draws from, and that costs the source's
    * per-combination chrome contribution multiplied by the 110 combinations
    * swept. Measured 2026-08-22, per combination: `aria-label` 2 from .topbar,
    * `title` 1 from .sidebar, `placeholder` 1 from .topbar, `option` 5 from
