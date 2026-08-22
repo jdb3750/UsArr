@@ -961,11 +961,21 @@ export function skippedNote(libraries: readonly Library[]): string {
 	return parts.join(' ');
 }
 
-/** `''` when every service feeds a library, which is the ordinary case. */
+/**
+ * `''` when every catalogue service feeds a library.
+ *
+ * ⚠️ THAT IS NO LONGER THE ORDINARY CASE, WHICH IS WHY THE SENTENCE DROPPED
+ * `yet`. Accepting a proposal is the only writer of a `library` row
+ * (`internal/store/proposals.go`), the import path binds containers to libraries
+ * that already exist and creates none, and no screen calls Accept. So a
+ * connected service feeding nothing is the FIRST-RUN state rather than a stage
+ * an import will move it out of, and `yet` promised a change nothing performs.
+ * The screen's own note under the table says what would create one.
+ */
 export function unboundNote(services: readonly ServiceHealth[]): string {
 	if (services.length === 0) return '';
-	if (services.length === 1) return `${services[0].name} feeds no library yet.`;
-	return `${services.length} services feed no library yet.`;
+	if (services.length === 1) return `${services[0].name} feeds no library.`;
+	return `${services.length} services feed no library.`;
 }
 
 /* ── 5. the source chips ──────────────────────────────────────────────────── */

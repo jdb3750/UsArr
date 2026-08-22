@@ -543,7 +543,7 @@ describe('a Libraries row leads to its own scoped view', () => {
 		expect(
 			SCOPE_HREF,
 			`${LIBRARIES_ROUTE}'s row link no longer carries the library as ?lib=`
-		).toContain('lib: slug');
+		).toContain('lib: scoped');
 		expect(
 			LIBRARIES_SOURCE,
 			`${LIBRARIES_ROUTE} resolves a per-type route for its rows. A library spans media ` +
@@ -562,13 +562,26 @@ describe('a Libraries row leads to its own scoped view', () => {
 	 * whose slug did not parse must get NO LINK rather than a link to a refusal.
 	 * `libraries.ts` reads the field with `str()`, so a missing or non-string
 	 * slug arrives as `''` and is exactly the case this covers.
+	 *
+	 * ⚠️ AND THIS GUARD USED TO PIN THE WRONG KEY. It asserted the literal
+	 * `if (slug === '') return undefined`, which is EMPTINESS — a proxy that
+	 * passes `'   '` straight through into `?lib=%20`. What the link actually
+	 * depends on is whether `readLibraryScope` RESOLVES the slug at the far end,
+	 * so the gate is `scopeSlug` (`librarygrid.ts`) and this pins that instead.
+	 * `librarygrid.test.ts` asserts the resolution itself; here the only question
+	 * is that the screen keys on it, and that the proxy has not come back.
 	 */
 	it('emits no empty lib, and gives such a row no link at all', () => {
 		expect(
 			SCOPE_HREF,
 			`${LIBRARIES_ROUTE} builds a ?lib= link for a library with no slug. An empty lib ` +
 				'is a 400, so that row would link to a refusal.'
-		).toContain("if (slug === '') return undefined");
+		).toContain('scopeSlug(slug)');
+		expect(
+			SCOPE_HREF,
+			`${LIBRARIES_ROUTE} gates the row link on the slug being non-empty again. A blank ` +
+				'slug is non-empty and resolves to no scope, so that row would link to every library.'
+		).not.toContain("slug === ''");
 		const cell = LIBRARIES_SOURCE.slice(LIBRARIES_SOURCE.indexOf("column.id === 'library'"));
 		expect(
 			cell.length,

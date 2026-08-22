@@ -38,7 +38,10 @@
 	 *   · the SESSION ENDED — a prompt, not an error. Nothing is broken and there
 	 *     is no upstream text to quote, so there is no verbatim block.
 	 *   · there are genuinely NO LIBRARIES — the list's own `empty` state (§9.6):
-	 *     one sentence naming why, and the one link that leads to the fix.
+	 *     one sentence naming why, and the one link that leads to the fix. ⚠️ IT IS
+	 *     THE ORDINARY FIRST-RUN STATE, NOT A FAULT, and the copy is written for
+	 *     that: `internal/store/proposals.go`'s Accept path is the only writer of a
+	 *     `library` row and no screen calls it, so a fresh install stays here.
 	 * `describeFailure` in `$lib/libraries` owns the first two so a node-run test
 	 * can pin them; a rule that lives inside an `{#if}` here is untestable.
 	 *
@@ -88,6 +91,11 @@
 		type Library,
 		type LibraryTone
 	} from '$lib/libraries';
+	// THE GATE ON THE ROW LINK, IMPORTED RATHER THAN RE-DERIVED, and it lives in
+	// `librarygrid` because that module owns the `?lib=` address rules and is the
+	// one a node test can call. The link is only good if the slug survives the
+	// reduction `/library` applies on arrival, which is what `scopeSlug` asks.
+	import { scopeSlug } from '$lib/librarygrid';
 	// One §9.1 timestamp formatter in the product, and it lives beside the screen
 	// that needed it first. Duplicating it here would be a second implementation
 	// of a rule the design states once.
@@ -192,14 +200,22 @@
 	 * slug did not parse gets NO LINK rather than a link to a refusal, which is
 	 * why this returns `undefined` instead of a bare path. `libraries.ts` reads
 	 * the field with `str()`, so a missing or non-string `slug` arrives as `''`.
+	 * ⚠️ `scopeSlug` — NOT `slug === ''` — decides that, and its own comment says
+	 * why emptiness was the wrong key.
 	 *
-	 * `URLSearchParams` builds the query rather than a template literal: a slug is
-	 * `[a-z0-9-]` in migration 0005 and would need no escaping, but the encoder is
-	 * what makes that a property of the code rather than of the data.
+	 * `URLSearchParams` builds the query rather than a template literal. ⚠️ THE
+	 * REASON HERE READ *"a slug is `[a-z0-9-]` in migration 0005"*, AND MIGRATION
+	 * 0005 SAYS NO SUCH THING: `library.slug` is a bare `TEXT NOT NULL` with a
+	 * UNIQUE index and no `CHECK`. The grammar is `slugify`'s, in Go
+	 * (`internal/store/catalogue.go`), which is a producer rather than a
+	 * constraint — so the encoder is not belt-and-braces over a guaranteed
+	 * alphabet, it is the only thing standing between an unexpected slug and a
+	 * malformed address.
 	 */
 	function libraryScopeHref(slug: string): string | undefined {
-		if (slug === '') return undefined;
-		return `${LIBRARY}?${new URLSearchParams({ lib: slug }).toString()}`;
+		const scoped = scopeSlug(slug);
+		if (scoped === undefined) return undefined;
+		return `${LIBRARY}?${new URLSearchParams({ lib: scoped }).toString()}`;
 	}
 
 	let libraries = $state<Library[]>([]);
@@ -397,11 +413,15 @@
 		{#if unbound}
 			<!--
 				THE JOIN'S OTHER DIRECTION, AND IT IS A SENTENCE RATHER THAN A ROW. A
-				service is not a library, so nothing invents a row for it; but on the
-				shipped binary a library appears when a connected service finishes its
-				first import, which makes a catalogue service feeding nothing the
-				answer to "why is this screen empty". Indexers are left out by
-				`unboundServices` itself: §17.8 proposes no library for Prowlarr.
+				service is not a library, so nothing invents a row for it. ⚠️ THE REASON
+				HERE READ *"on the shipped binary a library appears when a connected
+				service finishes its first import"*, AND IT DOES NOT: accepting a
+				proposal is the only writer of a `library` row, so an import moves no
+				service out of this sentence and `unboundNote` dropped its `yet` with
+				it. What the sentence is still for is the same: naming which services
+				feed nothing, beside a screen that says what would make one feed
+				something. Indexers are left out by `unboundServices` itself: §17.8
+				proposes no library for Prowlarr.
 			-->
 			<p class="toolbar__note toolbar__label">{unbound}</p>
 		{/if}
@@ -415,7 +435,7 @@
 		total={count}
 		state={count === 0 ? 'empty' : 'default'}
 		emptyTitle="No libraries yet"
-		emptyText="A library appears here when an import runs against a connected catalogue service — the first connect starts one, and Run full sync now starts another. Prowlarr alone will not produce one, because an indexer has no library to bind to."
+		emptyText="Connecting a catalogue service on Services does not create a library by itself: a library exists only when a proposed one is accepted, and that step has no screen yet."
 		{cell}
 		{emptyActions}
 	/>
@@ -432,8 +452,8 @@
 	<div class="section">
 		<p class="screennote">
 			Renaming a library, joining sources into one, and reordering this list are not built yet.
-			UsArr creates a library for each container a service reports, every time an import runs
-			against that service — not only the first.
+			Neither is accepting a proposed library, which is the only thing that creates one: an import
+			binds containers to libraries that already exist and creates none.
 		</p>
 	</div>
 {/if}

@@ -966,7 +966,9 @@ describe('the two reads can disagree, in both directions', () => {
 		const orphanService = healthRow({ id: 7, name: 'Kavita Books' });
 		const unbound = unboundServices([library()], read(healthRow({ id: 1 }), orphanService));
 		expect(unbound.map((h) => h.id)).toEqual([7]);
-		expect(unboundNote(unbound)).toBe('Kavita Books feeds no library yet.');
+		// NO `yet`: accepting a proposal is the only writer of a library row and
+		// no screen calls it, so this is the first-run state rather than a stage.
+		expect(unboundNote(unbound)).toBe('Kavita Books feeds no library.');
 	});
 
 	it('counts several unbound services rather than naming them all', () => {
@@ -974,7 +976,7 @@ describe('the two reads can disagree, in both directions', () => {
 			[library()],
 			read(healthRow({ id: 7 }), healthRow({ id: 8 }), healthRow({ id: 1 }))
 		);
-		expect(unboundNote(unbound)).toBe('2 services feed no library yet.');
+		expect(unboundNote(unbound)).toBe('2 services feed no library.');
 	});
 
 	it('never counts an indexer as unbound, because §17.8 proposes it no library', () => {

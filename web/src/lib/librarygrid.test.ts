@@ -47,6 +47,7 @@ import {
 	readBrowseSort,
 	readLibraryNames,
 	readLibraryScope,
+	scopeSlug,
 	REFUSED_BROWSE_SORT,
 	sameBrowseQuery,
 	type BrowseFeed,
@@ -372,6 +373,25 @@ describe('the request carries what the server does not remember', () => {
 			readLibraryScope(new URLSearchParams('lib=kids,%20vinyl-rips')),
 			'a real ?lib= produced no slugs, so the empty cases above prove nothing'
 		).toEqual(['kids', 'vinyl-rips']);
+	});
+
+	/*
+	 * THE LINK GATE, AND THE WHOLE POINT IS THE THIRD CASE.
+	 *
+	 * The Libraries screen authors one `?lib=` link per row and used to gate it on
+	 * `slug === ''`. A blank-but-not-empty slug passes that gate and resolves to
+	 * NO SCOPE here, so the row would have linked to every library while claiming
+	 * to open one. Keying the gate on this function is what makes the two agree by
+	 * construction. The last case is the arm that keeps the rest honest.
+	 */
+	it('gates a ?lib= link on what the address reader resolves, not on emptiness', () => {
+		expect(scopeSlug('kids')).toBe('kids');
+		expect(scopeSlug(''), 'an empty slug authored a link').toBeUndefined();
+		expect(scopeSlug('   '), 'a blank slug is non-empty and resolves to no scope').toBeUndefined();
+		expect(scopeSlug('a,b'), 'a single row authored a two-library scope').toBeUndefined();
+		expect(scopeSlug(' kids '), 'the reader trims, so the link must carry the trimmed slug').toBe(
+			'kids'
+		);
 	});
 
 	/*

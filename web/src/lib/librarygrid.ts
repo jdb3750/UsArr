@@ -458,6 +458,25 @@ export function readLibraryScope(params: URLSearchParams): string[] {
 		.filter((s) => s !== '');
 }
 
+/**
+ * ONE SLUG'S RESOLUTION: what `?lib=<slug>` will actually scope to, or
+ * `undefined` when it scopes to nothing.
+ *
+ * ⚠️ IT IS THE GATE ON AUTHORING A `?lib=` LINK, and it exists because emptiness
+ * is a PROXY for that question rather than the question. A caller that only
+ * refuses `''` will happily author `?lib=%20`: the server refuses that with a
+ * 400 because it tests PRESENCE, and had it not, `readLibraryScope` above would
+ * resolve it to NO SCOPE — a link that claims one library and opens every one.
+ * So the gate runs the destination's own reader instead of guessing at it.
+ *
+ * Exactly one slug is the only answer a single-library link can carry. Zero is
+ * no scope; more than one is not a link one row is entitled to author.
+ */
+export function scopeSlug(slug: string): string | undefined {
+	const resolved = readLibraryScope(new URLSearchParams({ lib: slug }));
+	return resolved.length === 1 ? resolved[0] : undefined;
+}
+
 /* ── 2a. the scope line: a scoped view saying what it is scoped to ────────── */
 
 /**
