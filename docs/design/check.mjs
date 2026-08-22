@@ -974,22 +974,38 @@ head('1d. CSP: no inline style attribute in the five screen files');
      went stale, and a floor's derivation that restates a number the gate
      already reports is a number with no way to stay true.
 
-     WHAT THE DERIVATION NEEDS IS THE SMALLEST FILE, not the largest. The
-     regression is losing one whole screen file, and what has to fall under the
-     floor is the REMAINDER the other four leave -- so the case that decides
-     whether this floor fires is the one leaving the LARGEST remainder, which
-     is losing the SMALLEST file. Losing the largest is the case most certain
-     to trip, which is the opposite of binding. Put as a rule: the check
-     catches the loss of file f exactly when f exceeds the slack, so the
-     ceiling on slack is min(f), not max(f).
+     WHAT THE DERIVATION NEEDS IS THE SMALLEST FILE, not the largest. What has
+     to fall under the floor is the REMAINDER the other four leave -- so the
+     case that decides whether this floor is tight is the one leaving the
+     LARGEST remainder, which is the SMALLEST file. Sizing against the largest
+     is the case most certain to trip, which is the opposite of binding.
+
+     ⚠️ BUT THIS FLOOR NEVER SEES A WHOLE FILE GO. The line below it -- the
+     FILE floor, `screen file(s)` against 5 -- runs first and `return`s, so
+     deleting `services.html` fails there ("scanned only 4 screen file(s),
+     below the floor of 5") and the character rule is never reached at all. A
+     file SMALLER than the slack would be caught by that same sibling floor for
+     the same reason, so the converse fails too, and the relation is not an
+     `iff` in either direction. Do not read the arithmetic below as "this floor
+     catches the loss of file f exactly when f exceeds the slack": it catches
+     nothing about a file's absence, because absence is the file floor's.
+
+     WHAT IT CAN ACTUALLY SEE is a screen file SHRINKING WHILE STILL PRESENT --
+     a section deleted, a panel dropped, a generator emitting less -- since
+     that moves the character total without moving the file count. The smallest
+     file is still the right ceiling for that, because it bounds how much one
+     file can take with it.
 
      ARITHMETIC, measured 2026-08-22, and not a fired drill. The five stripped:
      requests 126,603 · libraries 123,778 · search 111,733 · index 107,348 ·
-     services 99,507, totalling 568,969. The ceiling is therefore `services.html`
-     at 99,507, and the slack this floor carries is 568,969 - 500,000 = 68,969.
-     68,969 is under 99,507 with 30,538 to spare, so losing any ONE of the five
-     trips this check -- the cheapest one to lose included, which is the claim
-     the old wording never actually computed. */
+     services 99,507, totalling 568,969. The slack this floor carries is
+     568,969 - 500,000 = 68,969, against a smallest file of 99,507 -- under it
+     with 30,538 to spare, so a shrink big enough to empty any one of the five
+     trips this check, the cheapest one included. ⚠️ FIRED 2026-08-22 for the
+     short-circuit, which is the part that is not arithmetic: with
+     `services.html` removed from the sources the run failed on `§14 CSP:
+     inline style — scanned only 4 screen file(s), below the floor of 5`, and
+     the character rule printed nothing. */
   if (!floorOk('§14 CSP: inline style', html.length, 5, 'screen file(s)')) return;
   rule('§14 CSP: no style= attribute in a screen file', /\s(?<attr>style)\s*=\s*["']/, {
     filter: (f) => f.kind === 'html',
@@ -1975,10 +1991,14 @@ head('1b. §13 copy bans, over rendered chrome text, cells included');
    * decomposition measured 2026-08-22, where libraries is the smallest screen
    * at 8 of the 110, panel traversal accounts for 56, and an install is half.
    * THAT ARITHMETIC IS NOT A FIRED DRILL and is not offered as one. And a
-   * WIDENED EXCLUSION is OPTOUT_CEILING's business, for the reason set out
-   * under "IT IS NOT A CEILING ON THE CHEAPEST LOSS" below: it is
-   * element-granular, so it goes under any floor these could carry. This block
-   * used to claim that half of the class and could not deliver it.
+   * WIDENED EXCLUSION is OPTOUT_CEILING's business -- for the DECLARED
+   * exclusions, which is three of the five mechanisms and not all five -- for
+   * the reason set out under "IT IS NOT A CEILING ON THE CHEAPEST LOSS" below:
+   * it is element-granular, so it goes under any floor these could carry. This
+   * block used to claim that half of the class and could not deliver it. The
+   * two mechanisms OPTOUT_CEILING does not take are named, with what does and
+   * does not bound each, under hole 4 of "WHAT THIS BLOCK DOES NOT COVER"; one
+   * of the two lands back on these floors, so this is not a clean handover.
    *
    * WHICH CLAIMS HERE REST ON A DRILL: the four ceilings below, the two
    * results in the next paragraph, and the exclusion drill under "IT IS NOT A
@@ -2028,8 +2048,11 @@ head('1b. §13 copy bans, over rendered chrome text, cells included');
    * stated as 220. RAISING THESE FLOORS WOULD NOT HAVE FIXED IT -- a floor
    * satisfying a 110-combination ceiling is still blind at 8, and no floor on
    * a corpus this size reaches 8 at all. The exclusion is gated by
-   * OPTOUT_CEILING below instead, on the opt-out COUNT, where the cost does
-   * not depend on how many combinations the marked element renders in.
+   * OPTOUT_CEILING below instead, on the DISTINCT MARKED ELEMENT, where the
+   * cost does not depend on how many combinations that element renders in --
+   * which a count of the strings the marking removed would, and did: the first
+   * attempt at that ceiling counted strings and sat green on a marking that
+   * rendered in one combination.
    *
    * SLACK IS DELETION TOLERANCE -- corpus minus floor, the count that can go
    * missing before the floor fires -- and it must be STRICTLY BELOW that
@@ -2068,7 +2091,7 @@ head('1b. §13 copy bans, over rendered chrome text, cells included');
    * WHAT THIS BLOCK DOES NOT COVER. Written down, because the arrangement
    * above reads like a clean division of labour between COMBO_FLOOR and these
    * floors and it is not one: the two are not a partition of the regression
-   * space, and the criterion does not maintain itself. Three known holes, each
+   * space, and the criterion does not maintain itself. Five known holes, each
    * measured 2026-08-22 on this branch and none of them fixed here.
    *
    *   1. THE CRITERION DECAYS, AND NOTHING WATCHES IT. Slack is `live -
@@ -2088,7 +2111,9 @@ head('1b. §13 copy bans, over rendered chrome text, cells included');
    *   screen has -- costs 2 combinations. 108 is green at 104. The per-source
    *   losses that ride along are green too: across all 27 single-panel states,
    *   the WORST any of them costs is aria-label 28, option 104, placeholder 12
-   *   and title 74, against floors of 191, 218, 43 and 93. Neither guard sees
+   *   and title 74, against SLACKS of 191, 218, 43 and 93 -- the floors
+   *   themselves are 500, 1400, 245 and 1050, and it is the slack a loss has
+   *   to exceed. Neither guard sees
    *   that regression, at its cheapest (home/empty, 18 strings) or its worst.
    *
    *   3. THE §17 MEDIAN DOES NOT COVER THE SMALL SUBSECTIONS, and the two
@@ -2107,6 +2132,70 @@ head('1b. §13 copy bans, over rendered chrome text, cells included');
    *   never happened, with false positives on a section under active
    *   authorship, is a bad trade -- but that is a bet on the past and not a
    *   property of the floor, which is the point of writing it here.
+   *
+   *   4. TWO EXCLUSION MECHANISMS ARE OUTSIDE OPTOUT_CEILING, on a rule and
+   *   not by oversight -- and ONE OF THE TWO IS A REAL RESIDUAL, measured
+   *   rather than waved past. `!b.offsetParent` (the text collector) turns on
+   *   the element not being rendered, and it is airtight: that same test is
+   *   what the text corpus is BUILT with, so text it excludes was never in the
+   *   corpus and widening it removes nothing this rule was reading.
+   *
+   *   ⚠️ `[hidden]` IS NOT AIRTIGHT, AND THE SYMMETRICAL-LOOKING ARGUMENT FOR
+   *   IT IS FALSE. It reads as the same kind of thing -- an element that does
+   *   not render -- but the ATTRIBUTE collector has no rendering test, so its
+   *   corpus contains strings from elements that draw no box, and putting
+   *   `hidden` on one of those takes real strings out. FIRED 2026-08-22:
+   *   `hidden` on the closed add-library dialog's `#al-name` input took the
+   *   `placeholder` corpus from 288 to 280 and this ceiling printed 12 and
+   *   stayed green. IT IS STILL NOT GATED HERE, and the reason is scope rather
+   *   than principle: `hidden` is the mockup's own state machine -- installs,
+   *   states and panels are switched by toggling it on hundreds of elements a
+   *   run -- so it has no stable baseline to be a ceiling over, and gating it
+   *   would gate the sweep's own mechanism. WHAT BOUNDS IT INSTEAD is the
+   *   per-source floors: 8 strings hid under `placeholder`'s 43 of slack, and
+   *   a widening large enough to matter trips those. WHAT IS THEREFORE
+   *   UNCOVERED, stated plainly: an exclusion of up to one per-source slack,
+   *   declared as `hidden` on an element the sweep does not draw.
+   *
+   *   The rendering test cuts INSIDE `aria-hidden="true"`, which is gated on
+   *   the text side: only the markings over text the walk would have read are
+   *   counted, and on 2026-08-22 that was 5 of 1,123. The other 1,118
+   *   are the `.stacklabel` responsive-table duplicates, every one of them
+   *   `display: none` at the width this sweep runs at, and every one of them a
+   *   label already read once from the `<th>` it duplicates. Putting that
+   *   population under a ceiling would be putting the mockup's TABLE-CELL
+   *   COUNT under a ceiling -- it rises by about five with every row anybody
+   *   adds, so the line would go red on ordinary authoring and the number
+   *   would get raised without thought, which is worse than not gating it and
+   *   is the practice the floor block above exists to end. On the ATTRIBUTE
+   *   side there is no such population and no such test: every marking that
+   *   took a string is counted, drawn or not, which is what makes the
+   *   `[placeholder]` drill above red.
+   *
+   *   5. THE §17 FLOOR GUARDS A NET COUNT, so compensated removal is
+   *   invisible to it: a commit deleting two specified strings and adding two
+   *   others moves the population by zero. ENUMERATED HERE 2026-08-22 rather
+   *   than reasoned, over the 486 commit/parent pairs reachable from `git log
+   *   --full-history -- docs/ARCHITECTURE.md` (303 commits): 29 pairs carry a
+   *   §17 span present in the parent and absent in the child, 77 spans are
+   *   removed across the whole history, and there is NOT ONE net decrease --
+   *   `9fb64fa51` <- `512bbb605` removed 3 at 73 -> 73, `809f13d9b` <-
+   *   `3c0e7f91e` removed 2 at 57 -> 57, `34e9322e0` <- `574154103` removed 2
+   *   at 57 -> 57. This is a limit on what the floor SEES and not a
+   *   falsification of why it sits at 75: the conclusion hole 3 rests on was
+   *   control-validated in the same enumeration, and across those same 486
+   *   pairs a §17 SUBSECTION NUMBER present in the parent and absent in the
+   *   child happens 0 times.
+   *
+   *   ⚠️ THE CONTROL IS KEYED ON THE NUMBER, AND IT MATTERS WHICH. Keyed on
+   *   the heading TEXT the same enumeration returns 4 pairs, not 0 -- and all
+   *   four are one event, `### 17.2 Home — sections per media type` retitled
+   *   to `### 17.2 Navigation and Home` in `906f40e07` and replayed through
+   *   three later merges. A subsection was RENAMED, never dropped, which is
+   *   why the number-keyed control is the one that answers the question hole 3
+   *   asks. The text-keyed figure is written down because "0 times" is true
+   *   only under one keying, and a control whose keying is unstated is a
+   *   control nobody can re-run.
    * ===================================================================
    * ------------------------------------------------------------------- */
   const CORPUS_FLOORS = {
@@ -2186,35 +2275,86 @@ head('1b. §13 copy bans, over rendered chrome text, cells included');
   /* ---------------------------------------------------------------------
    * THE EXCLUSION'S OWN CEILING, and the reason it is a gate and not a print.
    *
-   * `data-copy="data"` takes strings out of this corpus. Until 2026-08-22 the
-   * only thing standing behind that was the word COUNTED: the skip total is
-   * printed beside the corpus total on the pass line, and printing is not
+   * A declared exclusion takes strings out of this corpus. Until 2026-08-22
+   * the only thing standing behind that was the word COUNTED: the skip total
+   * is printed beside the corpus total on the pass line, and printing is not
    * gating. A widened exclusion is the one regression in this rule the
    * per-source floors above structurally cannot reach, because it is
    * ELEMENT-granular -- the cost is the marked element's strings times only
-   * the combinations that element renders in, which is 8 on Libraries and
-   * fewer on a single state. Counting the OPT-OUTS instead of the strings they
-   * removed is what closes the class at every granularity: one element is one
-   * marking whatever it costs.
+   * the combinations that element renders in, which is 8 on Libraries, and as
+   * little as ONE for an element that renders in a single state of a single
+   * screen.
    *
-   * THE ARITHMETIC. The tree carries 5 rendered opt-outs (measured
-   * 2026-08-22; the pass line prints the live figure on every run, and this is
-   * a ceiling derived from that baseline rather than a second copy of it). The
-   * cheapest widening worth catching is ONE further element on the SMALLEST
-   * screen -- Libraries, 8 of the 110 combinations -- which puts the total on
-   * 13. The ceiling is therefore the largest value that still FAILS on 13,
-   * which is 12.
+   * THE UNIT IS THE DISTINCT MARKED ELEMENT, AND IT TOOK TWO GOES TO GET
+   * THERE. The first attempt at this ceiling counted SKIPPED STRINGS, which is
+   * the same container-for-member substitution this block exists to correct,
+   * made inside the instrument built to correct it. A string count carries the
+   * exact dependence on combination count that the unit was chosen to escape:
+   * the same marking costs 8x its strings on Libraries and 1x on a
+   * single-combination element, and one ceiling cannot be tight against both.
+   * FIRED 2026-08-22, and this is the drill that decided the rewrite:
+   * `data-copy="data"` on one `#pg-libraries button[data-act="expand"]` -- an
+   * element that renders in exactly one of the combinations -- took the string
+   * count from 5 to 6 against a string ceiling of 12, and the whole gate
+   * exited 0 while printing that the exclusion was capped. Seven of headroom,
+   * where the intent was none.
    *
-   * FIRED THREE WAYS, 2026-08-22, rather than argued. One
-   * `#pg-libraries [placeholder]` element marked `data-copy="data"` put the
-   * total on exactly 13 -- red here, and green on every other line in the run,
-   * including the `placeholder` floor it cost 8 of. One
-   * `.topbar button[aria-label]` marked the same way put it on 115 -- red
-   * here, where before this ceiling existed that drill dropped 110 aria-label
-   * strings and the whole gate still exited 0. The untouched tree reads 5 and
-   * is green.
+   * WHAT IDENTIFIES AN ELEMENT is a document-rooted path of tag name and
+   * sibling index, reduced to a Set, so one marking counts ONCE however many
+   * combinations render it. It is not screen-prefixed: `.topbar` and
+   * `.sidebar` are one pair of elements shared by all five screens, and a
+   * screen-prefixed key would count a single marking on either of them five
+   * times. What is recorded is the DECLARING element -- the ancestor `closest`
+   * returns -- and never the descendants the marking covers, for the same
+   * reason the unit is not a string: one marking is one authorial act however
+   * much sits underneath it.
    *
-   * IT IS A CEILING, SO A LEGITIMATE NEW OPT-OUT TURNS IT RED, and that is the
+   * THREE MECHANISMS ARE GATED, NOT ONE, and that is the second thing the
+   * first attempt got wrong. It gated `data-copy="data"` alone, so an
+   * exclusion could widen without touching the counter at all. FIRED
+   * 2026-08-22: `aria-hidden="true"` on Home's `.pagehead` took 44 strings out
+   * of the corpus, the opt-out line still printed 5, still said the exclusion
+   * was capped, and the gate exited 0. The three gated here are the ones an
+   * author can declare on an element a sighted user is looking at:
+   * `data-copy="data"`, `.statebar` and `aria-hidden="true"`. The two
+   * remaining exclusions turn on an element NOT RENDERING, which is a
+   * different kind of thing -- they are named under "WHAT THIS BLOCK DOES NOT
+   * COVER" above rather than gated badly.
+   *
+   * WHAT COUNTS AS HAVING REMOVED COPY IS ASKED PER COLLECTOR, because the two
+   * collectors read two different corpora and the test has to match the corpus
+   * it is protecting. The TEXT collector already skips any text whose block box
+   * does not render (`!b.offsetParent`), so a marking on a box that draws
+   * nothing took nothing from it, and those markings are recorded apart and
+   * reported instead of gated. The ATTRIBUTE collector has NO such test -- it
+   * reads attributes off every element that is not `[hidden]`, drawn or not --
+   * so on that side EVERY marking that took at least one string is gated, with
+   * no rendering test at all. ⚠️ FIRED 2026-08-22, and this is the drill that
+   * caught it: an interim version of this ceiling applied the text collector's
+   * box test to both, and the `#pg-libraries [placeholder]` marking on the
+   * closed add-library dialog's input -- a real corpus string, counted toward
+   * the `placeholder` floor -- took the corpus from 288 to 280 while the
+   * ceiling sat green at 12. The tip this replaces caught that same marking;
+   * an exclusion gate that is greener than what it replaces is not a gate.
+   *
+   * THE DERIVATION. The ceiling IS the baseline, so that one further marked
+   * element fails. Measured 2026-08-22 over the whole sweep, counting distinct
+   * declaring elements whose marking removed copy: 2 carry `data-copy="data"`,
+   * 5 carry `.statebar` -- one per screen -- and 5 carry `aria-hidden="true"`,
+   * all five of them the `.levels__sep` separator glyph. 2 + 5 + 5 = 12, so the
+   * ceiling is 12 and 13 fails. The pass line prints the live figure and its
+   * three parts on every run; this is a ceiling derived from that baseline
+   * rather than a second copy of it.
+   *
+   * ⚠️ THAT 12 IS NOT THE 12 THIS REPLACES. The string ceiling it supersedes
+   * was also 12, and the coincidence is worth naming so nobody reads this as
+   * an untouched line: the old 12 sat over a baseline of 5 STRINGS and carried
+   * seven of headroom, this 12 sits on a baseline of 12 ELEMENTS and carries
+   * none.
+   *
+   * IT HAS ZERO SLACK, SO A LEGITIMATE NEW MARKING TURNS IT RED -- and unlike
+   * the sentence that used to stand here, that is now true of EVERY marking
+   * rather than only of one big enough to move a string count. That is the
    * intent: widening this exclusion should be something a person argues for,
    * not something that lands. The response is the one the floor block above
    * states -- re-derive, take the smallest value that satisfies the
@@ -2222,7 +2362,23 @@ head('1b. §13 copy bans, over rendered chrome text, cells included');
    * ------------------------------------------------------------------- */
   const OPTOUT_CEILING = 12;
 
-  let strings = 0, exempted = 0, glyphs = 0, dataOptouts = 0; const bad = [];
+  let strings = 0, exempted = 0, glyphs = 0; const bad = [];
+  /* The three declared exclusions, each with the set of DISTINCT ELEMENTS that
+     declares it. Sets, not counters: one marking is recorded once however many
+     of the combinations render it. `unseen` holds the markings that sit on an
+     element rendering no box, which are reported and not gated. See
+     OPTOUT_CEILING below for both decisions. */
+  const MECHS = ['data', 'statebar', 'ariaHidden'];
+  const optoutEls = { data: new Set(), statebar: new Set(), ariaHidden: new Set() };
+  const optoutUnseen = { data: new Set(), statebar: new Set(), ariaHidden: new Set() };
+  const optoutStrings = { data: 0, statebar: 0, ariaHidden: 0 };
+  const absorb = (res) => {
+    for (const m of MECHS) {
+      for (const q of res.marks[m]) optoutEls[m].add(q);
+      for (const q of res.unseen[m]) optoutUnseen[m].add(q);
+      optoutStrings[m] += res.skipped[m];
+    }
+  };
   /* §17's copy is counted apart from `strings` on purpose. STRING_FLOOR's
      margin below is DERIVED from the rendered corpus and argued against a
      293-string regression — the working, and the single dated figure it rests
@@ -2290,7 +2446,11 @@ head('1b. §13 copy bans, over rendered chrome text, cells included');
    * exactly as it was, and §17's copy is brought INTO the corpus instead.
    *
    * Shipping copy in §17 is marked `*"…"*`, the italic-quoted form every
-   * specified label and sentence uses; 57 spans today. They run through the
+   * specified label and sentence uses. The live span count is on this rule's
+   * own pass line on every run and is deliberately not restated here: a second
+   * copy of a printed number has no way to stay true, and the figure that used
+   * to sit in this sentence had drifted by a third before anyone counted
+   * again. They run through the
    * same checkCopy, and the §17 exemption is withheld from them, because a
    * string cannot be its own authority. exempt() itself is untouched: with the
    * source now gated, the mockup exemption can only propagate copy that has
@@ -2462,6 +2622,28 @@ head('1b. §13 copy bans, over rendered chrome text, cells included');
     }
   }
 
+  /* ONE IDENTITY FOR A MARKED ELEMENT, installed once and used by both
+     collectors below because they feed ONE set. It is a document-rooted path
+     of tag name plus sibling index, and it is document-rooted rather than
+     screen-rooted on purpose: the attribute collector scopes over `.topbar`
+     and `.sidebar` as well as `#pg-<screen>`, and those two are the SAME
+     elements under all five screens, so a screen-prefixed key would count one
+     marking on the topbar five times over. The prototype's DOM is static --
+     installs, states and panels toggle `hidden`, they do not add or remove
+     nodes -- so a sibling-index path names the same authored element in every
+     one of the combinations it renders in. */
+  await page.evaluate(() => {
+    window.__usarrMarkPath = (el) => {
+      const parts = [];
+      for (let e = el; e && e.nodeType === 1; e = e.parentElement) {
+        let i = 1;
+        for (let sib = e.previousElementSibling; sib; sib = sib.previousElementSibling) i++;
+        parts.unshift(e.tagName.toLowerCase() + ':' + i);
+      }
+      return parts.join('/');
+    };
+  });
+
   for (const install of INSTALLS) {
   await setInstall(page, install);
   for (const screen of SCREENS) {
@@ -2480,34 +2662,65 @@ head('1b. §13 copy bans, over rendered chrome text, cells included');
        * during this sweep, and it is why the walk could not see it. */
       const attrsRead = await page.evaluate(({ s, ATTRS }) => {
         const out = [];
-        let skipped = 0;
+        const skipped = { data: 0, statebar: 0, ariaHidden: 0 };
+        const marks = { data: [], statebar: [], ariaHidden: [] };
+        const unseen = { data: [], statebar: [], ariaHidden: [] };
+        const path = window.__usarrMarkPath;
+        if (!path) throw new Error('the mark-path helper is not installed on this page');
+        /* EVERY MARKING THAT REMOVED AN ATTRIBUTE STRING IS GATED HERE, with no
+           renders-a-box test, because THIS collector's corpus has none either:
+           it reads attributes off every element that is not `[hidden]`,
+           whether or not that element draws a box in this combination. A
+           placeholder on a closed dialog's input is in the corpus and counts
+           toward the `placeholder` floor, so a marking on it removes corpus
+           strings and has to be gated. Applying the text collector's box test
+           here was the defect this drill caught: the `#pg-libraries
+           [placeholder]` marking took 8 strings out (288 -> 280) and the
+           ceiling stayed green at 12. `unseen` is kept -- the shape is shared
+           with the text collector, where the test IS right -- and stays empty
+           on this side. */
+        const mark = (m, el) => { marks[m].push(path(el)); };
         const root = document.querySelector('#pg-' + s);
         const chrome = [root, document.querySelector('.topbar'), document.querySelector('.sidebar')]
           .filter(Boolean);
         for (const scope of chrome) {
           scope.querySelectorAll('*').forEach((el) => {
             if (el.closest('[hidden]')) return;
-            if (el.closest('.statebar')) return;     /* the mockup's own scaffolding */
+            const bar = el.closest('.statebar');    /* the mockup's own scaffolding */
             /* The declared opt-out, read once per element and applied to every
                string the element contributes. Counted, never silent. */
-            const isData = !!el.closest('[data-copy="data"]');
+            const dataEl = bar ? null : el.closest('[data-copy="data"]');
+            /* The element's strings are gathered BEFORE any exclusion is
+               applied, because an exclusion that removed nothing is not a
+               widening and has no business in the count. */
+            const mine = [];
             for (const a of ATTRS) {
               const v = el.getAttribute(a);
               if (v == null) continue;
               const t = v.replace(/\s+/g, ' ').trim();
               if (!t) continue;
-              if (isData) skipped++; else out.push({ src: a, text: t });
+              mine.push({ src: a, text: t });
             }
             if (el.tagName === 'OPTION' || el.tagName === 'OPTGROUP') {
               const t = (el.tagName === 'OPTION' ? el.textContent : el.label || '')
                 .replace(/\s+/g, ' ').trim();
-              if (t) { if (isData) skipped++; else out.push({ src: 'option', text: t }); }
+              if (t) mine.push({ src: 'option', text: t });
             }
+            if (!mine.length) return;
+            /* WHAT IS RECORDED IS THE DECLARING ELEMENT -- the ancestor
+               carrying the marking, as `closest` returns it -- and not each
+               descendant the marking covers. One marking is one authorial act
+               however many elements sit under it, and recording the
+               descendants would be the same container-for-member substitution
+               this block exists to correct, made one level further down. */
+            if (bar) { mark('statebar', bar); skipped.statebar += mine.length; return; }
+            if (dataEl) { mark('data', dataEl); skipped.data += mine.length; return; }
+            out.push(...mine);
           });
         }
-        return { attrs: out, skipped };
+        return { attrs: out, skipped, marks, unseen };
       }, { s: screen, ATTRS });
-      dataOptouts += attrsRead.skipped;
+      absorb(attrsRead);
       for (const a of attrsRead.attrs) {
         countSource(a.src, 1);
         checkCopy(`${where} [${a.src}]`, a.text);
@@ -2561,7 +2774,14 @@ head('1b. §13 copy bans, over rendered chrome text, cells included');
          * was the 8 and the 2 of two hidden alternatives run together. A text
          * walk tests each node's own ancestry, so the variants stay apart. */
         const out = [];
-        let skipped = 0;
+        const skipped = { data: 0, statebar: 0, ariaHidden: 0 };
+        const marks = { data: [], statebar: [], ariaHidden: [] };
+        const unseen = { data: [], statebar: [], ariaHidden: [] };
+        const path = window.__usarrMarkPath;
+        if (!path) throw new Error('the mark-path helper is not installed on this page');
+        /* Same split as the attribute collector above, and for the same
+           reason: the ceiling is on markings a sighted user is looking at. */
+        const mark = (m, el) => { (el.getClientRects().length ? marks : unseen)[m].push(path(el)); };
         const root = document.querySelector('#pg-' + s);
         const BLOCKISH = /^(block|flex|grid|list-item|table-caption)$/;
         const blockOf = (n) => {
@@ -2572,6 +2792,16 @@ head('1b. §13 copy bans, over rendered chrome text, cells included');
         };
         const w = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
         let cur = null, run = '', isData = false;
+        /* The declaring elements behind the CURRENT run, committed only if the
+           run turns out to carry a string. A list rather than a single element
+           because two adjacent markings inside one block box do not cut the
+           run -- `isData` is a boolean, deliberately unchanged, so that the
+           corpus this collector returns is byte-for-byte what it was. */
+        let runData = [];
+        /* Does this text node's block box render? The mechanisms handled ahead
+           of the run machinery have to ask it themselves, because an exclusion
+           that removed a string nobody could see is not a widening either. */
+        const shows = (n) => { const b = blockOf(n); return !!b && (!!b.offsetParent || b.tagName === 'BODY'); };
         /* One buffer, two destinations. A run that lies inside a declared
            `data-copy="data"` is COUNTED rather than checked, in exactly the unit
            the corpus itself uses — a run of inline content, not a text node — so
@@ -2579,8 +2809,11 @@ head('1b. §13 copy bans, over rendered chrome text, cells included');
            kind of number and can be read against each other. */
         const flush = () => {
           const t = run.replace(/\s+/g, ' ').trim();
-          if (t) { if (isData) skipped++; else out.push(t); }
-          run = '';
+          if (t) {
+            if (isData) { skipped.data++; for (const el of runData) mark('data', el); }
+            else out.push(t);
+          }
+          run = ''; runData = [];
         };
         for (let n = w.nextNode(); n; n = w.nextNode()) {
           const p = n.parentElement;
@@ -2590,7 +2823,11 @@ head('1b. §13 copy bans, over rendered chrome text, cells included');
              word inside `<td><b>…</b></td>` is judged by the cell's own
              declaration and not by the <b>. */
           if (p.closest('[hidden]')) continue;
-          if (p.closest('.statebar')) continue;       /* the mockup's own scaffolding */
+          const bar = p.closest('.statebar');         /* the mockup's own scaffolding */
+          if (bar) {
+            if (n.nodeValue.trim() && shows(n)) { mark('statebar', bar); skipped.statebar++; }
+            continue;
+          }
           /* CUT THE RUN AT A DECORATIVE DUPLICATE, and do not merely drop it.
              The responsive table layout puts `<span class="stacklabel"
              aria-hidden="true">Publisher</span>` in front of the cell's value; at
@@ -2604,7 +2841,11 @@ head('1b. §13 copy bans, over rendered chrome text, cells included');
              them was a string any user or any screen reader ever gets. The label
              is already read once from the <th> it duplicates. flush() rather than
              `continue` so the sides do not weld to each other either. */
-          if (p.closest('[aria-hidden="true"]')) { flush(); continue; }
+          const ah = p.closest('[aria-hidden="true"]');
+          if (ah) {
+            if (n.nodeValue.trim() && shows(n)) { mark('ariaHidden', ah); skipped.ariaHidden++; }
+            flush(); continue;
+          }
           /* The declared opt-out. It cuts the run for the same reason: a
              substituted value sitting mid-sentence must not take the authored
              words around it out of the corpus with it. */
@@ -2616,12 +2857,13 @@ head('1b. §13 copy bans, over rendered chrome text, cells included');
              to "<a>the row</a>". They join the current run and are trimmed off
              at the ends by flush(). */
           if (b !== cur || nowData !== isData) { flush(); cur = b; isData = nowData; }
+          if (nowData) runData.push(p.closest('[data-copy="data"]'));
           run += n.nodeValue;
         }
         flush();
-        return { text: out, skipped };
+        return { text: out, skipped, marks, unseen };
       }, screen);
-      dataOptouts += r.skipped;
+      absorb(r);
       for (const t of r.text) checkCopy(where, t);
       }
     }
@@ -2630,6 +2872,11 @@ head('1b. §13 copy bans, over rendered chrome text, cells included');
   }
   }
   await setInstall(page, 'full');
+  const optoutN = {};
+  for (const m of MECHS) optoutN[m] = optoutEls[m].size;
+  const markedEls = MECHS.reduce((a, m) => a + optoutN[m], 0);
+  const markedStrings = MECHS.reduce((a, m) => a + optoutStrings[m], 0);
+  const unrenderedEls = MECHS.reduce((a, m) => a + optoutUnseen[m].size, 0);
   const uniq = [...new Set(bad)];
   if (uniq.length) {
     fail(`§13 copy: ${uniq.length} violation(s) in user-visible text`);
@@ -2641,27 +2888,33 @@ head('1b. §13 copy bans, over rendered chrome text, cells included');
        notes is exactly enough to bury it. */
     note('remedy: rewrite the string if UsArr wrote it — drop the em dash rather than padding the sentence past fifteen words, and pick a plainer word than the banned one.');
     note('remedy: if it is a SUBSTITUTED VALUE and not copy — a publisher, a release name, a title from a database — put data-copy="data" on the element that holds it, and only that element. Text and attributes inside it leave the corpus.');
-    note(`remedy: that opt-out is counted and capped, not silent — every skip is printed beside the corpus total on the pass line (${dataOptouts} skipped on this run, ceiling ${OPTOUT_CEILING}), so it is a thing this check has seen and dismissed rather than a thing it never found, and widening the exclusion far enough fails the run on its own line.`);
+    note(`remedy: that opt-out is counted and capped, not silent — the marking is printed beside the corpus total on the pass line (${markedEls} element(s) carry a declared exclusion that removed copy on this run, ceiling ${OPTOUT_CEILING}), so it is a thing this check has seen and dismissed rather than a thing it never found, and ONE further marked element fails the run on its own line.`);
     uniq.slice(0, 10).forEach((b) => note(b));
   }
   else if (floorOk('§13 copy', strings, STRING_FLOOR, 'user-visible string(s)')) {
     ok(`§13 copy: ${strings} user-visible strings clean of banned words, "!" and short-string em dashes ` +
       `(floor ${STRING_FLOOR} over both installs; ${exempted} short em-dash string(s) exempt because ARCHITECTURE §17 fixes their wording verbatim; ` +
       `${glyphs} bare "—" string(s) read as a glyph rather than prose, a structural exemption no sentence can hide in; ` +
-      `${dataOptouts} string(s) skipped at a declared data-copy="data", counted here rather than passed over in silence)`);
+      `${markedStrings} string(s) skipped at ${markedEls} element(s) carrying a declared exclusion that removed copy, counted here rather than passed over in silence)`);
   }
   /* GATED, NOT MERELY PRINTED -- see OPTOUT_CEILING above for the derivation
-     and the three drills. Deliberately outside the branch above: a widened
-     exclusion must be reported whether or not the copy sweep itself found a
-     violation, and the `fail` path returns early past the pass line. */
-  if (dataOptouts > OPTOUT_CEILING) {
-    fail(`§13 copy opt-outs: ${dataOptouts} string(s) skipped at a declared data-copy="data", over the ceiling of ${OPTOUT_CEILING} — ` +
-      `the exclusion widened. Either an element was marked data-copy="data" that was not before, or one already marked now covers more. ` +
-      `This is counted on the OPT-OUTS and not on the strings they removed, because the cost of one marking is only the combinations that ` +
-      `one element renders in — 8 on Libraries — which is under every per-source floor in this rule and always will be.`);
+     and the drills. Deliberately outside the branch above, because a widened
+     exclusion has to be reported whether or not the copy sweep itself found a
+     violation: the pass line it would otherwise ride on is the `else if` arm
+     of that branch, so a copy violation, or a corpus under STRING_FLOOR, would
+     take this report down with it. `fail` returns nothing and skips nothing --
+     it is the if/else-if structure that does. */
+  if (markedEls > OPTOUT_CEILING) {
+    fail(`§13 copy opt-outs: ${markedEls} element(s) carry a declared exclusion that removed copy, over the ceiling of ${OPTOUT_CEILING} — the exclusion widened. ` +
+      `Live on this run: ${optoutN.data} at data-copy="data", ${optoutN.statebar} at .statebar, ${optoutN.ariaHidden} at an aria-hidden="true" that renders a box. ` +
+      `The unit is the DISTINCT MARKED ELEMENT, counted once however many combinations render it, and deliberately NOT the ${markedStrings} string(s) those ` +
+      `markings removed: a marking on an element that renders in a single combination costs a handful of strings, which is under every per-source floor in ` +
+      `this rule and would be under a ceiling on strings too. Re-derive at OPTOUT_CEILING in this file and name the new element there, or take the marking off.`);
   } else {
-    ok(`§13 copy opt-outs: ${dataOptouts} string(s) skipped at a declared data-copy="data" (ceiling ${OPTOUT_CEILING}), ` +
-      `so the exclusion is capped and not only counted`);
+    ok(`§13 copy opt-outs: ${markedEls} element(s) carry a declared exclusion that removed copy (ceiling ${OPTOUT_CEILING}, so one more fails) — ` +
+      `${optoutN.data} data-copy="data", ${optoutN.statebar} .statebar, ${optoutN.ariaHidden} aria-hidden="true", removing ${markedStrings} string(s) between them; ` +
+      `the cap is on the MARKING and not on the strings it took, so it holds at every granularity down to one combination ` +
+      `(${unrenderedEls} further marking(s) cut only text the rendered walk was never going to read, and are outside this ceiling by construction — the block comment says why)`);
   }
   /* Reported separately from the line above because it is a separate corpus
      with a separate exemption, and one combined number would hide which of the

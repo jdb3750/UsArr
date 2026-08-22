@@ -3008,7 +3008,7 @@ all three density bands · **availability glyph accessible names** · **one tab 
 **1. It prints what it checked, not only what failed.** A silent pass is indistinguishable from a
 check whose glob was wrong and matched nothing — which is the specific way a hand-run sweep decays.
 Every assertion emits its own count, and names what it counted: font-family declarations parsed,
-screen×state×install×panel combinations swept, rendered chrome strings read, list renderings
+screen×state×install×panel combinations swept, rendered chrome and cell strings read, list renderings
 checked. A number that drops is a finding. ⚠️ **The counts themselves are deliberately not reproduced
 here.** This paragraph used to quote four of them as examples and **every one of the four had gone
 stale** — a document that copies a number the gate prints on every run has made a second copy with
