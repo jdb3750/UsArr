@@ -126,13 +126,20 @@
 	 * row's local write time (docs/reference/http-api.md §3.5). `null` is
 	 * "never synced" and must not be rendered as a time.
 	 *
-	 * ⚠️ NOTHING IN `web/` DRAWS THAT BANNER, AND IT IS BACKLOG RATHER THAN A
-	 * DECISION TAKEN HERE. §17.7 specifies the whole of it — non-modal, naming
-	 * the instance by the user's own name, linking to Services, and NOT greying
-	 * the catalogue — and none of that reaches the tree: `$lib/List.svelte`
-	 * carries a `staleNote` slot and no route passes one. Whoever builds it takes
-	 * the field off the same row as the name that goes in the sentence, because
-	 * the number is per instance and there is deliberately no global one.
+	 * ⚠️ HOME NOT DRAWING IT IS A SCOPE DECISION, NOT A GAP. This once read
+	 * *"nothing in `web/` draws that banner, and it is backlog"*, and that was a
+	 * claim about the whole tree made from one screen; it is false. §17.7 grants
+	 * the banner to the Library screen and to every per-type grid, and rules
+	 * Home's absence deliberate on the ground that Block B already reports a
+	 * degraded instance. So this screen declines a surface it was never given,
+	 * and there is nothing here to build.
+	 *
+	 * WHERE IT LIVES IS NOT RESTATED HERE, because a second copy of that list is
+	 * the thing that went stale the first time: `$lib/degraded` decides what a
+	 * banner says, `$lib/DegradedBanner` renders it, and `degraded.test.ts` is
+	 * what fails if a route stops mounting one. `$lib/List.svelte`'s `staleNote`
+	 * slot is a road deliberately not taken — `$lib/degraded`'s own note carries
+	 * the two reasons — so a route passing one is a regression, not progress.
 	 *
 	 * THE UNREACHABLE-INSTANCE FACT IS REAL and is reported, in Block B, where it
 	 * has a source. `scope-empty` is unreachable — ⚠️ but NOT because there is
@@ -1031,7 +1038,7 @@
 		and it rejects dropping those rows in the words the paragraph above
 		quotes. The all-sourceless install — no library-bearing service at all —
 		is a case §17.2 does not reach. An `unconfigured` install goes to the
-		wizard and never to a home page at all (§17.7).
+		wizard, and never to an EMPTY home page (§17.7's own words).
 
 		NOTHING IS DRAWN BEFORE THE READ LANDS. No skeleton, no shimmer, no zeroed
 		table: six zeros is a real answer this endpoint gives, so a zeroed
