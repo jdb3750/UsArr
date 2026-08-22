@@ -17,6 +17,7 @@ This file records the instruction text only. The design detail lives in `CLAUDE.
 
 | Version | Date | State | Size (characters) |
 | --- | --- | --- | --- |
+| v1.8 | 2026-08-22 | **Drafted — NOT applied.** Awaiting application by Joe or the project coordinator | 7638 (7650 bytes), md5 `2909dc2433ec2e3f9d7bed8376aef362` |
 | v1.7 | 2026-08-19 | **Applied to project settings** — 2026-08-19 | 7914 (7926 bytes) |
 | v1.6 | 2026-08-18 | Applied 2026-08-18, superseded by v1.7 on 2026-08-19 | 7729 (7739 bytes) |
 | v1.5 | 2026-08-17 | Applied 2026-08-17 05:05 UTC, superseded by v1.6 | 8112 (8124 bytes) |
@@ -25,6 +26,70 @@ This file records the instruction text only. The design detail lives in `CLAUDE.
 | v1.2 | 2026-08-16 | Applied 2026-08-16 07:57 UTC, superseded by v1.3 the same day | 7585 |
 | v1.1 | 2026-08-16 | Superseded by v1.2, never applied | 7022 |
 | v1.0 | 2026-08-16 | Superseded by v1.2 — applied 2026-08-16, replaced the same day | 3847 |
+
+## v1.8 — drafted, NOT applied
+
+**This is not the live settings text.** v1.7 below is, and stays live until Joe or the project
+coordinator pastes this text into the Project's settings by hand — agents cannot apply a version.
+7638 characters, md5 `2909dc2433ec2e3f9d7bed8376aef362` over its 7650 bytes.
+
+v1.8 is v1.7 plus exactly one wording change and one deletion, and nothing else — the ranking phrase
+in the replica-not-proxy paragraph, forced by `CLAUDE.md` at `origin/main` = `bca8dd2`, and the
+Go-floor sentence, cut for headroom exactly as v1.7's changelog entry pre-registered. The changelog
+entry below cites both.
+
+The verification chain, as far as it can run without an apply. **Before the edit**, the v1.7 block
+was extracted from `docs/PROJECT-INSTRUCTIONS.md` at `origin/main` = `bca8dd2`, first fenced block,
+the with-trailing-newline variant, and all three of its recorded gates were matched against that
+extract: **7914 characters** via `python3 len()`, **7926 bytes**, and md5
+**`eb03cc348585d2e7c55c47fb289bea62`**. That gate reproduces, so the text edited here is demonstrably
+the text that is live. **After the edit**, the two blocks were compared line by line: of the block's
+26 lines exactly two differ — line 1, which loses the Go-floor sentence, and line 7, which carries
+the ranking phrase — and the remainder of the edited sentence is byte-identical to v1.7's, so the
+change is confined to the ranking phrase itself. **There is no post-apply read-back to record**,
+because there has been no apply; that half of the chain belongs to whoever applies it, and this
+section must not be rewritten to claim it until they do.
+
+**It lands 362 characters under the 8000 limit, more than the ~150 this file aims to leave.** The
+overshoot is the size of the pre-registered cut rather than a target: v1.7's changelog named the
+Go-floor sentence as the cut to make when the next version needed room, and that sentence is 270
+characters whole. The required change alone yields 7908, which is 92 of headroom and short of the
+aim, so a cut was needed; taking only part of the sentence would have left a mutilated sentence
+still carrying the dated Go number that motivated the cut, so it was taken whole and the surplus is
+left for v1.9.
+
+**The eight earlier fenced blocks were measured before and after this edit and are byte-identical.**
+v1.7's re-measurement matched its recorded 7914 characters / 7926 bytes /
+`eb03cc348585d2e7c55c47fb289bea62` exactly, which is what v1.8 was derived from, and v1.6's matched
+its recorded 7729 / 7739 / `8ab3304a1ee48975480062d418e6f932`.
+
+````
+You are working on UsArr: a fast, self-hosted, unified hub and gateway over the media-acquisition ecosystem, running on a single self-hoster's own server. It aggregates the *Arrs (Sonarr, Radarr, Lidarr, Prowlarr, LazyLibrarian) and media backends (Navidrome, Jellyfin, Audiobookshelf, Komga, Kavita) into one local library you can browse, search and request from, and it exposes protocol surfaces (OpenSubsonic, OPDS) so existing client apps connect to UsArr instead of to each backend individually. It is meant to coexist with the rest of the ecosystem, not replace it. The stack is Go compiled to a single static binary with a SvelteKit SPA embedded in it, over SQLite in WAL mode. Treat any claim in the docs that something is or is not built as unverified: read the tree — web/src/routes for a screen, internal/ for a backend surface, internal/db/migrations for the schema — and name the commit you read. Do not write a fresher one; write the pointer. A milestone label is scope, not status.
+
+Before you propose or write anything, read CLAUDE.md at the repo root and then docs/ARCHITECTURE.md. Those two files, plus the ADRs in docs/DECISIONS.md, are the source of truth. Section 16 of ARCHITECTURE.md is authoritative for what belongs in which milestone, and it wins over every other document, this one included.
+
+Four principles govern every decision.
+
+First, replica not proxy: every user-facing read renders from local SQLite, and no screen ever blocks on an *Arr or a metadata provider. Perceived speed is a top-rank owner requirement, so anything that puts a synchronous upstream call on a render path is wrong by default and needs an explicit argument to survive. Three narrow exceptions are documented where they occur, and none of them blocks a render: byte streams on UsArr's own protocol surfaces, where audio, ebooks and comics are proxied with a plain io.Copy, video links out, and images are always proxied and cached; search over unowned items, which runs out of band and streams into an already-rendered page over SSE; and release search across indexers, which is remote and sits behind progressive disclosure.
+
+Second, UsArr is not a player: it never transcodes, never depends on FFmpeg, and does not implement video playback. It routes and links out to whichever media server owns the bytes.
+
+Third, pluggable by default: UsArr must work over a full stack, over any single library-bearing service, or over Prowlarr alone in Search-and-Grab mode, and every feature degrades honestly when a service is absent rather than rendering an empty screen. Presenting a library requires at least one library-bearing service; Prowlarr alone has no library. Requests are a pillar rather than a side feature: the Prowlarr free-text path ships in v0.1 and the *Arr-backed flow in v0.2.
+
+Fourth, single-user in v0.1 but multi-user in the schema from migration 0001. Two rules hold from the first migration: every user-scoped row carries a user_id, and every read path that aggregates across instances takes an access-scope parameter in its query signature, covering the grid, search, the client prefix index, the availability rollup and every northbound surface, defaulting in v0.1 to the owner's full scope. A rollup computed across instances a user cannot see is an existence oracle. The UI merely hides what has not shipped; authorization is enforced server-side from the first commit and is never bolted on later.
+
+Adversarial review is mandatory, and the owner asked for it explicitly. Substantive design, research or synthesis gets a reviewer pass that attacks assumptions, hunts for gaps and omissions, and verifies factual claims against primary sources. Every finding is then applied or rebutted in writing in docs/REVIEW-LOG.md. Findings are never quietly dropped. Several threads work this repo at once: section 11 of docs/DEVELOPMENT.md has the merge cadence, the file-ownership map and the guard rules.
+
+Verify, do not assert. Every claim about an external API, rate limit, licensing term, port, endpoint or field name must cite a primary source: official documentation, an OpenAPI spec, or the service's own source code. Training data about this ecosystem is stale and wrong in specific, load-bearing ways, so treat recollection as a hypothesis to check rather than a fact. Where you are reasoning rather than citing, say so and label it as inference. Never document a feature as existing when it does not. The same standard applies to this project's own gates: report what you measured — the binary, its version and the commit — because a green that names neither its tool nor its tree is a rumour, and fire a guard deliberately before trusting it, since one that has never been triggered is indistinguishable from no guard. Take a tool's version from the gate's own "tool:" banner, never from a bare --version — the binary on PATH is not the pinned gate binary. The "Ecosystem facts that stale training data gets wrong" section of CLAUDE.md is the list rather than a sample; re-verify any entry against a primary source before relying on it.
+
+Security is not negotiable. *Arr API keys are full-admin credentials: encrypted at rest under a versioned, AAD-bound scheme, never logged, never sent to the browser, and never sent to a host the user has just edited without re-entry. SSRF is a first-class risk because users configure arbitrary internal URLs, so resolve then pin. Argon2id is for user passwords only; per-app API keys verify with a fast keyed hash, because running Argon2id on every request is a remote memory-exhaustion vector. Section 14 of ARCHITECTURE.md owns the full threat model.
+
+Cut before you add, but leave the seams open. The project's largest risk is never shipping, so a proposal that adds a subsystem must say what it removes or defer itself to a later milestone. Deferred is not rejected: docs/FUTURE.md mostly holds the features that are wanted later, each with the specific seam in the current design that keeps it cheap to add. Preserve those seams; do not build the future feature early.
+
+Some things are permanently refused rather than deferred. Section 1.4 of ARCHITECTURE.md lists six: a video transcoder, an in-app media player, any FFmpeg dependency, reimplementing the *Arr download and import engines, a required sidecar (optional backends may exist, but Postgres, Redis or a search server may never be required), and being a dashboard. Section 16 adds native TV or mobile apps. Do not propose these and do not reopen them. Section 16 does name two measured conditions that would reopen playback, a hostile or unusable Jellyfin API and at least two engineers who can own an FFmpeg surface indefinitely including security response; neither is met, so treat it as closed. Anything out of scope that is not on those two lists is deferred rather than closed unless its docs/FUTURE.md heading says otherwise, so check there before assuming either way.
+
+On interface design, read section 17 of ARCHITECTURE.md before touching a screen. It is authoritative over the screens, and docs/design/ specifies the visual system that renders them — DESIGN-DIRECTION.md, tokens.css and the mockups. Read both, and where they disagree, section 17 wins. The constraint is utilitarian over stylish: standard patterns in preference to novel ones, density and speed over animation, and no visual flair that costs render time. Navidrome is the reference point, and "sleek" and "modern" are explicitly not goals. Section 17 enumerates the screens and section 16 says which ship in v0.1; read both rather than assuming a count. A degraded backend gets a non-modal banner; the catalogue never greys out.
+````
 
 ## v1.7 — as applied
 
@@ -335,6 +400,109 @@ On interface design: utilitarian over stylish. The bar is tried-and-true, easy t
 ````
 
 ## Changelog
+
+### v1.8 — 2026-08-22 (drafted; NOT applied)
+
+One wording change and one deletion against v1.7, and nothing else. The wording change is forced by
+`CLAUDE.md` at `origin/main` = `bca8dd253a81ef5b290bdd13c5cbfc57602483bd`; the deletion is the cut
+v1.7's own changelog entry pre-registered for whenever the next version needed room.
+
+- **The ranking phrase, forced by `CLAUDE.md:38-40` at `bca8dd2`.** That passage now reads
+  *"Perceived speed is ~~the owner's number-one requirement~~ **a top-rank owner requirement**: …"*,
+  carrying the strikethrough and the replacement in the file itself. v1.7's text said "Perceived
+  speed is the owner's number-one requirement"; v1.8 says "Perceived speed is a top-rank owner
+  requirement". **Only the ranking phrase moves** — the rest of the sentence, "so anything that puts
+  a synchronous upstream call on a render path is wrong by default and needs an explicit argument to
+  survive", is byte-identical to v1.7's and was verified so rather than retyped. Net **−6
+  characters**.
+- **The replacement wording is taken as landed, not paraphrased.** `CLAUDE.md`'s rider beside that
+  sentence records the replacement string as the exact wording the owner was shown and approved on
+  2026-08-21, and says outright that this is why a milder synonym is not substituted for it. So the
+  string is copied, not re-worded, and the ranking is not removed: "a top-rank owner requirement" is
+  still a ranking and is still attributed to him. **Speed is not demoted.**
+- **Not changed, deliberately: the adversarial-review sentence.** A relay reported that two
+  sentences changed in `CLAUDE.md`. They did not. Verified by extracting the adversarial-review
+  paragraph from `CLAUDE.md` at `7c8cb1b1` (its pre-landing form, lines 78-82) and at `bca8dd2`
+  (lines 116-120) and hashing both: **md5 `7033012f07e08ba050b41149b2b11560` on each, `cmp` clean**.
+  What landed beside it is a *rider*, and that rider states that the lead sentence "is left as it
+  stands" because the owner's sign-off covered a specific pair of changes and rewording it was not
+  among them; the residual is registered as `LS-394.26` in `docs/REVIEW-LOG.md`. **So the
+  instructions text's "Adversarial review is mandatory, and the owner asked for it explicitly" is
+  correct to stand unchanged**, and changing it here would have manufactured the very contradiction
+  between `CLAUDE.md`, this file and the applied text that this file's closing invariant forbids.
+- **Cut for headroom: the Go-floor sentence** (270 characters including the space that joined it),
+  removed from the opening paragraph verbatim:
+
+  > Do not state a Go minimum from memory: the go directive in go.mod is authoritative, 1.25.13 at
+  > the time of writing, and it is a moving floor raised by the gating govulncheck step rather than
+  > by the dependency floor beneath it, with the reasoning in docs/DEVELOPMENT.md.
+
+  **This is the cut v1.7's changelog pre-registered, and its argument was re-verified at this tip
+  rather than taken on v1.7's word.** Every operative fact in it survives in `CLAUDE.md`'s
+  Conventions section at `bca8dd2:230-233` — `go.mod` authoritative, the floor set by govulncheck
+  rather than by a dependency, "re-check rather than assuming; a new advisory moves it" — and the
+  instructions' second paragraph orders an agent to read `CLAUDE.md` before proposing or writing
+  anything, so the surviving copy sits one mandated hop away. The dated number it carried is still
+  correct (`go.mod:3` is `go 1.25.13` at `bca8dd2`), which is the point: it is the one sentence in
+  the text carrying a number that needs re-keying as the floor moves. Same argument v1.4 used to cut
+  the licence sentence.
+- **What the cut costs, stated rather than waved past.** The sentence was also a prophylactic
+  against an agent stating a Go minimum from memory *before* it reaches `CLAUDE.md`. That narrow
+  window is real and is the price paid; it is judged smaller than carrying a duplicated, dated fact
+  in a field with a hard 8000-character limit.
+- **Measured, not estimated.** v1.7 re-measured at **7914 characters / 7926 bytes / md5
+  `eb03cc348585d2e7c55c47fb289bea62`**, matching its record, so the edit was made against the live
+  text. The required change alone gives **7908** (92 of headroom, short of the ~150 aim). With the
+  cut, v1.8 is **7638 characters / 7650 bytes / md5 `2909dc2433ec2e3f9d7bed8376aef362`**, **362
+  under the limit**. Characters via `python3 len()` on the decoded string and confirmed with
+  `LC_ALL=C.utf8 wc -m`; bytes reported separately because the em dashes make them differ.
+- **The other eight blocks are untouched**, verified by hashing every fenced block before and after
+  the edit — all eight unchanged, v1.7's included, so this version is derived from a gate that
+  reproduces rather than from a remembered one.
+- **A tension with this file's own Candidates doctrine, recorded rather than hidden.** That section
+  says a fenced block and a Status row "mark a version that exists as a single applied artefact with
+  a checksum over it", and that a candidate gets a block "on the day it becomes a version, and not
+  before". v1.8 has both while being unapplied. It is given them because it is a complete, numbered,
+  measured version rather than a candidate fragment, and because a checksum is exactly what whoever
+  applies it will need to verify the paste. The doctrine's real purpose — that no reader mistake
+  unapplied text for live — is served instead by the heading, the Status row and this entry all
+  saying **NOT applied** outright, and by v1.7's section being left exactly as it stands, still
+  reading "This is the live settings text", because it still is.
+- **Adversarial review of the draft, run against the repo at `bca8dd2`.** The block's remaining
+  factual claims were re-resolved rather than assumed, and the findings are recorded here.
+  - *Holds.* The six permanent refusals: `ARCHITECTURE.md` §1.4 (`:117-128`) lists exactly six, and
+    they are the six the text names. §16 (`:3411-3412`) adds native TV or mobile apps, and states
+    the two measured reopen conditions at `:3413-3415` as the text describes them.
+  - *Holds.* The byte-proxy exceptions: §5.4's table (`:700-704`) gives audio/ebook/comic proxied,
+    video linked out, images always proxied and cached, and `:706` gives the plain `io.Copy`. The
+    out-of-band SSE search is §8.6, summarised at `:142-145`.
+  - *Holds.* The access-scope rule is `ARCHITECTURE.md` §1.3 item 2 (`:111-115`), including the
+    existence-oracle reasoning and the v0.1 default to the owner's full scope, in the same terms.
+  - *Holds.* The request split: `CLAUDE.md:111-112` puts the Prowlarr free-text path in v0.1
+    (Search-and-Grab mode) and the *Arr-backed flow in v0.2; §16.2 (`:3237`) carries the v0.2
+    request model.
+  - *Holds, with a live instrument caveat.* The Navidrome anchor and the refusal of "sleek" and
+    "modern" are §17.1 (`:3451-3453`). **`Sleek` is capitalised there**, so a lowercase `grep`
+    returns nothing: `grep -c "sleek" docs/ARCHITECTURE.md` gives **0** while `grep -n "Sleek"`
+    gives line 3453. That zero is an instrument failure, not an absence, and is recorded here as the
+    positive control for it.
+  - *Holds, but its citations have drifted again.* The `tool:` banner the text names still exists,
+    re-resolved by name at this tip: `require_tool` at `Makefile:319`, the banner it prints at
+    `:340`, `lint-go`'s call at `:823`, `GOLANGCI_VERSION ?= v2.12.2` at `:155` against
+    `GOLANGCI_LINT := $(GOBIN_DIR)/golangci-lint` at `:228`. **Those are not v1.7's 302/323/806/
+    138/211** — the Makefile moved again between `4731c7d` and `bca8dd2`, the second time in two
+    versions. The instructions text is unaffected because it cites no line numbers, which is
+    precisely why it should not start.
+  - *Holds.* The Go floor: `go.mod:3` is `go 1.25.13`, and `CLAUDE.md:230-233` carries the
+    govulncheck-not-dependency reasoning the cut sentence duplicated.
+  - *Checked, clean.* The edit disturbed no markdown: the block still opens and closes on its own
+    four-backtick fence, still has 26 lines, and the edited sentence is still one sentence with its
+    "so … and needs …" clause structure intact. The opening paragraph reads cleanly across the
+    excision — "…over SQLite in WAL mode. Treat any claim in the docs…".
+- **The gate proves nothing about this prose.** This is a docs-only diff, and `make check` reaches
+  `docs/` through **gitleaks alone**; a green attests "no credential-shaped string in the diff" and
+  nothing whatever about whether these sentences are true. The truth claims above are carried by the
+  citations, each re-resolved at `bca8dd2`.
 
 ### v1.7 — 2026-08-19 (applied 2026-08-19)
 
