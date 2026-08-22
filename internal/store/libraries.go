@@ -91,12 +91,16 @@ type Library struct {
 	// at all for two of the six. Reading it costs nothing: it is a column on
 	// the row this statement already reads, no join and no second statement.
 	//
-	// ⚠️ NOTHING WRITES IT. `library.formats` has no writer in non-test Go —
-	// catalogue.go's create names user_id, name, slug, kind, managed_by,
-	// enabled and include_in_search, and there is no `UPDATE library` anywhere
-	// — so it is NULL on every row today and a renderer falls back to kind
-	// alone. The column is the seam the Audiobookshelf split lands on, and the
-	// split is not v0.1's (§17.8 marks it "from the milestone Audiobookshelf
+	// ⚠️ ITS ONLY WRITER IS THE ACCEPT STEP, so a library the import path
+	// created is NULL here. catalogue.go's create names user_id, name, slug,
+	// kind, managed_by, enabled and include_in_search and no more, and none of
+	// the four `UPDATE library` statements in non-test Go touches this column:
+	// two in catalogue.go (a minted library's name, a provisional library's
+	// kind) and two in reconcile.go's sweepOrphans (orphaned_at, set and
+	// cleared). Only a library accepted with a format filter carries a value
+	// (AcceptLibraries, §17.8); for every other row a renderer falls back to
+	// kind alone. The column is the seam the Audiobookshelf split lands on, and
+	// the split is not v0.1's (§17.8 marks it "from the milestone Audiobookshelf
 	// lands in, not v0.1").
 	Formats sql.NullString
 

@@ -1245,34 +1245,55 @@ func userLibraries(ctx context.Context, q querier, userID int64) (userLibrarySet
 // next exit added to bindOneContainer gets it wrong by omission. Computed here,
 // every caller inherits it and a new exit cannot forget to.
 //
+// It binds at container_kind 'remote_library', which is BindContainers' own
+// decision and is argued there (LS-06). The body is upsertLibrarySource, which
+// takes the kind as a parameter; this signature is the one the whole import path
+// calls and it stays exactly as it was.
+func insertLibrarySource(
+	ctx context.Context, tx *sql.Tx, libraryID, instanceID int64, c CatalogueContainer,
+) (bool, error) {
+	return upsertLibrarySource(ctx, tx, libraryID, instanceID, "remote_library", c.RemoteID, c.Name)
+}
+
+// upsertLibrarySource is insertLibrarySource's body with container_kind as an
+// argument, because the Accept step binds a source the user chose rather than
+// one an adapter reported and carries its own container_kind (proposals.go).
+//
+// ⚠️ IT IS A PARAMETER RATHER THAN A SECOND COPY OF THE UPSERT. The existence
+// SELECT and the ON CONFLICT clause have to name the SAME four columns as
+// ux_library_source, in its column order, or the read reports "not bound" for a
+// row the write then updates — and two statements maintaining that agreement in
+// two files is the drift this repo keeps finding after it compiles clean.
+//
 // It is a SEEK, not a scan: the four columns it tests are ux_library_source's
 // unique key in its own column order. It runs inside the caller's transaction,
 // so nothing can create the row between the read and the write.
-func insertLibrarySource(
-	ctx context.Context, tx *sql.Tx, libraryID, instanceID int64, c CatalogueContainer,
+func upsertLibrarySource(
+	ctx context.Context, tx *sql.Tx, libraryID, instanceID int64,
+	containerKind, containerRef, containerIdentity string,
 ) (bool, error) {
 	var one int
 	err := tx.QueryRowContext(ctx, `
 		SELECT 1 FROM library_source
 		 WHERE library_id = ? AND service_instance_id = ?
-		   AND container_kind = 'remote_library' AND container_ref = ?`,
-		libraryID, instanceID, c.RemoteID).Scan(&one)
+		   AND container_kind = ? AND container_ref = ?`,
+		libraryID, instanceID, containerKind, containerRef).Scan(&one)
 	switch {
 	case errors.Is(err, sql.ErrNoRows):
 		// Not bound before: whatever the upsert does next, it attaches.
 	case err != nil:
-		return false, fmt.Errorf("look up source %s on library %d: %w", c.RemoteID, libraryID, err)
+		return false, fmt.Errorf("look up source %s on library %d: %w", containerRef, libraryID, err)
 	}
 	attached := errors.Is(err, sql.ErrNoRows)
 
 	if _, err := tx.ExecContext(ctx, `
 		INSERT INTO library_source
 		  (library_id, service_instance_id, container_kind, container_ref, container_identity)
-		VALUES (?,?, 'remote_library', ?, ?)
+		VALUES (?,?,?,?,?)
 		ON CONFLICT (library_id, service_instance_id, container_kind, container_ref)
 		DO UPDATE SET container_identity = excluded.container_identity, missing_since = NULL`,
-		libraryID, instanceID, c.RemoteID, c.Name); err != nil {
-		return false, fmt.Errorf("bind source %s to library %d: %w", c.RemoteID, libraryID, err)
+		libraryID, instanceID, containerKind, containerRef, containerIdentity); err != nil {
+		return false, fmt.Errorf("bind source %s to library %d: %w", containerRef, libraryID, err)
 	}
 	return attached, nil
 }
