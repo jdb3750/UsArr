@@ -383,8 +383,9 @@ type acceptLibrariesResponse struct {
 // no instance — so that a client error is a 400 naming the field rather than a
 // 500 from a layer that had no reason to expect it. Everything that is a fact
 // about the DATA — whether the name is free, whether the caller may name that
-// instance — belongs to the store, which decides it inside the transaction where
-// it cannot be raced, and returns a sentinel this file maps.
+// instance, whether the kind is one the schema has — belongs to the store, which
+// decides it inside the transaction where it cannot be raced, and returns a
+// sentinel acceptLibrariesError maps.
 func (s *Server) handleAcceptLibraries(w http.ResponseWriter, r *http.Request) error {
 	a, ok := sessionFrom(r)
 	if !ok {
@@ -539,6 +540,16 @@ func badAcceptance(i int, what string) error {
 // handle on a library they may not otherwise know exists. So the message is
 // built here from the request, and the cause goes to the log through wrapping().
 //
+// # THE 400 IS A CLASSIFIED STORAGE FAILURE, NOT A SECOND COPY OF THE RULE
+//
+// `library.kind`'s permitted values live in the column's CHECK and nowhere else.
+// A kind the schema refuses used to arrive here as an unclassified error and go
+// out as a 500 — a caller-supplied value crashing the endpoint. The repair is
+// the store CLASSIFYING that failure (store.ErrLibraryKindUnknown), not a value
+// list in Go: re-deriving the list would be one rule maintained twice and stale
+// the first time a migration adds a kind. So the status is decided from the
+// failure class and the vocabulary stays in the schema.
+//
 // ⚠️ THE 409 COVERS THREE CONDITIONS, ONE CODE, and the message says the true
 // thing about all three. That sentinel is returned when the name is held at a
 // DIFFERENT kind, when it is held by the reserved `Unfiled` library that nothing
@@ -553,7 +564,19 @@ func acceptLibrariesError(err error) error {
 			"another of your libraries already holds that name, or the web address it would use").
 			withAction("Choose a different name").wrapping(err)
 	case errors.Is(err, store.ErrSourceOutsideScope):
+		// One answer for an instance outside the caller's scope AND for an id
+		// naming no instance at all. See store.ErrSourceOutsideScope for why
+		// they are deliberately indistinguishable on the wire.
 		return errStatus(http.StatusNotFound, CodeNotFound, "no such service").wrapping(err)
+	case errors.Is(err, store.ErrLibraryKindUnknown):
+		// OUR OWN SENTENCE, and it names no kinds. The store's cause carries
+		// SQLite's text, which on this class quotes the CHECK expression itself
+		// — the constraint's value list, verbatim — and an error body is exactly
+		// where that would ride out. The cause goes to the log through
+		// wrapping(); the caller gets the fact it can act on.
+		return errStatus(http.StatusBadRequest, CodeBadRequest,
+			"one of these libraries names a media kind UsArr does not have").
+			withAction("Choose one of the offered kinds").wrapping(err)
 	}
 	// Everything else is UsArr's own failure. The store's text is NOT forwarded:
 	// it is a database-layer sentence, and the caller can act on none of it.

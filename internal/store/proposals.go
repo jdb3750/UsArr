@@ -9,6 +9,8 @@ import (
 	"sort"
 	"strings"
 	"time"
+
+	"github.com/ncruces/go-sqlite3"
 )
 
 // §17.8's Accept step, store side: what a connect probe DESCRIBES, and what
@@ -88,8 +90,34 @@ var ErrLibraryNameTakenAtOtherKind = errors.New(
 // instance both writes rows the caller may not read and makes that instance's
 // contents countable through DescribeContainers afterwards. Failing closed here
 // is the write-side half of the predicate every read in this file carries.
+//
+// ⚠️ IT ALSO ANSWERS AN INSTANCE THAT DOES NOT EXIST, AND THE TWO ARE ONE
+// SENTINEL ON PURPOSE. admitsInstance is `1=1` for the owner, so before this
+// error covered both, an id naming no row walked past the scope check and died
+// on `library_source`'s foreign key — a 500 for a caller-supplied id. Splitting
+// the two would hand the owner's answer to a future non-owner as an existence
+// oracle, which is exactly what store.go rule 2 and notFoundOr refuse. So the
+// caller learns "no such service" for both, and the log distinguishes them.
+//
+// A SOFT-DELETED INSTANCE IS ABSENT for this purpose. Its row survives, so the
+// foreign key would resolve and the bind would succeed — a library quietly
+// sourced from a service the user removed. Every other read of
+// `service_instance` in this package filters `deleted_at IS NULL`; so does this.
 var ErrSourceOutsideScope = errors.New(
-	"store: that source names a service instance outside the caller's access scope")
+	"store: that source names a service instance the caller cannot bind")
+
+// ErrLibraryKindUnknown is returned when an acceptance names a `library.kind`
+// the schema's CHECK does not permit.
+//
+// ⚠️ THE VALUE LIST IS NOT COPIED INTO GO, AND MUST NOT BE. libraryAcceptance's
+// Kind is checked for PRESENCE by the wire layer and for MEMBERSHIP by the
+// column's own CHECK — one derivation of one rule, so a migration that adds a
+// kind does not leave a stale list behind it. What this sentinel adds is the
+// classification: the constraint failure comes back from SQLite carrying its
+// extended result code, and that is enough to tell "the caller named a kind that
+// is not real" from "the database is broken" without knowing which kinds are.
+var ErrLibraryKindUnknown = errors.New(
+	"store: that library kind is not one the schema permits")
 
 // BoundLibrary is one library that already stands over a container.
 type BoundLibrary struct {
@@ -1011,6 +1039,22 @@ func acceptOne(
 			return AcceptedLibrary{}, fmt.Errorf("accept library %q: source on service instance %d: %w",
 				name, src.ServiceInstanceID, ErrSourceOutsideScope)
 		}
+		// THE LOOKUP THE FOREIGN KEY WOULD OTHERWISE DO, and it is here rather
+		// than left to the key because a key violation is a 500: it surfaces as
+		// an unclassified database failure several statements later, after the
+		// `library` row has been written and rolled back. Asking first turns a
+		// caller-supplied id that names nothing into the same refusal as one the
+		// scope does not admit, which is the answer ErrSourceOutsideScope
+		// documents.
+		ok, err := serviceInstanceBindable(ctx, tx, src.ServiceInstanceID)
+		if err != nil {
+			return AcceptedLibrary{}, err
+		}
+		if !ok {
+			return AcceptedLibrary{}, fmt.Errorf(
+				"accept library %q: source names service instance %d, which does not exist "+
+					"or has been removed: %w", name, src.ServiceInstanceID, ErrSourceOutsideScope)
+		}
 	}
 
 	lib, err := resolveAcceptedLibrary(ctx, tx, userID, name, a, now)
@@ -1108,6 +1152,19 @@ func resolveAcceptedLibrary(
 		VALUES (?,?,?,?,?,?,1,1,?,?)`,
 		userID, name, slug, a.Kind, formatsJSON(a.Formats), a.ManagedBy, now, now)
 	if err != nil {
+		// A CHECK violation HERE is the caller's `kind`, and saying so is what
+		// keeps the value list in the schema. Of the columns this INSERT sets,
+		// `kind` and `managed_by` are the two a CHECK polices, and acceptOne has
+		// already refused a managed_by outside 'auto'/'user' above — so the
+		// remaining CHECK-policed value on this statement is the one the wire
+		// supplied. MEASURED on ncruces/go-sqlite3 v0.35.3 (SQLite 3.53.4): the
+		// error satisfies errors.Is against CONSTRAINT_CHECK and not against
+		// CONSTRAINT_FOREIGNKEY, so the classes are distinguishable rather than
+		// collapsed into a generic CONSTRAINT.
+		if errors.Is(err, sqlite3.CONSTRAINT_CHECK) {
+			return AcceptedLibrary{}, fmt.Errorf("create library %q at kind %q: %w",
+				name, a.Kind, ErrLibraryKindUnknown)
+		}
 		return AcceptedLibrary{}, fmt.Errorf("create library %q: %w", name, err)
 	}
 	id, err := res.LastInsertId()
@@ -1266,6 +1323,26 @@ func rescopeSearchDocs(ctx context.Context, tx *sql.Tx, libraryID int64) error {
 // is whether it may. The three branches are instancePredicate's own, including
 // the one that matters — an empty visible set with AllInstances false admits
 // NOTHING, because "no visible instances" must never mean "all of them".
+// serviceInstanceBindable answers whether an id names a service instance a
+// library may be sourced from — it exists and has not been soft-deleted.
+//
+// It is a plain existence read rather than a join into the acceptance query
+// because the acceptance is per-source and the answer has to be known BEFORE any
+// row is written: the point of the check is that the refusal is a classified
+// 404 rather than a foreign-key failure the wire layer can only call internal.
+func serviceInstanceBindable(ctx context.Context, tx *sql.Tx, id int64) (bool, error) {
+	var one int
+	err := tx.QueryRowContext(ctx,
+		`SELECT 1 FROM service_instance WHERE id = ? AND deleted_at IS NULL`, id).Scan(&one)
+	switch {
+	case errors.Is(err, sql.ErrNoRows):
+		return false, nil
+	case err != nil:
+		return false, fmt.Errorf("look up service instance %d: %w", id, err)
+	}
+	return true, nil
+}
+
 func (s Scope) admitsInstance(id int64) bool {
 	if s.AllInstances {
 		return true

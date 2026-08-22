@@ -986,30 +986,13 @@ recomputes the same set, and the cost of a refusal is the user fixing one name a
 | Status | `error` | Meaning | `action` |
 | --- | --- | --- | --- |
 | `200` | — | Every acceptance was created or joined. | — |
-| `400` | `bad_request` | A fact about the request document: an empty batch, an acceptance with no name, no kind or no source, a source naming no service or no container, a name past the wire bound, an unknown field, or a body that is not one JSON object. The message names which acceptance, by index. | (varies) |
+| `400` | `bad_request` | Two groups. **A fact about the request document**: an empty batch, an acceptance with no name, no kind or no source, a source naming no service or no container, a name past the wire bound, an unknown field, or a body that is not one JSON object — the message names which acceptance, by index. **Or a `kind` the schema does not have** (§2b.7), whose message names no index and no kinds. | (varies) |
 | `409` | `library_name_taken` | The name is not available to this user (§2b.6). | `Choose a different name` |
-| `404` | `not_found` | A source names a service instance the caller's access scope does not admit. **Two conditions, one code**, on §4.4's reasoning: "no such instance" and "not yours" are deliberately indistinguishable, because the difference is an existence oracle. | — |
+| `404` | `not_found` | A source names a service instance the caller cannot bind: **outside the caller's access scope**, **naming no row at all**, or **soft-deleted**. **Three conditions, one code**, on §4.4's reasoning: "no such instance" and "not yours" are deliberately indistinguishable, because the difference is an existence oracle. | — |
 | `403` | `csrf` | Stale page token. | (its own) |
 | `401` | `unauthorized` | No session, or one that has expired. | — |
 | `415` | `unsupported_media_type` | Not sent as `Content-Type: application/json`. Checked **first**, ahead of the CSRF token, because the header requirement is itself half the CSRF defence. | — |
 | `500` | `internal` | The acceptance could not be written. **The store's own sentence is not forwarded**: it names an internal row id and a database-layer prefix, and the caller can act on none of it. The cause is in the process log. | — |
-
-⚠️ **A `kind` the schema refuses is a `500`, not a `400`, and that is a known rough edge rather than a
-decision.** `library.kind` is a `CHECK` in migration `00005_library_sync.sql` and there is no Go-side
-copy of the list; writing one here would be two derivations of one membership rule, which is the defect
-class `DEVELOPMENT.md` §11 names. A client sending a kind outside
-`movie · series · artist · album · book · comic · game` therefore reaches the constraint. The fix, when
-it is worth making, is a single list the schema mirror is checked against — not a second one typed into
-this layer.
-
-⚠️ **A `service_instance_id` that does not exist is also a `500`, for a different reason worth stating
-separately.** The scope check is `admitsInstance`, and the owner's scope admits **every** id — that is
-what `AllInstances` means — so an id naming no row reaches the foreign key on `library_source` rather
-than the scope refusal above. A **non-owner** naming the same id gets the `404` in the table, because
-the scope refuses it before the write. Both are measured, not inferred. The clean fix is a scoped
-existence read ahead of the batch, which this endpoint deliberately does not do today: it would be a
-second derivation of the same admission question, one statement per source, on the layer that already
-delegates it.
 
 ### 2b.6 `library_name_taken` covers three conditions, and one action fixes all of them
 
@@ -1022,6 +1005,31 @@ The store raises one sentinel for three cases, and the message says the true thi
 
 All three are fixed by typing a different name, which is why one code is honest here — and why the
 message names neither the conflicting library's id nor the store's own wording.
+
+### 2b.7 Two caller-supplied values that used to be `500`s, and how they were closed
+
+Both were measured, not inferred, and both are now classified refusals.
+
+**A `kind` the schema refuses is a `400`.** `library.kind`'s permitted values live in a `CHECK` in
+migration `00005_library_sync.sql` and **there is still no Go-side copy of the list** — writing one
+would be two derivations of one membership rule, the defect class `DEVELOPMENT.md` §11 names, stale the
+first time a migration adds a kind. What changed is not a list but a **classification**: the store maps
+the constraint failure's extended result code onto its own sentinel, and the wire layer maps that
+sentinel onto `400`. Measured on `ncruces/go-sqlite3` v0.35.3 (SQLite 3.53.4): a `CHECK` violation
+satisfies `errors.Is` against `sqlite3.CONSTRAINT_CHECK` and not against `CONSTRAINT_FOREIGNKEY`, so the
+two classes are distinguishable rather than collapsed into a generic constraint error.
+
+⚠️ **The `400` body names no kinds, and that is load-bearing.** SQLite's message for this class quotes
+the constraint expression itself — the entire permitted value list, verbatim. Forwarding it would put
+the schema's own text on the wire and hand a client a list to hardcode. The message is UsArr's own
+sentence; the cause goes to the process log.
+
+**A `service_instance_id` that names no row is a `404`.** The scope check is `admitsInstance`, and the
+owner's scope admits **every** id — that is what `AllInstances` means — so an id naming no row used to
+walk past it and die on `library_source`'s foreign key. The store now performs the existence read ahead
+of the write, and returns the **same** sentinel as an out-of-scope source, so the caller cannot tell the
+two apart. A soft-deleted instance is absent for this purpose too: its row survives, so the foreign key
+would resolve and the library would be quietly sourced from a service the user removed.
 
 ---
 

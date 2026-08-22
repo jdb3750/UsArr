@@ -653,6 +653,70 @@ func TestAcceptLibrariesRefusesASourceOutsideTheScope(t *testing.T) {
 	}
 }
 
+// THE TWO REACHABLE 500s, CLOSED — and closed by CLASSIFYING the storage
+// failure rather than by copying `library.kind`'s value list into Go.
+//
+// Both inputs are things a caller can send today: a kind outside the column's
+// CHECK, and an instance id naming no row. As the OWNER, whose scope admits every
+// id, so the second one is not caught by the scope check ahead of it.
+//
+// ⚠️ THE BODY-CONTENT ASSERTION IS HALF THE POINT. SQLite's message for a CHECK
+// violation quotes the constraint expression itself — the whole permitted value
+// list, verbatim — and a 500 body is exactly where that rides out. So the test
+// asserts the status AND that the driver's sentence did not come with it.
+func TestAcceptLibrariesClassifiesAStorageRefusal(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		body string
+		want int
+		code ErrorCode
+	}{
+		{
+			name: "a kind the schema does not have",
+			body: acceptBody("Banana Shelf", "banana", false, 1, "c-a"),
+			want: http.StatusBadRequest,
+			code: CodeBadRequest,
+		},
+		{
+			// 404 rather than 400: it is the same answer as an instance the
+			// caller may not see, deliberately, so the pair is not an oracle.
+			name: "an instance id naming no row",
+			body: acceptBody("Ghost Source", "comic", false, 987654, "c-a"),
+			want: http.StatusNotFound,
+			code: CodeNotFound,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			s := newTestServer(t, nil)
+			seedProposalsScreenCorpus(t, s)
+
+			code, body := callAccept(t, s, true, tc.body)
+			if code != tc.want {
+				t.Fatalf("POST = %d, want %d: %s", code, tc.want, body)
+			}
+			var got errorBody
+			mustJSON(t, body, &got)
+			if got.Error != tc.code {
+				t.Errorf("error = %q, want %q", got.Error, tc.code)
+			}
+			// The driver's own words, and the schema's, in our error body.
+			for _, forbidden := range []string{
+				"store:", "sqlite", "CHECK", "constraint", "FOREIGN KEY", "banana", "987654",
+			} {
+				if strings.Contains(body, forbidden) {
+					t.Errorf("%q reached the browser in an error body: %s", forbidden, body)
+				}
+			}
+
+			// ALL OR NOTHING held: the proposal is still a proposal.
+			_, after := callProposals(t, s, true)
+			if !strings.Contains(after, `"container_ref":"c-a"`) {
+				t.Errorf("a refused acceptance consumed the proposal anyway: %s", after)
+			}
+		})
+	}
+}
+
 // The request-shape refusals are 400s naming which acceptance was refused. Each
 // is a fact about the DOCUMENT, decided before the store is called, so none of
 // them can half-write a batch.

@@ -740,6 +740,55 @@ func TestAcceptRefusesASourceOutsideTheScope(t *testing.T) {
 	}
 }
 
+// THE TWO CALLER-SUPPLIED VALUES THAT USED TO REACH STORAGE UNCLASSIFIED.
+//
+// Both were 500s on the wire: a kind outside `library.kind`'s CHECK died on the
+// constraint, and an instance id naming no row walked past admitsInstance — `1=1`
+// for the owner — and died on `library_source`'s foreign key. Each now comes back
+// as a sentinel the wire layer maps, and NEITHER assertion is satisfied by a bare
+// "some error": the sentinel is what is asserted, because the defect was that the
+// failure had no class.
+func TestAcceptClassifiesWhatTheCallerGotWrong(t *testing.T) {
+	s := newTestStore(t)
+	seedProposalsCorpus(t, s)
+	before := count(t, s, `SELECT COUNT(*) FROM library`)
+
+	// A kind the schema's CHECK refuses. The value list is NOT restated here
+	// either — what is asserted is that an unreal kind is classified.
+	if _, err := s.AcceptLibraries(t.Context(), OwnerScope(0), 0,
+		[]LibraryAcceptance{acceptance("Banana Shelf", "banana", source(1, "c-a"))}); !errors.Is(
+		err, ErrLibraryKindUnknown) {
+		t.Fatalf("an unreal kind returned %v, want ErrLibraryKindUnknown", err)
+	}
+
+	// An instance id that names no row, for the OWNER — the scope that admits
+	// every id and so cannot catch this one.
+	if _, err := s.AcceptLibraries(t.Context(), OwnerScope(0), 0,
+		[]LibraryAcceptance{acceptance("Ghost Source", "comic", source(987654, "c-a"))}); !errors.Is(
+		err, ErrSourceOutsideScope) {
+		t.Fatalf("an instance id naming no row returned %v, want ErrSourceOutsideScope", err)
+	}
+
+	// A soft-deleted instance is absent for this purpose: the foreign key would
+	// resolve, so nothing but this lookup refuses it.
+	if err := s.db.Write(t.Context(), func(ctx context.Context, tx *sql.Tx) error {
+		_, err := tx.ExecContext(ctx,
+			`UPDATE service_instance SET deleted_at = ? WHERE id = 1`, FormatTime(testNow))
+		return err
+	}); err != nil {
+		t.Fatalf("soft-delete instance 1: %v", err)
+	}
+	if _, err := s.AcceptLibraries(t.Context(), OwnerScope(0), 0,
+		[]LibraryAcceptance{acceptance("Removed Source", "comic", source(1, "c-a"))}); !errors.Is(
+		err, ErrSourceOutsideScope) {
+		t.Fatalf("a soft-deleted instance returned %v, want ErrSourceOutsideScope", err)
+	}
+
+	if n := count(t, s, `SELECT COUNT(*) FROM library`); n != before {
+		t.Errorf("library rows went %d → %d across three refused accepts", before, n)
+	}
+}
+
 func TestAcceptValidatesWhatTheCallerDecides(t *testing.T) {
 	s := newTestStore(t)
 	seedProposalsCorpus(t, s)
