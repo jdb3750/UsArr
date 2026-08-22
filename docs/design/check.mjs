@@ -974,13 +974,22 @@ head('1d. CSP: no inline style attribute in the five screen files');
      went stale, and a floor's derivation that restates a number the gate
      already reports is a number with no way to stay true.
 
-     WHAT THE DERIVATION NEEDS IS THE LARGEST FILE, not the total, because the
-     regression is losing one whole screen file and the cheapest loss is the
-     biggest survivor. Measured 2026-08-22: the largest of the five is
-     `requests.html` at 126,603 stripped characters. Subtracting it from the
-     total measured the same day leaves 442,366, which is under this floor, so
-     losing any ONE of the five trips this check. Bigger files only make the
-     remainder smaller, so `requests.html` is the case that has to clear it. */
+     WHAT THE DERIVATION NEEDS IS THE SMALLEST FILE, not the largest. The
+     regression is losing one whole screen file, and what has to fall under the
+     floor is the REMAINDER the other four leave -- so the case that decides
+     whether this floor fires is the one leaving the LARGEST remainder, which
+     is losing the SMALLEST file. Losing the largest is the case most certain
+     to trip, which is the opposite of binding. Put as a rule: the check
+     catches the loss of file f exactly when f exceeds the slack, so the
+     ceiling on slack is min(f), not max(f).
+
+     ARITHMETIC, measured 2026-08-22, and not a fired drill. The five stripped:
+     requests 126,603 · libraries 123,778 · search 111,733 · index 107,348 ·
+     services 99,507, totalling 568,969. The ceiling is therefore `services.html`
+     at 99,507, and the slack this floor carries is 568,969 - 500,000 = 68,969.
+     68,969 is under 99,507 with 30,538 to spare, so losing any ONE of the five
+     trips this check -- the cheapest one to lose included, which is the claim
+     the old wording never actually computed. */
   if (!floorOk('§14 CSP: inline style', html.length, 5, 'screen file(s)')) return;
   rule('§14 CSP: no style= attribute in a screen file', /\s(?<attr>style)\s*=\s*["']/, {
     filter: (f) => f.kind === 'html',
@@ -1356,17 +1365,42 @@ head('6. Availability glyphs carry a word');
      either. What it is sized against is the .avail population shrinking while
      the traversal still runs in full, which the combination count cannot see
      because the count does not change. That much WAS fired: the drill below
-     left all 110 combinations intact and COMBO_FLOOR green. The cheapest such
-     loss is the whole of Search's contribution. Measured
-     2026-08-22 by attributing every reading to its install and screen: Search
-     contributes 40 readings, 27 in the full install and 13 in v01; Home
-     carries the rest and Services, Libraries and Requests contribute none.
+     left all 110 combinations intact and COMBO_FLOOR green.
 
-     So the ceiling on slack is 40, and slack must be STRICTLY below it. 330
-     leaves 30. THE OLD 320 LEFT EXACTLY 40 -- not below the ceiling but equal
-     to it, so it sat green through precisely the loss it existed to catch,
-     which was fired and confirmed rather than argued. */
-  const AVAIL_FLOOR = 330;
+     THE UNIT OF THAT LOSS IS A CELL, NOT A SCREEN, and getting that wrong is
+     what left the previous derivation short. Measured 2026-08-22 by
+     attributing every reading to its install AND its screen: full/home 248,
+     full/search 27, v01/home 72, v01/search 13, the other six cells none --
+     Services, Libraries and Requests carry no .avail at all. A screen does not
+     draw the same population in both installs, so "the whole of Search's
+     contribution", 40, is two losses added together rather than the cheapest
+     one. The cheapest is the smallest nonzero install-and-screen cell,
+     v01/search at 13. That is not a hypothetical class: `c666382`, the commit
+     this comment already documents, moved 15 readings by changing what the
+     v01 install draws, which is exactly this shape of loss.
+
+     So the ceiling on slack is 13, and slack must be STRICTLY below it. THE
+     RULE FOR SETTING A FLOOR IS THE SMALLEST VALUE THAT SATISFIES ITS
+     CEILING, never the largest: a higher floor catches nothing extra and
+     spends authoring headroom that ordinary editing needs. 348 leaves 12, one
+     under the ceiling, and is the smallest value that does. (The rule is for
+     DERIVING a floor, not a licence to re-lower one that already satisfies.)
+
+     FIRED BOTH WAYS, 2026-08-22, by hiding every .avail in v01/search and
+     leaving the sweep otherwise whole: the population read 347, exactly 13
+     down, with all 110 combinations still swept and COMBO_FLOOR green. At the
+     old 330 that ran `ok` and the whole gate exited 0; at 348 it fails. The
+     320 before it left exactly 40 against a ceiling it had mis-derived as 40.
+
+     WHAT THIS FLOOR STILL DOES NOT SEE, said rather than implied. The sweep's
+     unit is finer than a cell -- it is install x screen x state x panel -- and
+     the smallest nonzero one of those, measured the same day, is 1:
+     full/search/typed and v01/search/typed contribute a single reading each.
+     A regression costing one state's .avail on one screen in one install is
+     under this floor, and no floor on a population of 360 reaches it. This
+     value bounds how cheap a caught loss can be; it is not a claim that
+     nothing cheaper exists. */
+  const AVAIL_FLOOR = 348;
   for (const install of INSTALLS) {
     await setInstall(page, install);
     for (const screen of SCREENS) {
@@ -1843,9 +1877,11 @@ head('1b. §13 copy bans, over rendered chrome text, cells included');
  * had never once been applied to, since 1b was written.
  *
  * IT IS DECLARED PER SITE NOW: `data-copy="data"` on the element holding a
- * substituted value, honoured by both corpora, and COUNTED — the number is
- * printed beside the corpus total, so an opt-out is a thing this check has SEEN
- * and dismissed rather than a thing it never found. That is check 7's argument
+ * substituted value, honoured by both corpora, and COUNTED AND CAPPED — the
+ * number is printed beside the corpus total, so an opt-out is a thing this
+ * check has SEEN and dismissed rather than a thing it never found, and it is
+ * held under a ceiling of its own (OPTOUT_CEILING) so that widening the
+ * exclusion fails rather than merely showing up in a figure nobody reads. That is check 7's argument
  * for collecting `[data-roving-optout]`, applied to the same shape of problem.
  * The exemption now rests on the markup saying which value is data, and on
  * nothing else: no other check holds it up, and none is asked to. */
@@ -1930,24 +1966,30 @@ head('1b. §13 copy bans, over rendered chrome text, cells included');
    * Per-source floors, EACH DERIVED FROM A NAMED REGRESSION rather than
    * rounded down from whatever the corpus happened to measure that day.
    *
-   * WHAT THESE FLOORS ARE NOT THE GUARD FOR. A sweep that stops visiting
-   * combinations is COMBO_FLOOR's business, not this block's: that floor is
-   * 104 against a live 110 the pass line prints on every run, and it watches
-   * the sweep's EXTENT where these watch the collector's SCOPE. Losing a
-   * screen, losing panel traversal or losing an install each drops the count
-   * under 104 -- by arithmetic over the decomposition measured 2026-08-22,
-   * where libraries is the smallest screen at 8 of the 110, panel traversal
-   * accounts for 56, and an install is half. THAT ARITHMETIC IS NOT A FIRED
-   * DRILL and is not offered as one; the only claims in this block resting on
-   * a drill are the four ceilings below and the two results in the next
-   * paragraph, both of which were run.
+   * WHAT THESE FLOORS ARE NOT THE GUARD FOR. Two things, and they belong to
+   * two other guards. A sweep that stops visiting combinations is
+   * COMBO_FLOOR's business: that floor is 104 against a live 110 the pass line
+   * prints on every run, and it watches the sweep's EXTENT where these watch
+   * the collector's SCOPE. Losing a screen, losing panel traversal or losing
+   * an install each drops the count under 104 -- by arithmetic over the
+   * decomposition measured 2026-08-22, where libraries is the smallest screen
+   * at 8 of the 110, panel traversal accounts for 56, and an install is half.
+   * THAT ARITHMETIC IS NOT A FIRED DRILL and is not offered as one. And a
+   * WIDENED EXCLUSION is OPTOUT_CEILING's business, for the reason set out
+   * under "IT IS NOT A CEILING ON THE CHEAPEST LOSS" below: it is
+   * element-granular, so it goes under any floor these could carry. This block
+   * used to claim that half of the class and could not deliver it.
+   *
+   * WHICH CLAIMS HERE REST ON A DRILL: the four ceilings below, the two
+   * results in the next paragraph, and the exclusion drill under "IT IS NOT A
+   * CEILING". Everything else in this block is arithmetic over a measured
+   * decomposition, labelled as such where it appears.
    *
    * WHAT THESE ADD, over a corpus floor that counts the very same strings.
    * STRING_FLOOR reads attribute strings too, so it is NOT blind to the scope
    * list below losing one of its three elements (`#pg-<screen>`, `.topbar`,
-   * `.sidebar`) or to an exclusion widening -- but it has 211 of slack, and
-   * that is what decides which of those losses it can see. Both halves were
-   * fired 2026-08-22:
+   * `.sidebar`) -- but it has 211 of slack, and that is what decides which of
+   * those losses it can see. Both halves were fired 2026-08-22:
    *
    *   TOO SMALL TO MOVE IT. Dropping .sidebar from the scope list cost 110
    *   strings. STRING_FLOOR stayed GREEN, 110 sitting well inside its 211,
@@ -1963,17 +2005,31 @@ head('1b. §13 copy bans, over rendered chrome text, cells included');
    * So these floors catch the losses too small to move the corpus floor past
    * its own slack, and they localize the ones large enough to move it.
    *
-   * THE CEILING, THEREFORE. Of the scope-list and exclusion losses just
-   * described, the cheapest measurable one for a given source is losing the
-   * chrome element it draws from, and that costs the source's
-   * per-combination chrome contribution multiplied by the 110 combinations
-   * swept. Measured 2026-08-22, per combination: `aria-label` 2 from .topbar,
-   * `title` 1 from .sidebar, `placeholder` 1 from .topbar, `option` 5 from
-   * .topbar -- so 220, 110, 110 and 550 over the sweep. Those four numbers are
-   * the ceiling on each floor's slack, and all four were fired rather than
-   * argued: removing .topbar from the scope list drops aria-label, placeholder
-   * and option by exactly 220, 110 and 550, and removing .sidebar drops title
-   * by exactly 110.
+   * THE CEILING, THEREFORE, IS SCOPE-LIST ELEMENT LOSS -- `.topbar` or
+   * `.sidebar` leaving the scope list -- and that is the whole of what these
+   * four numbers measure. The cost is the source's per-combination
+   * contribution from that element multiplied by the 110 combinations swept.
+   * Measured 2026-08-22, per combination: `aria-label` 2 from .topbar, `title`
+   * 1 from .sidebar, `placeholder` 1 from .topbar, `option` 5 from .topbar --
+   * so 220, 110, 110 and 550 over the sweep. Those four numbers are the ceiling
+   * on each floor's slack, and all four were fired rather than argued: removing
+   * .topbar from the scope list drops aria-label, placeholder and option by
+   * exactly 220, 110 and 550, and removing .sidebar drops title by exactly 110.
+   *
+   * IT IS NOT A CEILING ON THE CHEAPEST LOSS OF THE SOURCE, and this comment
+   * used to say it was. The sentence was false, and it was false against the
+   * other half of the regression class it claimed to cover: a widened
+   * EXCLUSION is element-granular by construction -- `data-copy="data"` goes
+   * on one element and only that element -- so its cost is that element's
+   * strings times only the combinations that element renders in. Libraries is
+   * 8 of the 110, and one state of one screen is fewer still. FIRED
+   * 2026-08-22: one `.topbar` button marked `data-copy="data"` took aria-label
+   * from 691 to 581 and the whole gate exited 0, against a ceiling this block
+   * stated as 220. RAISING THESE FLOORS WOULD NOT HAVE FIXED IT -- a floor
+   * satisfying a 110-combination ceiling is still blind at 8, and no floor on
+   * a corpus this size reaches 8 at all. The exclusion is gated by
+   * OPTOUT_CEILING below instead, on the opt-out COUNT, where the cost does
+   * not depend on how many combinations the marked element renders in.
    *
    * SLACK IS DELETION TOLERANCE -- corpus minus floor, the count that can go
    * missing before the floor fires -- and it must be STRICTLY BELOW that
@@ -1986,12 +2042,72 @@ head('1b. §13 copy bans, over rendered chrome text, cells included');
    * upward: a floor pushed closer to its ceiling catches nothing extra and
    * costs false positives on ordinary editing.
    *
+   * AND WHEN AN HONEST AUTHORED CHANGE TURNS ONE RED, the move is NOT to read
+   * the new live count off the pass line and round down under it. That is the
+   * practice this block exists to end, and it is exactly what the next person
+   * to meet a red here will reach for, because it is the fastest thing that
+   * makes the line green. Re-derive the ceiling from the regression the floor
+   * is named against, set the floor to the SMALLEST value whose slack is
+   * strictly under that ceiling, and write the derivation at the site. The two
+   * tightest have the least room to absorb a wrong answer: `placeholder`'s 43
+   * covers ONE whole-of-Services `placeholder=` deletion at 40 -- Services is
+   * 40 of the 110 combinations, and at least four placeholders render in every
+   * one of them -- and not a second; `title`'s 93 covers FOUR whole-of-Home
+   * deletions at 22 each, Home being 22 of the 110, and not a fifth. Both are
+   * arithmetic over the combination decomposition measured 2026-08-22, not
+   * fired drills.
+   *
    * AND NO FLOOR HERE RESTATES TODAY'S COUNT. The pass line prints the live
    * figure on every run, so a baseline copied into this comment is a second
    * copy with no way to stay true -- which is precisely what happened to the
    * five that used to sit here, four of them stale by the time they were
    * deleted. STRING_FLOOR's comment below carries the long form of that
    * argument; this block follows it.
+   *
+   * ===================================================================
+   * WHAT THIS BLOCK DOES NOT COVER. Written down, because the arrangement
+   * above reads like a clean division of labour between COMBO_FLOOR and these
+   * floors and it is not one: the two are not a partition of the regression
+   * space, and the criterion does not maintain itself. Three known holes, each
+   * measured 2026-08-22 on this branch and none of them fixed here.
+   *
+   *   1. THE CRITERION DECAYS, AND NOTHING WATCHES IT. Slack is `live -
+   *   floor` with the floor fixed and the corpus growing, so every floor here
+   *   drifts toward its ceiling under ordinary authoring and crosses it in
+   *   silence -- no line goes red when a floor stops satisfying the rule it
+   *   was set by. This is general to the block; §17 is where it bites first,
+   *   because its ceiling is the smallest. Its span population went 71 at
+   *   `1bc400a3a` (2026-08-19) to 78 at `70192dcd2` (2026-08-21): +7 in two
+   *   days, against a ceiling of 7. Today's slack of 3 therefore lapses in
+   *   roughly two days of that rate.
+   *
+   *   2. THERE IS A GAP BETWEEN THE TWO GUARDS, and a regression sits in it.
+   *   COMBO_FLOOR carries 6 of slack. A state disappearing from a screen's
+   *   `[data-act="state"]` select costs its panel-pass count once per install,
+   *   and the cheapest -- a state running a single panel pass, which every
+   *   screen has -- costs 2 combinations. 108 is green at 104. The per-source
+   *   losses that ride along are green too: across all 27 single-panel states,
+   *   the WORST any of them costs is aria-label 28, option 104, placeholder 12
+   *   and title 74, against floors of 191, 218, 43 and 93. Neither guard sees
+   *   that regression, at its cheapest (home/empty, 18 strings) or its worst.
+   *
+   *   3. THE §17 MEDIAN DOES NOT COVER THE SMALL SUBSECTIONS, and the two
+   *   regressions it bundles are not distributed alike. Slice truncation is a
+   *   SUFFIX loss and 17.8 is last in document order, so its cheapest case is
+   *   25 -- far over the floor's slack of 3, and comfortably caught. A
+   *   subsection dropping out of the MIDDLE is as little as 1: 17.3.1
+   *   contributes one string, 17.3.2 and 17.7 three each, and any of those
+   *   three can vanish green. THE FLOOR STAYS AT 75 REGARDLESS, on measured
+   *   history rather than on comfort. Enumerating `git log --first-parent
+   *   --full-history -- docs/ARCHITECTURE.md` gives 89 commits, of which 18
+   *   moved the §17 span population and every one moved it UP; over the full
+   *   `--full-history` enumeration, 303 commits, the same count taken against
+   *   each commit's OWN parent gives 49 moves, again all upward and not one
+   *   decrease anywhere in the history. Buying coverage of a loss that has
+   *   never happened, with false positives on a section under active
+   *   authorship, is a bad trade -- but that is a bet on the past and not a
+   *   property of the floor, which is the point of writing it here.
+   * ===================================================================
    * ------------------------------------------------------------------- */
   const CORPUS_FLOORS = {
     /* Nothing to derive: there is exactly one document, so the floor is the
@@ -2053,19 +2169,66 @@ head('1b. §13 copy bans, over rendered chrome text, cells included');
        7. That is the honest reading of "losing a subsection": the typical
        one, not the degenerate one.
 
-       Cost 7. Slack 3, under it. Was 45, whose slack was several times the
-       largest subsection in the section. */
+       Cost 7. Slack 3, under it.
+
+       WAS 45, AND THE TRUE RELATION IS SMALLER THAN THIS COMMENT USED TO
+       CLAIM. Measured against the population of 2026-08-22, 45 carried 33 of
+       slack. That is 1.3x the largest subsection -- 17.8, at 25 -- and a
+       little under five times the median of 7. Not "several times the
+       largest". What was and remains true is the part that decided it: 33 is
+       OVER 25, so 45 sat green through the loss of any single subsection in
+       the section, the largest one included. */
     'ARCHITECTURE §17 copy': 75,
   };
   const seenBySource = {};
   const countSource = (src, n) => { seenBySource[src] = (seenBySource[src] || 0) + n; };
 
+  /* ---------------------------------------------------------------------
+   * THE EXCLUSION'S OWN CEILING, and the reason it is a gate and not a print.
+   *
+   * `data-copy="data"` takes strings out of this corpus. Until 2026-08-22 the
+   * only thing standing behind that was the word COUNTED: the skip total is
+   * printed beside the corpus total on the pass line, and printing is not
+   * gating. A widened exclusion is the one regression in this rule the
+   * per-source floors above structurally cannot reach, because it is
+   * ELEMENT-granular -- the cost is the marked element's strings times only
+   * the combinations that element renders in, which is 8 on Libraries and
+   * fewer on a single state. Counting the OPT-OUTS instead of the strings they
+   * removed is what closes the class at every granularity: one element is one
+   * marking whatever it costs.
+   *
+   * THE ARITHMETIC. The tree carries 5 rendered opt-outs (measured
+   * 2026-08-22; the pass line prints the live figure on every run, and this is
+   * a ceiling derived from that baseline rather than a second copy of it). The
+   * cheapest widening worth catching is ONE further element on the SMALLEST
+   * screen -- Libraries, 8 of the 110 combinations -- which puts the total on
+   * 13. The ceiling is therefore the largest value that still FAILS on 13,
+   * which is 12.
+   *
+   * FIRED THREE WAYS, 2026-08-22, rather than argued. One
+   * `#pg-libraries [placeholder]` element marked `data-copy="data"` put the
+   * total on exactly 13 -- red here, and green on every other line in the run,
+   * including the `placeholder` floor it cost 8 of. One
+   * `.topbar button[aria-label]` marked the same way put it on 115 -- red
+   * here, where before this ceiling existed that drill dropped 110 aria-label
+   * strings and the whole gate still exited 0. The untouched tree reads 5 and
+   * is green.
+   *
+   * IT IS A CEILING, SO A LEGITIMATE NEW OPT-OUT TURNS IT RED, and that is the
+   * intent: widening this exclusion should be something a person argues for,
+   * not something that lands. The response is the one the floor block above
+   * states -- re-derive, take the smallest value that satisfies the
+   * derivation, and name the new element here.
+   * ------------------------------------------------------------------- */
+  const OPTOUT_CEILING = 12;
+
   let strings = 0, exempted = 0, glyphs = 0, dataOptouts = 0; const bad = [];
   /* §17's copy is counted apart from `strings` on purpose. STRING_FLOOR's
-     margin below is DERIVED from the rendered corpus — 13,411 − 13,200 = 211,
-     argued against a 293-string regression — and folding documentation strings
-     into that total would move the number the derivation is about while
-     claiming the derivation still held. */
+     margin below is DERIVED from the rendered corpus and argued against a
+     293-string regression — the working, and the single dated figure it rests
+     on, are under STRING_FLOOR itself rather than restated a second time here
+     — and folding documentation strings into that total would move the number
+     the derivation is about while claiming the derivation still held. */
   let s17Strings = 0, s17Exempted = 0, s17Bad = 0, s17Glyphs = 0;
   /* Four floors, each against the corpus MEASURED WHEN IT WAS SET, which is the
      only tense any of these numbers can be read in: 2000 against 4203 while no
@@ -2478,7 +2641,7 @@ head('1b. §13 copy bans, over rendered chrome text, cells included');
        notes is exactly enough to bury it. */
     note('remedy: rewrite the string if UsArr wrote it — drop the em dash rather than padding the sentence past fifteen words, and pick a plainer word than the banned one.');
     note('remedy: if it is a SUBSTITUTED VALUE and not copy — a publisher, a release name, a title from a database — put data-copy="data" on the element that holds it, and only that element. Text and attributes inside it leave the corpus.');
-    note(`remedy: that opt-out is counted, not silent — every skip is printed beside the corpus total on the pass line (${dataOptouts} skipped on this run), so it is a thing this check has seen and dismissed rather than a thing it never found.`);
+    note(`remedy: that opt-out is counted and capped, not silent — every skip is printed beside the corpus total on the pass line (${dataOptouts} skipped on this run, ceiling ${OPTOUT_CEILING}), so it is a thing this check has seen and dismissed rather than a thing it never found, and widening the exclusion far enough fails the run on its own line.`);
     uniq.slice(0, 10).forEach((b) => note(b));
   }
   else if (floorOk('§13 copy', strings, STRING_FLOOR, 'user-visible string(s)')) {
@@ -2486,6 +2649,19 @@ head('1b. §13 copy bans, over rendered chrome text, cells included');
       `(floor ${STRING_FLOOR} over both installs; ${exempted} short em-dash string(s) exempt because ARCHITECTURE §17 fixes their wording verbatim; ` +
       `${glyphs} bare "—" string(s) read as a glyph rather than prose, a structural exemption no sentence can hide in; ` +
       `${dataOptouts} string(s) skipped at a declared data-copy="data", counted here rather than passed over in silence)`);
+  }
+  /* GATED, NOT MERELY PRINTED -- see OPTOUT_CEILING above for the derivation
+     and the three drills. Deliberately outside the branch above: a widened
+     exclusion must be reported whether or not the copy sweep itself found a
+     violation, and the `fail` path returns early past the pass line. */
+  if (dataOptouts > OPTOUT_CEILING) {
+    fail(`§13 copy opt-outs: ${dataOptouts} string(s) skipped at a declared data-copy="data", over the ceiling of ${OPTOUT_CEILING} — ` +
+      `the exclusion widened. Either an element was marked data-copy="data" that was not before, or one already marked now covers more. ` +
+      `This is counted on the OPT-OUTS and not on the strings they removed, because the cost of one marking is only the combinations that ` +
+      `one element renders in — 8 on Libraries — which is under every per-source floor in this rule and always will be.`);
+  } else {
+    ok(`§13 copy opt-outs: ${dataOptouts} string(s) skipped at a declared data-copy="data" (ceiling ${OPTOUT_CEILING}), ` +
+      `so the exclusion is capped and not only counted`);
   }
   /* Reported separately from the line above because it is a separate corpus
      with a separate exemption, and one combined number would hide which of the
