@@ -269,6 +269,27 @@ func TestBindContainersCreatesNoLibrary(t *testing.T) {
 	}
 }
 
+// ⚠️ THE ACCEPTS IN THIS FILE ARE ALL AT store.SystemUserID, WHICH MAKES THE
+// STEP-2 ASSERTIONS NARROWER THAN THEY READ. Every acceptContainers call here
+// passes SystemUserID — directly or through acceptedBind — so the library a
+// fixture creates sits at user_id 0, which is also the id BindContainers is
+// called with. Step 2 resolves through userLibraries(Scope{UserID: userID}),
+// `user_id IN (0, :uid)`, so at 0 it sees the accepted row and the join fires.
+//
+// 🚩 AT A REAL SESSION USER IT WOULD NOT. Accept writes the accepting session's
+// user id, always >= 1, and an import running at SystemUserID cannot see that
+// row at step 2. So the "a second instance joins by name" case below is asserted
+// at the one id where the gap is invisible. THE TESTS ARE CORRECT — what they
+// imply is a generality they do not have, and this comment is the whole of the
+// correction; nothing below is rewritten to chase it.
+//
+// ⚠️ AND THE GAP IS STEP 2's, AND THE NAME MATCH'S, ALONE — NOT the import's.
+// Step 1 carries no user predicate at all, so the idempotent-rebind case below
+// IS general: a container Accept has already bound resolves at ANY user id, and
+// its items file into the accepted library. Only the name-key join is id-bound.
+// internal/libsync/delta_test.go's TestADeltaEscalatesAtARealSessionUser
+// measures the gap directly, and TestAnUpgradingInstallStillMatchesAtStepsOneAndTwo
+// pins the upgrade population it does not touch. docs/REVIEW-LOG.md LS-399.4.
 func TestBindContainersIsIdempotentAndJoinsBySameNameAndKind(t *testing.T) {
 	s := newTestStore(t)
 	a := fixtureInstance(t, s, "kavita-a")
