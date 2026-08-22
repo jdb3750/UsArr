@@ -27382,3 +27382,622 @@ the argumentative grep**, exactly as `N17` said.
   evidence**, each one written out so a later lane can re-run it.
 * **`LS-395.1` is untouched and stays OPEN.** Nothing in this round swept a `file:<n>` citation, and
   a partial pass does not close it.
+
+---
+
+## LS-400 — the §13 copy pass's opt-out ceiling across five fix rounds: a ceiling derived from a container was blind to one of its members for three rounds running, and once the mechanism was right the same substitution moved out of the code and into the sentences describing it
+
+**Target:** `docs/design/check.mjs`, the §13 copy pass — the sweep that opens the generated
+`prototype.html`, walks 110 `screen × state × install × panel` combinations, collects user-visible
+strings through two collectors (a text walk that tests whether the nearest blockish ancestor renders,
+and an attribute collector with no rendering test at all), and asserts per-source corpus floors plus a
+ceiling on the markings that remove copy from that corpus. Branch `claude/hearth-thread-4vbzaj`, base
+`origin/main` `09ef0c0b6b97deb880ea0efbb3fef561c0713709`, which did not move across the arc.
+
+**The trees, because every figure below belongs to one of them.**
+
+| round | tree | how it is reachable |
+| --- | --- | --- |
+| 1 | `d097c39`, then `f9a9084e8f461e98d3a0b62844fd6857c42066f7` | pushed |
+| 2 | `f32e0616b611dd886a4f85b0e200259810b87d78` | pushed |
+| 3 | `fe67dd1ed4ad71100fc163ce8db66e351040006a` | pushed; branch tip at the time of writing |
+| 4 | `7fb330d28ab1b22861e0b5baecddd14b769ba5e8` | unpushed, anchored at `refs/keep/round4` |
+| 5 | `2e88ad12daa0fe6a48656743979f254a355a91bf` | unpushed, anchored at `refs/keep/round5` |
+
+⚠️ **The shared checkout was on none of them.** `/home/user/UsArr` sat at
+`dfe1238971e5b9bc178e829faa369eb33ed39a9c` throughout, a diverged local commit on the same branch
+name, and rounds 3 to 5 worked in a throwaway worktree. Two lanes quoting different line numbers for
+the same comment were both reading correctly off different trees, which is why nothing here addresses
+anything by line number.
+
+**Findings keep their reviews' own labels, prefixed by round** (`R1-F1`, `R2-3`, `R3-4`, `R4-B1`),
+because the reviews each numbered or lettered from the start. ⚠️ **Nothing here states how many
+findings there are** — `LS-394.24`'s rule, restated at `LS-394.26` and `LS-395`.
+
+📌 **Provenance.** ⚠️ **The lane that wrote this entry fired nothing.** **The standard this entry
+was written to, which is not the same as a property it has been shown to have:** every number below
+should be one the review or fix lane it is attributed to measured, on the tree named beside it, and
+every figure here is at second hand. Nothing has audited that transcription — no gate parses prose,
+and no second lane re-read the entry against the lane reports — so the standard is a discipline, not
+a result. Where a figure is weaker than the standard — unverified, inferred rather than fired, or not
+re-taken at the tree it sits under — **the entry says so at that figure**, not here. Where two lanes
+disagreed, both figures and the resolution are given, not the winner alone.
+
+📌 **This entry was swept for the defect it documents, and the sweep belongs in the record.** A pass
+over the entry's own sentences, looking for quantifiers over sets it neither computes nor cites,
+found some and repaired them: the gate-state determinism sentence, which generalised over rounds
+whose hashes the entry did not carry and now names review 3's round-3 hash and says which rounds
+carry none; the *"a green `make design` is not evidence"* rider and the rule's own *"every one had a
+single form"*, which now point at the BLOCKED findings by label instead of quantifying over them from
+outside; this provenance claim, which asserted a property and now states a standard; round 3's
+DOM-fingerprint sentence, which had an explanation welded onto a measurement; and the `ATTRS` scope
+note, which claimed non-action across four rounds from a source establishing it for one.
+
+⚠️ **What the sweep judged and left, named rather than tallied.** `R2-8`'s *"because additions always
+covered them"* is a universal over the 29 pairs, and it is left standing because the two figures
+beside it entail it: a pair with a removal and no net decrease had additions covering that removal,
+by arithmetic on the two numbers already cited. It is deduction from measured figures, not an
+independent claim — but it is phrased as a survey, and a reader should weigh it as the former.
+Round 4's *"All six round-3 regression drills still fired"* was checked against review 4, which
+tabulates the six individually at `7fb330d` with a result and an exit code for each; it is an event
+count and re-runnable, so it stands, though this entry gives the tally and leaves the table upstream.
+`R3-5`'s *"`display: contents` appears nowhere in `usarr.css`"* is citable and was cited: review 3
+ran `grep -n "display:\s*contents" usarr.css prototype.html` at its round-3 checkout for zero hits in
+both files, and its in-page probe printed `P3 display:contents elements=0`. That is a computed
+absence, so it is not a residual.
+
+⚠️ **And the part the sweep cannot close from inside.** Those are what a reading surfaced, and a
+reading is not an enumeration — nothing computes over the sentences of this entry, and no gate ever
+will. **This note records that a sweep happened and what it found; it does not claim the entry is
+clean of the defect.** An entry that claimed that would be committing the defect one level up, which
+is the whole lesson of the arc below.
+
+---
+
+### The rule the arc earned
+
+Rounds 3 and 4 each landed a commit whose purpose was to correct a false claim, and each introduced
+another false claim of the same shape in the same commit. **The shape is a sentence characterising a
+population** — and the rule is stated here against the claims themselves rather than against a
+universal a reader cannot check. The ones the rounds landed, each with the finding that killed it:
+*"1118 further markings cut only text the walk was never going to read."* (`R3-2`); *"each beside a
+`.sr` label the corpus does read."* (`R4-B1`); *"1,118 of the 1,148 cells in the 34 tables that use
+them."* (`R4-B2`). Each of those three compiled. Each passed `make design`. Each read as measured.
+Each was false. `R3-1`'s misattributed 5,670 is arithmetic rather than characterisation and is set
+aside for that reason; the BLOCKED findings above are the list to test the rule against, and naming
+the sentences beats quantifying over them.
+
+**Correcting the count is the loop; changing what kind of sentence it is, is the exit.** A figure
+describing an **event** — *"lifting one marking took the corpus from 13411 to 13413"* — is
+reproducible: someone can re-run the action and get the number. A quantifier describing the
+**standing composition of a set** — *each*, *every*, *only*, *N of the M* — is a frozen measurement
+wearing the grammar of a definition. Nothing re-runnable stands behind it, it goes stale on any edit
+to the population, and nothing in the gate can tell that it has. **Such a sentence is computed
+at run time or it is deleted.** Round 5 is the first round whose diff asserts no property of any
+population; that is the shape the next one has to keep. The findings below point at this rule rather
+than restating it.
+
+---
+
+## Round 1 — the corpus floors re-derived
+
+Round 1 (`d097c39`, then `f9a9084`) replaced six per-source copy-corpus floors and `AVAIL_FLOOR`,
+rounded down from live counts, with values derived from a stated regression, and relabelled the
+gate's banner from `tree` to `HEAD`.
+
+### R1-self 🚩 An undrilled claim written from relayed figures, caught by the fix lane auditing its own text — **applied, and one relayed figure was wrong**
+
+The preamble asserted that losing the smallest screen, panel traversal or an install *"trips that
+check first"*, with no drill run for any of the three. Decomposition at `f9a9084`: libraries 8,
+search 20, requests 20, home 22, services 40; 54 base passes plus 56 panel passes = 110. **The
+relayed cost of losing panel traversal was −36; the measured cost is −56.** The other two relayed
+figures (−8, −55) held and all three conclusions survived. **Applied:** the paragraph states the
+arithmetic as arithmetic and names which claims rest on a fired drill.
+
+### R1-F1 🚩 BLOCKED — the `aria-label` ceiling was computed over a container, and the floor sat green through the loss of one member of it — **applied in round 2**
+
+Each per-source ceiling was the whole `.topbar` scope's per-combination contribution × 110. The four
+per-combination figures reproduced exactly (aria-label 2, option 5, placeholder 1 from `.topbar`;
+title 1 from `.sidebar`), but `aria-label`'s two per combination come from two independent buttons,
+and `data-copy="data"` is element-granular by construction — the remedy note tells authors to put it
+*"on the element that holds it, and only that element"*. **Drill at `f9a9084`:** `data-copy="data"`
+on one topbar icon button removed 110 aria-label strings, 691 → 581, gate exit 0. The real ceiling is
+110, not 220, so the raised floor of 500 with 191 of slack **failed the block's own criterion** that
+slack be strictly under the ceiling; meeting it needed 582.
+
+**R1-F1b, same neighbourhood:** `option`'s 5 per combination are likewise two independent `<select>`s.
+Marking the install switcher cost 220 and the floor of 1400 caught it at 1398 — by two strings, in a
+comment calling that source *"comfortably under its ceiling"*.
+
+### R1-F2 🚩 BLOCKED — `AVAIL_FLOOR`'s ceiling was computed at screen granularity when the sweep's unit is finer — **applied in round 2, and explicitly not closed**
+
+The comment claimed the cheapest `.avail` loss was the whole of Search, 40. Tally at `f9a9084`:
+`full/home` 248, `full/search` 27, `v01/home` 72, `v01/search` 13, the other six cells 0.
+**`v01/search` alone is 13**, and suppressing it left 347 readings with the floor of 330 green, exit
+0 — the shape the comment documents, since the movement it cites (`c666382`, 15 readings) was
+install-conditional.
+
+**Applied in round 2:** `AVAIL_FLOOR` 330 → 348, the smallest integer whose slack (12) is strictly
+under 13, fired both directions at `f32e061` (347 FAIL at 348, green at 330) and re-fired by review 2.
+⚠️ **The round-2 lane declined to claim the class closed and said so in the file**, measuring the
+smallest nonzero `install × screen × state × panel` cell as **1**, at `full/search/typed` and
+`v01/search/typed`, and adding a *"WHAT THIS FLOOR STILL DOES NOT SEE"* paragraph so the value reads
+as a bound on how cheap a **caught** loss can be, not a claim that nothing cheaper exists.
+
+### R1-F3 🚩 The §14 character-floor derivation reasoned from the wrong extremum — **applied in round 2**
+
+The comment computed the **largest** screen file; losing the largest leaves the smallest remainder,
+the most favourable case. Stripped sizes, reproduced by review 1, round 2 and review 2 independently:
+requests 126,603 · libraries 123,778 · search 111,733 · index 107,348 · services 99,507 = 568,969;
+slack over 500,000 is 68,969; the binding case is the **smallest** file, `services.html` at 99,507,
+clear by 30,538. The conclusion was true and the reasoning backwards. **Applied:** the rule is now
+stated as the ceiling on slack being `min(file)`.
+
+### R1-F4 🚩 The counter that subtracted from every corpus in the block had no ceiling at all — **applied in round 2, and it is the whole of the rest of this arc**
+
+`dataOptouts` was printed and never asserted; in R1-F1's drill it went 5 → 115 while the run stayed
+green — the mirror of the file's own Rule 1, *"a check that matches nothing reads like a check that
+passed"*. **Applied in round 2** as `OPTOUT_CEILING`.
+
+### R1-F5, R1-F7, R1-F10 🚩 Stale or wrong figures in text the same motion was rewriting — **all applied in round 2**
+
+*"several times the largest subsection"* measured at 1.32× — §17 slack at floor 45 was 33 and the
+largest subsection is 17.8 at 25; 4.7× is the ratio to the **median** of 7, the wrong noun (R1-F5).
+`DESIGN-DIRECTION.md` §13.0 de-staled a count and kept the stale descriptor beside it, saying
+*"screen×state combinations swept"* where the pass line reads `screen×state×install×panel` (R1-F7).
+And the new block forbade restating today's count while pointing at a neighbouring comment that
+restates 13,411 twice, once un-caveated (R1-F10).
+
+### R1-F6, R1-F8, R1-F9 🚩 Structural residuals the floors do not reach — **applied as disclosure, not as closure**
+
+§17 went 71 → 78 spans in two days (`1bc400a3a` 2026-08-19 → `70192dcd2` 2026-08-21) against a
+ceiling of 7, so the slack criterion lapses in about two days of ordinary authoring and nothing
+re-derives it (R1-F6). `placeholder`'s 43 of slack tolerates exactly one deleted Services
+form field, which costs 40 (R1-F8). And one state disappearing from a screen's state select costs 2
+combinations — 108 against `COMBO_FLOOR`'s 104, green — while costing roughly 68 attribute strings,
+under every per-source floor; the block presented `COMBO_FLOOR` and the per-source floors as an
+exhaustive division of labour and they are not (R1-F9). **Applied in round 2** by measuring all 27
+single-panel states individually rather than bounding them, and writing the re-derivation duty into
+the file.
+
+### R1's ruling on the fifteen-word rename — **rebutted at the time, and it is still frozen**
+
+Asked whether to ride a rename of *"the fifteen-word floor"* on this motion, review 1 said **wait**,
+on three grounds. The register entry the request cited **could not be located anywhere in the tree at
+`f9a9084`**, and the only entry carrying the stated trigger was `LS-394.26`'s banner item, which this
+same motion had already closed. `docs/REVIEW-LOG.md` quotes the affected pass line verbatim under
+`VN9.27`, so unlike the banner relabel this edit cannot certify that it broke no quotation. And
+`check.mjs` was certain to be opened again, which is what happened four more times. ⚠️ **The
+misreading it was sent to fix is narrower than reported**: `check.mjs` already answers it in prose —
+*"`< 15` is what FIRES: the floor does not exempt short strings, it confines the rule TO them"* — so
+the defect is confined to the pass line, which a reader meets without that prose. **If the rename ever
+rides, the noun and the quotation move in one commit**, a half-rename leaving two vocabularies for one
+threshold — `DEVELOPMENT.md` §11's own rule, and the class this repo has three logged instances of.
+
+---
+
+## Round 2 — the ceiling arrives, derived from a container
+
+Round 2 (`f32e061`) applied every review-1 finding, added `OPTOUT_CEILING = 12` **counting skipped
+strings**, derived as `5 + 8 − 1`, and reframed the per-source ceilings as scope-list element loss.
+
+### R2-pushback 🚩 Three of four relayed §17 history figures did not reproduce, and the lane wrote its own — **accepted**
+
+*"138 commits touching `ARCHITECTURE.md`"* is the default-simplification count and is **303** under
+`--full-history`. *"34 commits moved the §17 span population"* reproduces under **no** enumeration the
+lane could construct: it measured 49 / 26 / 23 / 18 / 35 under five. *"Largest genuinely-authored
+single-commit decrease of 2"* is **false** — the −2 traces to `ffebec741`, a 12-insertion commit whose
+§17 span count is **69, identical to its parent's 69**, an artifact of comparing consecutive commits
+in a date-ordered list that crosses branches. And the first-parent move count is 18, not 17. The
+direction claim survived stronger: **zero decreases under every method.** The lane wrote its own
+numbers in and labelled the floor's justification a bet on the past rather than a property of the
+floor. Review 2 re-derived all of it under seven independent enumerations, reproducing 303 / 138 / 89
+and the no-decrease result exactly, with a control: a real 78 → 76 removal committed in a throwaway
+clone, which every one of the seven methods reported.
+
+### R2-1 🚩 BLOCKED — `OPTOUT_CEILING = 12` was derived from the smallest **screen** when the sweep's unit is the combination — **applied in round 3**
+
+The derivation read *"the cheapest widening worth catching is ONE further element on the SMALLEST
+screen — Libraries, 8 of the 110 combinations — which puts the total on 13."* Review 2 enumerated
+every corpus-contributing element at `f32e061` by screen and DOM path and counted the combinations
+each renders in: **112 elements render in exactly one combination**, the histogram running
+`{1:112, 2:81, 4:132, 6:17, 8:36, 14:54, 16:1, 17:26, 20:22, 32:1, 40:15}`. The minimum is 1, not 8.
+**Fired:** `data-copy="data"` on one Libraries `[data-act="expand"]` button — a genuinely substituted
+library name, the exact case the remedy note tells an author to mark — printed *"6 string(s) skipped …
+(ceiling 12) … so the exclusion is capped"* and exited **0**. Headroom was seven silently-removable
+strings, not zero. This is the container-for-member substitution a third time, inside the instrument
+built to correct it.
+
+### R2-2 🚩 BLOCKED — five sentences called the counter a count of markings; the code counts strings, and one of the five is printed on failure — **applied in round 3**
+
+`dataOptouts` increments once per skipped string per combination, at both increment sites, and the
+pass line says so (*"5 string(s) skipped"*). Against that: *"Counting the OPT-OUTS instead of the
+strings they removed is what closes the class at every granularity"*; *"one element is one marking
+whatever it costs"*, where one marking cost 1, 8 and 110 in three drills; the commit message's *"the
+cost of one marking does not depend on how many combinations the marked element renders in"*,
+falsified by the lane's own two drills; *"IT IS A CEILING, SO A LEGITIMATE NEW OPT-OUT TURNS IT RED"*,
+false for any element rendering in seven or fewer combinations; and the **FAIL message** — *"This is
+counted on the OPT-OUTS and not on the strings they removed"* — contradicting its own opening clause
+four words earlier, `13 string(s) skipped`.
+
+### R2-3 🚩 BLOCKED — an exclusion could widen 44 strings without touching the counter, while the line printed *"the exclusion is capped"* — **applied in round 3**
+
+Besides `data-copy` the collectors carry `[hidden]`, `.statebar`, `[aria-hidden="true"]` and a
+non-rendering block box, none of which incremented `dataOptouts`.
+
+⚠️ **The *none* ranges over four mechanisms and one of the four is drilled; the wider claim is kept,
+on a stated footing.** What review 2 measured is the counter's increment sites: it reports
+`dataOptouts` as incremented *"once per skipped string per combination"* and quotes the same guard at
+both of them — `if (isData) skipped++;` in the attribute collector, and the identical line in the
+text walk. **That the other three mechanisms cannot reach the counter is inference from that guard**
+— sound, because the guard is the only path to the increment, but not fired. **The mechanism actually
+fired is `[aria-hidden="true"]`.** `[hidden]`, `.statebar` and the non-rendering block box are
+reasoned at this tree, not drilled.
+
+**Fired:** one `aria-hidden="true"`
+on Home's `.pagehead`, an ordinary-looking a11y edit — corpus 13411 → 13367, counter unmoved at 5,
+`ok` on the opt-out line, exit **0**. The block's own *"WHAT THIS BLOCK DOES NOT COVER"* section did
+not name it.
+
+### R2-4, R2-5, R2-6, R2-9, R2-10 🚩 Smaller defects, all in text the motion had just written or was pointing at — **all applied in round 3**
+
+The §14 comment stated an **iff** the check does not satisfy: the file-count floor short-circuits
+before the character rule runs, fired by moving `services.html` aside, which gives file-floor FAILs
+with the character rule silent (R2-4). *"against floors of 191, 218, 43 and 93"* names **slacks** as
+floors, in a sentence whose whole content is a comparison of numbers — `DEVELOPMENT.md` §11's class,
+a wire vocabulary and a storage vocabulary sharing a term (R2-5). *"57 spans today"* sat un-caveated
+against a live 78, in the same block as the paragraph the same commit wrote asserting that no floor
+there restates today's count (R2-6). *"the `fail` path returns early past the pass line"* does not
+describe this code — `fail` returns nothing, and the `if / else if` structure skips the pass line
+(R2-9). And `DESIGN-DIRECTION.md` still said *"rendered chrome strings read"* though the corpus has
+included table cells since `9ffd6a5`, in a hunk this commit re-typed (R2-10).
+
+### R2-7 🚩 The response procedure written at the site made the ceiling weaker every time it was honestly used — **applied in round 3 by the unit change**
+
+Re-deriving after a legitimate marking inflated the ceiling by that marking's full
+combination-multiplied cost: mark one topbar element legitimately (+110), re-derive, and the guard
+tolerates 117 strings of silent exclusion where it tolerated 7. The procedure restored green without
+keeping the ceiling meaningful. Fixing R2-2's unit fixed this with it.
+
+### R2-8 🚩 A floor on a **net** count is blind to compensated removal, the most common shape in the actual history — **applied in round 3, and it is where the 29/77 figure enters the arc**
+
+*"Not one decrease anywhere in the history"* is true as written, about the net population. But a
+set-difference enumeration finds **29 commit/parent pairs in which a §17 span present in the parent is
+gone in the child — 77 spans removed — with zero net decreases**, because additions always covered
+them. Three flat-net examples: `9fb64fa51 ← 512bbb605` (73 → 73, 3 removed), `809f13d9b ← 3c0e7f91e`
+(57 → 57, 2 removed), `34e9322e0 ← 574154103` (57 → 57, 2 removed).
+
+---
+
+## Round 3 — the unit becomes the element
+
+Round 3 (`fe67dd1`) moved the ceiling's unit to the **distinct marked element**, identified by a
+document-rooted tag-plus-sibling-index path reduced to a Set, and gated three mechanisms. Baselines
+measured live at that tree: `data-copy="data"` 2, `.statebar` 5, `aria-hidden="true"` 5 = **12**, with
+`OPTOUT_CEILING = 12` — **the ceiling is the baseline, zero slack, one further marked element fails.**
+⚠️ The comment records that the old 12 was a coincidence: it had sat over a baseline of five *strings*
+with seven of headroom.
+
+Review 3 attacked the identity scheme and could not break it, and the rest of the arc rests on that:
+**6,507 elements resolved to 6,507 distinct paths, zero collisions**; the whole DOM — element count
+plus the full ordered path list, sha256'd — fingerprinted at each of the 110 combinations gave **one
+fingerprint across all 110**, `PROBE combinations=110 distinct-DOM-fingerprints=1`, fingerprint
+`1cf126cdfc38` ×110 at `n=6507`, measured at `fe67dd1` (ℹ️ **the mechanism is the explanation review 3
+offered for that result, not a second measurement**: it attributes the stability to the `usarr.js`
+mutation sites being click-driven and never clicked by the sweep); and the 12 resolved to distinct
+authored elements with zero cross-mechanism duplicates. The topbar drill held exactly: one marking on an element
+rendering in all 110 combinations cost 110 strings and moved the element count by **one**. A string
+ceiling could not be tight against both that and the one-string Libraries case.
+
+### R3-inherited 🚩 A hole in the draft round 3 inherited from a lane a container restart had killed — **caught and fixed before landing**
+
+The draft applied the **text** collector's `getClientRects()` box test to **both** collectors. The
+attribute collector has no rendering test — it reads attributes off every non-`[hidden]` element — so
+its corpus contains non-rendering elements, and the previous round's placeholder drill went **green,
+exit 0** while the marking removed eight real corpus strings (`placeholder` 288 → 280). **The draft
+was greener than the tip it replaced, on a drill that tip caught.** Fixed by asking, per collector,
+whether the removal took a string; the baseline stayed at 12, so the derivation stood. ⚠️ The same
+draft carried a `FIRED` marker on the §14 short-circuit drill, written by a lane that died before any
+committed-tree run; the drill does fire, but the marker preceded its evidence.
+
+### R3-pushback-a 🚩 The stated reason for leaving `[hidden]` ungated was false for `[hidden]` — **accepted; the decision kept, the reason replaced**
+
+The ruling named `[hidden]` and `!offsetParent` as outside the ceiling *"because an element that does
+not render is not in a corpus of rendered strings by definition."* That is airtight for
+`!offsetParent`, which **is** the test the text corpus is built with, and **false for `[hidden]`**,
+because the attribute corpus has no rendering test at all. **Fired at `fe67dd1`:** `hidden` on
+`#al-name` took `placeholder` 288 → 280, the gate printed 12 and *"all design checks pass"*, exit
+**0**. The lane kept the decision and wrote the true reason — `hidden` is the sweep's own state
+machine, toggled on hundreds of elements per run, so it has no stable baseline — plus what bounds it
+(the per-source floors) and the residual left over; writing the given reason would have re-committed
+R2-2 in the commit that fixes it. Review 3 reproduced the drill and could not make the hole read as
+closed; its one quibble is that *"an exclusion of up to one per-source slack"* understates the bound,
+since one `hidden` on a large container could take each source's slack simultaneously
+(43 + 191 + 93 + 218).
+
+### R3-pushback-b 🚩 The §17 subsection control's keying was unstated, and on one of the two keyings it is not zero — **accepted, both figures written in**
+
+*"No §17 subsection heading has ever disappeared, control-validated"* is **4 pairs, not 0**, keyed on
+heading **text** — all four the single retitling of `### 17.2 Home — sections per media type`, at
+`906f40e07 ← a7b1e1163` and replayed through `7b970c94c`, `4c13a8771`, `b1257cc9b`. Keyed on
+subsection **number** it is **0 of 486**. The conclusion survives; a control whose keying is unstated
+is a control nobody can re-run. Review 3 reproduced both figures independently.
+
+### R3-1 🚩 BLOCKED — 5,670 skipped strings were attributed to 12 elements that had removed 1,206, in two pass lines and the FAIL message — **applied in round 4**
+
+Widening from one mechanism to three widened `markedStrings` with it: the total summed
+`optoutStrings` over **every** marking, including the 1,118 unseen ones the same sentence excludes
+from the ceiling. Decomposition at `fe67dd1`, reproduced by the round-4 lane: seen strings
+`data 5 · statebar 1196 · ariaHidden 5` = **1,206**; unseen `ariaHidden 4,464`. **Fired:** lifting
+`aria-hidden="true"` off one `.stacklabel` span in `requests.html` — an element that is **not** one of
+the 12 — left the three counted figures byte-identical while the total attributed to them moved
+**5670 → 5668**. ⚠️ **This was a regression, not an inherited defect.** At `f32e061` the counter was
+`data`-only and the printed line was true and correctly scoped.
+
+### R3-2 🚩 BLOCKED — *"cut only text the rendered walk was never going to read"*, contradicted by the file's own comment in the same function — **applied in round 4**
+
+The same drill grew the corpus **13411 → 13413**: the walk read that text the moment the marking came
+off, and the 1,118 markings had removed 4,464 strings it would otherwise have read. The `aria-hidden`
+branch's own comment already said so — the walk attributes a text node to its nearest blockish
+ancestor and tests **that** ancestor's visibility, never the node's own inline chain, *"so the hidden
+label was read anyway"*. The **decision** was fine and the neighbouring hole states its true reason
+correctly; it is the pass line's compression into a false mechanism claim that failed.
+
+### R3-3 🚩 The §17 span enumeration did not reproduce — **applied in round 4 by stating the rule, and the discrepancy is fully explained**
+
+Review 3 re-derived the enumeration and matched everything load-bearing — 486 comparable pairs, 0 net
+decreases, 0 keyed on number, 4 keyed on text, all three worked examples — but got **30 pairs / 78
+spans** where the comment said 29 / 77, under all four span definitions it tried. The comment did not
+state its span-extraction rule, the defect it correctly diagnoses for the heading control.
+
+**Round 4 kept 29/77 and wrote the rule down:** `git log --full-history --format='%H %P' --
+docs/ARCHITECTURE.md` → 303 commits, 118 single-parent + 185 merges = 488 pairs, of which **486** are
+comparable, the two dropped being `7fe2060e6 ← a632ae1e5` (parent has no `ARCHITECTURE.md`) and
+`7dbfbcc46 ← 30faf2353` (parent has the file without §17) — which is where the previously unexplained
+486 comes from. Spans are the live extractor's own definition: slice from the first `\n## 17. ` to the
+next `\n## `, match the italic-quoted spans, **collapse each capture's whitespace**, drop empties,
+compare as a multiset. **The 30/78 is exactly one pair — `53ff58048 ← 74ea1e569`, where the span
+*"this count may be short"* was re-wrapped across a line break** and the extractor's whitespace
+collapse re-joins it. Review 4 re-derived it from the comment's text alone and reproduced every
+figure, including the named extra pair.
+
+---
+
+## Round 4 — the counters split correctly, and two new population claims arrive with them
+
+Round 4 (`7fb330d`) split the string counters the way the elements already were: `mark()` in both
+collectors reports whether it filed the marking as seen or unseen, each collector carries
+`skippedUnseen` beside `skipped`, and `markedStrings` became the seen population with a new
+`unrenderedStrings` carrying the rest. Nothing hard-coded; both computed live.
+
+**Review 4 verified the fix by instrumentation rather than argument**, reconstructing the totals from
+per-event records at `7fb330d`: `skipped` `{statebar 1196, ariaHidden 5, data 5}` = 1,206;
+`skippedUnseen` `{ariaHidden 4464}`; **zero string events whose element is not in the matching set**;
+the seen side's elements-that-removed-a-string exactly the 12, the unseen side's exactly the 1,118.
+Drill X2 after the fix: corpus 13411 → 13413 with `markedEls` and `markedStrings` unchanged and the
+unseen figures taking the hit. The topbar drill: 12 → 13, `data` 2 → 3, `aria-label` 691 → 581,
+attributed total 1206 → 1316, the +110 that marking removed. **All six round-3 regression drills
+still fired**, and the two honestly-stated residuals were unchanged.
+
+### R4-B1 🚩 BLOCKED — *"each beside a `.sr` label"* is false for two of the ten, and *each* is the word the sentence exists to fix — **applied in round 5 by deleting the characterisation**
+
+Round 4 had corrected a claim of its own inherited text — *"every one of them a label already read
+once from the `<th>` it duplicates"* — to 1,108 of 1,118, naming the ten that read `Accept` in a table
+whose first header reads `Decision`, and characterising those ten as *"each beside a `.sr` label the
+corpus does read."* Review 4 instrumented the live text collector at `7fb330d` to dump, per unseen
+marking, its text, its column header and every `.sr` in its cell: **eight of the ten sit beside that
+label; two do not**, the two being the `declined` rows in `libraries.html`, whose `<tr>` contains no
+`.sr` anywhere. The 1,108, the ten and the `Decision` header are all exactly right.
+
+### R4-B2 🚩 BLOCKED — *"1,118 of the 1,148 cells in the 34 tables that use them"* reproduces under no reading — **applied in round 5 by going count-free**
+
+Measured in the browser against the same `prototype.html` the sweep opens, and confirmed by an
+independent parser pass over the file: **34 tables, of which 33 carry a stacklabel**; `<td>` in those
+33 = 1,133, `<td>`+`<th>` = 1,322; `<td>` over all 34 = 1,147. **1,148 matches nothing**, and 1,147 is
+the population including the table that uses none — which is how a 33-table figure and a 34-table
+figure got welded into one sentence. The **conclusion** survives: duplicating one four-column row took
+the unseen population 1,118 → 1,122 and its strings 4,464 → 4,472, exactly as cited.
+
+⚠️ **Both blockers are in the same block comment as the fix they accompany.**
+
+### R4-H 🚩 The exit-code discrepancy — **rebutted as a defect**
+
+`node docs/design/check.mjs` exits **1**; `make design` exits **2**, because GNU make exits 2 on a
+failed recipe. Both numbers are named on screen in the same run, and the `Makefile` documents the
+distinction in terms — *"It exits 1 on a finding; this recipe failing makes `make` exit 2. Two
+different numbers for two different things — do not quote one for the other"* — albeit in the
+`provenance` block rather than the `design` one. Nothing in the round-4 diff touches the `Makefile`.
+**Not a defect; recorded so the next lane that meets the two numbers does not re-open it.**
+
+### R4-det ℹ️ The round-4 determinism hash is not re-derivable as stated — **recorded, not raised**
+
+Round 4 reported three byte-identical `make design` logs at `51b35fce…`. Review 4's own three runs at
+the same commit were also byte-identical, at `a9f213f3…` for the full log and `0367e351…` for the log
+minus the `make` echo line, the latter matching a direct `node` invocation. Both lanes measured
+determinism and both got it; the hashes differ by log framing. Review 4 declined to call it a finding,
+noting only that **a hash quoted without the exact command that produced it is not a figure anyone
+else can re-derive** — which round 5 answered by publishing the hashed command alongside its
+`1dc67d32…`.
+
+---
+
+## Round 5 — the characterisations are deleted rather than corrected
+
+Round 5 (`2e88ad1`) re-measured both blockers before touching them, reproducing review 4's figures
+exactly (descriptors `{span.stacklabel: 1118}`, mechanisms `{ariaHidden: 1118}`, header-duplicate
+`{True: 1108, False: 10}`, and of the ten, `.sr` in the row `{True: 8, False: 2}`). **Then it deleted
+the characterisations instead of correcting them.** No `8 of the 10` was written down. The comment now
+says nothing about what the population is made of; the text collector's `mark` records a descriptor
+alongside each unseen marking's path, and the pass line **counts and prints the population's
+descriptor breakdown on every run**, sorted by count then name. The cell decomposition is gone and its
+conclusion rests on the re-fired drill.
+
+### R4-A 🚩 The seen/unseen split for **strings** can diverge from the split for **elements** — **fired, not live; registered OPEN, untouched by round 5**
+
+The attribute collector's `mark` returns seen **unconditionally**, while the text collector's
+box-tests, so one element can be filed on both sides. **Fired at `7fb330d`:** on the `requests.html`
+TorrentLeech `.stacklabel`, swapping `aria-hidden="true"` for `data-copy="data" title="Zork"` produced
+`markedEls` 13 with the **same element in both the seen and the unseen set**, `optoutStrings.data`
+5 → 7 (its title, seen side) and `optoutUnseenStrings.data` 0 → 2 (its text, unseen side) — so the
+printed attributed total understates by 2. **The mirror of R3-1, one level down.**
+
+**No overlap exists today, and that is measured rather than asserted.** Review 4's instrumented
+baseline run at `7fb330d` dumped the seen and unseen path sets and intersected them, per mechanism
+and across mechanisms:
+
+```
+per-mech seen sizes: {'data': 2, 'statebar': 5, 'ariaHidden': 5}
+per-mech unseen sizes: {'data': 0, 'statebar': 0, 'ariaHidden': 1118}
+overlap data 0
+overlap statebar 0
+overlap ariaHidden 0
+cross-mech seen∩unseen: 0
+```
+
+Its finding states the same result in terms: *"No overlap today: `optoutEls[m] ∩ optoutUnseen[m] = ∅`
+for all three mechanisms, and cross-mechanism too."* ⚠️ **That figure is `7fb330d`'s, and round 5 did
+not re-take it** — round 5's own instrumentation dumped the unseen side only, its descriptors and
+header duplicates, so nothing re-measures the intersection at `2e88ad1`.
+
+Round 5 left it alone deliberately: closing it is a
+mechanism change, not a wording change. **Trigger: any `data-copy="data"` on a boxless element
+carrying an ATTRS attribute inside a visible block.** Nothing gates it.
+
+### R4-D 🚩 The empty-`runData` fallback files a string on the counted side attributable to no counted element — **disclosed in place, registered OPEN**
+
+Measured at `7fb330d`: zero occurrences — no data run has more than one declaring element, none mixes
+seen and unseen, none is empty. The comment discloses the fallback in terms. **Trigger: any future
+change that lets the data branch hold with an empty run.**
+
+### R3-4 🚩 Zero slack on `OPTOUT_CEILING` goes red on adding a breadcrumb level — **judged and left, registered OPEN with its trigger**
+
+**Fired at `fe67dd1`:** `libraries.html` reads `Libraries › Ebooks`; adding one level gave `EXIT=1`, a
+corpus that **grew** to 13412, and `FAIL … 13 element(s) … over the ceiling of 12 — the exclusion
+widened.` The author added a navigation level and one word of copy; the gate reported a widened
+exclusion.
+
+All five `aria-hidden` marks are `.levels__sep` separator glyphs, **verified by path resolution**:
+review 3's probe at `fe67dd1` resolved every counted mark back through the sweep's own path function
+and printed five identical lines, `P5 ariaHidden-MARK SPAN.levels__sep text="›"`, beside
+`P5 classes: {"stacklabel":1118}` for the unseen side. ℹ️ **That every breadcrumb edit in the mockups
+trips it is inference from that composition, not a measurement.** The drill above is the one instance
+fired — one level added to `libraries.html`'s `Libraries › Ebooks` — and a universal over edits nobody
+has made yet is not a thing any run can return. It is the reasoning the judgement below rests on,
+marked so a later lane weighs it as reasoning.
+
+**The reviewer's judgement, recorded because no round has acted on it: zero slack is right for
+`data-copy="data"` and wrong for `aria-hidden="true"`.** For `data-copy` the marking **is** the
+authorial act the ceiling is about. For `aria-hidden` the counted population is separator glyphs,
+which vary with navigation depth rather than with exclusion policy — the same objection the block
+already uses to keep the 1,118 table duplicates **out** of the ceiling, applied one class over. The
+suggested alternative is to keep zero slack on `data` + `statebar` and either report `aria-hidden`
+count-free or gate it on something not proportional to breadcrumb depth. The response procedure is
+adequate and is at the site, in both the block comment and the FAIL message. **Trigger: the next
+commit that adds or removes a breadcrumb level in any mockup.**
+
+### R3-5 🚩 The unseen split rests on an untested structural assumption — **enumerated as not-live, registered OPEN**
+
+The corpus test asks whether the nearest block ancestor renders; the seen/unseen split asks whether
+the **declaring element** has client rects. A `display:none` inline element whose text **is** in the
+corpus, because the block lookup skips past it to a rendered cell, would be filed unseen and escape
+the ceiling entirely. Enumerated over both installs and all five screens at `fe67dd1`: **zero hits**,
+and `display: contents` appears nowhere in `usarr.css`. **Trigger: any new `display:none` inline
+element inside a page root.**
+
+### R4-B, R4-C, R4-E 🚩 Follow-ups round 5 did close — **applied**
+
+**R4-B** was an ungated closed-set claim on the pass line — *"each sits on a `.stacklabel` table
+duplicate that draws no box"* — true at `7fb330d` and falsifiable in one edit **on a green run**.
+Fired at that tree: `aria-hidden="true"` on a `services.html` `<div class="field advanced">` gave exit
+**0**, green, with the line printing a false *"each"*, and the corpus did **not** move — falsifying
+the neighbouring *"lift one marking and the corpus grows"* as a universal too. Round 5's live
+descriptor breakdown answers it: the same drill re-fired on the fixed code stays green and prints
+`1118 span.stacklabel, 1 div.field.advanced`, and the *"corpus grows"* clause is now scoped to the one
+marking the block comment drills. **R4-C:** *"the one `.stacklabel` in requests.html's 'What Prowlarr
+reports' cell"* — there are four such cells; the marking is now addressed by its row and by the
+table's four column heads, and resolves to exactly one. **R4-E:** hole 5's rule said *"from the branch
+tip"* while the branch was diverged three ways; it is now pinned to `7fb330d`, and every figure in it
+was re-derived at that SHA from the comment's own rule.
+
+### Round 5's own residual, flagged by the lane that wrote it
+
+One sentence in the round-5 diff touches a set: *"The row is named because the column is not an
+address: the cell repeats down the table."* The lane argued it is definitionally true of a table
+column rather than a measurement, and verified it anyway (four such cells). **Recorded rather than
+resolved.**
+
+### Gate state at `2e88ad1`
+
+`make design` exit 0 and `make check` exit 0 on the clean committed tree, with three byte-identical
+whole-log hashes at `1dc67d322786ac4d75158bc33d2e47d3c44223e8c27f5e543e7ecb4e4415b5f8` and the hashed
+command published alongside them. Toolchain: `go1.25.13 linux/amd64`, node v22.22.2, govulncheck 0
+called vulnerabilities, `pnpm audit` 0. Determinism was measured at rounds three, four and five, and
+was byte-identical within every lane that measured it. Round 3: review 3 ran three consecutive
+`make design` runs on the untouched tree `fe67dd1` and reported the **whole log**, not just the
+counts, identical at `ab87854bb945955e1e8282f2e360055d999b6a67ed72ac43bd182ffd3567befd` ×3. Round 4:
+two lanes, both byte-identical to themselves and differing from each other by log framing — the
+figures and the reason are at `R4-det` above. Round 5: the three hashes named in this paragraph.
+⚠️ **Rounds 1 and 2 carry no determinism figure**, here or in the lane reports this entry is drawn
+from, and none is claimed for them.
+
+⚠️ **A fifth adversarial review was in flight when this entry was drafted and had not ruled.** Nothing
+here records its outcome, and this entry does not assert that round 5 landed clean.
+
+---
+
+### Pre-existing population claims elsewhere in `check.mjs`, found by round 5 and deliberately not touched — OPEN
+
+Round 5 swept the rest of the file for sentences of this shape and changed none, because each wants
+its own round under the same rule, and because a sweep folded into a fix commit is how this arc got
+long.
+
+* **The `.pagehead__meta` summaries claim** — a frozen string count plus two universal quantifiers over
+  that set, nothing computing either. ⚠️ **UNVERIFIED**: the lane did not check the figure, and reports
+  that the companion count is not directly greppable because the class name occurs in both markup and
+  CSS. **This is the strongest remaining instance in the file.**
+* **The per-subsection decomposition in hole 3** — *"17.3.1 contributes one string, 17.3.2 and 17.7
+  three each."* **Checked and correct at `2e88ad1`**, but frozen, and it decomposes a population the
+  sweep already counts live. ℹ️ The companion paragraph further down is already deliberately
+  count-free, stating only an ordering, and the lane verified that ordering holds. **That paragraph is
+  the model the rest of the block should follow.**
+* **The Services and Home combination claims** — *"Services is 40 of the 110 combinations, and at least
+  four placeholders render in every one of them"*, and *"Home being 22 of the 110"*. Universal over 40
+  combinations, uncomputed. **Partly mitigated in place**: the text says in terms that these are
+  arithmetic over a measured decomposition rather than fired drills — the disclosure the blockers
+  lacked.
+* **The per-source slack figures** — 191 / 218 / 43 / 93, frozen against floors the code holds as
+  constants. Lower risk, since both halves live in the same file.
+
+**Trigger, and it names a condition rather than a chore:** each closes when a lane computes it at run
+time or deletes it, in a commit that opens `check.mjs` for that reason. ⚠️ **A green `make design` is
+not evidence about any of them, and the findings above are where to check that rather than take it
+here.** The findings this entry marks BLOCKED — `R1-F1`, `R1-F2`, `R2-1`, `R2-2`, `R2-3`, `R3-1`,
+`R3-2`, `R4-B1`, `R4-B2` — each name a tree, and each of those trees compiled and went green with the
+false claim in it. Read the dispositions; the pattern is on the page, not in this sentence.
+
+---
+
+### What this arc did NOT cover
+
+Stated because *"not found"* and *"not looked at"* read identically otherwise.
+
+* **`LS-394.26`'s demotion and re-sort** is untouched. ℹ️ Round 1 did close `LS-394.26`'s banner
+  trigger — the gate's column now reads `HEAD` and carries what `git rev-parse HEAD` returns, with zero
+  changed body lines so that entry's verbatim quotations still hold — and repaired one clause of the
+  rider that the second commit falsified. **That is a different item from the demotion and re-sort,
+  which no round in this arc opened.**
+* **The five zero-yield unfloored `ATTRS` entries** — `alt`, `aria-description`, `aria-roledescription`,
+  `aria-valuetext`, `aria-placeholder` — were out of scope. Review 1 records leaving them alone on
+  instruction — *"The five zero-yield `ATTRS` entries I left alone as instructed."* — and no round in
+  this arc records taking them up, which is a statement about what the lane reports contain rather
+  than a survey of four rounds' diffs. Review 1 checked whether they could hide a loss and found they
+  read zero.
+* **The fifteen-word rename stays frozen**, for the reasons given at R1's ruling above.
+* **Re-lowering the `aria-label` floor from 500 to 472** was not done and is not proposed here. Review 2
+  recorded the tension: the block's own smallest-satisfying rule argues for 472, its *"not a licence to
+  re-lower one that already satisfies"* parenthetical forbids it, and the two are in tension without
+  contradicting. **Left as it stands.**
+* **No claim in this entry is measured by any gate.** `make check`'s `secrets` target scans these files
+  for credential patterns; no target parses prose, resolves a citation or re-fires a drill. The lane
+  reports named per finding, and the trees beside every figure, are the whole evidence — each written
+  out so a later lane can re-run it.
