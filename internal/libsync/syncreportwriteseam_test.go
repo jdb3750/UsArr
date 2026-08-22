@@ -53,8 +53,10 @@ func TestNoSyncReportWriterLeavesUpstreamTextUnredacted(t *testing.T) {
 	src := &fakeSource{
 		containers: []store.CatalogueContainer{
 			{RemoteID: "1", Name: "Fiction " + writeSeamPoison, Kind: "book"},
-			{RemoteID: "2", Name: "Refused " + writeSeamPoison,
-				DeclineReason: "the upstream said " + writeSeamPoison},
+			{
+				RemoteID: "2", Name: "Refused " + writeSeamPoison,
+				DeclineReason: "the upstream said " + writeSeamPoison,
+			},
 		},
 		items: []store.CatalogueItem{
 			{
@@ -93,7 +95,7 @@ func TestNoSyncReportWriterLeavesUpstreamTextUnredacted(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read sync_report: %v", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	var scanned, redacted int
 	kinds := map[string]bool{}
