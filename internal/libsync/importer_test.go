@@ -1210,6 +1210,31 @@ func TestLastFullSyncAtIsTheRunStartNotItsFinishOrTheRowWrite(t *testing.T) {
 // the pre-checked default §17.8 specifies.
 func acceptContainers(t *testing.T, s *store.Store, instanceID int64, cs ...store.CatalogueContainer) {
 	t.Helper()
+	acceptContainersAs(t, s, store.SystemUserID, instanceID, cs...)
+}
+
+// seedDeltaSessionUser inserts a user row a session could be issued for, so that
+// `library.user_id`'s foreign key resolves when a fixture accepts at an id other
+// than the system sentinel. User 0 is `_system`, disabled and passwordless; a
+// real session's id is always >= 1.
+func seedDeltaSessionUser(t *testing.T, s *store.Store, uid int64) {
+	t.Helper()
+	if err := s.DB().Write(t.Context(), func(ctx context.Context, tx *sql.Tx) error {
+		_, err := tx.ExecContext(ctx, `
+			INSERT INTO user (id, username, display_name, auth_source, is_owner, is_disabled)
+			VALUES (?, 'owner', 'Owner', 'local', 1, 0)`, uid)
+		return err
+	}); err != nil {
+		t.Fatalf("seed a real session user: %v", err)
+	}
+}
+
+// acceptContainersAs is acceptContainers at a named user, for the tests that
+// have to run at an id a session can actually carry.
+func acceptContainersAs(
+	t *testing.T, s *store.Store, uid, instanceID int64, cs ...store.CatalogueContainer,
+) {
+	t.Helper()
 	var accepts []store.LibraryAcceptance
 	for _, c := range cs {
 		if c.Kind == "" {
@@ -1230,7 +1255,7 @@ func acceptContainers(t *testing.T, s *store.Store, instanceID int64, cs ...stor
 	if len(accepts) == 0 {
 		return
 	}
-	if _, err := s.AcceptLibraries(t.Context(), store.OwnerScope(store.SystemUserID), accepts); err != nil {
-		t.Fatalf("accept libraries for the fixture: %v", err)
+	if _, err := s.AcceptLibraries(t.Context(), store.OwnerScope(uid), accepts); err != nil {
+		t.Fatalf("accept libraries for the fixture at user %d: %v", uid, err)
 	}
 }

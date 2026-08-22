@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"go/parser"
 	"go/token"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -92,6 +93,10 @@ func seedProposalsScreenCorpus(t *testing.T, s *Server) {
 			w.instance, w.id, w.id, w.container))
 	}
 	stmts = append(stmts,
+		// The session's own user row. `library.user_id` is a foreign key onto
+		// `user(id)`, so an Accept at wireSessionUser needs it to exist.
+		fmt.Sprintf(`INSERT INTO user (id, username, display_name, auth_source, is_owner, is_disabled)
+		   VALUES (%d, 'joe', 'Joe', 'local', 1, 0)`, wireSessionUser),
 		// Bound at its OWN kind: c-z is not a proposal.
 		`INSERT INTO library (id, user_id, name, slug, kind, managed_by)
 		   VALUES (100, 0, 'Existing Comics', 'existing-comics', 'comic', 'auto')`,
@@ -134,6 +139,22 @@ func seedProposalsScreenCorpus(t *testing.T, s *Server) {
 	}
 }
 
+// wireSessionUser is the id every request in this file carries.
+//
+// ⚠️ IT IS NOT 0, AND THAT IS THE POINT. These tests used store.User{ID: 0}, an
+// id no session can hold: migration 00001 seeds user 0 as `_system`, disabled
+// and passwordless, and its own comment says it *"can never be logged into"*. A
+// real session's id is always >= 1.
+//
+// The seeded libraries below stay at user_id 0, because that is where an
+// install's auto-created libraries really are — cmd/usarr/import.go builds its
+// Importer at store.SystemUserID. A session at 0 put the actor and that data on
+// the same side of every user predicate, so the endpoint's scoping could not be
+// exercised at all: strict equality and `user_id IN (0, :uid)` return the same
+// rows when :uid is 0, and differ only in production. Running the wire at 7 is
+// what makes these tests able to fail.
+const wireSessionUser int64 = 7
+
 func sessionRequest(t *testing.T, method, path, body string, owner bool) *http.Request {
 	t.Helper()
 	var r *http.Request
@@ -143,7 +164,7 @@ func sessionRequest(t *testing.T, method, path, body string, owner bool) *http.R
 		r = httptest.NewRequestWithContext(t.Context(), method, path, strings.NewReader(body))
 	}
 	return r.WithContext(context.WithValue(r.Context(), ctxKeySession, authSession{
-		User: store.User{ID: 0, Username: "joe", IsOwner: owner},
+		User: store.User{ID: wireSessionUser, Username: "joe", IsOwner: owner},
 	}))
 }
 
@@ -830,5 +851,49 @@ func TestLibraryProposalRoutesAreRegisteredAndGated(t *testing.T) {
 	if code, body := c.post(path, false); code != http.StatusForbidden ||
 		!strings.Contains(body, `"error":"csrf"`) {
 		t.Errorf("POST %s with no CSRF token = %d %s, want 403 csrf", path, code, body)
+	}
+
+	// ⚠️ AND THE 401 ITSELF, WHICH THIS TEST DID NOT ASSERT. Everything above
+	// stops SHORT of the session check: 415 is the media-type gate and 403 is
+	// CSRF, so every assertion above would hold for a write route that never
+	// refused an anonymous caller at all. The read route's 401 is checked at the
+	// top of this test and the write route's was not.
+	//
+	// Reaching the session check needs CSRF satisfied first. checkCSRFToken is
+	// pure double-submit — it compares the cookie to the header and consults no
+	// session — so a matching pair with NO session cookie is the request that
+	// gets past it.
+	//
+	// ⚠️ WHAT THIS ASSERTION DOES NOT PROVE, MEASURED RATHER THAN ASSUMED. It
+	// does NOT prove the route is wired behind the `authenticated` middleware.
+	// DRILLED: deleting `s.authenticated(...)` from this route's registration in
+	// server.go leaves this assertion GREEN, because handleAcceptLibraries opens
+	// with its own `sessionFrom(r)` check and returns the same 401. The endpoint
+	// is defended twice and this test pins the OUTCOME — an anonymous write is
+	// refused — which is the property that matters and the one that was
+	// unasserted. A test that pinned the middleware specifically would have to
+	// read the route table, and TestLibraryProposalHandlersReachNothingOutbound
+	// is where this file does that kind of structural check.
+	unauth, err := http.NewRequestWithContext(t.Context(), http.MethodPost, path,
+		strings.NewReader("{}"))
+	if err != nil {
+		t.Fatalf("request: %v", err)
+	}
+	unauth.Header.Set("Content-Type", "application/json")
+	unauth.Header.Set("X-CSRF-Token", "matched-but-sessionless")
+	unauth.AddCookie(&http.Cookie{Name: "usarr_csrf", Value: "matched-but-sessionless"})
+	resp, err := http.DefaultClient.Do(unauth)
+	if err != nil {
+		t.Fatalf("POST %s: %v", path, err)
+	}
+	body, err := io.ReadAll(resp.Body)
+	_ = resp.Body.Close()
+	if err != nil {
+		t.Fatalf("read body: %v", err)
+	}
+	if resp.StatusCode != http.StatusUnauthorized {
+		t.Errorf("POST %s with a valid CSRF pair and no session = %d %s, want 401 — an "+
+			"anonymous caller must not reach this write at all",
+			path, resp.StatusCode, body)
 	}
 }

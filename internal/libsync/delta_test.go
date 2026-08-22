@@ -623,6 +623,87 @@ func TestADeltaEscalatesWhenAContainerIsBoundIntoAnExistingLibrary(t *testing.T)
 	}
 }
 
+// THE SAME ESCALATION, AT A USER ID A SESSION CAN ACTUALLY CARRY.
+//
+// ⚠️ WHY A SECOND COPY RATHER THAN CHANGING THE ONE ABOVE, AND WHY THE IMPORTER
+// IS BUILT BY HAND HERE. The test above accepts at store.SystemUserID, which is
+// the id cmd/usarr's Importer runs at — and no session can carry it: migration
+// 00001 seeds user 0 as `_system`, disabled and passwordless, *"can never be
+// logged into"*. A real user accepts at an id >= 1, so their libraries are at
+// that id, and this test is the one that says the escalation still works there.
+//
+// ⚠️ AND IT DOES NOT USE deltaFixture.importer(), WHICH IS THE POINT. That helper
+// builds the Importer at store.SystemUserID, exactly as cmd/usarr/import.go
+// does. MEASURED with it: the delta does NOT escalate (err is nil,
+// LibrariesJoined is 1 rather than 2), because bindOneContainer's step 2 reads
+// `user_id IN (0, :uid)` at uid 0 and so cannot see a library owned by user 7.
+// Built at the accepting user, as below, the escalation fires and both
+// containers join.
+//
+// 🚩 THAT GAP IS REAL AND IS NOT THIS TEST'S TO CLOSE. It is the residual half of
+// the scope divergence: Accept writes at the session's id, the import reads at
+// the sentinel, and nothing carries the install's owner into the import. Closing
+// it means giving the importer a real owner id, which touches an existing data
+// population and is a decision rather than a fix. This test is written at the
+// accepting user so that it pins the BEHAVIOUR as correct, and its comment
+// records the production gap rather than letting a green test imply there is
+// none. See docs/REVIEW-LOG.md LS-395.9.
+func TestADeltaEscalatesAtARealSessionUser(t *testing.T) {
+	const uid = int64(7)
+	other := newDeltaFixture(t,
+		[]bookorbit.Library{{ID: 9, Name: "Fiction", BookCount: 1}},
+		map[int64][]bookorbit.Book{9: {bookAt(91, "A book", at(0))}})
+	seedDeltaSessionUser(t, other.st, uid)
+	acceptContainersAs(t, other.st, uid, other.instance,
+		store.CatalogueContainer{RemoteID: "9", Name: "Fiction", Kind: "book"})
+	if _, err := (&Importer{Store: other.st, Source: other.src, UserID: uid}).
+		FullImport(t.Context(), other.instance); err != nil {
+		t.Fatalf("first instance FullImport: %v", err)
+	}
+
+	r := &fakeBookOrbitReader{
+		libs:  []bookorbit.Library{{ID: 1, Name: "Audio", BookCount: 1}},
+		books: map[int64][]bookorbit.Book{1: {bookAt(1, "Audio one", at(0))}},
+	}
+	b := &deltaFixture{st: other.st, reader: r, src: NewBookOrbitSource(r)}
+	secondID, err := other.st.CreateServiceInstance(t.Context(), store.ServiceInstance{
+		Kind: "bookorbit", Role: "library", Name: "bookorbit-two",
+		BaseURL: "https://books.example:9999", APIKeyEnc: []byte{4, 5, 6}, KEKID: 1,
+		Enabled: true, ManagedBy: "ui",
+	})
+	if err != nil {
+		t.Fatalf("CreateServiceInstance: %v", err)
+	}
+	b.instance = secondID
+	acceptContainersAs(t, b.st, uid, b.instance,
+		store.CatalogueContainer{RemoteID: "1", Name: "Audio", Kind: "book"})
+	if _, err := (&Importer{Store: b.st, Source: b.src, UserID: uid}).
+		FullImport(t.Context(), b.instance); err != nil {
+		t.Fatalf("second instance FullImport: %v", err)
+	}
+
+	r.libs = append(r.libs, bookorbit.Library{ID: 2, Name: "Fiction", BookCount: 50})
+	r.books[2] = []bookorbit.Book{bookAt(2, "Old backlog", at(-6000))}
+	b.reopen()
+
+	rep, err := (&Importer{Store: b.st, Source: b.src, UserID: uid}).
+		DeltaSync(t.Context(), b.instance)
+	if !errors.Is(err, ErrEscalateToFullImport) {
+		t.Fatalf("err = %v, want ErrEscalateToFullImport at user %d", err, uid)
+	}
+	if !strings.Contains(rep.EscalationReason, "bound to this service for the first time") {
+		t.Errorf("reason = %q", rep.EscalationReason)
+	}
+	if n := countRows(t, b.st, `SELECT COUNT(*) FROM library WHERE id <> 0`); n != 2 {
+		t.Errorf("%d libraries exist, want 2", n)
+	}
+	if rep.LibrariesJoined != 2 {
+		t.Errorf("LibrariesJoined = %d, want 2 — at user %d the second instance's `Fiction` "+
+			"must join the first instance's, which is the whole case a creation detector misses",
+			rep.LibrariesJoined, uid)
+	}
+}
+
 // ─── what a delta must not do ────────────────────────────────────────────────
 
 // 🚩 A WINDOW-SCOPED VERDICT MUST NOT OVERWRITE A CONTAINER-SCOPED ONE. The skip
