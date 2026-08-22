@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/jdb3750/UsArr/internal/ssrf"
 	"github.com/ncruces/go-sqlite3"
 )
 
@@ -1575,5 +1576,168 @@ func TestAProvisionalRetypeRefusesALibraryTWOCONTAINERSFEED(t *testing.T) {
 		t.Errorf("the refusal produced %d 'Comics (Comics)' libraries, want 1 — refusing to "+
 			"retype falls back to the sibling mint, which is what the code did before "+
 			"provisional kinds existed", n)
+	}
+}
+
+// ── container_observed: one row per container per import ────────────────────
+
+// observations reads the container_observed rows for one instance, newest first
+// per container, decoded through the same struct the writer encodes.
+func observations(t *testing.T, s *Store, instanceID int64) map[string][]containerObservation {
+	t.Helper()
+	rows, err := s.db.Read().QueryContext(t.Context(), `
+		SELECT remote_kind, remote_id, detail FROM sync_report
+		 WHERE service_instance_id = ? AND kind = ?
+		 ORDER BY id DESC`, instanceID, SyncReportContainerObserved)
+	if err != nil {
+		t.Fatalf("read container_observed rows: %v", err)
+	}
+	defer func() { _ = rows.Close() }()
+
+	out := map[string][]containerObservation{}
+	for rows.Next() {
+		var remoteKind, remoteID, detail string
+		if err := rows.Scan(&remoteKind, &remoteID, &detail); err != nil {
+			t.Fatalf("read container_observed rows: scan: %v", err)
+		}
+		if remoteKind != "library" {
+			t.Errorf("observation of %q has remote_kind %q, want \"library\" — the "+
+				"newest-row probe seeks on that column, so a different value is a row "+
+				"no reader will ever find", remoteID, remoteKind)
+		}
+		var o containerObservation
+		if err := json.Unmarshal([]byte(detail), &o); err != nil {
+			t.Fatalf("decode observation of %q (%q): %v", remoteID, detail, err)
+		}
+		out[remoteID] = append(out[remoteID], o)
+	}
+	if err := rows.Err(); err != nil {
+		t.Fatalf("read container_observed rows: %v", err)
+	}
+	return out
+}
+
+// TestBindContainersObservesEveryContainerItSaw is the whole of the row's
+// contract: EVERY container in the list, whatever happened to it.
+//
+// The three fates are all here on purpose, because the row is written at the one
+// point in the loop where all three are still ahead of it:
+//
+//   - BOUND — the ordinary case, and the only one the old container_declined row
+//     said nothing about.
+//   - DECLINED (Kind == "") — skipped by the bind loop's `continue`, so an
+//     observation written after it would be missing exactly the containers
+//     §17.8's `Decision` column has to render.
+//   - UNBINDABLE — rolled back to its savepoint, so an observation written
+//     inside it would go with the rollback and the container would read as
+//     never reported.
+func TestBindContainersObservesEveryContainerItSaw(t *testing.T) {
+	s := newTestStore(t)
+	inst := fixtureInstance(t, s, "kavita")
+
+	cs := []CatalogueContainer{
+		comicContainer("1", "Manga"),
+		{RemoteID: "2", Name: "Podcasts", Kind: "", DeclineReason: "no work.kind for a podcast"},
+		{RemoteID: "3", Name: "Sheet Music", Kind: "score"},
+		{RemoteID: "4", Name: "Ebooks", Kind: "book", KindProvisional: true},
+	}
+	if _, skipped, err := s.BindContainers(t.Context(), inst, SystemUserID, cs); err != nil {
+		t.Fatalf("BindContainers: %v", err)
+	} else if len(skipped) != 1 || skipped[0].RemoteID != "3" {
+		t.Fatalf("skipped = %+v, want exactly the unbindable container — without it this "+
+			"test never exercises the savepoint rollback it exists for", skipped)
+	}
+
+	got := observations(t, s, inst)
+	if len(got) != len(cs) {
+		t.Fatalf("observed %d containers, want %d (%+v)", len(got), len(cs), got)
+	}
+	for _, want := range []containerObservation{
+		{Name: "Manga", Kind: "comic"},
+		{Name: "Podcasts", Kind: "", DeclineReason: "no work.kind for a podcast"},
+		{Name: "Sheet Music", Kind: "score"},
+		{Name: "Ebooks", Kind: "book", KindProvisional: true},
+	} {
+		ref := map[string]string{
+			"Manga": "1", "Podcasts": "2", "Sheet Music": "3", "Ebooks": "4",
+		}[want.Name]
+		seen := got[ref]
+		if len(seen) != 1 {
+			t.Errorf("container %q has %d observations, want 1 per import", ref, len(seen))
+			continue
+		}
+		if seen[0] != want {
+			t.Errorf("observation of container %q:\n  got:  %+v\n  want: %+v", ref, seen[0], want)
+		}
+	}
+}
+
+// A CONTAINER THE UPSTREAM STOPS REPORTING STOPS GAINING ROWS, and that is the
+// fact ProposedContainers' not-seen-by-last-sync boolean is derived from. The
+// row is per import rather than per container, so the newest one is the last
+// time this instance's adapter named it.
+func TestContainerObservationsAccumulatePerImport(t *testing.T) {
+	s := newTestStore(t)
+	inst := fixtureInstance(t, s, "kavita")
+
+	first := []CatalogueContainer{comicContainer("1", "Manga"), comicContainer("2", "Webtoons")}
+	if _, _, err := s.BindContainers(t.Context(), inst, SystemUserID, first); err != nil {
+		t.Fatalf("first bind: %v", err)
+	}
+	// The second run sees only container 1, and sees it under a NEW NAME.
+	if _, _, err := s.BindContainers(t.Context(), inst, SystemUserID,
+		[]CatalogueContainer{comicContainer("1", "Manga & Manhwa")}); err != nil {
+		t.Fatalf("second bind: %v", err)
+	}
+
+	got := observations(t, s, inst)
+	if len(got["1"]) != 2 {
+		t.Errorf("container 1 has %d observations after two imports, want 2", len(got["1"]))
+	} else if got["1"][0].Name != "Manga & Manhwa" {
+		t.Errorf("the newest observation of container 1 names it %q, want the name the "+
+			"SECOND import reported — the read takes the newest row and a stale name "+
+			"there is a stale proposal", got["1"][0].Name)
+	}
+	if len(got["2"]) != 1 {
+		t.Errorf("container 2 has %d observations, want the 1 from the run that saw it: "+
+			"a container the upstream stopped reporting must stop gaining rows, which is "+
+			"the whole of how its absence is detected", len(got["2"]))
+	}
+}
+
+// TestContainerObservationsAreRedactedAtRest is the security half of the row's
+// contract, and it is asserted at rest rather than on the wire.
+//
+// `sync_report.detail` promises redaction on the way in (migration 00005), and
+// the reason is not only the secret: ProposedContainers surfaces this name as
+// §17.8's suggested name, and a value redacted on the READ would differ from the
+// value stored — which is what makes an unedited proposal compare as edited. The
+// stored string is the only string, and that is what this asserts.
+func TestContainerObservationsAreRedactedAtRest(t *testing.T) {
+	s := newTestStore(t)
+	inst := fixtureInstance(t, s, "kavita")
+
+	const raw = "Manga (from http://kavita.test:5000/api/Library?apiKey=SUPERSECRET)"
+	if _, _, err := s.BindContainers(t.Context(), inst, SystemUserID,
+		[]CatalogueContainer{{RemoteID: "1", Name: raw, Kind: "comic"}}); err != nil {
+		t.Fatalf("BindContainers: %v", err)
+	}
+
+	got := observations(t, s, inst)["1"]
+	if len(got) != 1 {
+		t.Fatalf("observations = %+v, want exactly 1", got)
+	}
+	if strings.Contains(got[0].Name, "SUPERSECRET") {
+		t.Errorf("the stored name carries the api key: %q\n"+
+			"It is in the SQLite file, so it is in `usarr backup` output and in "+
+			"anything that later logs the row. A wire-side redaction closes none of "+
+			"that.", got[0].Name)
+	}
+	// AND IT IS THE FUNCTION'S OWN ANSWER, not a hand-rolled scrub: one
+	// implementation of the deny-list (internal/ssrf's rule), so a container name
+	// this store rewrites differently from every other free-text path is a second
+	// implementation nobody is maintaining.
+	if want := ssrf.RedactText(raw); got[0].Name != want {
+		t.Errorf("the stored name is %q, want ssrf.RedactText's own answer %q", got[0].Name, want)
 	}
 }

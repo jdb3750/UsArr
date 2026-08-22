@@ -612,14 +612,19 @@ func TestNoPosterFetcherIsNotAFailure(t *testing.T) {
 	if rep.Covers != (CoverResult{}) {
 		t.Errorf("Covers = %+v, want the zero value", rep.Covers)
 	}
-	// ⚠️ THIS COUNTED EVERY sync_report ROW AND NOW EXCLUDES ONE KIND. A
+	// ⚠️ THIS COUNTED EVERY sync_report ROW AND NOW EXCLUDES TWO KINDS. A
 	// completed full import always emits the deletion sweep's own row
 	// (reference/sync.md §4 step 5), so an unqualified count stopped being a
-	// statement about the COVER pass the moment channel 4 landed. The subject is
-	// unchanged: the cover pass has no sync_report kind of its own, so "no row of
-	// any other kind" is exactly "the pass that did not run reported nothing".
+	// statement about the COVER pass the moment channel 4 landed — and it emits
+	// one container_observed row per container the adapter reported, for the same
+	// structural reason, since §17.8's Accept step reads its proposals off those
+	// rows. The subject is unchanged: the cover pass has no sync_report kind of
+	// its own, so "no row of any other kind" is exactly "the pass that did not run
+	// reported nothing". Both exclusions name the kind BY SYMBOL, so a renamed
+	// constant is a compile error here rather than a silently widened count.
 	if got := countRows(t, s, `SELECT COUNT(*) FROM sync_report
-	                            WHERE kind <> '`+store.SyncReportDeletionSweep+`'`); got != 0 {
+	                            WHERE kind NOT IN ('`+store.SyncReportDeletionSweep+`',
+	                                               '`+store.SyncReportContainerObserved+`')`); got != 0 {
 		t.Errorf("sync_report rows = %d, want 0: a pass that did not run has nothing to report", got)
 	}
 }

@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/jdb3750/UsArr/internal/ssrf"
 	"github.com/ncruces/go-sqlite3"
 )
 
@@ -515,6 +516,16 @@ func (s *Store) BindContainers(
 	var skipped []SkippedContainer
 	err := s.write(ctx, func(ctx context.Context, tx *sql.Tx) error {
 		for i, c := range cs {
+			// ⚠️ THE OBSERVATION IS WRITTEN FIRST, BEFORE THE DECLINE SKIP AND
+			// BEFORE THE SAVEPOINT, AND BOTH POSITIONS ARE LOAD-BEARING.
+			// Before the skip, because a declined container is a container the
+			// upstream reported and the proposal set has to be able to say so.
+			// Before the savepoint, because a bind that rolls back must not take
+			// the record of what upstream said with it — the bind failed, the
+			// observation still happened.
+			if err := recordContainerObservation(ctx, tx, instanceID, c); err != nil {
+				return err
+			}
 			if c.Kind == "" {
 				continue
 			}
@@ -625,6 +636,135 @@ const SyncReportContainerKindChanged = "container_kind_changed"
 //
 // Unexported: nothing outside this package writes it.
 const syncReportContainerBindFailed = "container_bind_failed"
+
+// SyncReportContainerObserved is sync_report.kind for ONE ROW PER CONTAINER PER
+// IMPORT: what the adapter reported about a container at the moment it reported
+// it, whether or not that container was bound and whether or not it was
+// declined.
+//
+// # It exists so the Libraries screen can read its proposals off local state
+//
+// ADR-0048 clause 1 computes the proposal set from "what the connected instance
+// reports as its containers", and clause 5 excuses the connect probe's upstream
+// call. Neither gives a screen the user NAVIGATES to anything to render:
+// §17.8 specifies /settings/libraries as a settings screen, and a proposal that
+// exists only inside a probe response is available for a few seconds after
+// adding a service and never again. This row is the replicated half — the
+// container list, on the local file, where principle 1 says a render path has to
+// find it. ProposedContainers is its reader.
+//
+// ⚠️ IT IS ALSO THE ONLY EVIDENCE THAT A CONTAINER IS STILL THERE. A bound
+// container has `library_source.missing_since`, set by the whole-list sweep and
+// cleared on every rebind. An UNBOUND container — which is what a proposal is —
+// has no library_source row at all, so nothing else in the schema can say
+// whether the last run still saw it. The comparison that answers it is
+// `created_at >= service_instance.last_full_sync_at`, and it is sound only
+// because of where this row is written: see recordContainerObservation.
+//
+// It needs no migration: sync_report.kind carries no CHECK (migration 00005) and
+// `detail` is untyped JSON. Same seam container_declined, container_bind_failed
+// and container_kind_changed use.
+//
+// ⚠️ IT DOES NOT REPLACE container_declined AND MUST NOT BE FOLDED INTO IT. That
+// kind is the DECISION — this adapter had no work.kind for this container — and
+// it is written by internal/libsync, is enumerated in this file's own doc
+// comments, and carries the reason a reader depends on. This one is the
+// OBSERVATION, written for the declined container and the bound one alike. Two
+// facts, two kinds; a reader that counted declines off this kind would count
+// every container on the instance.
+//
+// EXPORTED, unlike syncReportContainerBindFailed, because a test in
+// internal/libsync has to name it BY SYMBOL: every completed bind phase writes
+// these rows, so a test that counts "sync_report rows the pass under test wrote"
+// has to subtract them, and a string literal there is a hand-copied list of the
+// exact kind DEVELOPMENT.md §11 says goes stale silently.
+const SyncReportContainerObserved = "container_observed"
+
+// containerObservation is a container_observed row's `detail` blob.
+//
+// FOUR FIELDS, AND EVERY ONE OF THEM IS A FACT NO OTHER TABLE HOLDS ONCE THE
+// CONTAINER IS UNBOUND. `library_source.container_identity` records the name of
+// a container that was bound; nothing records the name, the kind, the guess or
+// the decline reason of one that was not — which is precisely the set §17.8's
+// Accept screen renders. It is a struct rather than a map so the field names are
+// declared once and shared with the reader that decodes them.
+//
+// ⚠️ WHAT IS RECORDED IS WHAT UPSTREAM SAID, WITH URL-EMBEDDED CREDENTIALS
+// STRIPPED. That transformation is small but it is real, and this row'"'"'s whole
+// argument is that it records what upstream REPORTED — so it is named here
+// rather than left for a reader to discover. See recordContainerObservation for
+// why the strip happens at the write and what it does and does not cover.
+type containerObservation struct {
+	Name            string `json:"name"`
+	Kind            string `json:"kind"`
+	KindProvisional bool   `json:"kind_provisional"`
+	DeclineReason   string `json:"decline_reason"`
+}
+
+// recordContainerObservation writes one container_observed row inside the bind
+// transaction.
+//
+// # THE TRANSACTION IS THE WHOLE POINT, AND A FAILURE HERE FAILS THE BIND
+//
+// The absence of a row is read as a FACT — "the last completed run did not see
+// this container" — so the write must be impossible to lose independently of the
+// run that made it true. Inside this transaction the rows and the bind commit or
+// vanish together, and a whole-transaction failure returns before libsync's
+// FullImport can stamp `last_full_sync_at`. That is what makes "the run
+// completed and wrote no row for C" mean "C was not reported" rather than "the
+// row write happened to fail".
+//
+// ⚠️ THE SHAPE NOT TO COPY IS `content_completeness`, which cmd/usarr writes
+// AFTER FullImport returns, outside the transaction, with a failure path that
+// logs and carries on. A run of that shape can stamp and then fail to record a
+// container it demonstrably saw, which is exactly the reading this row must not
+// admit. `container_bind_failed` a few lines below is the right precedent: it is
+// written inside the bind transaction beside the rollback that made it true.
+//
+// So the error is RETURNED, not logged. If that fails the whole import, that is
+// correct — a run that cannot record what it saw must not leave a stamp claiming
+// it saw everything.
+//
+// # REDACTED ON THE WAY IN, AND THE REASON IS NOT ONLY THE SECRET
+//
+// Migration 00005'"'"'s own comment on `sync_report.detail` states the contract this
+// honours: upstream response text reaches this column, so it is redacted on the
+// way in. Redacting at rest is what keeps a credential out of the SQLite file,
+// out of `usarr backup`'"'"'s output, and out of anything that later logs the row —
+// a read-path redaction closes none of those.
+//
+// ⚠️ THE SHARPER REASON IS THE ONE THAT IS NOT ABOUT SECRETS AT ALL: THE NAME
+// MUST BE ONE STRING. ProposedContainers surfaces this name as §17.8'"'"'s
+// suggested name; the user edits it in place or does not; and whether a library
+// is `managed_by = '"'"'user'"'"'` is decided by comparing what came back against the
+// default. Redact on the READ and the value shown to the user is not the value
+// the default is recomputed from, so every UNEDITED proposal compares as edited,
+// every accepted library silently becomes user-managed, and §17.8'"'"'s one-way door
+// — *"a later connect can only offer to add sources. It can never reshape the
+// library."* — closes on every library anyone ever accepts, with nothing on the
+// screen to say so. Redacting here makes there be only one value, so there is
+// nothing to keep in step.
+//
+// ⚠️ AND THE LIMIT IS STATED RATHER THAN IMPLIED: ssrf.RedactText finds
+// http/https substrings and strips credential-named query params, and its own
+// doc says a bare secret that is not inside a URL passes through untouched. This
+// closes the URL-shaped case, which is the case security.md §5 cites. It does
+// not make the column safe, and nothing here should be read as claiming it does.
+func recordContainerObservation(
+	ctx context.Context, tx *sql.Tx, instanceID int64, c CatalogueContainer,
+) error {
+	detail, err := json.Marshal(containerObservation{
+		Name:            ssrf.RedactText(c.Name),
+		Kind:            c.Kind,
+		KindProvisional: c.KindProvisional,
+		DeclineReason:   ssrf.RedactText(c.DeclineReason),
+	})
+	if err != nil {
+		return fmt.Errorf("encode observation of container %q: %w", c.RemoteID, err)
+	}
+	return recordSyncReport(ctx, tx, instanceID,
+		SyncReportContainerObserved, "library", c.RemoteID, string(detail))
+}
 
 // bindReason is WHO is asking for a binding, and it exists for exactly one
 // decision: whether a container already bound at a different kind is a CHANGE
