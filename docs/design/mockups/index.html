@@ -264,7 +264,7 @@
        accessibility tree. -->
   <div class="pagehead">
     <h1>Home</h1>
-    <span class="pagehead__meta" data-when="live">Last delta sync 14:02, 6 minutes ago. <span data-inst="full">4 items need attention.</span><span data-inst="v01" hidden>2 items need attention.</span></span>
+    <span class="pagehead__meta" data-when="live">Last delta sync 14:02, 6 minutes ago. <span data-inst="full">4 items need attention.</span><span data-inst="v01" hidden>3 items need attention.</span></span>
     <span class="pagehead__meta" data-when="calm" hidden>Every service is healthy. Last delta sync 14:02, 6 minutes ago.</span>
     <span class="pagehead__meta" data-when="stale" hidden><span data-inst="full">Radarr</span><span data-inst="v01" hidden>Kavita</span> unreachable since 11:47, 2 hours ago. Everything else synced 14:02.</span>
     <span class="pagehead__meta" data-when="partial" hidden>First import running. No sync has completed yet.</span>
@@ -552,7 +552,7 @@
       <div class="section__head">
         <h2>Needs attention</h2>
         <span class="section__count num" data-inst="full">4 items</span>
-        <span class="section__count num" data-inst="v01" hidden>2 items</span>
+        <span class="section__count num" data-inst="v01" hidden>3 items</span>
       </div>
       <div class="tablewrap" data-inst="full">
         <table aria-rowcount="5" class="tbl tbl--stack cols-home-attention-full" data-roving="tbody tr" aria-label="Items needing attention" aria-colcount="3" role="table">
@@ -591,15 +591,23 @@
           </tbody>
         </table>
       </div>
-      <!-- The v0.1 install, derived: the two rows that belong to services it
-           does not have -- the Radarr outage and the Sonarr Anime clock skew --
-           are gone, so two remain and the count above follows. The Kavita
+      <!-- The v0.1 install, derived: a row belonging to a service this install
+           does not have is dropped, which takes the Sonarr Anime clock skew.
+           The Radarr outage is retargeted rather than dropped. ARCHITECTURE
+           §17.2 puts "a degraded instance" in this block with no install-shape
+           qualifier, §17.7 makes this block Home's only channel for one now
+           that the Home banner is gone, and the shipped classifier is
+           kind-agnostic -- a down Kavita lands here by the path a down Radarr
+           does -- so the outage row names Kavita, the one source this install
+           has, and reads against the same 11:47 the pagehead's stale line
+           names. The rows in the table are the count of themselves and no
+           number here restates it, per DEVELOPMENT.md §11. The Kavita
            identifier warning is not an edge case here. It is what a free
            Kavita reports about every series it holds, which on this install is
            the whole catalogue, so the row that reads as an exception on the
            full stack is the ordinary state of the only source there is. -->
       <div class="tablewrap" data-inst="v01" hidden>
-        <table aria-rowcount="3" class="tbl tbl--stack cols-home-attention-v01" data-roving="tbody tr" aria-label="Items needing attention" aria-colcount="3" role="table">
+        <table aria-rowcount="4" class="tbl tbl--stack cols-home-attention-v01" data-roving="tbody tr" aria-label="Items needing attention" aria-colcount="3" role="table">
           <thead role="rowgroup">
             <tr role="row" aria-rowindex="1">
               <th scope="col" role="columnheader" aria-colindex="1">State</th>
@@ -615,6 +623,12 @@
               <td data-col="action" role="cell" aria-colindex="3"><span class="stacklabel" aria-hidden="true">Action</span><a href="services.html">Update API key</a></td>
             </tr>
             <tr role="row" aria-rowindex="3">
+              <td data-col="state" role="cell" aria-colindex="1"><span class="stacklabel" aria-hidden="true">State</span><span class="st st--err"><svg class="i i--sm" aria-hidden="true"><use href="#i-x-circle"/></svg>error</span></td>
+              <td data-col="what-is-wrong" role="cell" aria-colindex="2"><span class="stacklabel" aria-hidden="true">What is wrong</span><span class="cell-title">Kavita</span> has been unreachable since 11:47
+                <div class="cell-sub">The catalogue is served entirely from the replica while this lasts.</div></td>
+              <td data-col="action" role="cell" aria-colindex="3"><span class="stacklabel" aria-hidden="true">Action</span><a href="services.html">Test connection</a></td>
+            </tr>
+            <tr role="row" aria-rowindex="4">
               <td data-col="state" role="cell" aria-colindex="1"><span class="stacklabel" aria-hidden="true">State</span><span class="st st--warn"><svg class="i i--sm" aria-hidden="true"><use href="#i-alert"/></svg>warning</span></td>
               <td data-col="what-is-wrong" role="cell" aria-colindex="2"><span class="stacklabel" aria-hidden="true">What is wrong</span><span class="cell-title">Kavita</span> reports no external identifier for any series
                 <div class="cell-sub">Identifier fields need Kavita+, so 512 series have no identifier.</div></td>
