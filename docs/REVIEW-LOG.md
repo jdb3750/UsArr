@@ -26599,3 +26599,774 @@ list). **Neither reads a claim.** One scans for credential patterns and the othe
 against a stamp; no target in `check` parses prose, checks a citation or resolves a `cmsg_` id. So a
 green gate over this commit is real and says nothing about it, and the instruments named in this entry
 are the whole evidence — each one named so a later lane can re-run it.
+
+---
+
+## LS-395 — the ROADMAP checks-to-pointers pass reviewed: the chain collapse dropped two standing scope limits and an undischarged finding, advancing the baseline re-aimed relative attestations into a contradiction of the preamble, and the counting rule's own first pass deleted counts that could not go stale
+
+**Target:** branch `claude/hearth-thread-vjwmel`. The pass under review is content commit
+`a38eb42f2d37` (*"docs: ROADMAP's stored results become commands, and its preamble collapses"*),
+single-parent on `origin/main` `5ff882c5b100`. Pre-image `5ff882c5b100:docs/ROADMAP.md`, post-image
+`a38eb42f2d37:docs/ROADMAP.md`. The fixes land on content commits `5fa290d85f06` and the commit
+carrying this entry. **`origin/main` was re-fetched before measuring and had not moved off
+`5ff882c5b100`.**
+
+**Findings keep the review's own labels** — `F1`–`F15`, `N16`–`N22`, and `PM-1`–`PM-4` for four
+routed in after the review — **rather than taking sub-numbers of their own.** `LS-395.1` is
+allocated, for the residual at the foot of this entry, and no other id is. ⚠️ **Nothing here states
+how many findings there are**: this file has been burned by counting its own contents before —
+`LS-394.24`'s rule, restated at `LS-394.26` — and **a tally of how often would be the same defect one
+level up**, so there is none here either.
+
+**Every measurement below was fired in this lane at `5ff882c5b100` before it was written down**,
+including the ones that arrived with a figure attached — and two of those figures were wrong, which
+is recorded at `F1` and `F9` rather than quietly corrected. **Baseline SHAs in this entry name a
+tree, not a change**, so several of them are merges; every commit cited for *authorship* is
+single-parent and was confirmed so before being cited.
+
+**The PM's sentence, because it is this pass's thesis in one line:** *a check that cannot fail reads
+exactly like a passing one.*
+
+### F1 🚩 The chain collapse lost two standing scope limits, and the sentence claiming they were enumerated was false — **applied, and the enumeration is now true**
+
+The post-image asserted the standing limits *"are enumerated rather than counted"* and then named
+three. The pre-image's chain carried more. **Two went out with it:** §3's *"Verified facts"* bullets,
+never re-read because they are about BookOrbit's own source rather than about UsArr's; and the
+facet-consumer item's ADR-0053 / ADR-0059 argument, empty-state paragraph, 🔍 budget inference and
+shared-action-string rider, all inherited unread — the ADR sentences doubly so, since the pass that
+wrote them recorded *"no ADR text read at all"*. Both bodies are still in the file. Corroborated by
+occurrence: `ADR-0059` falls 8 → 5 across the pass, `shared-action` 2 → 1, the surviving instance
+being the item's own discharged rider rather than the limit.
+
+⚠️ **The review's reduction was checked rather than trusted, and it is off by one.** It reported
+seven of ten scope paragraphs covered. **Re-derived here: eight of the ten carry only limits that
+survive, and two do not** — and the more useful cut is by limit rather than by paragraph, since the
+ten paragraphs state **six distinct limits** between them, of which four survived. The two lost are
+exactly the two `F1` names, so the finding's substance is right and its arithmetic was not.
+
+⚠️ **No frequency rule explains which survived, which was the first answer and is wrong.** *"§3 was
+not opened"* is stated exactly once too, and was carried forward; the shared-action-string limit is
+stated exactly once, and was not. **What separates them is that the four carried are the four the
+collapsing pass's own summary already named, and the two lost sat only inside paragraphs it deleted
+whole.** The lesson is written into the file: a collapse is re-derived from the pre-image, never
+summarised from the collapsing pass's notes.
+
+📌 **Method, because a line-oriented grep cannot do this one.** Two of the ten wrap their scope
+phrase across a line break — the Kavita-sunset paragraph as `nothing` / `else`, the Block-A /
+facet-consumer paragraph as `NOTHING` / `ELSE` — so a line-oriented search reaches eight of the ten
+and misses both silently, and it also returns hits from the inherited blocks that are not scope
+paragraphs. **The enumeration was done on whitespace-flattened text**, blockquote continuations
+unwrapped before matching. **This is `LS-394.26`'s own mechanism reproduced one file over**, in the
+entry that exists to record such things.
+
+⚠️ **AND THE METHOD'S SECOND HAZARD WAS NOT DISCLOSED WITH THE FIRST — ADDED 2026-08-22 (`R2-N2`).**
+The net is a **phrase**: only paragraphs carrying *"and to … NOTHING ELSE"* were read. Re-measured
+at `5ff882c5b100` with blockquote markers stripped and case folded, that phrase matches **exactly
+ten** and reproduces the list, so it is the right net for the limits it was aimed at — **but a
+standing limit worded any other way is outside it and was never read.** `nothing else` matches **29**
+times in the same pre-image, so **19 sit outside the phrase**, among them §3's *"It read nothing
+else for line drift"*, the merged-commits rider's *"nothing else in them was read"*, the search
+item's *"Nothing else in that range was read"*, and the six collapsed chain levels' *"re-derived
+<N> things and NOTHING ELSE"*. **A disclosed wrap hazard standing beside an undisclosed scope hazard
+reads as the only one**, which is why the ROADMAP's method note now carries both and says the
+completeness is over the phrase rather than over the file.
+
+**Applied:** both limits are restored verbatim in substance, the list is re-derived rather than
+recopied, and the sentence now says what it does.
+
+### F2 🚩 The preamble pointed at a REVIEW-LOG residual that did not exist — **applied, and it is why this file is in scope**
+
+`a38eb42f2d37` says the unconverted line citations *"are registered as a residual in
+`REVIEW-LOG.md`"*. `git diff --name-only` on that commit returns `docs/ROADMAP.md` and nothing else.
+**The pointer landed a commit ahead of its referent** — the pointer defect the ROADMAP exists to
+catch, committed by the file that catches it. **Applied:** `LS-395.1` below is the residual, the
+ROADMAP's sentence now names it by number, and both files land together.
+
+### F3 🚩 *"Re-fired every command that appears in this file"* was falsified by its own next paragraph — **applied**
+
+Four lines below that claim sat the inherited exceptions list: three `vitest` commands, six `make`
+targets and the `/img` `curl`. All of them appear in the file. **Applied:** the claim is now *"every
+command in this file it could fire"*, the exceptions are named as they already were, and the old
+wording rides as a struck quotation rather than being overwritten.
+
+### F4 🚩 Advancing the baseline re-aimed five relative attestations, one of them into a flat contradiction of the preamble — **applied, and it is the sharpest finding in the set**
+
+*"Every verdict below was re-fired against the tree at the baseline above"* introduces the
+image-pipeline item's obligations block. Once the baseline line said `5ff882c5b100`, that sentence
+claimed a re-fire of Obligation 2 — which the same preamble says has **never** been re-read. **A
+relative attestation is not a claim about a tree; it is a claim about whatever line happens to sit
+above it.** ⚠️ **The file names this exact failure class in its own struck open-defect block** —
+*"A re-derivation pass read this page, advanced the baseline past the fix, and left the box
+standing"* — and the pass reproduced it while editing the page that records it.
+
+**Enumerated rather than counted, because the review found two and the file carries more.**
+⚠️ **AND THIS FINDING'S OWN CLAIM OF EXHAUSTIVENESS WAS FALSE — CORRECTED 2026-08-22 (`R2-B3`), IN
+THE ENTRY WHOSE THESIS IS ENUMERATE-DON'T-COUNT.** It read *"~~Every *"the baseline above"* in the
+post-image was resolved to its author~~"* and then accounted for **seven**. Re-measured on
+whitespace-flattened `a38eb42f2d37:docs/ROADMAP.md`: **ten occurrences.** The five below are the
+live attestations, all five verified correct and unchanged; the other five are classed after them,
+so what follows is an enumeration rather than a remainder. The occurrences, resolved to their
+authors:
+
+* *"Every verdict below was re-fired …"* — written by `39cc459d31d3`, whose baseline was `4d95d36`.
+* *"Fired against the tree at the baseline above."*, heading the *still owed* block — same commit,
+  same baseline.
+* *"Every clause of that is wrong on the baseline above"* — same commit, same baseline.
+* *"Both reference files are correct as of the baseline above"* — `c38088fec32e`, baseline
+  `3c88b2e`, the pass that read `fc2b7c4` and `2ce8ed9` directly as they landed mid-pass.
+* *"It was fired at the baseline above, where `grep -n '^## ADR-005[5-8]' …`"* — `bdb29e4124d3`,
+  baseline `0085676`.
+
+**The other five, by class.** ⚠️ **This paragraph read *"~~Two further occurrences sit inside
+struck quotations~~"* until 2026-08-22.** **Four** sit inside `~~…~~` and are history, so they stay
+relative: the image-pipeline leg 2's struck *"RE-FIRED at the baseline above: exit 1 on the first
+half"*; **the same item's obligations block, struck *"WHAT THE FIRST WRITER OWES … Every one was
+verified against the tree at the baseline above"* — the occurrence neither the review nor this entry
+had named**; the `?lib=` item's struck measurement; and §3's struck open-defect block, which is the
+very text the class is named after. **The fifth is live and is a quotation inside commentary rather
+than an attestation** — the audiobook box's *"that is the failure worth keeping: 'verified against
+the tree at the baseline above' was written over a tree that already contradicted it"* — and a
+verbatim quotation of a historical measurement is `F13`'s broadened exception, so it stays relative
+too.
+
+⚠️ **The round-two split was re-measured rather than copied, and it is off by one in each
+direction.** It reported three struck and two live quotations-in-commentary; measured here, **four
+are struck and one is live** — leg 2's *"RE-FIRED at the baseline above"* sits inside `~~…~~` at
+`a38eb42f2d37:docs/ROADMAP.md` lines 1083-1085. **The total of ten, and the disposition, are the
+reviewer's and both stand.**
+
+⚠️ **The pin required one thing the finding did not name, and it makes the pin honest rather than
+merely dated.** `39cc459d31d3`'s own scope paragraph reads *"Obligation 2 and every LS-260 paragraph
+were NOT re-read"* — **in the same commit that wrote *"Every verdict below"***. So the sentence
+over-claimed on the day it was born, and pinning it to `4d95d36` alone would have moved the
+contradiction rather than removed it. **The sentence now reads *"Every verdict below except
+Obligation 2's"*, pinned to `4d95d36` and attributed to `39cc459d31d3`.**
+
+### F5 🚩 The new drift-step check coupled `SELECT` and `remote_hash` on one physical line, and this codebase writes SQL across many — **applied, with a negative control this leg never had**
+
+The post-image's leg 1 was `grep -rn 'SELECT' --include=*.go . | grep -v _test.go | grep remote_hash`,
+required **empty**. `internal/store/catalogue.go` writes its statements as raw backtick strings with
+`SELECT` on its own line, so the pipeline cannot see a multi-line read at all: **it comes back empty
+whether or not the drift step exists.**
+
+**Demonstrated rather than argued, by running both shapes over `last_full_sync_at`** — a column
+non-test Go genuinely reads. The struck shape returns **only** the single-line
+`SELECT last_full_sync_at FROM service_instance …` and **walks past** `FileWalkFailuresByInstance`
+in the same file, whose `SELECT` and whose `i.last_full_sync_at` predicate are four lines apart. The
+replacement — `grep -rn remote_hash --include=*.go . | grep -v _test.go`, **read rather than
+counted** — returns that read.
+
+**Applied:** the coupling is dropped, the `_test.go` exclusion stays (it is what the criterion always
+said), the discriminating condition is stated as *a hit inside a read* rather than as an emptiness,
+and the negative control is recorded in the box. ⚠️ **The residual is disclosed in the box too:** this
+leg's hit list is permanently non-empty by design — `internal/store/reconcile.go` and
+`internal/libsync/doc.go` both carry comments naming `remote_hash` as the missing step — so the
+reader classifies hits, and **a leg whose verdict is read cannot be falsely closed by a comment.**
+
+### F6 🚩 A recorded, undischarged finding was deleted with the chain — **applied as a dated closure, because the condition it flagged has lapsed**
+
+The `6533f1c` level carried *"One stale sentence was SEEN AND DELIBERATELY LEFT … §2's opening ⚠️
+still lists the "zero-external-providers evidence clause" among items "None of them is re-pointed
+line by line here", and `8cdf399` re-pointed exactly that one."* It is not derived status; it is an
+open finding, and it vanished.
+
+**Whether it still holds was measured first, as the disposition required, and it does not.** The
+flag was written by `4a30c7272fdb` (2026-08-20 08:07Z). `2263c6f78e81` (2026-08-21 08:02Z) put the
+⚠️ headed *"THE ZERO-EXTERNAL-PROVIDERS EVIDENCE CLAUSE IS RE-POINTED, 2026-08-20"* directly beneath
+the sentence complained of, conceding the re-pointing, citing `8cdf399` rather than either merge,
+and separating the **source name** having moved from the per-item **rewrite** the sentence defers.
+`2263c6f78e81` is not an ancestor of `4a30c7272fdb`; it lands a day later.
+
+**Applied:** restored inside `~~…~~` with a dated 🔻 closure naming what discharged it. **A flag
+whose condition has lapsed gets a closure, not a deletion**, or the next reader cannot tell an
+answered finding from one nobody ever took.
+
+### F7 🚩 Struck text was deleted by the same commit that promoted *"Strike in place; never delete"* to a rule — **applied**
+
+The `@@ -47,53 +62,53 @@` hunk deletes two `~~…~~` blocks from the no-dates rider: the struck
+**DATED RIDER** heading, and the struck 🔍 prior position. **Applied:** both restored. The 🔍 one is
+the load-bearing half — it is the recorded position that **scoping the owner's sentence was the
+owner's to do**, and without it a reader cannot see what the PM ruling of 2026-08-21 overrode.
+
+### F8 🚩 Channel 3b is ticked under the record-keeping carve-out and carried no 🧾 — **applied**
+
+The preamble promises boxes ticked or held under the *Done when* carve-out are marked
+`🧾 RECORD-KEEPING CHECK` **in place**, *"so a reader meets the limit at the criterion rather than
+after it"*. Channel 3b's box states the carve-out four paragraphs down and carried no mark.
+**Applied:** the mark is on the tick line, naming the missing prerequisite the box's own unfired
+obligation states — *"NO DELTA HAS EVER WALKED A REAL BookOrbit"*.
+
+### F9 🚩 A historical record was declared *"measured wrong"* by measuring it at the wrong tree — **applied, and the open sub-question is settled**
+
+The post-image struck *"matched five files"* as *"measured wrong at `5ff882c5b100`"* and replaced the
+enumeration (`policy.go`, `ssrf.go`, `redact.go`, two tests) with *"a pair of tests"*. **Both moves
+are wrong.** The sentence records what the check matched **when it was written**, so the tree that
+settles it is the writing tree — `c38088fec32e`, located with
+`git log -S'three comment-only mentions' -- docs/ROADMAP.md` and confirmed here.
+⚠️ **THAT LOCATOR NOW RETURNS THREE COMMITS AND NAMED NO SELECTION RULE — ADDED 2026-08-22
+(`R2-N3`), SAME CLASS AS `R2-B1`.** Restoring the struck phrase put this finding's own fix commits
+into the answer: re-fired at this tip it returns `5fa290d85f06`, `a38eb42f2d37` and `c38088fec32e`,
+newest first. **The rule is take the OLDEST answer** — the pass that introduced the string — which
+is `c38088fec32e`, so **the measurement below stands unchanged**; what was missing was the sentence
+saying which of three a reader should take.
+
+**Re-measured at `c38088fec32e`:** `grep -rln image_asset --include=*.go internal/ cmd/` matches
+**eight** files, not five and not seven — `internal/ssrf/policy.go`, `ssrf.go`, `redact.go`;
+`internal/store/images.go`; and `internal/db/migrate_test.go`, `internal/db/queryplan_test.go`,
+`internal/store/imagelint_test.go`, `internal/store/images_test.go`. Identical at `d5ab034` and
+`3c88b2e`, the pass's other two candidate trees, so the figure does not turn on which one is chosen.
+
+⚠️ **The sub-question the review could not settle is settled: *"not one writer among them"* holds.**
+`internal/store/images.go` at `c38088fec32e` mentions `image_asset` in five comments and contains no
+`INSERT`, `UPDATE`, `REPLACE` or `SELECT` at all — at that tree it is the format vocabulary and
+nothing else. **So the claim the line exists to make survives; the list and the figure were both
+wrong, in opposite directions.**
+
+**Applied:** the enumeration is restored and corrected — three `internal/ssrf` mentions, a **fourth
+comment-only non-test file**, and **four** tests — and both wrong accounts ride as struck
+quotations. **Measuring a historical record against a later tree is how a true record gets marked
+false**, and **replacing an enumeration with a verbal tally is this file's own counting rule read
+backwards.**
+
+### F10 🚩 A quotation was mutilated with an ellipsis to remove a number — **applied**
+
+The image item quoted LS-260's probe as *"all … series on the scanned page have a coverImage"*. The
+source, in this file, reads *"all 151 series"*. **Quoting is not counting:** the words are fixed at
+the tip that wrote them and the figure is a historical measurement of one probe run, which is the
+counting rule's durable case either way. **Applied:** `151` restored, with the reason on the line.
+
+### F11 🚩 Removing a count broke a referent one clause later, twice — **applied, by enumerating rather than by deleting**
+
+*"An equality per leading index column and a descending `id` pick … serves the first predicate,
+**none of the other three**"* — the *"four"* had been struck and *"the other three"* was left
+pointing at nothing. **Read off the statement rather than restored from the pre-image:**
+`containerReportSQL` in `internal/store/libraries.go` correlates on equalities on
+`service_instance_id`, `kind`, `remote_kind` and `remote_id`, then `ORDER BY r2.id DESC LIMIT 1`.
+**Applied:** the four are named, `ix_sync_report_instance` is said to serve the `service_instance_id`
+equality, and *"none of the other three"* has an antecedent again.
+
+Second instance, same commit: *"all three registries"* became *"every one of the registries"* while
+*"one of the three is `web/`"* was left standing one sentence later. **Applied:** named rather than
+counted — `SERVICE_KINDS`, in `web/src/lib/api.ts`.
+
+**The rule the pair earns:** removing a number does not discharge the counting rule if a later
+clause was counting on it. The fix is the list, not the deletion.
+
+### F12 🚩 New normative rules were minted under a charter of *"no obligation added"* — **applied to the charter, not to the rules**
+
+The rules are this pass's own findings and they are good, so nothing is deleted. What was false is
+the sentence. **Applied:** the charter now says the pass did not add or remove an **item-level**
+obligation, states plainly that it codified practice into three named rules — the Counting rule, the
+Self-match rule, and *"Strike in place; never delete"* — plus *"and add none"* on the citation
+policy, and **marks which are new**: all four are new as written rules and none is new as practice
+(the counting ground is `DEVELOPMENT.md` §11 and the file had been *"enumerated rather than counted"*
+since 2026-08-21; the self-match moves are the arm64 box's own repair, with one ordering changed and
+ridden; strike-in-place already had its justification sentence written), while *"Cite the content
+commit, never the merge"*, in that same paragraph, is **carried**. **An honest charter beats a quiet
+one.**
+
+⚠️ **THE GROUND FOR *"CARRIED"* WAS STATED AS A PHRASE RECURRING AND IT DOES NOT — CORRECTED
+2026-08-22 (`R2-N1`).** Both files read *"~~boxes throughout already cite it as *"this file's
+standing rule"*~~"*. Measured on whitespace-flattened `5ff882c5b100:docs/ROADMAP.md`, **that exact
+phrase occurs once**, on the image-pipeline writer's *"**Content commit `7e5934d`**, cited rather
+than the merge that carried it, per this file's standing rule."* **The substance holds and the
+attribution is now split**: the **practice** belongs to five boxes in five wordings — the one above,
+the Docker item's *"content commit, cited rather than the merge that carried it"*, the `write_queue`
+row's *"landed `007e58e` (content commit, not the merge)"*, the comics chain's *"the chain, content
+commits only, each confirmed single-parent before being cited"*, and the per-type-grid item's *"⚠️
+CITE `d0215fb`, NOT THE MERGE."* — and the **phrase** belongs to the one. **A carried rule is
+evidenced by the practice, not by a phrase count**, which is this entry's own counting rule pointed
+at itself.
+
+### F13 🚩 Counts qualifying as neither stated exception, including one the pass introduced — and the exception set was closed, which was the defect — **applied on both tracks**
+
+**Track (i), the offenders.** *"Seven nesting levels — eight baseline SHAs"*, introduced by this
+pass: **re-measured at `5ff882c5b100` and both figures are correct**, so the defect is that they were
+unpinned and untallied rather than that they were wrong. Applied by pinning the measurement to that
+frozen tree and **enumerating the eight** — `7c8cb1b`, `6533f1c`, `0a5d66e`, `4d95d36`, `a51d3c3`,
+`0085676`, `13878f2`, `c7d9ed3` — which doubles as the ladder `F15`'s restored inheritance rule sends
+readers up. *"Three items below"* and *"IN THREE PLACES"*: both counts sit immediately in front of
+their own enumerations, so both numbers are dropped and the lists stand. ~~*"The five places that
+documented it"* for `USARR_RECORD`: **eleven files reference it today**, so the count is dropped
+without a fresher one being asserted in its place.~~
+
+🔻 **THAT LAST DISPOSITION IS WITHDRAWN, 2026-08-22 (`R2-B2`) — THE COUNT WAS CORRECT AND THE
+JUSTIFICATION MEASURED THE WRONG POPULATION, WHICH IS `F9`'S OWN ERROR CLASS FOUR FINDINGS LATER.**
+The sentence says `USARR_RECORD` *"has an implementation behind the five places that **documented**
+it"*, so the population is the places that documented it. Re-measured 2026-08-22, `grep -rl
+USARR_RECORD . --exclude-dir=.git` returns eleven files that split cleanly: **five documentation
+places** — `.env.example`, `docs/CONFIGURATION.md`, `docs/DEVELOPMENT.md`, `docs/REVIEW-LOG.md`,
+`docs/ROADMAP.md` — and **six `.go` files**, which are the *implementation* the sentence says now
+stands **behind** the documentation. **Five at the writing tree `7bf578e` and still five at this
+tip**, so the count neither was wrong nor could go stale. ⚠️ **And it was the one DELETION in a
+delta that struck everything else in place** — `git log -S'the five places that documented it' --
+docs/ROADMAP.md` names `5fa290d85f06` as the remover, **the same commit that applied `F7`**, whose
+entire subject is struck text deleted by the pass that promoted *"strike in place; never delete"* to
+a written rule. **Applied:** *"the five places"* is restored in the ROADMAP with a
+dated rider carrying the split, and this disposition is struck rather than removed.
+
+**Track (ii), the rule.** The Counting rule shipped with no scope disclosure and read as swept, which
+the citation policy beside it is careful not to do. **Applied:** it now carries the same disclosure —
+no sweep has applied it to the whole file, the pass fixed the counts it had measured, and every other
+count is unvetted against it.
+
+**And the exception set was stated as closed — *"Two exceptions, and they are the only two"* — which
+was wrong to be.** A closed exception set is a count of exceptions, and this one was falsified inside
+its own first pass: it drove the removal of a routes figure **pinned to a frozen upstream commit**
+(`N22`) and the ellipsis-removal of a number **inside a quotation** (`F10`), neither of which can go
+stale. **Applied:** the set is opened and generalised — a count over anything frozen is durable
+provenance, whether that is a commit range with both endpoints named, a pinned upstream commit, or a
+verbatim quotation of a historical measurement. **That single correction disposes of `F10` and `N22`
+as instances rather than as one-offs**, and the closed set is named in the file as the defect.
+
+### F14 🚩 The Self-match rule inverts a recorded prior ruling while presenting itself as a codification of it — **applied by recording the change, with a date**
+
+The 2026-08-21 attestation the collapse deleted put naming first: *"That self-match is named rather
+than dodged, **because a criterion that matches its own record-keeping is the defect this pass
+repaired in the arm64 box,** and stating it is cheaper than a grep contorted to avoid itself."* The
+new rule puts engineering it away first and demotes naming to *"Where the self-match cannot be
+engineered away."*
+⚠️ **THE MIDDLE CLAUSE WAS ELIDED BY THIS ENTRY'S FIRST DRAFT AND IS RESTORED 2026-08-22
+(`R2-N4`).** It read *"~~That self-match is named rather than dodged … stating it is cheaper than a
+grep contorted to avoid itself~~"*, and **the ellipsis removed exactly the clause that carries the
+case distinction this finding then argues from** — the clause naming the arm64 box, which is the
+box that *was* scoped. Quoted in full, the reconciliation below is visible in the source rather than
+supplied by the reader. **An ellipsis that removes the evidence for the argument around it is `F10`
+one level up.**
+
+**Kept in the new order, and recorded as a change rather than a restatement**, which is the second of
+the two remedies the disposition allowed. What reconciles them is which case each was about: the
+arm64 criterion **could** be scoped, and was, by `--exclude=ROADMAP.md`; the retracted-citation
+self-match could not be, and was named. So scoping leads where it is available and the 2026-08-21
+sentence governs where it is not. ⚠️ **The point stands independently of which order is right: a rule
+that silently reverses a ruling is worse than either ordering.**
+
+### F15 🚩 Durable provenance died with the chain, and prose attestation became unknowable — **applied, both halves**
+
+**Half one.** `git log --no-merges --oneline 6533f1c..7c8cb1b | wc -l` → **114** (172 including
+merges, 99 files), which the pre-image recorded as *"measured, not inherited"* on a clone unshallowed
+for the purpose. **Re-fired here: 114 / 172 / 99, exact.** Both endpoints are named SHAs, so nothing
+about it can go stale, and it went out anyway. Restored.
+
+**Half two.** The chain carried an inheritance rule — *"read every box this pass does not name as
+attested at `<older SHA>`"* — and it was replaced with nothing. The pass's own attestation covers
+**commands**; without the rule, a reader has no way to tell which tip a box's **prose** is attested
+at. **That is a loss of information, not a conversion to a pointer.** Restored, restated for a file
+with no chain in it: a box's prose is attested at the tip named in its own dated rider, and where it
+carries none, at the baseline named by the pass that wrote it. **Only the commands are attested at
+`5ff882c5b100`.**
+
+⚠️ **THE RESTORED RULE'S FINDING PROCEDURE WAS WRONG IN THREE COMPOUNDING WAYS AND IS REWRITTEN
+2026-08-22 (`R2-B1`) — `F4`'S DEFECT RE-CREATED BY THE RULE `F15` RESTORED, IN THE SAME FIX ROUND
+THAT REPAIRED `F4`.** It read *"~~findable with `git
+log -S` on a distinctive string from the box, whose answer is one of the eight SHAs `F13`
+enumerates~~"*. **That command cannot return one of the eight:** all eight were tested at this tip
+and **none touches `docs/ROADMAP.md` in its own diff**, six of the eight being merges. It returns
+the **pass**, whose *"Last re-derived against"* line then names the baseline — a second hop the
+sentence did not state. It also returns **several** commits newest-first with no selection rule, and
+**taking the first answer for `PosterAsset.validate` yields `a38eb42f2d37`, the collapse pass, whose
+baseline is the CURRENT one** — so a reader concludes that box's prose is attested at today's tree,
+which is precisely `F4`'s defect arriving by a different mechanism.
+
+**Rewritten as two hops plus a selection rule, and fired end to end on three boxes before being
+written down:**
+
+| box string | hop 1 — `git log -S … -- docs/ROADMAP.md` | hop 2 — that commit's baseline |
+| --- | --- | --- |
+| `scopeSelectWorthShowing` | `d4b7d65903a8` (one answer) | `7c8cb1b` |
+| `libraryCompletenessSQL` | `5d323f94603b` (one answer) | `a51d3c3` |
+| `PosterAsset.validate` | `a38eb42f2d37`, then `39cc459d31d3` — **take the oldest** | `4d95d36` |
+
+**The selection rule is take the OLDEST answer**, the pass that introduced the string; every newer
+one is a later correction pass, and taking it attests the box at that pass's baseline instead of at
+its own. ⚠️ **And *"one of the eight"* is itself narrowed rather than repeated**: the eight are the
+chain's own levels, and a box written by a pass off that ladder lands elsewhere — `c38088fec32e`'s
+baseline `3c88b2e`, pinned by `F4` on the covers item, is a counterexample already inside this
+entry. The ROADMAP now says *"where the answer usually lands, not a closed set of what it may be."*
+
+### N16–N22 🚩 The nits — **all applied; none deferred, none rebutted**
+
+* **`N16`** — *"A comment cannot satisfy the replacement"* on the `usarr key rotate` box overstates.
+  A comment in `cmd/usarr/main.go` writing `runKeyRotate(` would match. Softened to what is true, and
+  the residual is stated in the box per the Self-match rule's third move.
+* **`N17`** — the arm64 box quotes `grep -rln -i arm64 docs/` as the argument for widening its range;
+  that grep returns `docs/ROADMAP.md` among its hits. It is argumentative, not criterial — the
+  criterion three paragraphs above carries `--exclude=ROADMAP.md` — and the box now says so, so a
+  reader re-running the bare form expects this file in the answer.
+  ⚠️ **THE DISCLOSURE NAMED THE NEW HITS RATHER THAN THE ANSWER, AND IS COMPLETED 2026-08-22
+  (`R2-N5`).** Re-fired at this tip, the bare form returns **seven** files — `docs/ARCHITECTURE.md`,
+  `docs/DECISIONS.md`, `docs/DEVELOPMENT.md`, `docs/RESEARCH.md`, `docs/REVIEW-LOG.md`,
+  `docs/ROADMAP.md`, `docs/reference/sync.md` — and the box now lists all seven instead of leaving a
+  reader to assemble them from a struck four-file list plus two additions. **The general point is
+  the one worth keeping: an argumentative grep quoted inside a reviewed file measures its own
+  commentary as well as its subject**, and `docs/REVIEW-LOG.md` is in that answer partly because
+  this box's review is recorded here.
+  ⚠️ **The nit's stated mechanism was re-measured rather than copied, and it does not hold.** It
+  said `docs/REVIEW-LOG.md` was *"now"* among the hits. Measured: this file has matched the string
+  since `3b1e6ec0855a` (2026-08-16) and is in the answer at **every** tree in this range —
+  `5ff882c5b100`, `a38eb42f2d37`, `5fa290d85f06` and `4e75518fe13f` — so the count was seven before
+  this review as well, and the disclosure was short for a different reason than the one given.
+  **The fix is unaffected; the reason for it is corrected.**
+  ⚠️ **The criterion is untouched and was fired both ways:** the shape carrying `--exclude=ROADMAP.md`
+  and the memory-unit filter returns **empty** at this tip, and its positive control over `amd64`
+  returns `docs/DECISIONS.md:201`. **This pollution is confined to the argumentative grep.**
+* **`N18`** — the LS-170 box rendered `reference/http-api.md` as *"That is stale. It closed in
+  LS-170"*. ⚠️ **The review's framing is narrowed here rather than repeated:** that text **is**
+  contiguous in the source once bold markers are stripped, so it is not a splice of non-adjacent
+  text. The real defect is subject: in the source, *"That is stale"* is about **that item's own
+  superseded wording**, not about the redaction gap the ROADMAP is discussing. **Applied by quoting
+  accurately** — the item records that the redactor half *"closed in **LS-170**"* and cites `cdeb2f2`
+  — with the re-pointing named as the failure mode.
+* **`N19`** — the `ok`-state box said the *"no periodic re-sync"* sentence *"was removed from
+  `home.ts`"* by `b2a91e2c4633`. It survives there, quoted inside the comment that overturns it —
+  the tree doing to itself exactly what *"Strike in place; never delete"* asks of the ROADMAP.
+  Applied: *"inverted in place"*. **Reporting a strike as a deletion sends the next reader looking
+  for something that is there.**
+* **`N20`** — *"`/api/v1/search` is NOT a third one"*, one clause after the count it counted from was
+  removed. Applied: *"NOT among them"*, with the referent defect named. Same class as `F11`.
+* **`N21`** — the citation policy's new clause *"usually within a few dozen lines of the truth"* is
+  contradicted by two cases the same file records: the repaired `ARCHITECTURE.md` citation on the
+  image item, *"several hundred lines off in its turn"*, and `http-api.md:774-801`, which now lands
+  on `file_walk_failed` prose. Applied: the generalisation is dropped and the file's own two
+  counterexamples take its place. **A new rule contradicted by the file's own evidence is worse than
+  no rule.**
+* **`N22`** — *"exactly two"* routes was removed from a claim pinned to BookOrbit's source at HEAD
+  `73b7877`, release `v2.6.0`, re-checked at `4a420a04` and identical at both, on the rationale that
+  a third route appearing upstream would falsify it. **A measurement taken at a named upstream commit
+  cannot be falsified by a later commit** — a later commit raises a new question. Restored, under
+  `F13`'s broadened exception rather than as a one-off.
+
+### PM-1 🚩 The badge box says its derivation *"exists only in a code comment"*, and `ARCHITECTURE.md` now states it outright — **verified against the tree, and applied**
+
+Routed with a line number as a lead; **located by text instead**, per the citation policy. §6.4's
+badge paragraph reads *"the not-identified state is derived from `EXISTS(external_id)`
+(`internal/store`)"*. So the ROADMAP's *"exists only in a code comment
+(`internal/store/catalogue.go`)"* is false, in two places on that box.
+
+⚠️ **The other half was re-measured rather than carried:** *"no ADR decides the derived shape"*
+**holds** — `docs/DECISIONS.md` names neither `EXISTS(external_id)` nor the derivation in any form.
+
+⚠️ **And §6.4 has not been corrected; it now says both things.** The same section still carries *"the
+nullable column belongs on `work` from the migration that creates it"*. **So the box's criterion is
+untouched here**: it points at *"whatever derivation §6.4 names once §6.4 is corrected"*, and a
+section stating two answers is not a corrected one. **Applied as a dated rider at each site**,
+replacing a false claim about where the derivation lives with a true one and **re-scoping,
+re-deciding and ticking nothing.** The divergence the box records is now *inside* §6.4 — sharper, not
+closed, and still not this file's to close.
+
+### PM-2 🚩 Channel 4's greps match a string living in the comment they grep — **verified: discharged for guard 2, and the second leg is disclosed rather than left**
+
+The routed shape is the foreign-file self-match: `internal/store/serviceinstance.go` carries an
+annotation quoting the criterion's own wording back, so a naive grep returns its own criterion.
+**Both legs were checked, since the routing said *"greps"*.**
+
+* **Guard 2 — already repaired, and the repair was fired rather than assumed.**
+  `grep -rn 'identity_fingerprint\|max_remote_id_seen' --include=*.go . | grep -vE
+  '^[^:]+:[0-9]+:[[:space:]]*//'` returns **empty**, where the unfiltered form returns five lines,
+  all of them that one Go comment block. Negative control over `last_full_sync_at` returns non-comment
+  lines. **The self-match is gone and the residual — a trailing comment on a code line, or a
+  `/* … */` block — is already stated in the box.**
+* **Leg 1, the drift step — not self-matching, and now disclosed.** Its hit list is **permanently
+  non-empty by design**, because two Go files carry comments naming `remote_hash` as the missing
+  step. **A leg whose verdict is read rather than counted cannot be falsely closed by a comment**,
+  and `--include=*.go` keeps the ROADMAP's own prose structurally out of it. Applied: the box now
+  says both, so no later reader re-finds it as a defect.
+
+**No second self-matching leg was found on this item.**
+
+### PM-3 🚩 The system-tags criterion is already satisfied by a benchmark fixture — **verified, and a discriminating replacement is written with a control per leg**
+
+*Done when: a tag vocabulary has a writer and a filter path in `internal/`.* **Both halves are true
+today, and the thing that makes them true ships in no binary.** `internal/db/spike/fixture.go` writes
+the vocabulary (`INSERT INTO tag (id, namespace, value, is_system)`) and the assignments;
+`internal/db/spike/workload.go` reads them back (`SELECT work_id FROM tag_assignment WHERE tag_id =
+?`). The package is `//go:build bench`: `go list ./...` does not name it, `go list -tags bench ./...`
+does — the same discriminator `LS-394.23` used on `write_queue`. **Outside `internal/db/spike/`, every
+non-test mention of either table is a comment.**
+
+**Applied — the criterion's own words, mechanised, with the fixture excluded structurally rather than
+by luck:** `grep -rn 'INSERT INTO tag' --include=*.go . | grep -v _test.go | grep -v '/spike/'` must
+be **NON-EMPTY** for the writer, and `grep -rn 'FROM tag_assignment' --include=*.go . | grep -v
+_test.go | grep -v '/spike/'` **NON-EMPTY** for the filter path. **Both are empty today**, which is
+the honest state of the box. **A negative control was fired for each**, because a shape that excludes
+a directory has to be shown it can still find a positive: the writer shape over `work_comic_issue`
+returns `internal/store/catalogue.go`'s `INSERT INTO work_comic_issue`, and the read shape over
+`external_id` returns that file's `FROM external_id` reads. **`--include=*.go` keeps the ROADMAP's own
+prose out of both.** ⚠️ **The obligation is unchanged and nothing is ticked**: what changed is that
+the box can now go red.
+
+### PM-4 🚩 The Libraries Accept item has no runnable command — **verified, and ruled a legitimate pointer rather than a defect, with the reason written into the box**
+
+Confirmed: *"an Accept path exists that creates a `library` row, and the proposal has a home that is
+not that table"*, no command, no stored result, no line citation. **It is not a defect under this
+pass** — the preamble's repaired claim is that *most* items carry a command, and a pointer is a
+legitimate form — **but it is a defect to leave a reader guessing which it is**, so the box now says.
+
+**The reason it stays a pointer is measured, not asserted.** `INSERT INTO library` already has a
+non-test writer: `internal/store/catalogue.go`'s `bindOneContainer`, which writes `managed_by =
+'auto'` on the **import bind path**. **So the obvious mechanisation is already green without the
+obligation being met** — minting it would add an instance of the defect this pass exists to remove.
+*A check that cannot fail reads exactly like a passing one.* The second half is not greppable at all:
+[ADR-0048](./DECISIONS.md#adr-0048) puts the proposal set in the connect probe's **response** and says
+a proposal is never a row, so *"has a home that is not that table"* is a claim about a shape. **What a
+discriminating check would have to assert is written into the box** so the next pass does not
+re-derive it, and both halves are presence claims besides, which the file's own Done-when rule refuses
+on their own.
+
+### Routed items that were already discharged — **confirmed, and not done twice**
+
+* **The `home.ts` rider outliving its subject by 1 h 22 m.** Already inverted in place on the
+  `ok`-state box, citing content commit `b2a91e2c4633` (single-parent, `web/src/lib/home.ts` only).
+  **The only thing wrong with it was the verb**, fixed under `N19`.
+* **The re-derivation baseline being behind.** Already re-attested by the pass under review, and
+  **re-measured here rather than copied**: `7c8cb1b1da9e..5ff882c5b100` is **28 non-merge commits, 36
+  including merges, 23 files**. `origin/main` was re-fetched before measuring and had not moved off
+  `5ff882c5b100`, so no re-measurement against a newer tip was owed.
+
+### What could NOT be measured, and why
+
+Stated because *"no findings"* and *"didn't look"* read identically otherwise.
+
+* **`make check` was not run, by instruction** — the gate runs separately on the exact landing tree —
+  and neither were `make check-offline`, `make spec-drift`, `make bench-rss`, `make design` or
+  `make docker`. `make docker` needs a Docker daemon this container does not have; `make bench-rss`
+  needs hardware of an architecture it does not have; `make spec-drift` is network-only.
+* **The three `web` vitest commands were not run.** `web/node_modules` does not exist — `web/` holds
+  only sources and configuration — and `pnpm` is present (10.33.0) but installing would need the
+  network. So the recorded `64` / `31` / `86` totals on the `ok`-state, `?lib=` and `System` nav
+  items are **inherited, not re-fired**, in this lane as in the last one.
+* **The `/img` `curl` was not run**, and no live service was touched, so every *"on a real instance"*
+  leg in the ROADMAP is untouched by this review.
+* **No Go test was fired as evidence for any claim here.** A green gate is not evidence for a box.
+* **The project-chat messages are not readable from this repository.** Nothing in this entry rests on
+  one; where the ROADMAP quotes the owner, this review checked the quotation's internal consistency
+  and its dated attribution only.
+* **Nothing in this entry is measured by `make check`.** `secrets` opens every Markdown file here and
+  scans for credential patterns; no target parses prose, checks a citation or resolves a claim. **A
+  green gate over these two commits is real and says nothing about them** — the instruments named
+  above are the whole evidence, each one named so a later lane can re-run it.
+
+### LS-395.1 The `file:<n>` citations outside item criteria, left unconverted — OPEN
+
+**The residual, and it is the one the ROADMAP's citation policy now points at by number.**
+`a38eb42f2d37` converted the `file:<n>` citations that sat **inside item criteria** and repaired every
+citation it had measured wrong. **Everything else was untouched and stays unvetted** — that was a
+deliberate scope choice, not an oversight, and the pass said so in the words the policy still carries:
+*"read every `file:<n>` in this file as unvetted unless the box around it says otherwise."*
+
+⚠️ **No sweep has ever applied the citation policy to the whole of `docs/ROADMAP.md`**, across every
+pass that has declared its scope, and this one is no exception. **The known-bad cluster is on the
+search item**, whose five symbol locators were measured 10 to 63 lines from their targets and are
+cited **by symbol** now; what is not known is how many of the rest are in the same state, and
+**counting them is not what closes this** — re-firing them one by one is.
+
+**TRIGGER, and it names a condition rather than a chore.** ⚠️ **This does not close by someone
+remembering it.** It closes when **one pass reads every `file:<n>` in `docs/ROADMAP.md` against the tip
+it is read at and records that tip in the file** — at which point the citation policy's *"no sweep has
+ever applied it to the whole file"* becomes false and must be struck in place. **Until then, any pass
+that opens a box for another reason converts or verifies the citations inside that box in passing**,
+which costs nothing and is how the residual shrinks without a sweep being scheduled. ⚠️ **A partial
+pass does NOT close this and must not claim to** — three passes have now converted a subset and every
+one of them ended by restating that the rest are unvetted, which is the shape this entry exists to
+stop being re-discovered.
+
+**Not closed by:** a citation being *repaired*. A repaired number is still a number in a file that
+moves, and the policy prefers the symbol. **`F13`'s broadened exception does not reach line citations
+either** — a line number is not a count, and nothing about a `file:<n>` in a moving file is frozen.
+
+---
+
+## LS-395 — second round, 2026-08-22: the fix commits reviewed, and the restored inheritance rule turns out to re-create the defect it was restored to repair
+
+**Target:** the **fix commits** of the first round — `a38eb42f2d37..4e75518fe13f` on branch
+`claude/hearth-thread-vjwmel`, base `origin/main` `5ff882c5b100`, which had not moved when this round
+was measured. Only `docs/ROADMAP.md` and `docs/REVIEW-LOG.md` are in scope, and only those two
+changed. **Same id, on the same ruling the second and third rounds of `LS-394` were taken under: an
+LS number covers a slice's review, not a round**, so nothing here takes a new id and no ADR is
+opened. **Findings keep the reviewer's labels** — `R2-B1`–`R2-B3` and `R2-N1`–`R2-N5` — and
+**nothing here states how many there are**, for the reason `LS-394.24` gives and `F13` restates.
+
+**Every one is applied. There are no rebuttals in this round** — but **three of the eight carried a
+premise this lane re-measured and corrected**, and each correction is recorded beside its fix rather
+than folded into it, because a fix landed on a wrong reason is a defect waiting to be re-derived.
+Round one's findings are corrected **in place**, struck rather than removed, per the rule that pass
+itself promoted; this section is the record of what changed and why.
+
+⚠️ **THE ROUND EXISTS BECAUSE ROUND ONE BROKE ITS OWN RULE ONCE.** `R2-B2` is a silent deletion,
+and `5fa290d85f06` committed it — **the same commit that applied `F7`**, whose whole subject is
+struck text deleted by the pass that promoted *"strike in place; never delete"* to a written rule.
+
+### R2-B1 🚩 The restored inheritance rule asserted a two-hop procedure in one hop, named an output its own command cannot produce, and followed literally re-created `F4`'s defect inside the round that repaired `F4` — **applied**
+
+**Measured, and every leg fired.** `F15`'s restatement sent a reader to `git log -S '<a distinctive
+string from the box>' -- docs/ROADMAP.md`, *"whose answer is one of the eight SHAs enumerated
+below"*. **All eight were tested: none of `7c8cb1b`, `6533f1c`, `0a5d66e`, `4d95d36`, `a51d3c3`,
+`0085676`, `13878f2`, `c7d9ed3` touches `docs/ROADMAP.md` in its own diff**, and **six of the eight
+are merges** (`0a5d66e` and `a51d3c3` are the two single-parent ones), so that command can never
+answer with one of them.
+
+**Three compounding defects, and the third is the serious one.** (i) The missing hop — the command
+returns the **pass**, and the reader must then read *that* commit's `**Last re-derived against:**`
+line to reach the baseline. (ii) `git log -S` returns several commits **newest-first** with no
+selection rule stated. (iii) **Taking the first answer for `PosterAsset.validate` yields
+`a38eb42f2d37`, the collapse pass, whose baseline is the CURRENT one** — a reader would conclude
+that box's prose is attested at today's tree. **That is `F4`'s defect arriving through a different
+mechanism** — carried by the rule `F15` restored, in the same fix round that pinned `F4`'s five
+attestations, so the page repaired the class in one place and re-opened it in another.
+
+**Fired end to end on all three worked examples, at this tip:**
+
+| box string | hop 1 (newest-first) | selected | hop 2 — `Last re-derived against` |
+| --- | --- | --- | --- |
+| `scopeSelectWorthShowing` | `d4b7d65903a8` | `d4b7d65903a8` | `origin/main` `7c8cb1b` |
+| `libraryCompletenessSQL` | `5d323f94603b` | `5d323f94603b` | `origin/main` `a51d3c3` |
+| `PosterAsset.validate` | `a38eb42f2d37`, `39cc459d31d3` | **oldest** — `39cc459d31d3` | `origin/main` `4d95d36` |
+
+All four cited commits are single-parent and were confirmed so before being cited. **Applied:** the
+ROADMAP now states hop one, the selection rule (*take the oldest answer* — the pass that introduced
+the string), and hop two as a runnable command, with the three worked examples and the
+`PosterAsset.validate` trap written out.
+
+⚠️ **AND WRITING THE EXAMPLES DOWN CHANGED WHAT THEY RETURN — DISCLOSED IN THE FILE RATHER THAN
+DODGED.** Naming the three strings in the ROADMAP's preamble adds an occurrence of each to
+`docs/ROADMAP.md`, so from the commit carrying this entry onward hop one returns **that commit** as
+a newer answer for all three, and the *"one answer"* rows above are historical measurements rather
+than predictions. **The take-the-oldest rule absorbs it**, which is the strongest available evidence
+that the rule is the right one — and it is `R2-N5`'s lesson arriving a second time in the same
+round, one file over. **The alternative, choosing example strings contorted to avoid the file that
+holds them, is what the Self-match rule already refuses.**
+
+⚠️ **AND ONE THING THE FINDING DID NOT NAME, WHICH THE RE-FIRE FOUND: *"one of the eight"* IS NOT
+TRUE EITHER, EVEN AFTER THE HOPS ARE FIXED.** A census of `Last re-derived against` across every
+non-merge commit that touched `docs/ROADMAP.md` returns **eighteen distinct baselines**, of which
+the eight are only the chain's own levels; `222248c`, `047a060`, `19f5451`, `7bd45e9`, `9689e56`,
+`5aee209`, `3c88b2e`, `0c89420` and `01bdb19` are the others. **`c38088fec32e`'s baseline `3c88b2e`
+is a counterexample already sitting inside this entry**, pinned by `F4` on the covers item. The
+ROADMAP now says the enumeration is *"where the answer usually lands, not a closed set of what it
+may be."* **A procedure verified by running it is how this was found; a procedure verified by
+reading it would have shipped.**
+
+### R2-B2 🚩 A correct, non-stale count was deleted silently, on a measurement of the wrong population — **applied on both tracks**
+
+**Located rather than assumed:** `git log -S'the five places that documented it' -- docs/ROADMAP.md`
+returns `5fa290d85f06` and `7bf578ed8003`, so the count was written by `7bf578ed8003` and **removed
+by `5fa290d85f06`** — the round-one fix commit, not the pass under review, which still carried it at
+`a38eb42f2d37:docs/ROADMAP.md:1054`. The ROADMAP was left reading *"`USARR_RECORD` finally has an
+implementation behind **the places** that documented it"*, with **no strike and no rider**. `F13`
+justified it as *"eleven files reference it today"*.
+
+**Re-measured 2026-08-22.** `grep -rl USARR_RECORD . --exclude-dir=.git` returns eleven files, and
+they split cleanly: **five documentation places** — `.env.example`, `docs/CONFIGURATION.md`,
+`docs/DEVELOPMENT.md`, `docs/REVIEW-LOG.md`, `docs/ROADMAP.md` — and **six `.go` files**
+(`internal/config/config.go`, `internal/vcrscrub/vcrscrub.go` and four `_test.go` files). **The
+`.go` files are the implementation the sentence says now stands *behind* the documentation, not
+places that documented it.** At the writing tree, `git grep -l USARR_RECORD 7bf578e` returns
+**ten** files — one `_test.go` fewer — and **the same five documentation places**. So the count was
+correct when written, is correct now, and **cannot go stale in the direction the deletion feared.**
+
+**Two things make this worse than an ordinary miss, and both are in the record.** It reproduces
+**`F9`'s own error class** — measuring a historical record against a later tree, and against the
+wrong population — **four findings after `F9` named it**. And it is the **one deletion** in a delta
+that struck everything else in place, committed by `5fa290d85f06`, **the same commit that applied
+`F7`** — the finding whose subject is struck text deleted by the pass that promoted *"strike in
+place; never delete"* to a written rule.
+
+**Applied:** *"the five places"* is restored in the ROADMAP under a dated rider carrying the split
+and both trees; `F13`'s disposition is **struck in place** with a 🔻 withdrawal naming the population
+it should have measured. **The wrong justification is not deleted, per the rule this round is here
+to enforce.**
+
+### R2-B3 🚩 `F4` claimed a complete enumeration and delivered seven of ten — **applied by extending it**
+
+Re-measured on whitespace-flattened `a38eb42f2d37:docs/ROADMAP.md`: **ten** occurrences of *"the
+baseline above"*, not seven. **Five are live attestations and all five were verified correct — they
+are untouched.** The finding's disposition is right: five is the complete live-attestation set. What
+was false is *"Every … was resolved to its author"*, in the entry whose thesis is
+enumerate-don't-count.
+
+**Applied by extending rather than by dropping the claim**, which is the entry's own standard. The
+other five now carry their class: **four inside `~~…~~`** — leg 2's *"RE-FIRED at the baseline
+above"* (lines 1083-1085), the obligations block's *"WHAT THE FIRST WRITER OWES … verified against
+the tree at the baseline above"* (1167-1168), the `?lib=` item's struck measurement (1689-1690), and
+§3's struck open-defect block (2573-2574) — and **one live quotation inside commentary** (2562), the
+audiobook box quoting the failure class it is named after.
+
+⚠️ **The round-two split was re-measured rather than copied, and is off by one in each direction.**
+It reported three struck and two live quotations; measured here it is **four struck and one live** —
+leg 2's occurrence sits inside `~~…~~`, which the reviewer read as commentary. **The total of ten,
+and the finding, are the reviewer's and both stand**; only the class of one occurrence moved.
+
+### R2-N1 🚩 A practice cited in five wordings was reported as a phrase recurring throughout — **applied in both files**
+
+Both files read *"boxes throughout already cite it as *'this file's standing rule'*"*. **Measured on
+whitespace-flattened `5ff882c5b100:docs/ROADMAP.md`: that exact phrase occurs once.** The substance
+holds — five boxes cite the content-commit-not-merge practice, in five different wordings: the
+image-pipeline writer (the one carrying the phrase), the Docker item, the `write_queue` row, the
+comics chain, and the per-type-grid item's *"⚠️ CITE `d0215fb`, NOT THE MERGE."* **Applied:** the
+practice is attributed to the five and the phrase to the one, in `F12` and in the ROADMAP's charter
+paragraph, with the old wording struck in place.
+
+### R2-N2 🚩 The 📌 METHOD paragraph disclosed the wrap hazard and not the scope hazard — **applied**
+
+The method's net is a phrase: only paragraphs carrying *"and to … NOTHING ELSE"* were read. **A
+standing limit stated in any other wording is outside the method**, and the completeness claim
+carried no such caveat — so a disclosed wrap hazard beside an undisclosed scope hazard reads as the
+only one. **Measured at `5ff882c5b100`, blockquote markers stripped and case folded:** the phrase
+matches **exactly ten**, reproducing `F1`'s list, while `nothing else` matches **29**, leaving **19
+outside the net** — among them §3's *"It read nothing else for line drift"*, the merged-commits
+rider's *"nothing else in them was read"*, the search item's *"Nothing else in that range was
+read"*, and the six collapsed chain levels' *"re-derived <N> things and NOTHING ELSE"*. **Applied:**
+both files now state that the completeness is over the phrase rather than over the file, and that
+closing the gap needs a read rather than a grep.
+
+### R2-N3 🚩 `F9`'s locator now returns its own fix commits and named no disambiguation rule — **applied, same class as `R2-B1`**
+
+Restoring the struck phrase put the fix commits into the answer. **Re-fired at this tip:** `git log
+-S'three comment-only mentions' -- docs/ROADMAP.md` returns `5fa290d85f06`, `a38eb42f2d37` and
+`c38088fec32e`, newest first. **The oldest is still `c38088fec32e`, so `F9`'s measurement stands
+unchanged**; what was missing was the sentence telling a reader which of three to take. **Applied:**
+the take-the-oldest rule is stated at the locator.
+
+### R2-N4 🚩 `F14`'s ellipsis elided the clause carrying its own case distinction — **applied**
+
+The source, at `5ff882c5b100`, reads *"That self-match is named rather than dodged, **because a
+criterion that matches its own record-keeping is the defect this pass repaired in the arm64 box,**
+and stating it is cheaper than a grep contorted to avoid itself."* `F14` quoted it with the middle
+clause elided — **and that clause is exactly the one showing the arm64 box WAS scoped**, which is
+the reconciliation `F14` then argues for. **Applied:** the quotation is restored in full, and the
+elision is named as `F10` one level up.
+
+### R2-N5 🚩 `N17`'s disclosure named the new hits rather than the answer — **applied, with the nit's own premise corrected**
+
+**Applied:** the arm64 box now lists the whole answer — `grep -rln -i arm64 docs/` returns **seven**
+files at this tip (`docs/ARCHITECTURE.md`, `docs/DECISIONS.md`, `docs/DEVELOPMENT.md`,
+`docs/RESEARCH.md`, `docs/REVIEW-LOG.md`, `docs/ROADMAP.md`, `docs/reference/sync.md`) — rather than
+leaving a reader to assemble it from a struck four-file list plus two additions, and it records the
+general hazard the nit names: **an argumentative grep quoted inside a reviewed file measures its own
+commentary as well as its subject.**
+
+⚠️ **The nit's mechanism was re-measured and does not hold.** It said `docs/REVIEW-LOG.md` is *"now"*
+in the answer. **Measured: this file has matched the string since `3b1e6ec0855a` (2026-08-16)** —
+the oldest answer of `git log -S'arm64' -- docs/REVIEW-LOG.md` — and it is in the answer at every
+tree in this range — `5ff882c5b100`, `a38eb42f2d37`, `5fa290d85f06`,
+`4e75518fe13f` — so the count was seven before this review too. **The fix is unaffected; the reason
+is corrected**, and the correction is itself an instance of the finding's general point.
+
+⚠️ **The criterion is unpolluted and was fired both ways at this tip**, before and after this
+round's edits: the form carrying `--exclude=ROADMAP.md` and the memory-unit filter returns **empty**,
+and the positive control over `amd64` returns `docs/DECISIONS.md:201`. **The pollution is confined to
+the argumentative grep**, exactly as `N17` said.
+
+### What this round did NOT do
+
+* **No checkbox line was touched.** Verified byte-identical between `a38eb42f2d37:docs/ROADMAP.md`
+  and this tip: every `^- \[` line matches, in the same order. **Nothing was ticked, unticked,
+  re-scoped, or given or relieved of an item-level obligation.**
+* **`make check` was not run, by instruction** — the gate runs separately on the landing tree — and
+  no other make target, no `web` vitest command, no `curl` and no Go test was fired. **Nothing in
+  this section rests on one.**
+* **No claim here is measured by any gate.** `secrets` scans these files for credential patterns and
+  no target parses prose or resolves a citation, so **the instruments named above are the whole
+  evidence**, each one written out so a later lane can re-run it.
+* **`LS-395.1` is untouched and stays OPEN.** Nothing in this round swept a `file:<n>` citation, and
+  a partial pass does not close it.
