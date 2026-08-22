@@ -27370,3 +27370,236 @@ the argumentative grep**, exactly as `N17` said.
   evidence**, each one written out so a later lane can re-run it.
 * **`LS-395.1` is untouched and stays OPEN.** Nothing in this round swept a `file:<n>` citation, and
   a partial pass does not close it.
+
+---
+
+## LS-397 — §17.8's Accept step, backend half: the store operations, the removal they rest on, the wire, and the screen copy the removal left false
+
+**Target:** branch `claude/hearth-thread-jyaovx`, merged forward onto `origin/main` `bca8dd253a81`
+at merge `46faebe6add1`. The landing is content commits `0200ee4f19d9` through `be057493f3a0`,
+every one of them single-parent, plus the ROADMAP amendment `a7729a1c8279` and the commit carrying
+this entry. **Authority:** `docs/ARCHITECTURE.md` §17.8,
+[ADR-0048](./DECISIONS.md#adr-0048), [ADR-0066](./DECISIONS.md#adr-0066).
+
+**What the landing is, in one sentence, because the heading of the roadmap item it serves promises
+more than it delivers:** the Accept step now exists in the store, on the wire, and in the security
+model, and **no screen calls it** — `grep -rn 'libraries/proposals\|libraries/accept' web/src`
+returns nothing at this tree, under any spelling, and `docs/ROADMAP.md`'s item now carries that
+grep as its third *Done when* clause rather than leaving the gap to a prose note.
+
+**The store operations** (`0200ee4f19d9`, `internal/store/proposals.go`). `DescribeContainers` turns
+a container list into §17.8's proposal rows — the adapter's answer verbatim, the count of top-level
+works from that container already replicated, and the libraries the container is already a source
+of, a slice rather than one id because ADR-0066 decision 5 lets one container ref name two
+libraries. `AcceptLibraries` creates or joins one library per acceptance on §17.8's merge key, binds
+its sources, files membership from `service_item_link`, and **re-derives `search_doc_library` for the
+works it files** — `writeSearchDoc` builds that junction at write time and nothing re-derived it
+afterwards, so under ADR-0048's before-Accept import ordering a filed work's document would have
+stayed scoped to Unfiled. ✅ **The proposals READ is not the same function as the probe's**:
+`ProposedContainers` recomputes the set from `container_observed` rows in `sync_report`
+(`d56ef433f784`), which is what gives a settings screen the user navigates to something to render —
+ADR-0048 clause 5 excuses the connect probe's upstream call, and that excuse does not reach a screen
+reached from the nav.
+
+**The subtraction, which is the half §17.8 calls a REMOVAL** (`a83ff9cf4e50`, with
+`158464621c25` and `b6aa1a38cde5`). `bindOneContainer`'s step 3 — the create — is gone, along with
+the name and slug derivation that fed it. Steps 1 and 2 are untouched, so an install whose rows an
+earlier build auto-created keeps matching before any create path could run (clause 4 declares those
+accepted). An unaccepted container still gets a binding carrying `CatalogueBinding.NoLibrary`; its
+items are applied in full and get no `library_member` row, which is what lets a proposal show a real
+item count. ⚠️ **`NoLibrary` is deliberately not `LibraryID == 0`**, because 0 is `UnfiledLibraryID`,
+a real seeded row — *no library* and *filed into the reserved library* are opposite states.
+✅ **Measured at this tree rather than asserted:** `grep -rn 'INSERT INTO library' --include=*.go .
+| grep -v _test.go` returns `internal/store/proposals.go` as the only writer of the table; the other
+hits are `library_source`, `library_member` and a comment.
+
+**The wire** (`58b2655c8d4f`, `f7aa6054dc47`, `internal/httpapi/proposals.go`).
+`GET /api/v1/libraries/proposals` and `POST /api/v1/libraries/accept`, both local against SQLite,
+contract in `docs/reference/http-api.md` §2a and §2b. Accept takes the action segment rather than
+`POST /api/v1/libraries` — it is a batch whose per-item outcome may be a join into a library that
+already exists, and `POST /api/v1/libraries` is left unclaimed for §17.8's *Add library*.
+
+**The security half, and it is not one thing.**
+1. **Nothing outbound, structurally.** `TestLibraryProposalHandlersReachNothingOutbound` is a guard
+   over `proposals.go`'s imports and over the four `Config` ports, not a comment saying the handlers
+   are local.
+2. **Field-by-field response allowlists.** A proposal names the service instance that reported the
+   container, and `service_instance` carries a full-admin \*Arr credential and an internal host; the
+   name and the kind cross and nothing else does (§14).
+3. **The no-sudo decision has its ground where a reader arrives** (`231d9a001a6a`). Accept is
+   `csrfProtected` + `authenticated` with no sudo while every Services-screen write is sudo-gated,
+   and an unexplained gate difference between two write endpoints is the kind of thing a later
+   reviewer closes by tightening the wrong one. Sudo re-proves the operator in front of a stored
+   credential (§17.3.3); §17.8 puts no credential field on this screen.
+4. **`sync_report.detail` stops carrying raw upstream text** (`269bb42f95d7`, `9cb7be3ba7d3`,
+   `13dd4a38a7d1`). The writers of that column which copy a string the upstream chose — enumerated at
+   that tree in `269bb42f95d7`'s own message rather than carried here as a number — now redact at the
+   struct assignment rather than on the map or the read, because the struct value reaches a log line
+   as well as the JSON. 🚩 **The seam guard enumerates no writer** —
+   `TestNoSyncReportWriterLeavesUpstreamTextUnredacted` poisons every upstream-chosen string a fake
+   `Source` can carry, so a writer added later is covered without being listed. Two deaf substring
+   blacklists in the same area were replaced with closed-set membership on three fields. ⚠️ **Every
+   comment states the limit rather than implying protection**: `ssrf.RedactText` acts on URL-shaped
+   text and its own doc says a bare secret outside a URL passes through untouched.
+
+**Two reachable 500s closed by CLASSIFYING the storage failure, not by copying the schema into Go**
+(`f7aa6054dc47`). `POST /libraries/accept` returned `500 internal` for two values a caller supplies:
+a `kind` outside `library.kind`'s CHECK, and a `service_instance_id` naming no row — the latter for
+the owner, whose scope admits every id, so `admitsInstance` waved it through to `library_source`'s
+foreign key. ✅ **The distinguishability was measured, not assumed**: on `ncruces/go-sqlite3`
+v0.35.3 (SQLite 3.53.4), against the real migrated schema through this repo's own pools, a CHECK
+violation returns extended code **275** and a foreign-key violation **787**, each matching
+`errors.Is` against its own constant and not the other. The CHECK class becomes
+`store.ErrLibraryKindUnknown` → 400; the missing instance becomes an existence read ahead of the
+write returning the **same** sentinel as an out-of-scope source → 404, so the pair is not an
+existence oracle, and a soft-deleted instance is absent for this purpose too. 📌 **The alternative —
+copying the schema's value list into Go — would be one membership rule derived twice and stale the
+first time a migration adds a kind.** ⚠️ **Neither body carries the driver's sentence**: SQLite's
+message for the CHECK class quotes the constraint expression, which is the whole permitted value
+list verbatim, and an error body is exactly where that rides out.
+
+**The screen copy the removal left false** (`be057493f3a0`). Copy written for the old world reads
+fine and is false, which is why it survived the removal. The list's `emptyText` said a library
+appears when an import runs and named two triggers that start one; the screennote said UsArr creates
+a library for each container a service reports, every time an import runs; `unboundNote` said a
+service *"feeds no library yet"*, where the `yet` promised a change nothing performs. All three now
+name Accept as the only creator and say the step has no screen, so *no libraries* reads as the
+ordinary first-run state rather than a fault. 🚩 **The fourth is a different defect and the sharper
+one:** the `?lib=` link gate keyed on `slug === ''`, and emptiness is a proxy — a blank-but-not-empty
+slug passes it while `readLibraryScope` resolves it to NO SCOPE at the far end, so the row would have
+linked to every library while claiming to open one. The gate now runs the destination's own address
+reader (`scopeSlug` in `web/src/lib/librarygrid.ts`), placed there rather than in the component
+because vitest runs in node with no Svelte plugin.
+
+**Six comments were checked against the code and five were wrong** (`9236cb1022e5`, with
+`890e23d082f3`, `80f81d8b97f1`, `640af5ac864d`, `4df8088144ed`, `0173f3e02bed`). Each was replaced
+with a pointer rather than a fresher assertion, on the repo's own rule that a docstring describing
+behaviour is a claim and not a specification. The two documents that said the bootstrap import
+creates libraries were corrected in the same pass.
+
+⚠️ **A merge-time supersession, recorded because it removed another lane's text.** `origin/main`'s
+`bca8dd253a81` added a 📌 block to the ROADMAP item above, recording that the item deliberately
+carries no command on the ground that `INSERT INTO library` already has a non-test writer in
+`internal/store/catalogue.go`'s `bindOneContainer`, so a grep for it would be green without an Accept
+step existing. **That was true when it was written and `a83ff9cf4e50` had already falsified it**; the
+two lanes simply had not met. On the merged tree the premise is false and the conclusion — that no
+discriminating command exists — is false with it, so the block was dropped at the merge rather than
+carried forward stale. **The merge was verified against both parents rather than accepted as clean**:
+`docs/REVIEW-LOG.md` is byte-identical to main's, every file only this branch touched is
+byte-identical to this branch's, and `docs/ROADMAP.md` differs from main's by exactly that one hunk.
+
+**What this landing did NOT do, stated so nothing reads it as more than it is.**
+* **No screen calls either route.** The flow §17.8 names is unbuilt, `web/src/routes` is
+  authoritative for that, and the roadmap box stays open on a clause that now fails as a command.
+* **`LS-397.1` is not below, and the absence is deliberate rather than a numbering slip** — the id is
+  allocated and this lane did not write it.
+* **What the gate does and does not cover here.** `make check` runs the Go and vitest suites, so the
+  store operations, the handlers, the error classification and the seam guard are all measured by it.
+  **The prose in this entry is not.** No target parses a comment, resolves a citation or checks a
+  §-reference, so the greps and commit addresses written out above are the whole evidence for the
+  claims that are about documents, and each is written so a later lane can re-run it.
+
+### LS-397.2 `SkippedContainer.Reason` is redacted at a site whose safety argument was never traced — OPEN
+
+`internal/store/catalogue.go`'s `BindContainers` writes `ssrf.RedactText(bindErr.Error())` into
+`SkippedContainer.Reason`, which is JSON-encoded into `sync_report.detail` and lifted onto
+`GET /api/v1/libraries`. The redaction landed in `269bb42f95d7`. **The point of this entry is what
+the redaction does not settle.**
+
+The field's doc comment used to read *"It names a constraint, so it is database detail rather than
+upstream text"*, and that was two claims wearing one sentence. **The half that holds is about the
+SENTINEL**: `isSkippableBindError` is `errors.Is(err, sqlite3.CONSTRAINT)` and nothing else becomes a
+skip. **The half that did not is about the STRING**, which is not the sentinel — it is whatever
+`bindOneContainer` wrapped around the driver's own message. That half was never traced, and the
+comment at the field now says so instead of claiming it.
+
+⚠️ **A redaction applied at a site whose safety argument was never traced is a redaction, not a
+verification.** `ssrf.RedactText` finds http/https substrings and strips credential-named query
+params from them; its own doc says a bare secret outside a URL passes through untouched. It closes
+the URL-shaped case `docs/reference/security.md` §5 cites and it does not answer the question the
+struck sentence was answering, which is what the string can contain at all.
+
+**What was measured here, and it is short of a trace.** At this tree `bindOneContainer`'s error
+returns wrap with constant prefixes — `refresh source:`, `look up existing source:` — or return the
+inner error unchanged, so no wrapping layer embeds a value the adapter chose. **That is a fact about
+one function at one tree, not the property the struck sentence asserted**: the innermost error is the
+driver's sentence, whose content is SQLite's, and SQLite's CHECK message quotes the constraint
+expression verbatim — the same behaviour `f7aa6054dc47` kept out of an HTTP body two commits later.
+
+**Trigger.** When a `bindOneContainer` error path first embeds a caller- or adapter-supplied value in
+its wrapping text, or when `isSkippableBindError` admits a class other than `sqlite3.CONSTRAINT`, the
+string reaching this field stops being the thing measured above and the exactness question has to be
+answered rather than deferred.
+
+### LS-397.3 Whether §17.7's degraded banner belongs on Search, on the merits — OPEN
+
+**The question.** §17.7's *Instance degraded / backend offline* bullet was amended on 2026-08-21 to
+name its screens, and the list it names is *"the Library screen and on every per-type grid"*. Search
+is not on it. **The list's absences are declared meaningful in the bullet itself** — Home is excluded
+with a stated reason (Block B is the attention block and already reports a degraded instance, §17.2)
+— so a reader arrives at a list whose silence about Search reads as a decision. **It has not been
+argued as one.** Search renders from the replica exactly as the catalogue screens do, and a stale
+answer to a search is precisely the thing a user would want told; the merits point the other way from
+the list, and nothing in §17 states which way it was meant to go.
+
+⚠️ **THE CAUTION, AND IT IS THE REASON THIS ENTRY EXISTS RATHER THAN A TODO.** This must not be
+settled later by pointing at a mockup. **A mockup drawing a surface §17 never granted is the mockup
+asserting scope**, and the direction of authority is fixed the other way round: §17 is authoritative
+over `docs/design/`, including over the mockups. A future pass that finds a banner drawn on the
+search mockup and concludes the question was already answered will have taken the artefact's word for
+the specification's.
+
+📌 **The pre-removal evidence, established by reading this tree rather than asserted.** At content
+commit `a7729a1c8279`, tree `fa20481c9b69`, the mockups still draw the banner on Search:
+
+| File | Line | What is there |
+| --- | --- | --- |
+| `docs/design/mockups/search.html` | 302 | `<span data-inst="full">Radarr</span><span data-inst="v01" hidden>Kavita</span> is unreachable — showing cached data from 11:47, 2 hours ago` |
+| `docs/design/mockups/search.html` | 303 | `Search itself is unaffected: it reads the replica, not the service. What can be stale is whether a file has appeared or been deleted in the 2 hours since.` |
+| `docs/design/mockups/search.html` | 285 | the state selector's `<option value="stale">Results, one instance unreachable</option>` |
+| `docs/design/mockups/prototype.html` | 4749 | the same banner title, in the assembled prototype |
+| `docs/design/mockups/prototype.html` | 4732 | the same state option, in the assembled prototype |
+
+**The second row is why this is a scope question and not a tidy-up.** The mockup's body text is an
+argument on the merits — the same argument the paragraph above makes — so what is being removed, if
+it is removed, is not decoration.
+
+**Removal SHA:** *recorded when the D8 removal lands.* Not landed at this tree; the banner is present
+at `fa20481c9b69` as tabulated. Until that content commit exists this slot names the condition rather
+than sitting blank, and the table above is what a reader compares it against.
+
+**Trigger.** The next motion that opens §17.7. Whoever opens it decides Search on the merits and
+writes the decision into the bullet — either name Search in the list, or exclude it with a reason the
+way Home is excluded. **An absence with no reason beside it is what produced this entry.**
+
+---
+
+## LS-398 — the three `cmd/usarr` redaction calls have no firing guard, and cannot be given one at this tree
+
+`cmd/usarr/import.go` passes upstream-chosen text through `ssrf.RedactText` at three struct
+assignments that reach `sync_report.detail` — `store.SkipNote.Name` (line 488),
+`store.CompletenessNote.Container` (585) and `comicResidueNote.Name` (707). All three landed in
+`269bb42f95d7`. **None of them is covered by a guard that has been fired, and this entry records why
+that is a measured limit rather than an oversight.**
+
+**The reason, and both halves were checked against the tree.** The only producer feeding these types
+today is the BookOrbit adapter, and `internal/bookorbit` puts upstream prose through `ssrf.RedactText`
+at its own client boundary — `internal/bookorbit/errors.go`'s
+`func clean(s string) string { return truncate(ssrf.RedactText(s)) }`, used by the projection in
+`catalogue.go`. **So the three calls are provably no-ops for the one producer there is**, and a test
+cannot make them fire: the write-seam guard that covers the store and libsync writers
+(`internal/libsync/syncreportwriteseam_test.go`) poisons a fake `Source`, and the only route from a
+`Source` to a `cmd/usarr` writer runs through the client that already cleaned the string.
+
+**They are not therefore pointless, and that is the other half.** The invariant belongs to the FIELD
+rather than to one adapter. `internal/kavita` does **not** redact a container name on the way out —
+`ToLibraryView` projects `LibraryDto.Name` through unchanged (`internal/kavita/redact.go`) — so the
+second adapter to feed these types would arrive unredacted at a site with no guard behind it. ✅ **A
+call that cannot fire is exactly the shape this repo's drill discipline distrusts**, which is why the
+limit is written at each of the three sites in the source as well as here, rather than left for a
+reader to infer from a green suite.
+
+**Trigger.** When a second adapter first feeds `ContainerSkips`, `CompletenessNote` or the comic
+residue path. At that moment the three calls stop being no-ops, the seam guard's poison has a route
+to them, and a firing guard becomes both possible and required. **Until then a guard cannot be built,
+and asserting that these lines are protected would be asserting from their presence.**
