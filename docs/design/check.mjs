@@ -2173,12 +2173,11 @@ head('1b. §13 copy bans, over rendered chrome text, cells included');
    *   ROW of requests.html's indexer table -- the four-column table headed
    *   Indexer / State / What Prowlarr reports / Retry -- took the corpus from
    *   13411 to 13413. The row is named because the column is not an address:
-   *   the cell repeats down the table, and "the one .stacklabel in the 'What
-   *   Prowlarr reports' cell", which is what stood here, resolves to nothing
-   *   a re-runner can act on. The strings those markings removed are totalled
-   *   on every run and printed beside THEM rather than folded into the
-   *   counted elements' total, where on 2026-08-22 it made 1,206 read as
-   *   5,670.
+   *   the cell repeats down the table, so a pointer that names only the
+   *   "What Prowlarr reports" cell resolves to nothing a re-runner can act
+   *   on. The strings those markings removed are totalled on every run and
+   *   printed beside THEM rather than folded into the counted elements'
+   *   total, where on 2026-08-22 it made 1,206 read as 5,670.
    *
    *   THEY ARE STILL OUTSIDE THE CEILING, and NOTHING HERE DESCRIBES WHAT
    *   THAT POPULATION IS MADE OF ANY MORE -- ON A RULE, not by omission.
@@ -2592,8 +2591,9 @@ head('1b. §13 copy bans, over rendered chrome text, cells included');
       'verbatim, which §17.6 requires be shown rather than summarised. ' +
       'RETIRED BY: the same.'],
     ['tv — catalogue source, request destination',
-      "§17.8's per-kind source gloss. The head is a media kind and the detail is " +
-      'what the kind gets, which is a label-and-value pair rather than a sentence. ' +
+      "§17.3's per-kind source gloss -- the Services screen's Libraries column, " +
+      'which is where a user meets both terms. The head is a media kind and the ' +
+      'detail is what the kind gets, a label-and-value pair rather than a sentence. ' +
       'RETIRED BY: the same, or by the gloss becoming a real two-column row.'],
     ['music — catalogue source; no request destination',
       'The negative half of the pair above, and it must keep the same shape as ' +
