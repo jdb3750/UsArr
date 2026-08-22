@@ -53,12 +53,12 @@ import (
 //
 // Every write on the SERVICES screen is sudo-gated because it touches a stored
 // *Arr credential (§12.1). Accept touches none: it writes `library`,
-// `library_source`, `library_member` and `search_doc_library`, and it reads a
-// service instance's id only to check the caller may name it. §17.8 puts
-// credentials behind Services plus sudo and asks for nothing of the sort on this
-// screen — *"No credential field ever appears on this screen"* — so the gate is
-// CSRF plus an authenticated session, which is what POST /releases/{id}/grab
-// carries for the same reason.
+// `library_source`, `library_member` and `search_doc_library`, and it takes a
+// service instance's id only to bind a source to it, once the scope has said the
+// caller may name it. §17.8 puts credentials behind Services plus sudo and asks
+// for nothing of the sort on this screen — *"No credential field ever appears on
+// this screen"* — so the gate is CSRF plus an authenticated session, which is
+// what POST /releases/{id}/grab carries.
 
 // proposalBoundLibraryResponse is one library a proposed container already feeds.
 //
