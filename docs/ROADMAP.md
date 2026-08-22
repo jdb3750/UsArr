@@ -219,11 +219,44 @@ READER TELLS WHICH TIP A BOX'S PROSE IS ATTESTED AT. RESTORED 2026-08-22, BECAUS
 THAT UNKNOWABLE.** The collapsed chain carried it as *"read every box this pass does not name as
 attested at `<older SHA>`"*, which needed the chain. Restated for a file with none in it: **a box's
 prose is attested at the tip named in the box's own dated rider; where a box carries none, it is
-attested at the baseline named by the pass that wrote the box** — found with `git log -S '<a
-distinctive string from the box>' -- docs/ROADMAP.md`, whose answer is one of the eight SHAs
-enumerated below. **Only the commands in this file are attested at `5ff882c5b100`.** A pointer is
-not a loss of information; a deleted rule is.
+attested at the baseline named by the pass that wrote the box.** **Only the commands in this file
+are attested at `5ff882c5b100`.** A pointer is not a loss of information; a deleted rule is.
+⚠️ **AND FINDING THAT TIP TAKES TWO HOPS. CORRECTED 2026-08-22, BECAUSE THE ONE-HOP FORM NAMED AN
+OUTPUT THAT COMMAND CANNOT PRODUCE AND COULD LAND A READER ON TODAY'S TREE.** It read *"~~found
+with `git log -S '<a distinctive string from the box>' -- docs/ROADMAP.md`, whose answer is one of
+the eight SHAs enumerated below~~"*, and **no commit in that enumeration can ever be that command's
+answer**: measured 2026-08-22, **none of the eight touches `docs/ROADMAP.md` in its own diff** and
+six of the eight are merges. What the command returns is the **pass**; the baseline is one hop
+further on.
 
+1. **Hop one — find the WRITING PASS.** `git log -S '<a distinctive string from the box>' --
+   docs/ROADMAP.md`, which answers with the commits that changed how often that string occurs,
+   **newest first**.
+2. **The selection rule, because that list can hold several and the newest is the trap.** Take the
+   **OLDEST** answer — the last line — which is the pass that introduced the string. Every newer
+   answer is a later pass correcting the box, and taking one of those attests the box's prose at
+   that correction's baseline instead of at its own.
+3. **Hop two — read that pass's baseline.** `git show <that SHA>:docs/ROADMAP.md | grep -m1 'Last
+   re-derived against'`. **That** SHA is the tip the box's prose is attested at.
+
+⚠️ **AND IT IS NOT ALWAYS ONE OF THE EIGHT.** For a box written by one of the chain's own levels it
+is; for a box written by a pass off that ladder it is not — `c38088fec32e`'s baseline `3c88b2e`,
+pinned on the covers item below, is one such. **The enumeration below is where the answer usually
+lands, not a closed set of what it may be.**
+📌 **FIRED END TO END ON THREE BOXES, 2026-08-22, AND THE THIRD IS WHY THE SELECTION RULE IS
+WRITTEN DOWN.** `scopeSelectWorthShowing` → one answer, `d4b7d65903a8` → *"Last re-derived against:
+`origin/main` `7c8cb1b`"*. `libraryCompletenessSQL` → one answer, `5d323f94603b` → `a51d3c3`.
+`PosterAsset.validate` → **two** answers, `a38eb42f2d37` then `39cc459d31d3`; the oldest is
+`39cc459d31d3` → `4d95d36`, and taking the newest instead returns `a38eb42f2d37`, whose baseline is
+**this file's current one** — a reader would conclude that box's prose is attested at today's tree,
+which is the exact defect the pin on that block repairs.
+⚠️ **AND THE EXAMPLES CHANGED THEIR OWN ANSWER, WHICH IS THE HAZARD RATHER THAN AN EXCEPTION TO IT.**
+Naming those three strings **here** added an occurrence of each to this file, so re-running hop one
+now returns **the commit that wrote this paragraph** as a newer answer for all three — the *"one
+answer"* above was true when measured and is a historical measurement, not a prediction. **The
+take-the-oldest rule absorbs it exactly as designed**, and that is the point: **a locator quoted
+inside the file it searches is measuring its own commentary too**, which the arm64 box records for
+its own grep further down.
 ⚠️ **WHAT THIS ATTESTATION CLAIMS IS NARROW, AND SAYING SO IS THE POINT.** This pass **re-fired
 every command in this file it could fire** against `5ff882c5b100` and rewrote what it found — the
 commands it could not fire are named immediately below, and they are the list every pass here
@@ -246,8 +279,18 @@ since 2026-08-21; the self-match moves are the arm64 box's own repair, **with on
 and ridden above rather than presented as a restatement**; strike-in-place was this file's practice
 with its justification sentence already written (*"the record of an alarming box having been wrong
 is worth more than a clean page"*); and *"Cite the content commit, never the merge"*, in that same
-paragraph, is **carried, not new** — boxes throughout already cite it as *"this file's standing
-rule"*. **A pass that codifies is adding something, and an honest charter beats a quiet one.**
+paragraph, is **carried, not new** — **five boxes already cited the practice, in five different
+wordings, and exactly one of them used the phrase.** ⚠️ **THAT SPLIT WAS COLLAPSED INTO *"~~boxes
+throughout already cite it as *"this file's standing rule"*~~"* UNTIL 2026-08-22**, which reads as
+a phrase recurring throughout and it does not: at `5ff882c5b100`, on whitespace-flattened text,
+*"this file's standing rule"* occurs **once** — on the image-pipeline writer's *"**Content commit
+`7e5934d`**, cited rather than the merge that carried it, per this file's standing rule."* The
+other four say the same thing in their own words: the **Docker** item's *"content commit, cited
+rather than the merge that carried it"*; the **`write_queue`** row's *"landed `007e58e` (content
+commit, not the merge)"*; the **comics chain**'s *"the chain, content commits only, each confirmed
+single-parent before being cited"*; and the **per-type-grid** item's *"⚠️ CITE `d0215fb`, NOT THE
+MERGE."* **The practice is the five; the phrase is the one.**
+**A pass that codifies is adding something, and an honest charter beats a quiet one.**
 
 **NOT fired by this pass, and therefore inherited:** the three `web` vitest commands —
 `web/node_modules` is absent and installing it needs the network · `make check`, `make
@@ -288,6 +331,18 @@ and silently misses both, and it returns hits from the inherited blocks that are
 paragraphs at all. **The enumeration was done on whitespace-flattened text**, blockquote
 continuations unwrapped before matching, which is [`REVIEW-LOG.md`](./REVIEW-LOG.md)'s `LS-394.26`
 reproducing itself one file over.
+⚠️ **AND THE METHOD'S NET IS A PHRASE, WHICH THE COMPLETENESS CLAIM ABOVE DID NOT SAY. DISCLOSED
+2026-08-22, BECAUSE A DISCLOSED WRAP HAZARD BESIDE AN UNDISCLOSED SCOPE HAZARD READS AS THE ONLY
+ONE.** The ten were found by reading every paragraph carrying *"and to … NOTHING ELSE"*, unwrapped
+and case-insensitive; re-measured at `5ff882c5b100` that phrase matches **exactly ten** and
+reproduces the list, so the net is the right one for the limits it was aimed at. **But a standing
+limit worded any other way is outside it and was never read.** The pre-image holds such wordings:
+`nothing else` matches **29** times there, so **19 sit outside the phrase** — among them §3's *"It
+read nothing else for line drift"*, the merged-commits rider's *"nothing else in them was read"*,
+the search item's *"Nothing else in that range was read"*, and the six collapsed chain levels'
+*"re-derived <N> things and NOTHING ELSE"*. **So *"WHAT FOLLOWS IS THE WHOLE OF THEM"* above is
+complete over the phrase, not over the file**, and closing that gap needs a read rather than a
+grep.
 
 ⚠️ **THE `INHERITED from the …` CHAIN IS COLLAPSED, 2026-08-22, AND WHAT DIED WAS DERIVED STATUS
 ONLY.** At `5ff882c5b100`, and measured there, it nested **eight baseline SHAs one inside the
@@ -1242,11 +1297,23 @@ re-sectioned on the strength of this note**, and none of the three is thereby pl
       stated condition — *"every other thread was told to record nothing new until this landed"* — is
       **discharged**. `internal/vcrscrub` is in the tree (merged `36d7f71`), it is the **only**
       cassette opener, it **installs** the `BeforeSave` hook rather than offering it as an option,
-      `USARR_RECORD` finally has an implementation behind the places that documented it, and the
+      `USARR_RECORD` finally has an implementation behind the **five places** that documented it, and the
       **credential-in-path drill was fired in both directions** — LS-344's table measures `gitleaks`
       catching `?apiKey=<guid>` and **missing the same GUID as a bare path segment**, which is the
       shape Kavita's OPDS routes use, so the scrubber is green exactly where the gate is not.
       **The freeze outlives Kavita as a convention, and its evidence travels with it.**
+      ⚠️ **THE COUNT *"five"* WAS DELETED ON 2026-08-22 AND IS RESTORED THE SAME DAY, BECAUSE IT WAS
+      MEASURED OVER THE WRONG POPULATION.** The counting rule's own first pass struck it out on the
+      ground that *"eleven files reference `USARR_RECORD` today"* — but **the eleven are five
+      documentation places and six `.go` files**, and the `.go` files are the *implementation* this
+      sentence says now stands **behind** the documentation, not places that documented it.
+      Re-measured 2026-08-22: `grep -rl USARR_RECORD . --exclude-dir=.git` returns
+      `.env.example`, `docs/CONFIGURATION.md`, `docs/DEVELOPMENT.md`, `docs/REVIEW-LOG.md` and
+      `docs/ROADMAP.md` — **five** — plus `internal/config/config.go`, `internal/vcrscrub/vcrscrub.go`
+      and four `_test.go` files. **Five at the writing tree `7bf578e` and still five at this tip**,
+      so the count neither was wrong nor has gone stale. **The deletion was also the one deletion in
+      a pass that struck everything else in place**, which is why it carries a rider rather than a
+      quiet restoration.
       🛑 **DO NOT read the fail as newly-urgent work — nobody should now build query-auth
       scrubbing for Kavita.** That cover path is stopped by the owner's decision (§1). The finding's
       forward value is **as a template**: BookOrbit's cover auth must be asked the same question, and
@@ -2437,7 +2504,19 @@ re-sectioned on the strength of this note**, and none of the three is thereby pl
       distinction matters here more than usual: `docs/ROADMAP.md` is among what it returns** — this
       box's own prose says `arm64` repeatedly. **The criterion is the one three paragraphs above,
       which carries `--exclude=ROADMAP.md`**; the argumentative grep is quoted bare, and a reader re-running it
-      should expect this file in the answer. **`--exclude=ROADMAP.md` is what buys self-match immunity**, and it buys it
+      should expect this file in the answer.
+      ⚠️ **THE ARGUMENTATIVE GREP'S ANSWER IS NOW GIVEN WHOLE RATHER THAN BY ITS NEW ENTRIES, 2026-08-22.**
+      Naming only the two files the widening added left a reader to assemble the rest from a struck
+      list. Re-fired at this tip, `grep -rln -i arm64 docs/` returns **seven** files —
+      `docs/ARCHITECTURE.md`, `docs/DECISIONS.md`, `docs/DEVELOPMENT.md`, `docs/RESEARCH.md`,
+      `docs/REVIEW-LOG.md`, `docs/ROADMAP.md` and `docs/reference/sync.md` — and the criterion's
+      form drops exactly one of them, this file. ⚠️ **AND THE ANSWER MOVES WHEN SOMEBODY WRITES
+      ABOUT IT:** `docs/REVIEW-LOG.md` is in that list partly because this box's own review is
+      recorded there, so **an argumentative grep quoted inside a reviewed file is measuring its own
+      commentary as well as its subject.** It is quoted bare anyway, because the criterion is
+      immune by construction and the argument is not the check. **What the criterion would not
+      survive is the same drift**, which is why the memory-unit half and `--exclude=ROADMAP.md` are
+      both load-bearing. **`--exclude=ROADMAP.md` is what buys self-match immunity**, and it buys it
       **by construction** rather than by luck: the four-file form was immune only because this
       box's own sentence happens to wrap `arm64` and `GiB` onto different physical lines, and a
       re-wrap would have made the criterion match itself and stop discriminating — **the exact
