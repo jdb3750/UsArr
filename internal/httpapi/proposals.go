@@ -1,7 +1,9 @@
 package httpapi
 
 import (
+	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"strconv"
 	"strings"
@@ -259,12 +261,54 @@ func toContainerProposalResponse(p store.ContainerProposal) containerProposalRes
 
 // ─── POST /api/v1/libraries/accept ──────────────────────────────────────────
 
-// maxAcceptedNameLen bounds a library name on the wire.
+// The wire bounds on an acceptance.
 //
-// The column has no length limit and does not need one; this is a WIRE bound, so
-// that a name the caller invented cannot travel back out in an error body at the
-// size of the 1 MB request cap. §17.8's names are what fits in a table cell.
-const maxAcceptedNameLen = 200
+// ⚠️ THE REASON THESE EXIST IS NOT THE ONE THIS CONSTANT USED TO GIVE. It said
+// the bound stopped a caller-invented name travelling back out "in an error
+// body at the size of the 1 MB request cap". MEASURED, that is false: no error
+// body on this endpoint echoes the name. badAcceptance names the INDEX
+// ("acceptance 3 has no name"), acceptLibrariesError writes UsArr's own
+// sentences and forwards none of the store's text, and the one place the name
+// does travel back out is the **200 body**, which reflects what was stored. An
+// echo bound would have to be argued about the success path, not the failure
+// path.
+//
+// WHAT THEY ARE ACTUALLY FOR: every value bounded here is PERSISTED VERBATIM —
+// `library.name`, `library.formats`, `library_source.container_ref`,
+// `library_source.container_identity`. None of those columns carries a length
+// limit, and SQLite would store a megabyte in any of them without complaint, so
+// the request cap is the only thing standing between a client bug and a row no
+// screen can render. §17.8's names are what fits in a table cell; the same is
+// true of everything else on this list.
+//
+// ⚠️ WHAT IS DELIBERATELY NOT BOUNDED, so the omission reads as a decision. The
+// BATCH size (`accept`) and the per-acceptance SOURCE count are left to the 1 MB
+// request cap, because neither is free-text and neither is stored as given: an
+// acceptance costs a name the store must find free, and a source must name a
+// service instance that exists and that the caller's scope admits, which is a
+// row a client cannot conjure. A bound on those two would be a number with no
+// derivation — the cap already answers "how big may this request be", and
+// §17.8's screen offers one proposal per container a service reported.
+const (
+	maxAcceptedNameLen = 200
+
+	// maxAcceptedFormatLen and maxAcceptedFormats bound `library.formats`, which
+	// is the one field on this endpoint that reaches a column as a caller-built
+	// JSON DOCUMENT rather than as a scalar. formatsJSON marshals the slice
+	// straight in, so without these two the column takes an arbitrary number of
+	// arbitrarily long strings. A format is a short enum-shaped token
+	// (`epub`, `flac`); 32 of them is already far past what §6.5's format axis
+	// offers.
+	maxAcceptedFormatLen = 64
+	maxAcceptedFormats   = 32
+
+	// maxAcceptedContainerLen bounds the two `library_source` free-text columns.
+	// Both are UPSTREAM values the client is echoing back from a proposal it was
+	// served, so the bound is a sanity limit on a client that invents them, not
+	// a constraint on any real container: Kavita, BookOrbit and the *Arrs all
+	// name containers in something a person typed into a web form.
+	maxAcceptedContainerLen = 512
+)
 
 // acceptedSourceRequest is one container an acceptance binds.
 //
@@ -400,9 +444,12 @@ type acceptLibrariesResponse struct {
 // `search_doc_library`, and it reads a service instance's id only to decide the
 // caller may name it — §17.8 puts no credential field on the Libraries screen at
 // all. POST /releases/{id}/grab sits in the same position and is gated the same
-// way. ARCHITECTURE §17.3.3's *"every endpoint that changes anything"* is scoped
-// to the SERVICES screen; reading it as a rule over every write in the API is
-// what would put a re-authentication prompt in front of ticking a checkbox.
+// way. ARCHITECTURE §17.3.3's *"Every endpoint that changes anything here is
+// gated"* carries its scope in the word `here` — the sentence before it is
+// *"Every write on this screen sits behind sudo mode"*, and the screen is
+// Services. Quoting it without `here` is what would turn it into a rule over
+// every write in the API, and put a re-authentication prompt in front of ticking
+// a checkbox.
 func (s *Server) handleAcceptLibraries(w http.ResponseWriter, r *http.Request) error {
 	a, ok := sessionFrom(r)
 	if !ok {
@@ -420,20 +467,31 @@ func (s *Server) handleAcceptLibraries(w http.ResponseWriter, r *http.Request) e
 	// SCOPE, and it is the WRITE side of the same predicate the read carries:
 	// binding a library to an instance the caller cannot see would publish that
 	// instance's item count back through the proposals read.
-	got, err := s.store.AcceptLibraries(r.Context(), storeScope(a), a.User.ID, accepts)
+	got, err := s.store.AcceptLibraries(r.Context(), storeScope(a), accepts)
 	if err != nil {
-		return acceptLibrariesError(err)
+		apiErr := acceptLibrariesError(err)
+		s.auditAcceptRefused(r, accepts, apiErr)
+		return apiErr
 	}
 
-	// Rendered in full BEFORE anything is audited, so a batch this layer cannot
-	// describe does not leave half a journal behind it. The write itself already
-	// committed — the store's transaction is closed by here — so the audit rows
-	// record what happened either way; what is avoided is a row for the first
-	// two acceptances and none for the third.
+	// EVERYTHING BELOW THIS LINE RUNS AFTER THE BATCH HAS COMMITTED. The store's
+	// transaction is closed by here, so from this point a library EXISTS whatever
+	// this layer manages to say about it, and the journal has to record that.
 	out := acceptLibrariesResponse{Items: make([]acceptedLibraryResponse, 0, len(got))}
 	for _, lib := range got {
 		outcome, err := acceptOutcome(lib)
 		if err != nil {
+			// ⚠️ THE COMMITTED BATCH IS AUDITED BEFORE THIS 500 RETURNS, AND
+			// THAT IS THE WHOLE REASON THIS ARM IS NOT A BARE `return err`.
+			// acceptOutcome fails when the store hands back a row that is
+			// neither created nor joined — a rendering failure over rows that
+			// are already on disk. Returning without auditing would leave a
+			// committed batch with ZERO rows in the journal, which is the one
+			// outcome an audit trail may not have. The rows go in whole rather
+			// than up to the failing element, so the alternative this ordering
+			// was always meant to avoid — a row for the first two acceptances
+			// and none for the third — is still avoided.
+			s.auditAcceptIndeterminate(r, got)
 			return err
 		}
 		out.Items = append(out.Items, acceptedLibraryResponse{
@@ -446,10 +504,142 @@ func (s *Server) handleAcceptLibraries(w http.ResponseWriter, r *http.Request) e
 		})
 	}
 	for _, lib := range out.Items {
-		s.audit(r, "library.accept", "library", lib.ID, store.AuditResultOK, "")
+		s.audit(r, auditAcceptAction, "library", lib.ID, store.AuditResultOK,
+			acceptAuditJSON(acceptAuditMeta{
+				Outcome:      lib.Outcome,
+				Kind:         lib.Kind,
+				LibraryName:  lib.Name,
+				MembersFiled: lib.MembersFiled,
+			}))
 	}
 	writeJSON(w, http.StatusOK, out)
 	return nil
+}
+
+// The accept audit vocabulary, spelled once, on grab.go's reasoning: an action
+// that is a bare string literal at its one call site is a row that silently
+// never appears in any list filtered for it.
+//
+// ⚠️ IT IS DECLARED HERE AND NOT IN internal/store, WHICH IS WHERE
+// store.AuditActionGrab LIVES, AND THE DIFFERENCE IS REAL RATHER THAN AN
+// OVERSIGHT. The grab action is declared store-side because the STORE reads it —
+// Recent grabs filters `action = ?` on it, so the writer and the reader must not
+// spell it twice. Nothing reads `library.accept` yet. The moment a store-side
+// read filters on it, this constant moves there and this comment goes with it.
+const (
+	auditAcceptAction = "library.accept"
+
+	// The two outcomes that exist ONLY in the journal. They are deliberately not
+	// in the wireAccept* block: no response body ever carries either, and a
+	// reader who found them beside `created` and `joined` would reasonably
+	// conclude a client could meet them. `refused` is written where nothing was
+	// created at all; `indeterminate` where rows were created and this layer
+	// could not say which of the two things each one was.
+	auditAcceptRefusedOutcome       = "refused"
+	auditAcceptIndeterminateOutcome = "indeterminate"
+)
+
+// acceptAuditMeta is audit_log.metadata_json for one accepted library.
+//
+// WHY IT IS NOT `""`. The row used to carry empty metadata, which made the two
+// outcomes this endpoint exists to distinguish indistinguishable in the journal:
+// a JOIN into a library that already had every one of these sources — a no-op
+// re-accept — wrote exactly the same row as a CREATE. `outcome` is the field
+// that separates them, and `members_filed` is what says whether the acceptance
+// actually moved any works.
+//
+// NO SECRET VALUES. A library name is the user's own text and a kind is an enum;
+// there is no credential, host or URL on this endpoint at all. Server.audit
+// redacts the rendered JSON again on the way in regardless.
+type acceptAuditMeta struct {
+	Outcome      string `json:"outcome"`
+	Kind         string `json:"kind,omitempty"`
+	LibraryName  string `json:"library_name,omitempty"`
+	MembersFiled int64  `json:"members_filed"`
+
+	// Error and Message are the refusal arm's fields, and Accepted is the batch
+	// size it refused. They are omitempty so a success row does not carry three
+	// empty keys.
+	Error    string `json:"error,omitempty"`
+	Message  string `json:"message,omitempty"`
+	Accepted int    `json:"accepted,omitempty"`
+}
+
+// acceptAuditJSON renders the metadata. A marshal failure yields the minimum
+// honest object rather than an empty string, so the row still records the
+// outcome even if a field would not encode — grabAuditJSON's rule, for the same
+// reason.
+func acceptAuditJSON(m acceptAuditMeta) string {
+	buf, err := json.Marshal(m)
+	if err != nil {
+		return fmt.Sprintf(`{"outcome":%q}`, m.Outcome)
+	}
+	return string(buf)
+}
+
+// auditAcceptRefused records an Accept the STORE refused: a name held at another
+// kind, a source outside the scope, a container already bound at this kind, a
+// kind the schema has not, or an unclassified failure. Nothing was written.
+//
+// WHICH OF THIS HANDLER'S FIVE EARLY RETURNS WRITE A ROW, AND WHY THE OTHER
+// THREE DELIBERATELY DO NOT. The line is grab.go's line, and it is whether the
+// request named work this user could actually have done:
+//
+//	no session          — NO ROW. There is no actor, so actor_user_id is NULL and
+//	                      the scoped read (`actor_user_id IN (0, :uid)`) can never
+//	                      return it. It is also the one branch reachable without
+//	                      credentials, so appending here would let anyone who can
+//	                      reach the port grow an append-only table by request.
+//	undecodable body    — NO ROW. The body was rejected before any acceptance was
+//	                      read, so there is no name, no kind and no source — none
+//	                      of the fields the row exists to carry.
+//	invalid acceptance  — NO ROW. storeAcceptances refuses facts about the
+//	                      REQUEST (an empty batch, a nameless acceptance, a source
+//	                      with no instance). A client bug belongs in the request
+//	                      log, which already has it.
+//	store refused       — ROW, here. A real attempt: the user ticked proposals and
+//	                      UsArr declined to create them. "Why did that do nothing"
+//	                      is a question only this row answers.
+//	outcome unrenderable— ROW, and see auditAcceptIndeterminate: that arm is past
+//	                      the commit, so its rows record libraries that exist.
+//
+// The row is result="fail" and carries no target_id: no library was created, and
+// a target_id naming one of the requested names would assert a row that is not
+// there. The batch size and the caller's own error code go in the metadata.
+func (s *Server) auditAcceptRefused(r *http.Request, accepts []store.LibraryAcceptance, err error) {
+	code, message := CodeInternal, ""
+	var ae *apiError
+	if errors.As(err, &ae) {
+		code, message = ae.Code, ae.Message
+	} else if err != nil {
+		message = redactText(err.Error())
+	}
+	s.audit(r, auditAcceptAction, "library", 0, store.AuditResultFail,
+		acceptAuditJSON(acceptAuditMeta{
+			Outcome:  auditAcceptRefusedOutcome,
+			Error:    string(code),
+			Message:  message,
+			Accepted: len(accepts),
+		}))
+}
+
+// auditAcceptIndeterminate records a batch that COMMITTED and that this layer
+// then could not describe, one row per library.
+//
+// result is "warn" rather than "fail", on exactly grab.go's distinction: "fail"
+// asserts the work provably did not happen, and here it provably DID — the
+// transaction closed before this arm is reachable. What is unknown is only
+// whether each row was created or joined, which is what the outcome says.
+func (s *Server) auditAcceptIndeterminate(r *http.Request, got []store.AcceptedLibrary) {
+	for _, lib := range got {
+		s.audit(r, auditAcceptAction, "library", lib.ID, store.AuditResultWarn,
+			acceptAuditJSON(acceptAuditMeta{
+				Outcome:      auditAcceptIndeterminateOutcome,
+				Kind:         lib.Kind,
+				LibraryName:  lib.Name,
+				MembersFiled: lib.MembersFiled,
+			}))
+	}
 }
 
 // acceptOutcome collapses the store's exclusive pair into the one wire value.
@@ -493,6 +683,13 @@ func storeAcceptances(req acceptLibrariesRequest) ([]store.LibraryAcceptance, er
 		case len(in.Sources) == 0:
 			return nil, badAcceptance(i,
 				"binds no container, so it would create a library that can never hold anything")
+		case len(in.Formats) > maxAcceptedFormats:
+			return nil, badAcceptance(i, "lists more formats than this endpoint accepts")
+		}
+		for _, f := range in.Formats {
+			if len(f) > maxAcceptedFormatLen {
+				return nil, badAcceptance(i, "lists a format longer than this endpoint accepts")
+			}
 		}
 		sources := make([]store.AcceptedSource, 0, len(in.Sources))
 		for _, src := range in.Sources {
@@ -501,6 +698,10 @@ func storeAcceptances(req acceptLibrariesRequest) ([]store.LibraryAcceptance, er
 			}
 			if src.ContainerRef == "" {
 				return nil, badAcceptance(i, "names a source with no container")
+			}
+			if len(src.ContainerRef) > maxAcceptedContainerLen ||
+				len(src.ContainerName) > maxAcceptedContainerLen {
+				return nil, badAcceptance(i, "names a container longer than this endpoint accepts")
 			}
 			sources = append(sources, store.AcceptedSource{
 				ServiceInstanceID: src.ServiceInstanceID,
@@ -580,6 +781,15 @@ func acceptLibrariesError(err error) error {
 		return errStatus(http.StatusConflict, CodeLibraryNameTaken,
 			"another of your libraries already holds that name, or the web address it would use").
 			withAction("Choose a different name").wrapping(err)
+	case errors.Is(err, store.ErrContainerBoundAtSameKind):
+		// NOT CodeLibraryNameTaken, and the action says why: renaming does not
+		// clear this one. The store's sentence names the other library; this one
+		// does not, because that library may be one the caller's scope has no
+		// business enumerating — the fix is the same either way.
+		return errStatus(http.StatusConflict, CodeContainerAlreadyBound,
+			"that container already provides another of your libraries of the same kind").
+			withAction("Accept it at a different media kind, or remove the other library's source").
+			wrapping(err)
 	case errors.Is(err, store.ErrSourceOutsideScope):
 		// One answer for an instance outside the caller's scope AND for an id
 		// naming no instance at all. See store.ErrSourceOutsideScope for why

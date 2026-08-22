@@ -117,6 +117,15 @@ const (
 	// and the slug it reduces to is not. See acceptLibrariesError.
 	CodeLibraryNameTaken ErrorCode = "library_name_taken"
 
+	// CodeContainerAlreadyBound refuses an Accept that would bind one upstream
+	// container into a SECOND library of the SAME kind, with 409. It is its own
+	// code rather than CodeLibraryNameTaken because the fix is a different one:
+	// the name is fine and changing it would not help — the container is the
+	// thing already spoken for. ADR-0066 decision 5 licenses two libraries over
+	// one container ref only at DIFFERENT kinds; see
+	// store.ErrContainerBoundAtSameKind.
+	CodeContainerAlreadyBound ErrorCode = "container_already_bound"
+
 	// Search and grab.
 	CodeExpired ErrorCode = "expired"
 	// CodeGrabFailed asserts that the release did NOT reach the download
@@ -169,6 +178,7 @@ var errorCodes = map[ErrorCode]struct{}{
 	CodeInternal:                  {},
 	CodeImportInProgress:          {},
 	CodeInvalidURLBase:            {},
+	CodeContainerAlreadyBound:     {},
 	CodeLibraryNameTaken:          {},
 	CodeNoDownloadClient:          {},
 	CodeNoIndexerService:          {},

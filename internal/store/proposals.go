@@ -121,6 +121,35 @@ var ErrSourceOutsideScope = errors.New(
 var ErrLibraryKindUnknown = errors.New(
 	"store: that library kind is not one the schema permits")
 
+// ErrContainerBoundAtSameKind is returned when an acceptance would bind one
+// upstream container into a SECOND library of the SAME kind.
+//
+// ⚠️ TWO LIBRARIES OVER ONE CONTAINER REF ARE LICENSED ONLY AT DIFFERENT KINDS.
+// [ADR-0066](../../docs/DECISIONS.md#adr-0066) decision 5 is the licence, and it
+// is specific: a mixed BookOrbit container *"becomes a `book` library and a
+// `comic` library over the same `library_source` container ref"*. The kinds are
+// what make the pair meaningful — `library_source`'s uniqueness is
+// (library_id, service_instance_id, container_kind, container_ref), which
+// PERMITS the same-kind pair without saying it means anything.
+//
+// IT MEANS NOTHING, AND WORSE, IT IS AMBIGUOUS. bindOneContainer's step 1 asks
+// "which library does this container feed at this kind" with a QueryRow carrying
+// no ORDER BY, so a second same-kind row makes the answer whichever row SQLite
+// happens to return first — a subsequent import files the container's items into
+// an arbitrary one of the two. Before Accept existed the state was unreachable:
+// the only writer was step 2's join, which is keyed on the name and so could
+// never produce two same-kind libraries over one ref. Accept can, because the
+// user names the library, so Accept is where the refusal belongs.
+//
+// THE ALTERNATIVE WAS TO MAKE STEP 1's PICK DETERMINISTIC — lowest id wins, say
+// — and it was rejected: an ORDER BY would make the wrong answer stable rather
+// than making it right. Nothing downstream can act on "the items went to
+// whichever of your two identical libraries sorted first". Refusing at the one
+// path that can create the state keeps step 1's assumption true instead of
+// teaching it to cope.
+var ErrContainerBoundAtSameKind = errors.New(
+	"store: that container already feeds another library of the same kind")
+
 // BoundLibrary is one library that already stands over a container.
 type BoundLibrary struct {
 	ID   int64
@@ -405,10 +434,42 @@ func (s *Store) ProposedContainers(ctx context.Context, scope Scope) ([]Containe
 	}
 
 	// The user's libraries, read ONCE for the whole batch, by the same function
-	// resolveAcceptedLibrary calls. This is a read with no writer racing it, so
-	// unlike AcceptLibraries' deliberate re-read per acceptance there is nothing
-	// for a second read to see.
-	held, err := userLibraries(ctx, s.db.Read(), scope.UserID)
+	// resolveAcceptedLibrary calls — and under the same predicate, which is what
+	// makes `JoinsLibraryID` a prediction of what Accept will actually do rather
+	// than a guess from a different population.
+	//
+	// ⚠️ THERE IS A WRITER RACING THIS, AND AN EARLIER COMMENT HERE DENIED IT.
+	// It read *"This is a read with no writer racing it"*, which is false:
+	// handleAcceptLibraries is concurrent with handleLibraryProposals — they are
+	// the write and the read of ONE screen, and the screen refreshes itself after
+	// an accept — so a library can be created between this statement and the
+	// DescribeContainers calls below it. This function issues 2+2N statements on
+	// the read pool with no enclosing read transaction, so those statements can
+	// see different snapshots.
+	//
+	// IT IS DELIBERATELY NOT WRAPPED IN db.ReadTx, and the reason is the failure
+	// MODE rather than the absence of a race. The precedent that does wrap —
+	// ReadIndexerCatalog, whose note records a torn read reproducible at roughly
+	// 1 request in 100 — tears into an ERROR: it reads a catalogue for an
+	// instance a concurrent delete removed and fails the request. Nothing here
+	// can do that. Every statement is scope-filtered and self-contained, so a
+	// commit landing mid-read costs at most a container listed as a proposal that
+	// is already bound, or a join prediction one library out of date. ADR-0048
+	// clause 1 is what makes that a non-event rather than a bug: the proposal set
+	// is *"a value computed by the probe, not a table"*, recomputed on every
+	// visit, so the next render is already correct and no row was written from
+	// the stale answer. A read transaction here would buy consistency nobody
+	// observes and pay db.ReadTx's own price — a read transaction held across a
+	// 2+2N statement loop is exactly the long-lived reader its note warns starves
+	// the WAL checkpointer.
+	//
+	// ⚠️ THIS STOPS BEING TRUE THE MOMENT A CALLER WRITES FROM WHAT IT READS
+	// HERE. The reasoning above is entirely about this function's output being
+	// rendered and discarded. A path that took a JoinsLibraryID from this read
+	// and wrote against it would need the transaction, and AcceptLibraries is
+	// deliberately not that path: it re-reads the library set INSIDE its own
+	// write transaction rather than trusting anything computed here.
+	held, err := userLibraries(ctx, s.db.Read(), scope)
 	if err != nil {
 		return nil, err
 	}
@@ -988,15 +1049,22 @@ func (s *Store) containerBindings(
 // created rather than collide with it on ux_library_name. Re-reading inside the
 // transaction is what makes that true by construction; a set read once and
 // patched in Go is the same fact maintained twice.
+// ⚠️ THE ACTING USER IS `scope.UserID` AND THERE IS NO SECOND PARAMETER FOR IT.
+// This signature took a Scope AND a bare userID, and nothing checked the two
+// agreed — a caller could validate its sources against one user's scope and
+// write the `library` row at another's, and neither the compiler nor any test
+// would have said so. ProposedContainers, the read this write answers, takes the
+// Scope alone; so does this. The rule is that a request's identity enters the
+// store ONCE.
 func (s *Store) AcceptLibraries(
-	ctx context.Context, scope Scope, userID int64, accepts []LibraryAcceptance,
+	ctx context.Context, scope Scope, accepts []LibraryAcceptance,
 ) ([]AcceptedLibrary, error) {
 	var out []AcceptedLibrary
 	err := s.write(ctx, func(ctx context.Context, tx *sql.Tx) error {
 		out = make([]AcceptedLibrary, 0, len(accepts))
 		now := FormatTime(time.Now())
 		for _, a := range accepts {
-			got, err := acceptOne(ctx, tx, scope, userID, a, now)
+			got, err := acceptOne(ctx, tx, scope, a, now)
 			if err != nil {
 				return err
 			}
@@ -1011,7 +1079,7 @@ func (s *Store) AcceptLibraries(
 }
 
 func acceptOne(
-	ctx context.Context, tx *sql.Tx, scope Scope, userID int64, a LibraryAcceptance, now string,
+	ctx context.Context, tx *sql.Tx, scope Scope, a LibraryAcceptance, now string,
 ) (AcceptedLibrary, error) {
 	name := strings.TrimSpace(a.Name)
 	if name == "" {
@@ -1059,12 +1127,21 @@ func acceptOne(
 		}
 	}
 
-	lib, err := resolveAcceptedLibrary(ctx, tx, userID, name, a, now)
+	lib, err := resolveAcceptedLibrary(ctx, tx, scope, name, a, now)
 	if err != nil {
 		return AcceptedLibrary{}, err
 	}
 
 	for _, src := range a.Sources {
+		// ADR-0066 decision 5's boundary, enforced at the one path that can
+		// cross it. Checked INSIDE the loop and after the library is resolved,
+		// because the question is per-source and needs the resolved id: binding
+		// a source this library already has is a no-op re-accept and must stay
+		// legal, while the same ref feeding a DIFFERENT library at this kind is
+		// the ambiguity ErrContainerBoundAtSameKind describes.
+		if err := refuseSameKindDoubleBind(ctx, tx, lib, name, src); err != nil {
+			return AcceptedLibrary{}, err
+		}
 		if _, err := upsertLibrarySource(ctx, tx, lib.ID, src.ServiceInstanceID,
 			src.ContainerKind, src.ContainerRef, src.ContainerIdentity); err != nil {
 			return AcceptedLibrary{}, err
@@ -1096,16 +1173,19 @@ func acceptOne(
 //   - SAME NAME KEY, DIFFERENT KIND → ErrLibraryNameTakenAtOtherKind. See that
 //     error for why this is not disambiguated the way the import path
 //     disambiguates.
-//   - NAME FREE → create. The slug is allocated ONCE from the name (slugify),
+//   - NAME FREE → create, at `scope.UserID`. The row is written to the ACTING
+//     user even though the lookup above reads `user_id IN (0, :uid)`; see
+//     userLibraries for why reading wider than one writes is the right
+//     asymmetry here. The slug is allocated ONCE from the name (slugify),
 //     and a slug that is taken while the name was not is the SAME refusal rather
 //     than an ordinal: `Sci-Fi` and `Sci Fi` are two names that reduce to one
 //     slug, and a user who typed the second and got a library at `sci-fi-2`
 //     would have a permalink nobody chose. The import path mints an ordinal
 //     there because it has nobody to ask; this one asks.
 func resolveAcceptedLibrary(
-	ctx context.Context, tx *sql.Tx, userID int64, name string, a LibraryAcceptance, now string,
+	ctx context.Context, tx *sql.Tx, scope Scope, name string, a LibraryAcceptance, now string,
 ) (AcceptedLibrary, error) {
-	existing, err := userLibraries(ctx, tx, userID)
+	existing, err := userLibraries(ctx, tx, scope)
 	if err != nil {
 		return AcceptedLibrary{}, err
 	}
@@ -1152,7 +1232,7 @@ func resolveAcceptedLibrary(
 		  (user_id, name, slug, kind, formats, managed_by, enabled, include_in_search,
 		   created_at, updated_at)
 		VALUES (?,?,?,?,?,?,1,1,?,?)`,
-		userID, name, slug, a.Kind, formatsJSON(a.Formats), a.ManagedBy, now, now)
+		scope.UserID, name, slug, a.Kind, formatsJSON(a.Formats), a.ManagedBy, now, now)
 	if err != nil {
 		// A CHECK violation HERE is the caller's `kind`, and saying so is what
 		// keeps the value list in the schema. Of the columns this INSERT sets,
@@ -1174,6 +1254,67 @@ func resolveAcceptedLibrary(
 		return AcceptedLibrary{}, fmt.Errorf("create library %q: id: %w", name, err)
 	}
 	return AcceptedLibrary{ID: id, Name: name, Slug: slug, Kind: a.Kind, Created: true}, nil
+}
+
+// refuseSameKindDoubleBind is ErrContainerBoundAtSameKind's test: does this
+// container ref already feed a library of this kind that is NOT the one being
+// accepted into?
+//
+// The `l.id <> ?` is what keeps a re-accept a no-op. Accepting the same proposal
+// twice — or accepting into a library that already carries this source — resolves
+// to the SAME library, so its own `library_source` row must not count as the
+// conflict; upsertLibrarySource then updates it in place, which is what it is
+// for. Only a row on a DIFFERENT library at the same kind is the state ADR-0066
+// decision 5 does not license.
+//
+// MEASURED, not assumed — EXPLAIN QUERY PLAN on the migrated schema:
+//
+//	SEARCH ls USING INDEX ix_libsrc_instance (service_instance_id=?)
+//	SEARCH l USING INTEGER PRIMARY KEY (rowid=?)
+//
+// So SQLite seeks `ix_libsrc_instance` on the instance and resolves the library
+// by primary key; it does NOT choose ux_library_source, which would have been
+// the natural guess and is why the plan is quoted here instead of guessed. Both
+// legs are seeks. It runs inside the caller's transaction, so nothing can create
+// the conflicting row between this read and the write that follows.
+//
+// ⚠️ `LIMIT 1` WITH NO `ORDER BY` IS DELIBERATE AND IS NOT THE DEFECT THIS
+// FUNCTION EXISTS TO CLOSE. This is an EXISTENCE test: any conflicting row
+// refuses the acceptance, so which one SQLite returns changes no decision. The
+// id and name it scans out are for the error message alone. That is the opposite
+// of bindOneContainer's step 1, where an unordered pick chooses which library
+// receives a container's items — a nondeterministic ANSWER rather than a
+// nondeterministic way of saying no.
+func refuseSameKindDoubleBind(
+	ctx context.Context, tx *sql.Tx, lib AcceptedLibrary, name string, src AcceptedSource,
+) error {
+	var otherID int64
+	var otherName string
+	err := tx.QueryRowContext(ctx, `
+		SELECT l.id, l.name
+		  FROM library_source ls
+		  JOIN library l ON l.id = ls.library_id
+		 WHERE ls.service_instance_id = ?
+		   AND ls.container_kind = ?
+		   AND ls.container_ref = ?
+		   AND l.kind = ?
+		   AND l.id <> ?
+		 LIMIT 1`,
+		src.ServiceInstanceID, src.ContainerKind, src.ContainerRef, lib.Kind, lib.ID).
+		Scan(&otherID, &otherName)
+	switch {
+	case errors.Is(err, sql.ErrNoRows):
+		return nil
+	case err != nil:
+		return fmt.Errorf("check whether container %q already feeds a %s library: %w",
+			src.ContainerRef, lib.Kind, err)
+	}
+	return fmt.Errorf(
+		"accept library %q: container %q on service instance %d already feeds library %d (%q) "+
+			"at kind %q, and one container may stand over two libraries only at DIFFERENT "+
+			"kinds (ADR-0066 decision 5): %w",
+		name, src.ContainerRef, src.ServiceInstanceID, otherID, otherName, lib.Kind,
+		ErrContainerBoundAtSameKind)
 }
 
 // formatsJSON renders LibraryAcceptance.Formats for `library.formats`.
@@ -1292,10 +1433,27 @@ func fileContainerMembers(
 // prevent. A work that stays unfiled keeps its library-0 row.
 //
 // SET-BASED, over the library rather than over a list of work ids the caller
-// collected: `library_member` is where the answer already is, ix_libmem_work is
-// the reverse index migration 0005 declares *"for the item detail page and for
-// the search_doc_library rebuild"*, and a rebuild driven by a Go-side id list
-// would be the same set assembled twice.
+// collected: `library_member` is where the answer already is, and a rebuild
+// driven by a Go-side id list would be the same set assembled twice.
+//
+// ⚠️ THE INDEXES, MEASURED RATHER THAN NAMED FROM MEMORY. An earlier version of
+// this comment cited `ix_libmem_work` as the index these statements use. They do
+// not use it, and it appears in neither plan — the citation was transplanted
+// from writeSearchDoc, whose statement drives off `work_id` and so does. These
+// two drive off `library_id`. EXPLAIN QUERY PLAN, on the migrated schema:
+//
+//	INSERT … SELECT   SEARCH m USING COVERING INDEX ux_libmem_identity (library_id=?)
+//	                  SEARCH d USING COVERING INDEX ix_sd_work (work_id=?)
+//	                  USE TEMP B-TREE FOR DISTINCT
+//	DELETE            SEARCH search_doc_library USING COVERING INDEX ix_sdl_doc (doc_rowid=? AND library_id=?)
+//	                  LIST SUBQUERY 1
+//	                  SEARCH m USING COVERING INDEX ux_libmem_identity (library_id=?)
+//	                  SEARCH d USING COVERING INDEX ix_sd_work (work_id=?)
+//
+// Both are seeks and every join leg is covering. The TEMP B-TREE is DISTINCT's,
+// over the rows one library's membership already narrowed to, and it is the
+// price of INSERT OR IGNORE not being asked to dedupe a work with two editions
+// in the same library.
 func rescopeSearchDocs(ctx context.Context, tx *sql.Tx, libraryID int64) error {
 	if _, err := tx.ExecContext(ctx, `
 		INSERT OR IGNORE INTO search_doc_library (library_id, doc_rowid)
@@ -1318,13 +1476,6 @@ func rescopeSearchDocs(ctx context.Context, tx *sql.Tx, libraryID int64) error {
 	return nil
 }
 
-// admitsInstance is Scope.instancePredicate's answer for one id, in Go.
-//
-// It exists because AcceptLibraries is a WRITE and there is no statement to hang
-// a predicate on: the caller hands over a service_instance_id and the question
-// is whether it may. The three branches are instancePredicate's own, including
-// the one that matters — an empty visible set with AllInstances false admits
-// NOTHING, because "no visible instances" must never mean "all of them".
 // serviceInstanceBindable answers whether an id names a service instance a
 // library may be sourced from — it exists and has not been soft-deleted.
 //
@@ -1345,6 +1496,21 @@ func serviceInstanceBindable(ctx context.Context, tx *sql.Tx, id int64) (bool, e
 	return true, nil
 }
 
+// admitsInstance is Scope.instancePredicate's answer for one id, in Go.
+//
+// It exists because AcceptLibraries is a WRITE and there is no statement to hang
+// a predicate on: the caller hands over a service_instance_id and the question
+// is whether it may.
+//
+// TWO EXPLICIT BRANCHES AND A FALL-THROUGH, which is NOT the same shape as
+// instancePredicate's three. instancePredicate answers the empty visible set
+// with a branch of its own returning `1=0`; here that case is the fall-through,
+// because a loop over an empty slice already falls out to `false`. The outcome
+// is the one that matters and it is identical: an empty visible set with
+// AllInstances false admits NOTHING, because "no visible instances" must never
+// mean "all of them". Stated rather than left to be re-derived — the two
+// functions must agree, and the reader checking that they do needs to know the
+// agreement is in the ANSWERS and not in the branch structure.
 func (s Scope) admitsInstance(id int64) bool {
 	if s.AllInstances {
 		return true

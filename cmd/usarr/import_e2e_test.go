@@ -671,7 +671,7 @@ func acceptLibraries(t *testing.T, env *testEnv, instanceID int64, specs ...acce
 		accepts = append(accepts, a)
 	}
 	if _, err := env.app.store.AcceptLibraries(t.Context(),
-		store.OwnerScope(store.SystemUserID), store.SystemUserID, accepts); err != nil {
+		store.OwnerScope(store.SystemUserID), accepts); err != nil {
 		t.Fatalf("accept libraries: %v", err)
 	}
 }

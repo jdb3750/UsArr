@@ -933,7 +933,13 @@ func bindOneContainer(
 	// because ux_library_name is a plain UNIQUE on the raw name and there is no
 	// index over a lowered, trimmed form to seek — a homelab has single-digit
 	// libraries, so the scan is cheaper than the index would be.
-	existing, err := userLibraries(ctx, tx, userID)
+	// Scope{UserID: userID} rather than a caller-supplied Scope: the import path
+	// has no session and no instance scope, and userLibraries reads only the
+	// UserID field (through Scope.userPredicate). At the SystemUserID this path
+	// runs as, `user_id IN (0, 0)` is the strict-equality read this step has
+	// always done, so the import's behaviour is unchanged by the predicate
+	// becoming the scope's.
+	existing, err := userLibraries(ctx, tx, Scope{UserID: userID})
 	if err != nil {
 		return CatalogueBinding{}, err
 	}
@@ -1201,16 +1207,55 @@ type userLibrarySet struct {
 	slugs map[string]bool
 }
 
-func userLibraries(ctx context.Context, q querier, userID int64) (userLibrarySet, error) {
+// userLibraries reads the libraries one scope holds, under THE SAME PREDICATE
+// EVERY READ OF THIS TABLE USES — Scope.userPredicate's `user_id IN (0, :uid)`
+// — and splits them into the two questions the bind and accept paths ask.
+//
+// ⚠️ THE PREDICATE IS THE SCOPE'S, NOT `user_id = ?`, AND THAT IS THE WHOLE
+// POINT OF THE PARAMETER. This function is the LOOKUP half of a read-then-write
+// pair whose write inserts at `scope.UserID`; the reads that later render what
+// it wrote — containerBindingsSQL, listLibrariesSQL behind GET
+// /api/v1/libraries, and LibraryIDsBySlug behind `?lib=` — every one of them
+// resolves `user_id IN (0, :uid)`. When this lookup used strict equality the two
+// disagreed on exactly the rows an install already has: `cmd/usarr/import.go`
+// constructs its Importer at `store.SystemUserID`, so every library the first
+// connect auto-created sits at user_id 0, and a real session's id is >= 1
+// because user 0 is the disabled `_system` row that cannot log in. Under strict
+// equality an acceptance naming one of those libraries could not SEE it, so it
+// created a second row with the same name and slug, both of which then reached
+// the wire and both of which `?lib=<slug>` resolved to.
+//
+// ADR-0048 clause 4 is what makes joining them right rather than merely
+// convenient: it DECLARES the pre-existing `managed_by = 'auto'` rows accepted
+// on upgrade, so they are libraries this user already holds and an acceptance
+// that names one is §17.8's merge, not a collision.
+//
+// ⚠️ THE INSERT STILL WRITES `scope.UserID`, AND THE ASYMMETRY IS DELIBERATE.
+// Seeing a shared row is not owning it: resolveAcceptedLibrary rewrites nothing
+// about a row it joins, and neither `library_source` nor `library_member` has a
+// `user_id` column, so joining a user_id 0 library adds sources and members
+// without moving the row's ownership. Reading wider than one writes is what the
+// sentinel means everywhere else in this codebase — httpapi/events.go's hub
+// delivers a SystemUserID event to every subscriber on the identical rule.
+//
+// A CONSEQUENCE WORTH NAMING: `names` and `slugs` now refuse a value held by a
+// user_id 0 row, which is STRICTER than ux_library_name/ux_library_slug, both
+// UNIQUE over (user_id, …) and so indifferent to it. That is the correct
+// direction. The uniqueness these two maps exist to protect is not the index's,
+// it is the SCREEN's — two libraries a user sees under one name, or one slug
+// that resolves to two ids, are broken for the reader whatever the index
+// permits.
+func userLibraries(ctx context.Context, q querier, scope Scope) (userLibrarySet, error) {
 	out := userLibrarySet{
 		joinable: map[string]libraryRow{},
 		names:    map[string]bool{},
 		slugs:    map[string]bool{},
 	}
+	userPred, userArgs := scope.userPredicate("user_id")
 	rows, err := q.QueryContext(ctx,
-		`SELECT id, name, slug, kind FROM library WHERE user_id = ?`, userID)
+		`SELECT id, name, slug, kind FROM library WHERE `+userPred, userArgs...)
 	if err != nil {
-		return out, fmt.Errorf("list libraries for user %d: %w", userID, err)
+		return out, fmt.Errorf("list libraries for user %d: %w", scope.UserID, err)
 	}
 	defer func() { _ = rows.Close() }()
 
@@ -1218,7 +1263,7 @@ func userLibraries(ctx context.Context, q querier, userID int64) (userLibrarySet
 		var r libraryRow
 		var slug string
 		if err := rows.Scan(&r.id, &r.name, &slug, &r.kind); err != nil {
-			return out, fmt.Errorf("list libraries for user %d: scan: %w", userID, err)
+			return out, fmt.Errorf("list libraries for user %d: scan: %w", scope.UserID, err)
 		}
 		out.names[libraryNameKey(r.name)] = true
 		out.slugs[slug] = true
@@ -1227,7 +1272,7 @@ func userLibraries(ctx context.Context, q querier, userID int64) (userLibrarySet
 		}
 	}
 	if err := rows.Err(); err != nil {
-		return out, fmt.Errorf("list libraries for user %d: %w", userID, err)
+		return out, fmt.Errorf("list libraries for user %d: %w", scope.UserID, err)
 	}
 	return out, nil
 }

@@ -458,7 +458,7 @@ func TestAcceptFilesExactlyOneContainersTopLevelWorks(t *testing.T) {
 	s := newTestStore(t)
 	seedProposalsCorpus(t, s)
 
-	got, err := s.AcceptLibraries(t.Context(), OwnerScope(0), 0, []LibraryAcceptance{
+	got, err := s.AcceptLibraries(t.Context(), OwnerScope(0), []LibraryAcceptance{
 		acceptance("Alpha Comics", "comic", source(1, "c-a")),
 	})
 	if err != nil {
@@ -487,7 +487,7 @@ func TestAcceptFilesExactlyOneContainersTopLevelWorks(t *testing.T) {
 
 	// A tombstoned WORK is a different stamp from a tombstoned LINK, so it gets
 	// its own container and its own assertion.
-	book, err := s.AcceptLibraries(t.Context(), OwnerScope(0), 0, []LibraryAcceptance{
+	book, err := s.AcceptLibraries(t.Context(), OwnerScope(0), []LibraryAcceptance{
 		acceptance("Beta Books", "book", source(1, "c-b")),
 	})
 	if err != nil {
@@ -506,7 +506,7 @@ func TestAcceptSplitsAMixedContainerByKind(t *testing.T) {
 	s := newTestStore(t)
 	seedProposalsCorpus(t, s)
 
-	got, err := s.AcceptLibraries(t.Context(), OwnerScope(0), 0, []LibraryAcceptance{
+	got, err := s.AcceptLibraries(t.Context(), OwnerScope(0), []LibraryAcceptance{
 		acceptance("Mixed Prose", "book", source(1, "c-m")),
 		acceptance("Mixed Comics", "comic", source(1, "c-m")),
 	})
@@ -548,7 +548,7 @@ func TestAcceptIsIdempotent(t *testing.T) {
 	seedProposalsCorpus(t, s)
 
 	accepts := []LibraryAcceptance{acceptance("Alpha Comics", "comic", source(1, "c-a"))}
-	first, err := s.AcceptLibraries(t.Context(), OwnerScope(0), 0, accepts)
+	first, err := s.AcceptLibraries(t.Context(), OwnerScope(0), accepts)
 	if err != nil {
 		t.Fatalf("first accept: %v", err)
 	}
@@ -560,7 +560,7 @@ func TestAcceptIsIdempotent(t *testing.T) {
 		t.Fatal("nothing was filed, so re-running proves nothing about duplication")
 	}
 
-	second, err := s.AcceptLibraries(t.Context(), OwnerScope(0), 0, accepts)
+	second, err := s.AcceptLibraries(t.Context(), OwnerScope(0), accepts)
 	if err != nil {
 		t.Fatalf("second accept: %v", err)
 	}
@@ -596,7 +596,7 @@ func TestAcceptJoinsOnTheNameKey(t *testing.T) {
 	seedProposalsCorpus(t, s)
 
 	before := count(t, s, `SELECT COUNT(*) FROM library`)
-	got, err := s.AcceptLibraries(t.Context(), OwnerScope(0), 0, []LibraryAcceptance{
+	got, err := s.AcceptLibraries(t.Context(), OwnerScope(0), []LibraryAcceptance{
 		// §17.8's key: case-insensitive, whitespace-trimmed, per user.
 		acceptance("  existing COMICS  ", "comic", source(1, "c-a")),
 	})
@@ -668,7 +668,7 @@ func TestAcceptRefusesANameThatIsTakenAndCannotBeJoined(t *testing.T) {
 			before := count(t, s, `SELECT COUNT(*) FROM library`)
 			beforeMembers := count(t, s, `SELECT COUNT(*) FROM library_member`)
 
-			got, err := s.AcceptLibraries(t.Context(), OwnerScope(0), 0,
+			got, err := s.AcceptLibraries(t.Context(), OwnerScope(0),
 				[]LibraryAcceptance{tc.acc})
 			if !errors.Is(err, ErrLibraryNameTakenAtOtherKind) {
 				t.Fatalf("accepting %q returned (%+v, %v), want ErrLibraryNameTakenAtOtherKind "+
@@ -694,7 +694,7 @@ func TestAcceptIsAllOrNothing(t *testing.T) {
 	seedProposalsCorpus(t, s)
 	before := count(t, s, `SELECT COUNT(*) FROM library`)
 
-	_, err := s.AcceptLibraries(t.Context(), OwnerScope(0), 0, []LibraryAcceptance{
+	_, err := s.AcceptLibraries(t.Context(), OwnerScope(0), []LibraryAcceptance{
 		acceptance("Perfectly Fine", "comic", source(1, "c-a")),
 		acceptance("Existing Comics", "book", source(1, "c-b")),
 	})
@@ -716,7 +716,7 @@ func TestAcceptRefusesASourceOutsideTheScope(t *testing.T) {
 	before := count(t, s, `SELECT COUNT(*) FROM library`)
 
 	// The caller can see instance 2 and names a container on instance 1.
-	_, err := s.AcceptLibraries(t.Context(), Scope{UserID: 0, InstanceIDs: []int64{2}}, 0,
+	_, err := s.AcceptLibraries(t.Context(), Scope{UserID: 0, InstanceIDs: []int64{2}},
 		[]LibraryAcceptance{acceptance("Alpha Comics", "comic", source(1, "c-a"))})
 	if !errors.Is(err, ErrSourceOutsideScope) {
 		t.Fatalf("AcceptLibraries returned %v, want ErrSourceOutsideScope", err)
@@ -726,7 +726,7 @@ func TestAcceptRefusesASourceOutsideTheScope(t *testing.T) {
 	}
 
 	// FAIL CLOSED: an empty visible set admits nothing, not everything.
-	if _, err := s.AcceptLibraries(t.Context(), Scope{UserID: 0}, 0,
+	if _, err := s.AcceptLibraries(t.Context(), Scope{UserID: 0},
 		[]LibraryAcceptance{acceptance("Alpha Comics", "comic", source(1, "c-a"))}); !errors.Is(
 		err, ErrSourceOutsideScope) {
 		t.Fatalf("an empty visible set returned %v, want ErrSourceOutsideScope", err)
@@ -734,7 +734,7 @@ func TestAcceptRefusesASourceOutsideTheScope(t *testing.T) {
 
 	// And the owner, who can see both, is not refused — otherwise the two
 	// assertions above would pass on a function that refuses everything.
-	if _, err := s.AcceptLibraries(t.Context(), OwnerScope(0), 0,
+	if _, err := s.AcceptLibraries(t.Context(), OwnerScope(0),
 		[]LibraryAcceptance{acceptance("Alpha Comics", "comic", source(1, "c-a"))}); err != nil {
 		t.Fatalf("the owner's own scope was refused: %v", err)
 	}
@@ -755,7 +755,7 @@ func TestAcceptClassifiesWhatTheCallerGotWrong(t *testing.T) {
 
 	// A kind the schema's CHECK refuses. The value list is NOT restated here
 	// either — what is asserted is that an unreal kind is classified.
-	if _, err := s.AcceptLibraries(t.Context(), OwnerScope(0), 0,
+	if _, err := s.AcceptLibraries(t.Context(), OwnerScope(0),
 		[]LibraryAcceptance{acceptance("Banana Shelf", "banana", source(1, "c-a"))}); !errors.Is(
 		err, ErrLibraryKindUnknown) {
 		t.Fatalf("an unreal kind returned %v, want ErrLibraryKindUnknown", err)
@@ -763,7 +763,7 @@ func TestAcceptClassifiesWhatTheCallerGotWrong(t *testing.T) {
 
 	// An instance id that names no row, for the OWNER — the scope that admits
 	// every id and so cannot catch this one.
-	if _, err := s.AcceptLibraries(t.Context(), OwnerScope(0), 0,
+	if _, err := s.AcceptLibraries(t.Context(), OwnerScope(0),
 		[]LibraryAcceptance{acceptance("Ghost Source", "comic", source(987654, "c-a"))}); !errors.Is(
 		err, ErrSourceOutsideScope) {
 		t.Fatalf("an instance id naming no row returned %v, want ErrSourceOutsideScope", err)
@@ -778,7 +778,7 @@ func TestAcceptClassifiesWhatTheCallerGotWrong(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("soft-delete instance 1: %v", err)
 	}
-	if _, err := s.AcceptLibraries(t.Context(), OwnerScope(0), 0,
+	if _, err := s.AcceptLibraries(t.Context(), OwnerScope(0),
 		[]LibraryAcceptance{acceptance("Removed Source", "comic", source(1, "c-a"))}); !errors.Is(
 		err, ErrSourceOutsideScope) {
 		t.Fatalf("a soft-deleted instance returned %v, want ErrSourceOutsideScope", err)
@@ -810,7 +810,7 @@ func TestAcceptValidatesWhatTheCallerDecides(t *testing.T) {
 		}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			if _, err := s.AcceptLibraries(t.Context(), OwnerScope(0), 0,
+			if _, err := s.AcceptLibraries(t.Context(), OwnerScope(0),
 				[]LibraryAcceptance{tc.acc}); err == nil {
 				t.Fatal("accepted, want an error naming what the caller got wrong")
 			}
@@ -827,7 +827,7 @@ func TestAcceptWritesTheCallersManagedByAndFormats(t *testing.T) {
 	s := newTestStore(t)
 	seedProposalsCorpus(t, s)
 
-	got, err := s.AcceptLibraries(t.Context(), OwnerScope(0), 0, []LibraryAcceptance{
+	got, err := s.AcceptLibraries(t.Context(), OwnerScope(0), []LibraryAcceptance{
 		{
 			Name: "Ebooks", Kind: "book", Formats: []string{"ebook"}, ManagedBy: "user",
 			Sources: []AcceptedSource{source(1, "c-b")},
@@ -883,7 +883,7 @@ func TestAcceptRescopesSearchDocumentsAndKeepsInvariantFive(t *testing.T) {
 		}
 	}
 
-	got, err := s.AcceptLibraries(t.Context(), OwnerScope(0), 0, []LibraryAcceptance{
+	got, err := s.AcceptLibraries(t.Context(), OwnerScope(0), []LibraryAcceptance{
 		acceptance("Alpha Comics", "comic", source(1, "c-a")),
 	})
 	if err != nil {
@@ -1235,7 +1235,7 @@ func TestProposedContainersDropsABindingOnlyAtItsOwnKind(t *testing.T) {
 	ctx := t.Context()
 
 	// The book half of the mixed container is accepted.
-	if _, err := s.AcceptLibraries(ctx, OwnerScope(0), 0, []LibraryAcceptance{
+	if _, err := s.AcceptLibraries(ctx, OwnerScope(0), []LibraryAcceptance{
 		{Name: "Mixed", Kind: "book", ManagedBy: "auto", Sources: []AcceptedSource{source(1, "c-m")}},
 	}); err != nil {
 		t.Fatalf("accept the book half: %v", err)
@@ -1487,7 +1487,7 @@ func TestProposedContainersPredictsTheJoinTheWriterWouldMake(t *testing.T) {
 
 	// AND THE PREDICTION IS TRUE. The same acceptance is run for real and must
 	// land on the library the read named.
-	accepted, err := s.AcceptLibraries(t.Context(), OwnerScope(0), 0, []LibraryAcceptance{
+	accepted, err := s.AcceptLibraries(t.Context(), OwnerScope(0), []LibraryAcceptance{
 		{
 			Name: joining.SuggestedName, Kind: joining.Kind, ManagedBy: "auto",
 			Sources: []AcceptedSource{source(1, "c-a")},

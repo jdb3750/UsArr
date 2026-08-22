@@ -1230,8 +1230,7 @@ func acceptContainers(t *testing.T, s *store.Store, instanceID int64, cs ...stor
 	if len(accepts) == 0 {
 		return
 	}
-	if _, err := s.AcceptLibraries(t.Context(), store.OwnerScope(store.SystemUserID),
-		store.SystemUserID, accepts); err != nil {
+	if _, err := s.AcceptLibraries(t.Context(), store.OwnerScope(store.SystemUserID), accepts); err != nil {
 		t.Fatalf("accept libraries for the fixture: %v", err)
 	}
 }

@@ -75,7 +75,7 @@ func acceptContainers(t *testing.T, s *Store, instanceID, userID int64, cs ...Ca
 	if len(accepts) == 0 {
 		return
 	}
-	if _, err := s.AcceptLibraries(t.Context(), OwnerScope(userID), userID, accepts); err != nil {
+	if _, err := s.AcceptLibraries(t.Context(), OwnerScope(userID), accepts); err != nil {
 		t.Fatalf("accept libraries for the fixture: %v", err)
 	}
 }
@@ -1360,7 +1360,7 @@ func TestASecondKindOverOneContainerIsNowAProposal(t *testing.T) {
 	// AND THE KIND SEPARATION STILL WORKS ONCE BOTH ARE ACCEPTED. This is
 	// ADR-0066 decision 5's actual content: one container ref, two libraries, and
 	// each kind resolving to its own.
-	if _, err := s.AcceptLibraries(t.Context(), OwnerScope(SystemUserID), SystemUserID,
+	if _, err := s.AcceptLibraries(t.Context(), OwnerScope(SystemUserID),
 		[]LibraryAcceptance{{
 			Name: "Fiction (Comics)", Kind: "comic", ManagedBy: "user",
 			Sources: []AcceptedSource{{
@@ -1407,7 +1407,7 @@ func TestAContainerWhoseKindChangedIsRecorded(t *testing.T) {
 	// The container is bound at `comic`, into a library whose name is NOT the
 	// container's — so the join at the new kind is decided by the container name
 	// alone, which is what step 2 reads.
-	if _, err := s.AcceptLibraries(t.Context(), OwnerScope(SystemUserID), SystemUserID,
+	if _, err := s.AcceptLibraries(t.Context(), OwnerScope(SystemUserID),
 		[]LibraryAcceptance{
 			{
 				Name: "Old Comics", Kind: "comic", ManagedBy: "user",
@@ -1555,7 +1555,7 @@ func TestAProvisionalRetypeRefusesALibraryTWOCONTAINERSFEED(t *testing.T) {
 
 	// ONE accepted library fed by BOTH containers — §17.8's merge, which is what
 	// the bind path used to reach by joining on the name key.
-	if _, err := s.AcceptLibraries(t.Context(), OwnerScope(SystemUserID), SystemUserID,
+	if _, err := s.AcceptLibraries(t.Context(), OwnerScope(SystemUserID),
 		[]LibraryAcceptance{{
 			Name: "Comics", Kind: "book", ManagedBy: "user",
 			Sources: []AcceptedSource{
