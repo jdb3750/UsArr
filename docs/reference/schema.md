@@ -1546,6 +1546,37 @@ CREATE UNIQUE INDEX ux_library_name ON library(user_id, name);
 CREATE INDEX ix_library_kind ON library(user_id, kind) WHERE enabled = 1;
 ```
 
+⚠️ **`managed_by`'s *"created by the proposal flow"* was FALSE when it was written and is only half
+true now; the column comment is left standing** (2026-08-22,
+[ADR-0078](../DECISIONS.md#adr-0078)) — it transcribes migration 0005, and a merged migration is
+never edited. **When 0005 merged there was no proposal flow at all.** Every `'auto'` row was written
+by the import bind path — `bindOneContainer`'s step 3 create — which was then the column's only Go
+writer and wrote the literal `'auto'` unconditionally, with no screen involved.
+
+**On this tree the column has exactly ONE non-test Go writer, and it is not that path.** ADR-0078
+removed step 3, so the bind path no longer creates a `library` row at all. The one writer is the
+`INSERT INTO library` in `resolveAcceptedLibrary` (`internal/store/proposals.go`), reached only from
+`AcceptLibraries`, and the value it writes is `managedBy(edited)` from
+`internal/httpapi/proposals.go` — **`'user'` when the user edited the proposal, `'auto'` when they
+accepted it unedited.** So *"created by the proposal flow"* has become true of every row this tree
+writes, and stays false of two populations that outlive it: the reserved `Unfiled` row, seeded
+`'auto'` by 0005 itself, and any library an **earlier** build auto-created, which
+[ADR-0048](../DECISIONS.md#adr-0048) clause 4 declares accepted on upgrade. ⚠️ **An `'auto'` row's
+origin is therefore not recoverable from the column**, which is clause 3's point and the reason
+those rows are *declared* accepted rather than read as accepted.
+
+**The *"never rewrites it again"* half is true — but of BOTH values, not of `'user'` alone.** There
+is no `UPDATE … SET managed_by` anywhere: the other two `UPDATE library` statements in non-test Go
+set `kind` (`bindProvisional`) and `orphaned_at` (`sweepOrphans`), and `resolveAcceptedLibrary`'s
+join branch reads `name` and `slug` and writes nothing. **No row ever leaves the value it was
+inserted with.** Re-measure rather than trusting this paragraph — the command also returns comments
+mentioning those statements, which is why it is read rather than counted:
+`grep -rnE 'INSERT INTO library\b|UPDATE[[:space:]]+library\b' --include='*.go' internal/ cmd/ | grep -v _test`
+
+⚠️ **This is `library.managed_by`, NOT `service_instance.managed_by`** — a different column on a
+different table with a different constraint, `CHECK (managed_by IN ('ui','env','file'))`, transcribed
+with its own DDL earlier in this document. Nothing in this note applies to it.
+
 ⚠️ **`orphaned_at`'s *"when the last library_source goes away"* is not what the writer does, and the
 column comment is left standing** (2026-08-21, [ADR-0074](../DECISIONS.md#adr-0074)) — it transcribes
 migration 0005, and a merged migration is never edited. **No `library_source` row ever goes away.**
@@ -1569,7 +1600,18 @@ exist and they mean different things:** `library.user_id` records the **owner**,
 created it and whose name, ordering and corrections it carries; `user_library_access` (v1.0)
 records a **grant** of read access to a *different* user. That is Plex's shape, it satisfies
 principle 4, and it makes `sort_order` and ADR-0028's per-user media-type ordering per-user by
-construction rather than by a second table. In v0.1 there is one user and every row is `user_id 0`.
+construction rather than by a second table.
+
+⚠️ **2026-08-22 — `library.user_id` is NOT uniformly 0, and this paragraph used to end by saying it
+was** ([ADR-0078](../DECISIONS.md#adr-0078)). The sentence removed here read *"In v0.1 there is one
+user and every row is `user_id 0`"*, and the landing that gave `AcceptLibraries` the only `INSERT
+INTO library` falsified it. **v0.1 still exposes a single account, but that account is not user 0**:
+migration 0001 seeds user 0 as `_system`, disabled and passwordless — *"it can never be logged
+into"* — so a real session carries an id `>= 1`. `AcceptLibraries` inserts `scope.UserID`, the
+session user's own id as `storeScope` derives it, **so a library the user accepted sits at
+`user_id >= 1`**. What stays at 0 is the reserved `Unfiled` row and any library an *earlier* build
+auto-created, because the import runs at `store.SystemUserID`. **Both populations coexist on an
+upgraded install**, which is why every read here takes a `Scope` rather than assuming a constant.
 
 **`include_on_home` is not a column here, and that is a deletion rather than an omission.** §R2.1
 of the review log kept it from the libraries research, and under ADR-0028's three-fixed-block Home
