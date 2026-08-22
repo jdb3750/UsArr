@@ -618,6 +618,69 @@ passkey. UsArr's own routes carry no path segment near 20 characters, so nothing
 affected. The heuristic is **not** applied to `stripCredentials`: removing a path segment from a
 redirect target changes which resource is being requested.
 
+**Rider, 2026-08-22 — two guards over `sync_report.detail` were the same broken instrument, and
+both read clean.**
+
+`CompletenessNote.Reason` is JSON-encoded into `sync_report.detail` and lifted onto
+`GET /api/v1/libraries`, so this section forbids upstream response text in it. Two tests asserted
+that rule. `cmd/usarr/bookorbit_completeness_e2e_test.go` tested for the absence of the substrings
+`Forbidden resource` and `403`; `internal/libsync/bookorbitcompleteness_test.go` tested for the
+absence of `403` and `bookorbit:`. Both were substring blacklists over the tokens one scenario
+happens to produce, and both ran on that scenario — the 403 — and on no other.
+`completenessReason` (`internal/libsync/bookorbitcompleteness.go`) has three arms. Neither guard
+asserted on the `default:` arm, although an existing test reached it and read `State` and nothing
+else. Its `ErrNotFound` arm was reached by no test at all.
+
+The counterfactual is measured, not estimated. Appending `err.Error()` to the `default:` arm and
+running `./internal/libsync` plus the two completeness e2e tests leaves both packages green. What
+that arm carries on the e2e path is an `*bookorbit.APIError`, whose `Error()` concatenates the
+upstream's `Message` and its flattened `Validation` array, each passed through `ssrf.RedactText` and
+then truncated at 512 bytes (`internal/bookorbit/errors.go`). So the system was one arm away from up
+to 512 bytes of an upstream response body reaching a field a browser renders, with two instruments
+in two packages both reporting clean. **Two of them is the stronger half of the finding**: one
+blacklist is an author's oversight, two of the same shape is a property of the instrument, and a
+third written the same way would have been equally blind.
+
+Both are replaced with a positive assertion that `Reason` is a member of a closed set — four
+UsArr-authored literals plus the empty string — hand-copied into each test file rather than derived
+from the production constants, because a set built from `completenessReason`'s own returns is
+satisfied by whatever that function returns, including the future arm this is meant to catch. The
+same shape is extended to `SkipNote.Reason`, which had no guard, and to
+`kindDecision.Reason`/`DeclinedContainer.Reason` as a closed set of anchored patterns, one producer
+there being a `fmt.Sprintf` over an `int32`.
+
+Placement, not assertion form, is what buys the coverage: a membership assertion left where the
+blacklist sat would have been exactly as deaf. Each drill below broke the producer and named the
+value the assertion fired on.
+
+| Arm | Value the guard fired on |
+| --- | --- |
+| 403 (`ErrForbidden`/`ErrUnauthorized`) | `…compares against: stats: bookorbit: forbidden (the token is valid but its account lacks the permission)` in `internal/libsync`; `…compares against: bookorbit LibraryStats: GET /api/v1/libraries/1/stats -> 403: Forbidden resource` in `cmd/usarr` |
+| `default:` | `…could not be read: the network went away` in `internal/libsync`; `…could not be read: bookorbit LibraryStats: GET /api/v1/libraries/1/stats -> 500: Forbidden resource` in `cmd/usarr` |
+| `ErrNotFound` | `…for this library: stats: bookorbit: not found` |
+| impossible count disagreement | `the two counts disagreed: 9 vs 10` |
+| `shortfall` / `complete` (empty `Reason`) | `a content filter is hiding Fiction from this credential`, in both packages |
+| `SkipNote.Reason`, populated row | `a file BookOrbit itself cannot classify has no row: Fiction` |
+| `SkipNote.Reason`, zero row | `nothing was skipped in Audio` |
+| decline, Image arm | `…offers no member for it (upstream code 3)`, at the producer and at `DeclinedContainer` |
+| decline, unmapped-`LibraryType` arm | `…rather than guessing one; raw value 99` |
+
+**And one finding from the same landing about where redaction has to be tested.** Six statements
+copy upstream-chosen text into `sync_report.detail`; `ssrf.RedactText` is now applied at each of
+those struct assignments — not on the map they are marshalled through, because the struct value also
+reaches a log line, and not on the read, because that would make the value shown differ from the
+value stored. The seam guard over them
+(`internal/libsync/syncreportwriteseam_test.go`) enumerates no writer: it poisons every
+upstream-chosen string a fake `Source` can supply and scans every resulting row, so an unredacted
+tenth writer fails it with no list to update. It was first written as an end-to-end test over the
+BookOrbit fake and **deleting a redaction left it green** — `internal/bookorbit` passes every piece
+of upstream prose through `ssrf.RedactText` at its own client boundary, so that test could not
+distinguish a redacting writer from a redacting client. It is driven from a fake `Source` instead.
+`internal/kavita` does not redact a container name on the way out, which is what makes the writers
+load-bearing rather than decorative. The three writers in `cmd/usarr` are fed only by the BookOrbit
+adapter, so their redactions are provably no-ops today and no test can make them fire; each says so
+where it stands rather than implying a cover it does not add.
+
 ### 5.1 Credentials already written to `provenance`
 
 `provenance.nzb_info_url` is indexer-supplied and **permanent by design** — it records which tracker
