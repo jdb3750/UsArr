@@ -670,9 +670,31 @@ copy upstream-chosen text into `sync_report.detail`; `ssrf.RedactText` is now ap
 those struct assignments — not on the map they are marshalled through, because the struct value also
 reaches a log line, and not on the read, because that would make the value shown differ from the
 value stored. The seam guard over them
-(`internal/libsync/syncreportwriteseam_test.go`) enumerates no writer: it poisons every
-upstream-chosen string a fake `Source` can supply and scans every resulting row, so an unredacted
-tenth writer fails it with no list to update. It was first written as an end-to-end test over the
+(`internal/libsync/syncreportwriteseam_test.go`) poisons every upstream-chosen string a fake
+`Source` can supply and scans every resulting row.
+
+> ⚠️ **Corrected 2026-08-22 — that guard is scoped by SCENARIO, not by seam, and this paragraph
+> said otherwise.** It read that the guard *"enumerates no writer … so an unredacted tenth writer
+> fails it with no list to update"*. The first half is true of the test's code and the conclusion
+> does not follow from it: a writer whose triggering condition the fixture never reaches writes no
+> row, and a scan over rows that do not exist passes. **Measured** by deleting each `ssrf.RedactText`
+> call on this seam in turn and re-running — eight calls, of which **six are caught and two are
+> not**. Caught: `containerObservation.Name`, `containerObservation.DeclineReason`,
+> `noteKindChange`'s `name`, the identity-conflict `value`, and the decline row's `name` and
+> `reason`. **Not caught: both `SkippedContainer` fields.** The kind-change writer was uncaught too
+> until a third import was added to the fixture for it.
+>
+> **The two that remain cannot be fixed by a better fixture, and that is the honest reason rather
+> than an excuse.** `SkippedContainer` is written only when `bindOneContainer` returns a CONSTRAINT
+> error, and since [ADR-0078](../DECISIONS.md#adr-0078) removed step 3's create there is no statement
+> left in the bind path that can violate one —
+> `internal/libsync`'s own `TestAnUnbindableContainerDoesNotAbortTheImport` asserts
+> `len(rep.SkippedContainers) == 0` for exactly that reason. Those two redactions guard a path
+> nothing currently reaches; they are kept because the create could return. **So adding a ninth
+> writer does NOT automatically fail the guard**: whoever adds one adds the scenario that reaches
+> it, and drills the redaction out to watch the test go red before trusting it.
+
+It was first written as an end-to-end test over the
 BookOrbit fake and **deleting a redaction left it green** — `internal/bookorbit` passes every piece
 of upstream prose through `ssrf.RedactText` at its own client boundary, so that test could not
 distinguish a redacting writer from a redacting client. It is driven from a fake `Source` instead.
