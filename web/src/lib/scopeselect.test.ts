@@ -173,9 +173,10 @@ describe('a control that can do nothing is not on the screen', () => {
 	/*
 	 * ⚠️ ZERO LIBRARIES IS AN ABSENT CONTROL, NOT AN EMPTY ONE. A dropdown whose
 	 * only entry is the state you are already in reads as a broken screen. A read
-	 * that failed is indistinguishable from an install with no libraries —
-	 * deliberately, `readLibraryNames` cannot reject — and both get the same
-	 * answer here.
+	 * that failed answers HAS NOT ANSWERED rather than an empty map — the two are
+	 * distinguishable now, because `libraryScopeLine` has to tell them apart — and
+	 * this function still gives both the same answer, which is why both are
+	 * asserted below rather than only one.
 	 */
 	it('hides at zero libraries and while the read is in flight', () => {
 		expect(scopeSelectWorthShowing(undefined)).toBe(false);

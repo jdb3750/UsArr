@@ -39,6 +39,7 @@ import {
 	emptyBrowseFeed,
 	fetchBrowsePage,
 	libraryNames,
+	libraryNamesAnswered,
 	libraryScopeLine,
 	LIBRARY_BROWSE_URL,
 	MAX_LIBRARY_SLUGS,
@@ -974,14 +975,22 @@ describe('the media-type vocabulary is one list', () => {
  *
  * A scoped view used to print `Scoped to <slug>`, and ARCHITECTURE §17.8
  * deliberately renders a slug NOWHERE on the Libraries screen — so a user could
- * be scoped by a value the UI had never shown them. These guards hold the four
- * halves of the fix: the name is used when it resolves, the slug stands when it
- * does not, an unscoped view says nothing at all, and the libraries read is
- * never something the grid waits on.
+ * be scoped by a value the UI had never shown them.
  *
- * ⚠️ THE ABSENCE GUARD ASSERTS THE PRESENCE FIRST. "Nothing renders when
+ * ⚠️ THE FIRST FIX PRINTED THE SLUG WHENEVER NO NAME WAS FOUND, AND THAT LEFT
+ * THE DEFECT STANDING IN ITS WORST STATE. With ZERO libraries configured,
+ * `?lib=ghost` still rendered `Scoped to ghost` — and the scope select is hidden
+ * at zero libraries, so the screen named its scope in a vocabulary §17.8 shows
+ * nowhere and put nothing on screen to change it with. The guards below hold the
+ * THREE states that replaced the two: has-not-answered keeps the slug (in flight
+ * and a dead read alike), an answered read that resolves SOME slugs prints the
+ * names it has beside the slugs it does not, and an answered read that resolves
+ * NONE prints no line at all.
+ *
+ * ⚠️ EVERY ABSENCE GUARD ASSERTS A PRESENCE FIRST. "Nothing renders when
  * unscoped" passes just as well on a function that returns `undefined` for every
- * input, which would delete the line from the scoped view too.
+ * input, which would delete the line from the scoped view too — and "nothing
+ * renders when nothing resolves" passes on exactly the same broken function.
  */
 
 const RECENT_ROUTE = 'routes/library/+page.svelte';
@@ -1013,17 +1022,38 @@ describe('a scoped view states its scope in words a user can read', () => {
 		expect(libraryScopeLine(['ebooks'], names)).toBe('Scoped to Ebooks');
 	});
 
-	it('falls back to the slug when the read has not answered', () => {
+	it('falls back to the slug while the read HAS NOT ANSWERED', () => {
 		// `undefined` is the value the screen holds from its first frame until the
-		// read lands, and for ever if it never does.
-		const line = libraryScopeLine(['ebooks']);
-		expect(line, 'a scoped view rendered nothing, which is the one outcome forbidden').toBeTruthy();
+		// read lands — and the value a failed read resolves to, because the two are
+		// one state. Nothing better is knowable yet and the line is due now.
+		const line = libraryScopeLine(['ebooks'], undefined);
+		expect(line, 'a scoped view rendered nothing while the read was in flight').toBeTruthy();
 		expect(line).toBe('Scoped to ebooks');
 	});
 
-	it('falls back to the slug when the read answered without that library', () => {
-		const line = libraryScopeLine(['kids'], libraryNames([EBOOKS]));
-		expect(line).toBe('Scoped to kids');
+	/*
+	 * ⚠️ THIS IS THE DEFECT, AND IT USED TO BE ASSERTED THE OTHER WAY UP. The test
+	 * here read "falls back to the slug when the read answered without that
+	 * library" and expected `Scoped to kids`. That is the state the user actually
+	 * hit: zero libraries, `?lib=ghost`, a raw slug on screen and — because
+	 * `scopeSelectWorthShowing` hides the select at zero libraries — no control
+	 * beside it to change the scope. An answered read that knows none of these
+	 * slugs is never going to know them; printing them teaches the user an
+	 * identifier instead of a name.
+	 */
+	it('prints NO LINE when the read answered and resolves not one slug', () => {
+		expect(
+			libraryScopeLine(['ghost'], libraryNames([])),
+			'zero libraries and ?lib=ghost still print the raw slug'
+		).toBeUndefined();
+		expect(
+			libraryScopeLine(['kids'], libraryNames([EBOOKS])),
+			'an answered read that knows other libraries still printed the unknown slug'
+		).toBeUndefined();
+		expect(
+			libraryScopeLine(['kids', 'ghost'], libraryNames([EBOOKS, AUDIO])),
+			'a wholly unresolved MULTI-slug scope still printed its slugs'
+		).toBeUndefined();
 	});
 
 	it('names every library in a multi-slug scope, in the address’s order', () => {
@@ -1031,30 +1061,81 @@ describe('a scoped view states its scope in words a user can read', () => {
 		expect(libraryScopeLine(['audiobooks', 'ebooks'], names)).toBe('Scoped to Audiobooks, Ebooks');
 	});
 
+	/*
+	 * ⚠️ ONE RESOLVED SLUG IS ENOUGH TO PRINT THE LINE, AND ITS COMPANIONS COME
+	 * WITH IT AS SLUGS. Dropping the unresolved half would say the user is scoped
+	 * by one library while they are scoped by two, and understating a scope is a
+	 * worse lie than an unfriendly string. This is the case that keeps the third
+	 * state at NOT ONE slug resolving rather than at "any slug unresolved".
+	 */
 	it('resolves per slug, so one known name sits beside one unknown slug', () => {
 		const line = libraryScopeLine(['ebooks', 'kids'], libraryNames([EBOOKS]));
 		expect(line).toBe('Scoped to Ebooks, kids');
 	});
 
+	it('keeps the unresolved companion in either order, and in the address’s', () => {
+		const line = libraryScopeLine(['kids', 'ebooks'], libraryNames([EBOOKS]));
+		expect(line, 'the unresolved slug was dropped, understating the scope').toBe(
+			'Scoped to kids, Ebooks'
+		);
+	});
+
 	it('never stores a blank name, because a blank label states no scope at all', () => {
-		const names = libraryNames([{ slug: 'ebooks', name: '   ' }]);
+		const names = libraryNames([{ slug: 'ebooks', name: '   ' }, AUDIO]);
 		expect(names.has('ebooks'), 'a whitespace name was stored and would render blank').toBe(false);
-		expect(libraryScopeLine(['ebooks'], names)).toBe('Scoped to ebooks');
+		// The blank row is DROPPED, so its slug stands in for it — never an empty
+		// label between two commas. `audiobooks` resolves, so this is the mixed case
+		// and the line renders.
+		expect(libraryScopeLine(['ebooks', 'audiobooks'], names)).toBe('Scoped to ebooks, Audiobooks');
+	});
+
+	/*
+	 * ⚠️ THE THIRD STATE MOVED THIS CASE, AND IT IS THE RULE APPLIED RATHER THAN A
+	 * CORNER. A library whose name is blank is dropped from the map, so a scope
+	 * naming only that library resolves nothing — and this test asserted
+	 * `Scoped to ebooks` until the rule landed. The read has answered and no name
+	 * is coming, which is exactly what the third state is for; the library being
+	 * real rather than a ghost does not make its slug a thing to show the user.
+	 */
+	it('prints no line when the only library in scope has a blank name', () => {
+		const names = libraryNames([{ slug: 'ebooks', name: '   ' }]);
+		expect(libraryScopeLine(['ebooks'], names)).toBeUndefined();
 	});
 
 	it('says nothing on an unscoped view, and the scoped case proves it looked', () => {
-		expect(libraryScopeLine(['ebooks']), 'the scoped case is empty too').toBeTruthy();
-		expect(libraryScopeLine([])).toBeUndefined();
+		expect(libraryScopeLine(['ebooks'], undefined), 'the scoped case is empty too').toBeTruthy();
+		expect(libraryScopeLine([], undefined)).toBeUndefined();
 		expect(libraryScopeLine([], libraryNames([EBOOKS]))).toBeUndefined();
+	});
+
+	/*
+	 * ⚠️ THE STATE IS NAMED FOR WHAT ITS TWO CAUSES SHARE. A read in flight and a
+	 * read that died are one thing — HAS NOT ANSWERED — and the predicate is the
+	 * name. A later reader who saw the failure as an oversight and "tidied" it into
+	 * the answered-empty bucket would drop the scope line on every transient blip.
+	 */
+	it('calls in-flight and failed by the one name they share', () => {
+		expect(libraryNamesAnswered(undefined)).toBe(false);
+		expect(libraryNamesAnswered(libraryNames([]))).toBe(true);
+		expect(libraryNamesAnswered(libraryNames([EBOOKS]))).toBe(true);
 	});
 });
 
 describe('the libraries read is an enrichment, never a precondition', () => {
-	it('resolves to no names when the read fails, rather than rejecting', async () => {
+	/*
+	 * ⚠️ A FAILED READ RESOLVES TO HAS-NOT-ANSWERED AND NOT TO AN EMPTY MAP, WHICH
+	 * IS THE HALF OF THE FIX THAT IS NOT VISIBLE ON SCREEN. An empty map is now a
+	 * real answer — "this install has no libraries" — and `libraryScopeLine` drops
+	 * the line on it. Had the failure kept spelling itself that way, a single
+	 * transient failure of a local read would have deleted a scoped view's only
+	 * statement of its own scope. It still cannot reject: the catalogue below must
+	 * render whether or not this answers.
+	 */
+	it('resolves to HAS NOT ANSWERED when the read fails, rather than rejecting', async () => {
 		vi.stubGlobal('fetch', () => Promise.reject(new TypeError('connection refused')));
 		try {
 			const names = await readLibraryNames();
-			expect(names.size, 'a failed read produced names, so the stub did not bite').toBe(0);
+			expect(names, 'a failed read answered, so the stub did not bite').toBeUndefined();
 			// The line the screen still renders over that failure.
 			expect(libraryScopeLine(['ebooks'], names)).toBe('Scoped to ebooks');
 		} finally {
@@ -1062,10 +1143,31 @@ describe('the libraries read is an enrichment, never a precondition', () => {
 		}
 	});
 
-	it('resolves to no names on a 500, rather than rejecting', async () => {
+	it('resolves to HAS NOT ANSWERED on a 500, rather than rejecting', async () => {
 		stubFetch(() => jsonResponse({ detail: 'nope' }, 500));
 		try {
-			await expect(readLibraryNames()).resolves.toHaveProperty('size', 0);
+			await expect(readLibraryNames()).resolves.toBeUndefined();
+		} finally {
+			vi.unstubAllGlobals();
+		}
+	});
+
+	/*
+	 * The other half of the pair: a read that SUCCEEDS on an install with no
+	 * libraries answers an empty map, which is a different value and a different
+	 * outcome. Without this the guard above passes on a function that answers
+	 * `undefined` for everything.
+	 */
+	it('answers an empty map — not HAS NOT ANSWERED — for an install with none', async () => {
+		stubFetch(() => jsonResponse({ items: [] }));
+		try {
+			const names = await readLibraryNames();
+			expect(names, 'a successful empty read is indistinguishable from a failure').toBeDefined();
+			expect(names?.size).toBe(0);
+			expect(
+				libraryScopeLine(['ghost'], names),
+				'zero libraries and ?lib=ghost print a raw slug the UI shows nowhere'
+			).toBeUndefined();
 		} finally {
 			vi.unstubAllGlobals();
 		}
@@ -1091,7 +1193,7 @@ describe('the libraries read is an enrichment, never a precondition', () => {
 		);
 		try {
 			const names = await readLibraryNames();
-			expect(names.get('ebooks')).toBe('Ebooks');
+			expect(names?.get('ebooks')).toBe('Ebooks');
 		} finally {
 			vi.unstubAllGlobals();
 		}
@@ -1108,6 +1210,42 @@ describe('the libraries read is an enrichment, never a precondition', () => {
 			page.slice(0, page.indexOf('\n\t}')),
 			`${where} reads the library names on the paging path`
 		).not.toMatch(/\bnames\b/);
+	});
+
+	/*
+	 * ⚠️ THE THIRD STATE IS A `{#if}` IN THE MARKUP, SO IT IS ONLY CHECKABLE AS
+	 * TEXT. `vitest.config.ts` is `environment: 'node'` with no Svelte plugin, so
+	 * neither screen can be compiled here — `libraryScopeLine` returning
+	 * `undefined` is worth nothing if the toolbar renders it into an empty
+	 * `<span class="toolbar__label">` anyway, which is what these screens did.
+	 *
+	 * `branchMarkup` bounds the arm rather than a window or a precedence test, for
+	 * the reason the guard below records: both of those forms have already passed
+	 * over the wrong text in this repo. The marker is `{#if scopeLine}` itself, and
+	 * it THROWS when that arm is gone — so deleting the guard fails red here rather
+	 * than quietly satisfying a `toContain`.
+	 */
+	it.each(SCOPED_SCREENS)('%s prints no scope line when there is none', (where, _code, markup) => {
+		const line = branchMarkup(markup, '{#if scopeLine}');
+		expect(
+			line,
+			`${where} guards something other than the scope line, so an unresolved scope still prints`
+		).toContain('{scopeLine}');
+		/*
+		 * ⚠️ AND THE WAY OUT OF THE SCOPE IS OUTSIDE THAT ARM. Zero libraries with a
+		 * `?lib=` the install does not have is the state with the fewest ways out —
+		 * the scope select is hidden there — so the clear-scope link is the only one
+		 * left. Dropping the line must not drop it too, or the fix would leave the
+		 * user more stuck than the defect did.
+		 */
+		expect(
+			line,
+			`${where} hides "Show every library" with the scope line, stranding a bad ?lib=`
+		).not.toContain('Show every library');
+		expect(
+			branchMarkup(markup, '{#if query.libraries.length > 0}'),
+			`${where} no longer offers a way out of a scope at all`
+		).toContain('Show every library');
 	});
 
 	it.each(SCOPED_SCREENS)(
