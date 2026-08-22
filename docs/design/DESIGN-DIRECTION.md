@@ -3007,9 +3007,12 @@ all three density bands · **availability glyph accessible names** · **one tab 
 
 **1. It prints what it checked, not only what failed.** A silent pass is indistinguishable from a
 check whose glob was wrong and matched nothing — which is the specific way a hand-run sweep decays.
-Every assertion emits its own count: *"14 font-family declarations parsed"*, *"36 screen×state
-combinations"*, *"1,214 rendered chrome strings"*, *"49 list renderings checked"*. A number that
-drops is a finding.
+Every assertion emits its own count, and names what it counted: font-family declarations parsed,
+screen×state combinations swept, rendered chrome strings read, list renderings checked. A number that
+drops is a finding. ⚠️ **The counts themselves are deliberately not reproduced here.** This paragraph
+used to quote four of them as examples and **every one of the four had gone stale** — a document that
+copies a number the gate prints on every run has made a second copy with no way to stay true, and the
+gate's own output is the only place either can be read honestly.
 
 **2. False positives are excluded structurally, never by name.** The hand-run sweep kept
 rediscovering the same four, and each round re-explained them in prose that was then thrown away.
@@ -3041,9 +3044,10 @@ the source of that exemption, the order of operations laundered the rule: a UI l
 copy of it exempt **because §17 said so**. A §17-originated em dash could not be caught, by
 construction. One was drafted during the §17.8 pass and removed by hand rather than by the checker.
 
-**So §17's shipping copy — the `*"…"*` spans, 56 of them — is now a corpus of its own**, checked by
-the same three rules with the §17 exemption **withheld**, because a string cannot be its own
-authority. That closes the laundering channel. It is not sufficient on its own: the sentence actually
+**So §17's shipping copy — every `*"…"*` span in the section — is now a corpus of its own**, checked
+by the same three rules with the §17 exemption **withheld**, because a string cannot be its own
+authority. How many spans that is, `check.mjs` prints on every run and this sentence does not repeat;
+it also carries a floor under the count, so the corpus shrinking is itself a finding. That closes the laundering channel. It is not sufficient on its own: the sentence actually
 drafted runs to twenty-four words, so a corpus fix alone still let it through, which was confirmed by
 planting it rather than reasoned about.
 

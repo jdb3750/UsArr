@@ -149,7 +149,7 @@ const URL = 'file://' + join(MOCKUPS, 'prototype.html');
  * is a fact about provenance and not a design defect, so it is reported in the
  * same line rather than raised as a failure this file has no standing to make.
  * ------------------------------------------------------------------------- */
-console.log('tree  ' + (() => {
+console.log('commit' + (() => {
   let git;
   try { git = createRequire(import.meta.url)('node:child_process'); } catch { git = null; }
   if (!git) return 'no child_process: this run names no commit, so its result is evidence about no particular tree';
@@ -969,9 +969,18 @@ head('1d. CSP: no inline style attribute in the five screen files');
      ban rule wants zero hits, so its own hit count can never be the floor —
      the floor is on the corpus. FILE floor: SOURCES globs the mockup
      directory, and a screen file that is renamed or moved simply stops being
-     scanned. CHARACTER floor: 550,600 stripped characters across the five
-     today; the largest single file is 121,844, so losing any ONE of them
-     drops the corpus to at most 428,756 and trips this. */
+     scanned. CHARACTER floor: the pass line prints the live total on every
+     run, so this comment does not carry a second copy of it -- the last one
+     went stale, and a floor's derivation that restates a number the gate
+     already reports is a number with no way to stay true.
+
+     WHAT THE DERIVATION NEEDS IS THE LARGEST FILE, not the total, because the
+     regression is losing one whole screen file and the cheapest loss is the
+     biggest survivor. Measured 2026-08-22: the largest of the five is
+     `requests.html` at 126,603 stripped characters. Subtracting it from the
+     total measured the same day leaves 442,366, which is under this floor, so
+     losing any ONE of the five trips this check. Bigger files only make the
+     remainder smaller, so `requests.html` is the case that has to clear it. */
   if (!floorOk('§14 CSP: inline style', html.length, 5, 'screen file(s)')) return;
   rule('§14 CSP: no style= attribute in a screen file', /\s(?<attr>style)\s*=\s*["']/, {
     filter: (f) => f.kind === 'html',
@@ -1323,10 +1332,38 @@ await page.evaluate(() => { document.documentElement.setAttribute('data-density'
 head('6. Availability glyphs carry a word');
 {
   let bad = 0, total = 0;
-  /* 165 against 195 while no panel was ever opened. 375 with the traversal:
-     the poster card carries an .avail of its own, and 42 of them across the two
-     grids had never once been looked at by this check. */
-  const AVAIL_FLOOR = 320;
+  /* THE PANEL TRAVERSAL IS WHY THIS CHECK CAN SEE THE POSTER CARDS AT ALL,
+     and that is the history worth keeping here: before any panel was opened
+     this swept 165 of 195, because the poster card carries an .avail of its
+     own and 42 of them across the two grids had never once been looked at.
+
+     THE FLOOR IS DERIVED, NOT ROUNDED, and the live population is left to the
+     pass line rather than copied here -- the figure that used to sit in this
+     comment was true when written and had drifted by 15 before anyone
+     re-read it. THE DRIFT WAS AUTHORED, NOT A REGRESSION, and it is recorded
+     so the next reader does not chase it again: `c666382`, the ADR-0041
+     re-draw of the mockups' v0.1 install to Kavita and Prowlarr, moved all 15
+     -- Home's v01 grid lost a row of eight, and Search's v01 media types
+     became ones this design gives no .avail (Ebooks and Audiobooks carry
+     none; Comics, Movies and TV do). That commit moved ROW_FLOOR.services and
+     wrote a rider for it while moving this population silently, which is the
+     failure mode a floor that restates a count invites: 320 still passed, so
+     nothing turned red.
+
+     THE REGRESSION THIS FLOOR IS SIZED AGAINST. Losing a screen from SCREENS
+     or losing panel traversal trips COMBO_FLOOR (104 against 110) first, so
+     neither is this floor's job. What only this floor can catch is the .avail
+     population itself shrinking while the traversal still runs in full, and
+     the cheapest such loss is the whole of Search's contribution. Measured
+     2026-08-22 by attributing every reading to its install and screen: Search
+     contributes 40 readings, 27 in the full install and 13 in v01; Home
+     carries the rest and Services, Libraries and Requests contribute none.
+
+     So the ceiling on slack is 40, and slack must be STRICTLY below it. 330
+     leaves 30. THE OLD 320 LEFT EXACTLY 40 -- not below the ceiling but equal
+     to it, so it sat green through precisely the loss it existed to catch,
+     which was fired and confirmed rather than argued. */
+  const AVAIL_FLOOR = 330;
   for (const install of INSTALLS) {
     await setInstall(page, install);
     for (const screen of SCREENS) {
@@ -1886,29 +1923,117 @@ head('1b. §13 copy bans, over rendered chrome text, cells included');
    * ------------------------------------------------------------------- */
   const ATTRS = ['aria-label', 'title', 'placeholder', 'alt', 'aria-description',
     'aria-roledescription', 'aria-valuetext', 'aria-placeholder'];
-  /* Floors are per source and set below today's figures, so ordinary editing
-   * never trips one but losing a whole source does. document.title's floor is
-   * 1 because there is exactly one document; it is the smallest floor here and
-   * the one that matters most, since 0 was the status quo. */
+  /* ---------------------------------------------------------------------
+   * Per-source floors, EACH DERIVED FROM A NAMED REGRESSION rather than
+   * rounded down from whatever the corpus happened to measure that day.
+   *
+   * WHAT THESE FLOORS ARE NOT THE GUARD FOR. Structural loss is caught louder
+   * and earlier by COMBO_FLOOR, which is 104 against 110 combinations: losing
+   * the smallest screen costs 8 combinations, losing panel traversal costs 36,
+   * and losing an install costs 55. Every one of those trips that check first,
+   * so none of them is the regression these floors have to be sized against --
+   * and sizing them against a loss something else already catches is how a
+   * floor ends up too slack to fire on anything short of total loss.
+   *
+   * WHAT ONLY THESE CAN CATCH is a change inside the attribute collector
+   * itself: the scope list below losing one of its three elements
+   * (`#pg-<screen>`, `.topbar`, `.sidebar`), or one of its exclusions
+   * widening. Nothing else in this file would notice -- the sweep still visits
+   * every combination, every screen still renders, and the only symptom is
+   * that a source quietly returns fewer strings.
+   *
+   * THE CEILING, THEREFORE. The cheapest measurable member of that class is
+   * losing the chrome element a source draws from, and it costs that source's
+   * per-combination chrome contribution multiplied by the 110 combinations
+   * swept. Measured 2026-08-22, per combination: `aria-label` 2 from .topbar,
+   * `title` 1 from .sidebar, `placeholder` 1 from .topbar, `option` 5 from
+   * .topbar -- so 220, 110, 110 and 550 over the sweep. Those four numbers are
+   * the ceiling on each floor's slack, and all four were fired rather than
+   * argued: removing .topbar from the scope list drops aria-label, placeholder
+   * and option by exactly 220, 110 and 550, and removing .sidebar drops title
+   * by exactly 110.
+   *
+   * SLACK IS DELETION TOLERANCE -- corpus minus floor, the count that can go
+   * missing before the floor fires -- and it must be STRICTLY BELOW that
+   * ceiling. A floor with more slack than its ceiling sits green through
+   * exactly the regression it exists for, which is what 340 was doing against
+   * a ceiling of 110.
+   *
+   * IT IS A MAXIMUM, NOT A TARGET. Two of these already satisfy the criterion
+   * with room and are LEFT WHERE THEY ARE ON PURPOSE. Do not tidy them
+   * upward: a floor pushed closer to its ceiling catches nothing extra and
+   * costs false positives on ordinary editing.
+   *
+   * AND NO FLOOR HERE RESTATES TODAY'S COUNT. The pass line prints the live
+   * figure on every run, so a baseline copied into this comment is a second
+   * copy with no way to stay true -- which is precisely what happened to the
+   * five that used to sit here, four of them stale by the time they were
+   * deleted. STRING_FLOOR's comment below carries the long form of that
+   * argument; this block follows it.
+   * ------------------------------------------------------------------- */
   const CORPUS_FLOORS = {
+    /* Nothing to derive: there is exactly one document, so the floor is the
+       whole corpus and the slack is zero. It is the smallest floor here and
+       the one that matters most, since 0 was the status quo. */
     'document.title': 1,
-    'aria-label': 400,   /* 468 today, 286 before panel traversal */
-    'title': 340,        /* 406 today, 74 before panel traversal, AND THE 74 IS
-                            THE REASON THIS FILE NOW CLICKS PANELS. a5c9399 put
-                            84 new title= attributes on the poster cards -- 123
-                            to 207 across the five screen files -- and this
-                            number did not move: 74 on the tree before that
-                            commit and 74 on the tree after it, both measured by
-                            running each tree's own copy of this file. A corpus
-                            that cannot see 84 new instances of the exact
-                            attribute it counts is not measuring the page, and
-                            the old comment here explained the small number as a
-                            <td> exclusion working as designed. It was not. It
-                            was two whole panels the sweep had never opened. */
-    'placeholder': 245,  /* 288 today, 156 before panel traversal */
-    'option': 1400,      /* 1602 today, 1298 before panel traversal */
-    'ARCHITECTURE §17 copy': 45, /* 57 today. Not a rendered source at all; see
-                                    the §17 block below for why it is here. */
+    /* Regression: .topbar leaves the scope list. Cost 2 x 110 = 220.
+       Slack 191, under it. Was 400, whose 291 of slack sat over the ceiling
+       and would have held green through the whole loss. */
+    'aria-label': 500,
+    /* Regression: .sidebar leaves the scope list. Cost 1 x 110 = 110.
+       Slack 93, under it.
+
+       WAS 340, WHICH IS THE SLACKEST FLOOR THIS BLOCK HAS EVER CARRIED: 803
+       of slack against a ceiling of 110, wide enough to lose the sidebar
+       seven times over and still report ok. It was set by rounding down from
+       a live count, which is the practice this rewrite exists to end.
+
+       THE PANEL-BLINDNESS INCIDENT IS WHY THIS FILE CLICKS PANELS, and it is
+       kept here because it is the same failure one layer down -- a corpus
+       that cannot see what it claims to count. a5c9399 put 84 new title=
+       attributes on the poster cards, 123 to 207 across the five screen
+       files, and this source did not move: the same figure on the tree before
+       that commit and on the tree after it, both measured by running each
+       tree's own copy of this file. A corpus that cannot see 84 new instances
+       of the exact attribute it counts is not measuring the page. The comment
+       that stood here at the time explained the small number as a <td>
+       exclusion working as designed. It was not. It was two whole panels the
+       sweep had never opened. */
+    'title': 1050,
+    /* Regression: .topbar leaves the scope list. Cost 1 x 110 = 110.
+       Slack 43. UNCHANGED DELIBERATELY -- it already clears the criterion
+       with room, and the criterion is a maximum on slack, not a target to
+       raise a floor toward. */
+    'placeholder': 245,
+    /* Regression: .topbar leaves the scope list. Cost 5 x 110 = 550.
+       Slack 218. UNCHANGED DELIBERATELY, for the same reason as placeholder:
+       comfortably under its ceiling, and nothing is bought by moving it up. */
+    'option': 1400,
+    /* Not a rendered source at all -- see the §17 block below for why it is
+       here -- so the chrome-element regression does not apply and this floor
+       needs a ceiling of its own.
+
+       THE REGRESSION IS THE SLICE. §17's copy is read out of one span of
+       ARCHITECTURE.md, and the way that quietly shrinks is the span ending
+       early or a subsection dropping out of it, which costs whatever that
+       subsection contributes.
+
+       MEASURED 2026-08-22, by attributing every match to the subsection
+       heading it falls under. Nine subsections contribute (17.1 and 17.6
+       contribute none): 17.8 is the largest, then 17.5, 17.2, 17.3, and
+       17.3.3 and 17.4 tie in the middle, with 17.3.2, 17.7 and finally 17.3.1
+       smallest at a single string.
+
+       THE SMALLEST IS NOT USABLE AS THE CEILING. 17.3.1 contributes 1, which
+       would force slack to 0 and make this floor fire on any edit that
+       removed a single quoted label anywhere in §17 -- a section under active
+       authorship. THE MEDIAN SUBSECTION IS USED INSTEAD, and it contributes
+       7. That is the honest reading of "losing a subsection": the typical
+       one, not the degenerate one.
+
+       Cost 7. Slack 3, under it. Was 45, whose slack was several times the
+       largest subsection in the section. */
+    'ARCHITECTURE §17 copy': 75,
   };
   const seenBySource = {};
   const countSource = (src, n) => { seenBySource[src] = (seenBySource[src] || 0) + n; };

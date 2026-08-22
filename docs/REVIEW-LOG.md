@@ -26379,6 +26379,13 @@ them was found while verifying them and is new here.
   quoting this week is worth doing once, in a commit that runs the check and pastes the new line,
   and this restore runs it without changing it. A grep for the word alone does not fire this.
 
+  ✅ **Closed 2026-08-22 by the motion this trigger names.** The column now reads `commit`, which is
+  what `git rev-parse HEAD` returns, and the entry's own prediction held exactly: the repair was the
+  one string literal, the five body strings are byte-identical, and the three quoted above are
+  therefore still quoted true. Landed in *"fix: the copy-corpus floors are derived from a regression,
+  not rounded"*, whose run pastes the new line. The worked example above was re-verified rather than
+  taken on trust.
+
 ### LS-394.27 The two adversarial reviews of the owner-attribution slice, and where each finding landed
 
 **Reviewed 2026-08-21**, two independent lenses over `2e7c8f7..b93f117` — one on **provenance** (every
