@@ -27626,6 +27626,278 @@ and asserting that these lines are protected would be asserting from their prese
 
 ---
 
+## LS-399 — two adversarial reviews of the §17.8 Accept landing, and the fix pass: the scope divergence both reviewers found independently, the guard that was scoped by scenario, and one finding that does not survive its own measurement
+
+**Target:** branch `claude/hearth-thread-jyaovx`, the landing `c8b7874..a80096b` reviewed, fixes in
+`3ef0a07`, `a290239`, `075692d`, `9eb2f4d` plus the commit carrying this entry. **Authority:**
+`docs/ARCHITECTURE.md` §6, §17.8, [ADR-0048](./DECISIONS.md#adr-0048),
+[ADR-0066](./DECISIONS.md#adr-0066), [ADR-0078](./DECISIONS.md#adr-0078).
+
+**The pass in one sentence.** Both reviewers independently found that the Accept path's library
+LOOKUP and every READ of the same table disagreed about which rows belong to a user; that is fixed,
+its blast radius is measured, and one consequence of it turns out to be **only half closed by the
+fix**, which is recorded as open rather than implied shut.
+
+### LS-399.1 🚩 Two predicates for "this user's libraries" disagreed — **applied**
+
+`userLibraries` (`internal/store/catalogue.go`) read `WHERE user_id = ?`, strict equality, and is the
+lookup behind both `resolveAcceptedLibrary` and `bindOneContainer`'s step 2. Every READ of the same
+table — `containerBindingsSQL`, `listLibrariesSQL` behind `GET /api/v1/libraries`, and
+`LibraryIDsBySlug` behind `?lib=` — resolves `Scope.userPredicate`'s `user_id IN (0, :uid)`.
+`cmd/usarr/import.go` builds its `Importer` at `store.SystemUserID`, so every library a first connect
+auto-created sits at `user_id = 0`, while a real session's id is always >= 1 — migration `00001`
+seeds user 0 as `_system`, disabled and passwordless, *"can never be logged into"*.
+
+**Consequences, reproduced:** accepting a proposal whose name matched an existing user_id 0 library
+CREATED a duplicate instead of joining; two rows with identical name and slug both reached the wire;
+`?lib=<slug>` resolved to both ids; and the reserved-`Unfiled` refusal was dead code, because
+library 0 is at user_id 0 and a real session could not see it.
+
+**Applied as the lookup conforming to the scope predicate, with the INSERT still writing the acting
+user.** [ADR-0048](./DECISIONS.md#adr-0048) clause 4 is what makes the join right rather than merely
+convenient — it DECLARES the pre-existing `managed_by = 'auto'` rows accepted on upgrade. Checked
+against ADR-0048's five clauses, ADR-0066, ADR-0078 and §6/§17.8 before implementing: **nothing rules
+out joining a user_id 0 library from a user session**, and the repo's own norm is the other way —
+`internal/httpapi/events.go`'s hub delivers a `SystemUserID` event to every subscriber on the
+identical rule. Seeing a shared row is not owning it: the join rewrites nothing on the row, and
+neither `library_source` nor `library_member` carries a `user_id`, so ownership does not move.
+
+✅ **A consequence named rather than discovered later.** `names` and `slugs` now refuse a value held
+by a user_id 0 row, which is STRICTER than `ux_library_name`/`ux_library_slug`, both UNIQUE over
+`(user_id, …)` and so indifferent to it. That is the correct direction: the uniqueness those maps
+protect is the SCREEN's, not the index's — two libraries a user sees under one name, or one slug
+resolving to two ids, are broken for the reader whatever the index permits.
+
+### LS-399.2 🚩 `AcceptLibraries` took a Scope AND a bare `userID`, and nothing checked they agreed — **applied**
+
+A caller could validate its sources against one user's scope and write the `library` row at
+another's, and neither the compiler nor any test would have said so. The parameter is removed;
+`scope.UserID` is the acting user, as `ProposedContainers` already had it. The identity enters the
+store once.
+
+### LS-399.3 🚩 Every AcceptLibraries test ran at user 0, the one id no session can hold — **applied**
+
+26 call sites in test Go plus the wire session (`store.User{ID: 0}`). This is the
+green-test-asserts-the-defect shape, and the mechanism is exact: an install's auto-created libraries
+are at user_id 0, so a test that also accepts at user 0 puts its actor and its data on the same side
+of every user predicate. Strict equality and `user_id IN (0, :uid)` cannot be distinguished when
+`:uid` is 0 — **they differ only in production**.
+
+Each headline behaviour now has coverage at user 7, with a seeded `user` row so the foreign key
+resolves, and each test states why the id is the point: the join, the join prediction, the name
+refusal, the reserved-`Unfiled` refusal (`internal/store/proposalsrealuser_test.go`) and the
+cross-instance escalation (`internal/libsync/delta_test.go`). The wire tests moved wholesale rather
+than gaining a parallel copy.
+
+✅ **FIRED, not assumed.** Reverting `userLibraries` to strict equality turns four of the new store
+tests and four wire tests red; restoring it turns them green.
+
+### LS-399.4 🚩 The fix closes the Accept→read direction and NOT the import→Accept direction — **OPEN, and it is the residual half of LS-399.1**
+
+⚠️ **Found while testing the fix, not reported by either reviewer, and it bounds what LS-399.1
+achieved.** `bindOneContainer`'s step 2 still cannot see a library that Accept created. The import
+runs at `store.SystemUserID`; Accept writes at the session's id, which is >= 1; step 2 reads
+`user_id IN (0, :uid)` at uid 0 and so returns only user_id 0 rows. The fix does not touch this,
+and could not: at uid 0 the new predicate is `IN (0, 0)`, which is the strict equality it replaced.
+
+**MEASURED.** Building the cross-instance escalation fixture at user 7 with the production importer
+(`UserID: store.SystemUserID`): the delta does **not** escalate — `err` is nil, `LibrariesJoined` is
+1 where 2 is required. Building the same fixture with the importer at the accepting user: it
+escalates, both containers join, `LibrariesJoined` is 2. **So the behaviour is correct and the
+importer's identity is what is wrong.** `TestADeltaEscalatesAtARealSessionUser` is written at the
+accepting user, and its comment carries that measurement so a green test does not imply there is no
+gap.
+
+**NOT closed here, deliberately.** Closing it means giving the import a real owner id. That touches
+an existing data population and is a decision rather than a fix; it was explicitly reserved by the
+lane that commissioned this pass. **TRIGGER: the next landing that changes `Importer.UserID` or
+`cmd/usarr/import.go`'s construction of it.**
+
+### LS-399.5 🚩 One container ref could be bound into two libraries of the SAME kind — **applied, by refusing it**
+
+[ADR-0066](./DECISIONS.md#adr-0066) decision 5 licenses two libraries over one container ref only at
+**different** kinds — *"a `book` library and a `comic` library over the same `library_source`
+container ref"*. `library_source`'s uniqueness `(library_id, service_instance_id, container_kind,
+container_ref)` permits the same-kind pair without meaning anything by it, and
+`bindOneContainer`'s step 1 picks between them with a `QueryRow` carrying no `ORDER BY`. Before this
+landing the state was unreachable; Accept introduces it.
+
+Refused in `acceptOne` (`ErrContainerBoundAtSameKind`, 409 `container_already_bound`), which is the
+reviewing lane's stated preference and this lane's too. **The alternative — making step 1's pick
+deterministic — was rejected**: an `ORDER BY` makes the wrong answer stable rather than making it
+right, and nothing downstream can act on "the items went to whichever of your two identical
+libraries sorted first". The `l.id <> ?` in the check is what keeps a re-accept a no-op, and the
+different-kind case is tested so the refusal cannot become a blanket ban.
+
+### LS-399.6 🚩 The Accept endpoint audited only its success path — **applied**
+
+Five early returns, one audit. Two specific defects, both real: the `acceptLibrariesError` arm (the
+409/404/400/500 return) wrote no row, where `auth.login`, `auth.sudo`, `service.credential.added` and
+`release.grab` all audit their failures; and the `acceptOutcome` error arm returned **after the store
+transaction had committed**, so a committed batch could leave zero audit rows — while the comment
+four lines above said *"the audit rows record what happened either way"*.
+
+**The code is now what the comment said**, rather than the comment being softened. The refusal arm
+writes a `fail` row; the post-commit arm writes one `warn` row per committed library before
+returning its 500. Three early returns still write nothing — no session, undecodable body,
+request-shaped validation failure — on `grab.go`'s own stated line, which is now written out in the
+same table form next to it. The row carries metadata instead of `""` (so a join is distinguishable
+from a no-op re-accept, which it was not), and the action is a named constant. Recorded on the wire
+in `docs/reference/http-api.md` §2b.
+
+### LS-399.7 🚩 The write-seam guard does not guard the seam — **applied, and the residual named**
+
+The test claimed it *"enumerates no writer, so a tenth statement added tomorrow with no redaction
+fails here without anyone having remembered to update anything"*, and `security.md`'s rider repeated
+it. The first half is true of the test's code; **the conclusion does not follow** — a writer whose
+triggering condition the fixture never reaches writes no row, and a scan over rows that do not exist
+passes. The guard was scoped by SCENARIO, not by seam.
+
+✅ **DRILLED, one redaction at a time, deleting each `ssrf.RedactText` call on this seam and
+re-running.** Eight calls (the reviewing lane counted seven; the difference is that the decline
+writer's `name` and `reason` are two calls on one line). **Before: six caught, two not.**
+
+| Call | Before | After |
+| --- | --- | --- |
+| `containerObservation.Name` | CAUGHT | CAUGHT |
+| `containerObservation.DeclineReason` | CAUGHT | CAUGHT |
+| identity conflict `value` | CAUGHT | CAUGHT |
+| decline `name` | CAUGHT | CAUGHT |
+| decline `reason` | CAUGHT | CAUGHT |
+| `noteKindChange` `name` | **NOT CAUGHT** | **CAUGHT** |
+| `SkippedContainer.Name` | **NOT CAUGHT** | **NOT CAUGHT** |
+| `SkippedContainer.Reason` | **NOT CAUGHT** | **NOT CAUGHT** |
+
+`noteKindChange` is now reached: it fires only at step 2 and only when the container is already bound
+at another kind, which no single import produces, so the fixture gains a third phase and a
+non-vacuity assertion pins the `kind_changed` row.
+
+⚠️ **The two that remain cannot be fixed by a better fixture, and that is the honest reason.**
+`SkippedContainer` is written only on a CONSTRAINT error from `bindOneContainer`, and since
+[ADR-0078](./DECISIONS.md#adr-0078) removed step 3's create there is no statement left in the bind
+path that can violate one — `TestAnUnbindableContainerDoesNotAbortTheImport` asserts
+`len(rep.SkippedContainers) == 0` for exactly that reason. The redactions are kept because the create
+could return. Both the test comment and the `security.md` rider now name them as uncovered, and both
+state that **a ninth writer does NOT automatically fail this guard**: whoever adds one adds the
+scenario that reaches it and drills it red first.
+
+### LS-399.8 ⚠️ ADR-0078's "steps 1 and 2 keep an existing install working" reported false — **REBUTTED on measurement**
+
+Routed as a blocking correction: step 2 calls `userLibraries` under strict equality and *"cannot see
+anything Accept created"*, so the sentence the ADR rests its argument on was said to be false.
+
+**It does not survive measurement, and the measurement is cheap.** The sentence is about *"the rows
+an earlier build auto-created"*. Those rows are at `user_id = 0`, **and the import that re-reads them
+also runs at 0** (`cmd/usarr/import.go` → `UserID: store.SystemUserID`). Strict equality at 0 returns
+exactly the user_id 0 rows, so step 2 matched them at the ADR's own date and matches them now.
+Running an upgrading-install fixture under BOTH predicates gives identical results: two libraries
+joined, one of them by step 2's name match having had no source at all, and none created.
+
+**The reviewer's two supporting statements are individually true and neither is what the sentence
+claims:** step 2 cannot see Accept-created rows (true — that is `LS-399.4`, still open) and Accept
+could not see import-created rows (true before `LS-399.1`, fixed by it). The sentence is scoped to
+the UPGRADE population and is true of it.
+
+⚠️ **The standing question, asked and answered.** Was the sentence wrong, or its quantifier? Neither —
+it was **accurate at its date**, which is `a80096b`, `2026-08-22T05:29:19Z`, the commit that authored
+it (`git log -S`). So no "false since" note was written, and no correction was made to the sentence.
+What landed instead is a **dated rider affirming it with the measurement and stating its boundary**,
+because the sentence has now been misread once and the boundary is the part worth recording. The ADR
+body is annotated rather than rewritten, per this file's convention, and no Status mark was added —
+no later decision supersedes ADR-0078. The measurement is kept as a test rather than discarded:
+`TestAnUpgradingInstallStillMatchesAtStepsOneAndTwo`.
+
+### The minor findings
+
+* 🚩 **`maxAcceptedNameLen`'s justification was false — applied.** It claimed the bound stopped a
+  caller-invented name travelling back out *"in an error body at the size of the 1 MB request cap"*.
+  **No error body on this endpoint echoes the name**: `badAcceptance` names the INDEX,
+  `acceptLibrariesError` writes UsArr's own sentences and forwards none of the store's text. The name
+  echoes on the **200**. Bound kept, reason replaced with the one it actually has — every value it
+  bounds is persisted verbatim into a column with no length limit.
+* 🚩 **Everything except the name was unbounded — applied in part, with the remainder argued.**
+  `Formats`, `ContainerRef` and `ContainerName` are now bounded, because those three are the ones
+  PERSISTED verbatim (`library.formats`, `library_source.container_ref`, `container_identity`) and
+  `formatsJSON` marshals the slice straight into the column. **The batch size and the per-acceptance
+  source count are deliberately left to the 1 MB request cap**: neither is free-text, neither is
+  stored as given, and a source must name a service instance that exists and that the scope admits —
+  a row a client cannot conjure. A number for those two would have no derivation.
+* 🚩 **`TestLibraryProposalsShipNoCredentialOrAddress` is a 15-token denylist — kept, with the
+  reasoning recorded, and the drift closed.** ✅ **Measured rather than argued:** leaking a `base_url`
+  into `service_name` — a value inside an ALLOWED key — is caught by this test and **passed by the
+  sibling key allowlist**. So the allowlist is exhaustive over FIELDS and this is the only guard over
+  VALUES; they are complementary, not redundant. Its credential and address tokens are now derived
+  from the fixture's own constants instead of restating them, which removes the drift
+  `security.md` objects to; the remaining hand-written entries are column NAMES, backed by the
+  allowlist.
+* 🚩 **`TestLibraryProposalHandlersReachNothingOutbound` banned `internal/ssrf` for a reason that
+  misdirects — applied.** The shared reason was *"a package that can make a request"*. True of six
+  entries, false of `internal/ssrf`, which makes none and is the repo's **only** text redactor — so
+  the stated reason pointed a future author at writing a second one, the drift `security.md` refuses.
+  Guard kept; each import now carries its own reason, and `ssrf`'s names the sanctioned route (the
+  `redactText` shim in `redact.go`). Drilled: importing `internal/ssrf` turns it red with that
+  message.
+* 🚩 **§17.3.3 quoted with `here` elided — applied.** The source reads *"**Every** endpoint that
+  changes anything **here** is gated"*, and the sentence before it is *"Every write on this screen
+  sits behind sudo mode"*. `here` is the word carrying the scope; restored, with the neighbouring
+  sentence quoted so the scope is visible without opening §17.3.3.
+* 🚩 **A doc block covered two functions and was attached to the wrong one — applied.** It opened
+  about `admitsInstance`, switched subject mid-paragraph to `serviceInstanceBindable`, and sat above
+  the latter, so godoc rendered `admitsInstance`'s prose for `serviceInstanceBindable` while
+  `admitsInstance` had no doc comment at all. Split. Its *"three branches"* is also corrected: there
+  are two explicit branches and a fall-through, and the empty-visible-set case that `instancePredicate`
+  answers with a branch of its own is the fall-through here — the two functions agree in their
+  ANSWERS, not in their branch structure, and that is now what the comment says.
+* 🚩 **"This is a read with no writer racing it" was false — applied to the comment; the `ReadTx`
+  judged separately and NOT taken.** The list and accept handlers are the read and write of one
+  screen and are concurrent, and `ProposedContainers` issues 2+2N statements on the read pool with no
+  enclosing read transaction. **Decision: not wrapped, and the reason is the failure MODE.** The
+  precedent that does wrap — `ReadIndexerCatalog`, whose note records a torn read at roughly 1 request
+  in 100 — tears into an **error**. Nothing here can: every statement is scope-filtered and
+  self-contained, so a commit landing mid-read costs at most a container listed as a proposal that is
+  already bound, or a join prediction one library stale, and ADR-0048 clause 1 makes the set *"a value
+  computed by the probe, not a table"*, recomputed on every visit. A read transaction held across a
+  2+2N loop is also exactly the long-lived reader `db.ReadTx`'s own note warns starves the WAL
+  checkpointer. ⚠️ **The comment records the condition that reverses this**: a caller that WRITES from
+  what this read returns needs the transaction, and `AcceptLibraries` is deliberately not that caller
+  — it re-reads inside its own write transaction.
+* 🚩 **`rescopeSearchDocs` cited the wrong index — applied, with plans measured.** It named
+  `ix_libmem_work`, transplanted from `writeSearchDoc`'s statement, which drives off `work_id`; these
+  two drive off `library_id`. `EXPLAIN QUERY PLAN` on the migrated schema: the INSERT…SELECT is
+  `SEARCH m USING COVERING INDEX ux_libmem_identity (library_id=?)` + `SEARCH d USING COVERING INDEX
+  ix_sd_work (work_id=?)` + `USE TEMP B-TREE FOR DISTINCT`; the DELETE is `SEARCH search_doc_library
+  USING COVERING INDEX ix_sdl_doc (doc_rowid=? AND library_id=?)` + `LIST SUBQUERY 1` + the same two
+  legs. `ix_libmem_work` appears in neither. ⚠️ **The same instrument caught this lane's own new
+  comment**: `refuseSameKindDoubleBind` was described as a seek on `ux_library_source`, and the plan
+  is `SEARCH ls USING INDEX ix_libsrc_instance (service_instance_id=?)` + `SEARCH l USING INTEGER
+  PRIMARY KEY (rowid=?)`. Both comments now quote the measured plan.
+* 🚩 **`http-api.md` §2b.1 described `formats` as a filter nothing applies — applied.**
+  `fileContainerMembersSQL` files every top-level work of the library's kind, filtered on `w.kind` and
+  the child-kind exclusion and nothing else; `library.formats` is in that statement nowhere. The code
+  comment said so honestly and the wire contract did not. The row now says the value is recorded, not
+  applied, with a note on what the filter needs (edition-grained membership; every writer fills
+  `edition_id` with the `0` whole-work sentinel).
+* 🚩 **`TestLibraryProposalRoutesAreRegisteredAndGated` never asserted 401 on the write route —
+  applied, and the assertion's own limit measured.** It stopped at 415 and 403, both of which precede
+  the session check. A valid double-submit CSRF pair with no session cookie now asserts the 401.
+  ⚠️ **DRILLED, and the drill did not fire**: deleting `s.authenticated(...)` from that route leaves
+  the assertion green, because `handleAcceptLibraries` opens with its own `sessionFrom` check and
+  returns the same 401. The endpoint is defended twice. The comment says so rather than claiming a
+  wiring proof the assertion does not make — which is a correction to this lane's own first draft of
+  it.
+
+### What this pass did NOT do
+
+* **The full §17.8 amendment did not land.** Only the approved route note (Block 2) was applied, and
+  appended to the existing open-question note rather than replacing it, because the approved text
+  says in its own words that the note *"stays as written until the closing pass"*. The amendment is
+  held for the pass that moves the document, the mockups README and the tree together.
+* **The ADR-0077 index note did not land**, its wording being in transit; the source file records the
+  unresolved question of whether the row is the whole row or its tail.
+* **`LS-399.4` is open**, and is the one finding in this pass that changes behaviour nobody has
+  authorised a fix for.
+
+
 ## LS-396 — the §17 citation sweep: comments that cite a §17 subsection for something it does not say
 
 **Source.** Drafted by the lane at content commit `ab290aa01e03`, tree `b3ed224afa36`, on

@@ -648,7 +648,7 @@ func TestADeltaEscalatesWhenAContainerIsBoundIntoAnExistingLibrary(t *testing.T)
 // population and is a decision rather than a fix. This test is written at the
 // accepting user so that it pins the BEHAVIOUR as correct, and its comment
 // records the production gap rather than letting a green test imply there is
-// none. See docs/REVIEW-LOG.md LS-395.9.
+// none. See docs/REVIEW-LOG.md LS-399.4.
 func TestADeltaEscalatesAtARealSessionUser(t *testing.T) {
 	const uid = int64(7)
 	other := newDeltaFixture(t,

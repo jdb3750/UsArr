@@ -14379,7 +14379,7 @@ and 2 before any create path could have run.
 > see them. That gap is real, it is not what this sentence claims, and it is measured in
 > `TestADeltaEscalatesAtARealSessionUser`'s comment. Closing it means giving the import a real owner
 > id, which is a decision about an existing data population rather than a correction to this record.
-> Registered in [`docs/REVIEW-LOG.md`](./REVIEW-LOG.md) as `LS-395.9`.
+> Registered in [`docs/REVIEW-LOG.md`](./REVIEW-LOG.md) as `LS-399.4`.
 
 **`managed_by = 'user'` gets its first writer**, so §17.8's one-way door has a hinge for the first
 time. ⚠️ **The wire does not carry `managed_by`.** It carries `edited`, and the translation is one line
