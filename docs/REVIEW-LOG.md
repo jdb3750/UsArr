@@ -27603,3 +27603,343 @@ reader to infer from a green suite.
 residue path. At that moment the three calls stop being no-ops, the seam guard's poison has a route
 to them, and a firing guard becomes both possible and required. **Until then a guard cannot be built,
 and asserting that these lines are protected would be asserting from their presence.**
+
+---
+
+## LS-396 — the §17 citation sweep: comments that cite a §17 subsection for something it does not say
+
+**Source.** Drafted by the lane at content commit `ab290aa01e03`, tree `b3ed224afa36`, on
+2026-08-22, and routed here to be filed by the landing that next opened the register. This section
+is the filing. **The drafting lane's own framing is kept**: every item below was a **lead at that
+tree**, not a defect at main's tip, and the lane said so in terms rather than presenting a measured
+commit as a measured branch.
+
+**Spot-verification was by EXECUTION at this tree, not by reading the draft.** Every locator was run
+as a command against the merged tree — the comment sites by search over each named file, the
+`check.mjs` span count by re-running the file's own extractor in `node` — and the output kept. ⚠️ **A
+zero-hit was treated as a result and investigated, never as a pass.** The first pass returned a
+zero-hit on more than a dozen sites; **every one of them was a needle that stopped at a line break in
+a wrapped comment**, and re-running with comment-marker and whitespace normalisation found all of
+them present. **None of the zero-hits was a fixed defect**, and recording that is the point: a
+zero-hit reported without being chased would have filed live defects as already-closed.
+
+**The split.** ✅ **Every id below reproduced at this tree**: `LS-396.1` through `LS-396.26`.
+**Already-fixed at this tree: none** — no entry stopped reproducing between `b3ed224afa36` and here,
+so no entry is filed under that disposition and none was dropped.
+
+**The defect class is one class.** A code comment cites a §17 subsection for something that
+subsection does not say. **The fix is the comment and only the comment** in every case; no code is
+implicated and none needs a judgement about which of code or spec is right. The grouping is by file
+owner, from `docs/DEVELOPMENT.md` §11's *Who leads which area* table, and the trigger is the same
+shape throughout because the ruling was that they ride the next landing that opens each file.
+
+📌 **Corrections made AT PLACEMENT, listed here as well as at each entry.** Two kinds, and they are
+not the same kind:
+* **Drift caused by this landing**, where the draft was right at `b3ed224afa36` and this branch moved
+  the line: `LS-396.9` (`:167-169`→`:190-193`), `LS-396.10` (`:462-463`→`:500-501`),
+  `LS-396.11` (`:193-195`→`:213-215`, and its contradicting half `:187-190`→`:206-210`),
+  `LS-396.1`'s `healthAction` ground (`internal/httpapi/services.go:898-899`→`:903-904`),
+  `LS-396.2`'s second site (`:853`→`:858`), `LS-396.23`'s second site (`:1939`→`:1940`),
+  `LS-396.9`'s `listLibrariesSQL` ground (`internal/store/libraries.go:524-550`→`:532-558`),
+  `LS-396.7`'s `http-api.md` ground (`:1888`→`:2237`), and `LS-396.20`'s §17.8 grounds
+  (`docs/ARCHITECTURE.md:4888-4895`→`:4909-4917`, `:4897-4899`→`:4919-4921`).
+* 🚩 **Two off-by-ones that were wrong at the drafting tree as well**, established by reading
+  `ab290aa01e03:docs/ARCHITECTURE.md` rather than inferred: §17.2's axes table is byte-identical at
+  both trees, so **§17.2 row 5 is `docs/ARCHITECTURE.md:3495`, not `:3496`** (`LS-396.7`), and
+  **§17.2's Ebooks row is `:3494`, not `:3495`** (`LS-396.14`). The draft's own corrections list did
+  not catch these; they are corrected in place below with the correction stated.
+
+**Backend — `internal/` and `cmd/`.** *Led by the work that lands backend features and their tests
+(`docs/DEVELOPMENT.md` §11).*
+
+* ⚠️ **`LS-396.1` — `internal/httpapi/imports.go:8-9` cites §17.3 for an action §17.3 struck.** The
+  comment names the endpoint as *"the Services screen's 'Run full sync now' (ARCHITECTURE.md §17.3,
+  the action named for a degraded, partial data row)"*. §17.3 names `Test connection` for that row
+  (`docs/ARCHITECTURE.md:3747-3748`) and `:3750-3751` records that the *"Run full sync now"* wording
+  was struck and that `healthAction` has never emitted it — as the code does not: the degraded arm
+  returns `Test connection` at **`internal/httpapi/services.go:903-904`** at this tree (the draft's
+  `:898-899`, correct at `b3ed224afa36`). **TRIGGER: next landing that opens this file.**
+  📌 **Adjacent site, flagged and not verified as in scope:** §17.3's own rider at
+  `docs/ARCHITECTURE.md:3752` cites `internal/httpapi/services.go:799-819` for `healthAction`'s
+  range, which at this tree is `:885-906`.
+
+* ⚠️ **`LS-396.2` — `internal/httpapi/services.go:624` and `:858` source a fifth health state to a
+  §17.3 table that names four.** `:624` heads the const block *"Health states, from ARCHITECTURE.md
+  §17.3."* over five constants, `stateUnknown = "unknown"` among them at `:630`, and `:858` says
+  `healthState` *"derives the four states in §17.3"* while returning `stateUnknown`. §17.3's State
+  row is `healthy / degraded / down / needs re-identification` (`docs/ARCHITECTURE.md:3682`) and
+  carries no `unknown`. **TRIGGER: next landing that opens this file.** *(Second site drifted from the
+  draft's `:853`.)*
+
+* ⚠️ **`LS-396.3` — `internal/store/recent.go:25-28` says `work.kind` has eleven members; it has
+  twelve.** The comment reads *"kind has eleven members, the navigation enum has six"* at `:26`;
+  §17.2 says twelve at `docs/ARCHITECTURE.md:3484-3485` and the `CHECK` of record enumerates twelve
+  at `internal/db/migrations/00005_library_sync.sql:250-253`. 📌 **This exact correction is already
+  recorded** as `LS-141a` at `docs/REVIEW-LOG.md:15398`, against §17.2's own copy of the same
+  sentence — so this is the reliance site that correction did not reach, which is the class this
+  register exists for. **TRIGGER: next landing that opens this file.**
+
+* ⚠️ **`LS-396.4` — one defect, two sites: the 25-item floor attributed to §17.1, which carries no
+  number.** `internal/store/recent.go:74-80` reads *"§17.1's own floor is 25 items above the fold"*
+  (the claim on `:76`) and `internal/store/browse.go:169-174` reads *"§17.1's floor is 25 items above
+  the fold"* (on `:173`); §17.1 is `docs/ARCHITECTURE.md:3447-3474` and contains no numeric floor at
+  all. The figure is `docs/design/DESIGN-DIRECTION.md` §5.3's, at `:726` — *"at 1440x900 a library or
+  search screen should show on the order of 25–40 scannable items above the fold"* — and is marked
+  there as **INFERENCE, as a review heuristic**, which the two comments drop. **Both sites are one
+  entry deliberately**: a correction that reaches one is the visible partial fix this register exists
+  to prevent. **TRIGGER: next landing that opens either file.**
+
+* ⚠️ **`LS-396.5` — `internal/store/recent_test.go:44-48` keeps a §17.2 citation the same file's own
+  test header retracts.** `:47` says `TestRecentWorksIsLibraryAgnosticToday` *"pins that as §17.2's
+  shape"*; that test's header at `:324-336` says the reason *"cites §17.2 for the inverse of what
+  §17.2 says"* (the sentence on `:330`), that §17.2 requires of Block C's table *"it sorts, it
+  filters, it Ctrl+Fs"*, and that removing the citation leaves no reason at all, which is the honest
+  state to record. **The retraction and the retracted claim are forty lines apart in one file.**
+  **TRIGGER: next landing that opens this file.**
+
+* ⚠️ **`LS-396.6` — `internal/store/imageassets.go:40-42` and `:170-172` source sixty covers per
+  screenful to §17.2; the sixty is §4.4's.** `:41` reads *"§17.2's grid paints up to sixty covers per
+  screen"* and `:172` reads *"sixty of those per screenful of covers (§17.2)"*; the figure is at
+  `docs/ARCHITECTURE.md:382` — *"a 60-item viewport at 500x750 is ~5-9 MB per screenful"* — inside
+  §4.4 Image pipeline (heading at `:363`), not §17.2. **TRIGGER: next landing that opens this file.**
+
+* 🚩 **`LS-396.7` — `internal/store/browse.go:429-430` labels a universal predicate as §17.2 row 5,
+  and the two differ on a reachable row.** The comment reads *"browseAudiobookPredicate is §17.2
+  row 5 — 'every edition of this work is an audiobook'"*; **§17.2 row 5 is
+  `docs/ARCHITECTURE.md:3495`** — an **EXISTS** (*"the same over `e.format='audiobook'`"*, inheriting
+  row 1's `EXISTS (SELECT 1 …)` shape) — while the universal rule the code implements is
+  `docs/reference/http-api.md:2237`, *"`book` whose every edition is an audiobook"*. **A book with one
+  audiobook edition and one print edition satisfies row 5 and fails the predicate**, so the two are
+  not the same rule. **TRIGGER: next landing that opens this file.**
+  📌 **Two grounds re-addressed at placement**, one of each kind: the row-5 line is `:3495` and the
+  draft's `:3496` was wrong at its own tree as well (§17.2's table is byte-identical at
+  `ab290aa01e03`); the `http-api.md` line moved from `:1888` to `:2237` under this landing's own
+  additions to that file.
+
+* ⚠️ **`LS-396.8` — `internal/store/browse.go:12` and `:118` attribute the `?lib=` scope chip to
+  §17.8; it is §17.2's — and the identical correction is already recorded one directory over.** `:12`
+  reads *"§17.8's library scope chip"* and `:118` reads *"LibraryIDs scopes the page to §17.8's
+  library chip"*; §17.2's axes table files a library under **scope** rather than navigation at
+  `docs/ARCHITECTURE.md:3482` (*"a multi-select chip above the nav, reflected in the URL"*) and
+  specifies the chip at `:3519-3536`, the `?lib=` sentence itself at `:3527`. **§17.8 configures a
+  library; it does not own the chip that scopes a view to one.** `web/src/lib/librarygrid.ts:4-8` had
+  already recorded this exact correction — *"THE SCOPE WAS CITED AS §17.8's: that section CONFIGURES
+  a library, while the chip that scopes a view to one is §17.2's"* — which is what makes these the
+  unreached sites rather than fresh findings. **TRIGGER: next landing that opens either file.**
+  📌 **This defect has a third site under another owner — `LS-396.26`. It is one defect and it is
+  written once.**
+
+* ⚠️ **`LS-396.9` — `cmd/usarr/bookorbit_library_kind_e2e_test.go:190-193` asserts a JOIN §17.8 does
+  not specify and the code does not perform.** The failure message reads *"§17.8 renders `library`
+  JOINED to `library_source`, so a library with no source row is invisible, which is the same screen
+  as no row at all"*; `listLibrariesSQL` (`internal/store/libraries.go:532-558`) selects
+  `FROM library l` with no `library_source` join at all, and the scope predicate's **first arm** exists
+  precisely to admit source-less libraries — `NOT EXISTS (SELECT 1 FROM library_source … WHERE
+  …library_id = l.id)` in `libraryVisibilityPredicate`. **A source-less library is visible by
+  construction.** **TRIGGER: next landing that opens this file.** *(Both the site and the
+  `listLibrariesSQL` ground drifted under this landing, from `:167-169` and `:524-550`.)*
+
+* 🚩 **`LS-396.10` — `internal/store/catalogue.go:500-501` double-quotes superseded §17.8 wording as
+  if current.** The comment reads *"ONE LIBRARY PER UPSTREAM CONTAINER. §17.8: 'one per upstream
+  library for Audiobookshelf / Kavita / Navidrome'"*; that clause was amended out of §17.8 and the
+  amendment is recorded at `docs/REVIEW-LOG.md:8580`, which replaces it with *"one proposal per
+  container the connected service itself reports"* and notes the old wording filed Kavita as
+  post-v0.1. **The quotation marks are the aggravating factor** — a quoted string reads as verified
+  and stops the next reader re-checking it. **TRIGGER: next landing that opens this file.** *(Drifted
+  from `:462-463`.)*
+
+* ⚠️ **`LS-396.11` — `internal/httpapi/libraries.go:213-215` defines the orphaned state as `[]`
+  sources, a few lines after the same doc comment says the sources are retained.** `:213-215` reads
+  *"it is `[]` rather than absent for an orphaned library … 'this library has no sources' is
+  precisely the fact §17.8's orphaned state renders"*; `:206-210` in the same block reads *"the sweep
+  RETAINS the library_source row and stamps missing_since on it, so an orphaned library still has its
+  sources listed under `sources`. Orphaned means none of them is still being reported."* **The two
+  are in one comment and contradict each other.** **TRIGGER: next landing that opens this file.**
+  *(Both spans drifted, from `:193-195` and `:187-190`.)*
+
+* ⚠️ **`LS-396.12` — `internal/db/migrations/00010_image_serving_indexes.sql:46` sources 27,500 to
+  §17.8; it is §13's.** The line reads *"§17.8's flagship topology measures 27,500 of them"*; the
+  figure is `docs/ARCHITECTURE.md:2282` — *"Top-level works | 27,500 | the corpus for FTS (§8.2) and
+  the Tier 1 prefix index (§4.5)"* — inside §13 Performance budget (heading at `:2256`). 📌 **A merged
+  migration is never edited**, so this correction cannot ride an edit to the file that carries it; it
+  is registered so the claim is not re-copied out of the header into something editable. **TRIGGER:
+  next landing that opens this file** — which, for a merged migration, means the next landing that
+  copies or cites this header.
+
+* ⚠️ **`LS-396.13` — `internal/db/migrations/00009_edition_format_index.sql:64-65` sources 58,500 to
+  §17.8; the figure appears nowhere in `ARCHITECTURE.md`.** The lines read *"§17.8's flagship topology
+  measures 58,500 edition rows"*; `58,500` returns no hit anywhere in `docs/ARCHITECTURE.md` and its
+  only hit under `docs/` is `docs/DECISIONS.md:7538`, which reasons *about* the number rather than
+  establishing it. **This is a citation with no target, not a citation to the wrong target.** Same
+  merged-migration caveat as the entry above. **TRIGGER: next landing that opens this file.**
+
+* ⚠️ **`LS-396.14` — `internal/db/migrate_test.go:3120-3123` sources the NULL-format requirement to
+  §17.2, whose Ebooks row is an allowlist without NULL.** The comment reads *"a partial index would
+  silently drop the NULL-format rows the Ebooks side of §17.2's split has to be able to see"* (the
+  claim on `:3122`); **§17.2's Ebooks row is `('book', ['print','ebook','cbz','cbr','pdf'])` at
+  `docs/ARCHITECTURE.md:3494`** — an allowlist that does not admit NULL. The requirement is the
+  **implementation's**: Ebooks is `"\n\t\t   AND NOT " + browseAudiobookPredicate` at
+  `internal/store/browse.go:338`, and it is the negation that lets NULL-format rows through. **The
+  test is right and its authority is misattributed.** **TRIGGER: next landing that opens this file.**
+  📌 **The Ebooks-row line is `:3494`; the draft's `:3495` was wrong at its own tree as well.**
+
+* ⚠️ **`LS-396.15` — three sites quote `CLAUDE.md:106`'s wording as §17.3's.** `CLAUDE.md:106` reads
+  *"Service setup and health, which must show what in the pipeline is broken and how to fix it"*; the
+  phrase *"what is broken and how to fix it"* does not occur anywhere in `docs/ARCHITECTURE.md`. The
+  sites: **`internal/bookorbit/resources.go:158-159`**, **`internal/bookorbit/client_test.go:612-613`**
+  and **`testdata/cassettes/bookorbit_health_database_down.yaml:9-10`**. §17.3 does specify per-state
+  actions (`docs/ARCHITECTURE.md:3740-3748`) — **the underlying claim is sound and only its address is
+  wrong**. **TRIGGER: next landing that opens any of the three files.**
+  📌 **Owner note, an inference and not a table read.** `testdata/` has no row in §11's map. §11's *a
+  missing row is not an absence of an owner* applies, and the `api/specs/` row's reasoning — a fixture
+  arrives with the code that reads it — puts the cassette with `internal/bookorbit`, which is why it
+  is filed here. **If a landing disagrees, the cassette is the site to re-route, not to drop.**
+
+**Frontend — `web/`.** *Led by the work that lands screens and frontend behaviour
+(`docs/DEVELOPMENT.md` §11).*
+
+* ⚠️ **`LS-396.16` — `web/src/routes/+page.svelte:979-983` attributes the cover-art card test to
+  §17.1, which does not carry it.** The comment reads *"§17.1 and DESIGN-DIRECTION §5.4 both settle it
+  on the same test: a media-type summary's primary content is a COUNT, and a card is justified only
+  where the primary content is cover art"*. ✅ **The §5.4 half is correct** —
+  `docs/design/DESIGN-DIRECTION.md:738` reads *"Rows and tables are the default container; a card is
+  the exception, justified only when the primary content is cover art"*, inside §5.4 Geometry
+  (heading at `:729`). **The §17.1 half is the defect**: §17.1 (`docs/ARCHITECTURE.md:3447-3474`)
+  states no card-versus-count justification test anywhere. **TRIGGER: next landing that opens this
+  file.**
+  🚩 **A withdrawn ground, kept because withdrawing it is the instructive part.** The routing brief
+  said §17.1 *"contains neither 'card' nor 'cover art'"*. **It contains both** —
+  `docs/ARCHITECTURE.md:3462` reads *"More items per screen beats larger cards"* and `:3470` reads
+  *"real cover art is not one colour"*; the first is a **density** rule and the second is the argument
+  for deleting §4.4.1's OKLCh contrast solver, and neither is a rule about when a card is the right
+  container. **The defect stands on the narrower ground; the word-presence argument would have been
+  falsified the moment anyone checked.**
+
+* 🚩 **`LS-396.17` — `web/src/routes/+page.svelte:86-97` books Home's missing degraded banner as unmet
+  §17.7 backlog; §17.7 excludes Home deliberately.** The comment reads *"WHAT IS STILL NOT DRAWN:
+  §17.7's `stale` state — the non-modal banner …"* and *"What `stale` still wants is the BANNER, which
+  is a rendering decision §17.7 specifies and nothing here has made"*; §17.7's degraded bullet scopes
+  the banner to *"the Library screen and every per-type grid"* and says **"Home is deliberately not in
+  that list and is not an omission"** at `docs/ARCHITECTURE.md:4435-4438`, on the ground that Block B
+  already reports a degraded instance. **The screen is compliant and its own comment books it as owing
+  work.** **TRIGGER: next landing that opens this file.**
+
+* ⚠️ **`LS-396.18` — three sites attribute *"112 releases, 10 shown after de-duplication"* to §17.5;
+  the string is a mockup's.** `web/src/lib/requests.ts:141-145`,
+  `web/src/routes/requests/+page.svelte:452-454` and `web/src/lib/requests.test.ts:130` (a test named
+  *"renders §17.5's sentence from real counts"*). Neither `112 releases` nor `de-duplication` occurs
+  anywhere in `docs/ARCHITECTURE.md`. The string is `docs/design/mockups/requests.html:506`, and the
+  **rule** it instantiates is `docs/design/DESIGN-DIRECTION.md` §7.2 Tier 3 at `:880-882` —
+  *"Determinate progress with real counts: '4 of 9 indexers responded'"*. **A mockup's sample data has
+  been promoted to a specification.** **TRIGGER: next landing that opens any of the three files.**
+  📌 **Overlap worth naming:** the register's existing requests-lane entry already covers
+  `requests.ts:137-147` for the flipped-seam flag, and `:141-145` sits inside that span. **The two are
+  different defects at overlapping lines and both are owed**; a landing that fixes only the seam flag
+  has not fixed this.
+
+* ⚠️ **`LS-396.19` — four sites say §17.5 REQUIRES two block-level notes; §17.5 requires a row-level
+  note.** `web/src/lib/requests.test.ts:786` (*"§17.5 requires both lines"*),
+  `web/src/routes/requests/+page.svelte:2216` (*"the sentences §17.5 requires around each block"*), and
+  `web/src/lib/requests.ts:581` and `:589`, which carry *"(§17.5)"* on the doc line of
+  `KNOWLEDGE_STOPS_NOTE` and `NOT_SENT_NOTE` respectively. The only note §17.5 requires is
+  **row-level and beside a disabled grab control** — `docs/ARCHITECTURE.md:4237-4240`, *"at zero the
+  grab controls go `aria-disabled` with a row-level note and the screen offers `Search again`"*. Read
+  across §17.5 (`:4052-4407`) the word `note` occurs twice, at `:4145` and `:4240`, and neither is a
+  block-level requirement. ✅ **The two notes are good copy and are not in question — what is wrong is
+  the claim that §17 mandates them**, which is what would stop someone changing them. **TRIGGER: next
+  landing that opens any of the three files.**
+
+* 🚩 **`LS-396.20` — `web/src/lib/importstream.svelte.ts:18-22` repeats a revisit trigger §17.8
+  retracted with *"do not repeat it"* — and this file is what discharged it.** The comment reads
+  *"§17's steward ruled that the Libraries screen should not subscribe FOR NOW, and named the revisit
+  trigger as this plumbing landing somewhere shared"*; §17.8 at `docs/ARCHITECTURE.md:4909-4917` reads
+  *"the reason that used to carry it has been retracted — do not repeat it"*, says of the two
+  conditions **"Both have happened"**, and names **`web/src/lib/importstream.svelte.ts` by path** as
+  the reference-counted singleton that satisfies them. The answer is unchanged and now rests on a
+  different reason (`:4919-4921`: an import is a service-level event and its home is §17.3). **The
+  file repeats the retracted reason about itself.** **TRIGGER: next landing that opens this file.**
+  *(Both §17.8 grounds drifted under this landing, from `:4888-4895` and `:4897-4899`.)*
+
+**Design — `ARCHITECTURE.md` §17 and `docs/design/`.** *Owned by the work that owns the screens and
+the visual system (`docs/DEVELOPMENT.md` §11).*
+
+* ⚠️ **`LS-396.21` — `docs/design/check.mjs:2004-2007` files a §17.3 string under §17.8, and the
+  paired entry at `:2008-2010` inherits it.** The map entry for
+  `'tv — catalogue source, request destination'` glosses it as *"§17.8's per-kind source gloss"*; the
+  string is `docs/ARCHITECTURE.md:3724`, inside §17.3 (heading `:3671`, next heading `:3818`), in
+  §17.3's `Libraries` column. The paired `'music — …'` entry says only *"The negative half of the pair
+  above"*, so it takes the wrong section by reference. 📌 **This is an exemption-map key: the gloss is
+  what tells a later reader why the em dash is carried**, so a wrong address here sends them to a
+  section that will not explain it. **TRIGGER: next landing that opens this file.**
+
+* ⚠️ **`LS-396.22` — `docs/design/check.mjs:2000-2003` cites §17.6 for the
+  show-the-upstream-status-verbatim rule; §17.6 says nothing about errors.** The entry for
+  `'grab failed — http 502'` reads *"the upstream status verbatim, which §17.6 requires be shown
+  rather than summarised"*; §17.6 (`docs/ARCHITECTURE.md:4408-4416`) is Item detail — title, year,
+  overview, cross-media links, the per-instance table, the primary action — and contains no error
+  rule. The **string** is §17.5's, at `:4279`, and the **rule** is §17.5's, in the sentence spanning
+  `:4368-4369` (*"with the upstream message shown verbatim"*). **TRIGGER: next landing that opens this
+  file.**
+
+* 🚩 **`LS-396.23` — `docs/design/check.mjs:1891` and `:1940` record §17 as holding 57 italic-quoted
+  copy spans; re-running the file's own matcher against this tree gives 78.** `:1891` reads
+  *"'ARCHITECTURE §17 copy': 45, /* 57 today"* and `:1940` reads *"57 spans today"*. ✅ **Re-executed
+  at this tree rather than carried over from the draft**: the file's own extraction —
+  `arch.slice(arch.indexOf('\n## 17. '))`, truncated at the next `\n## `, matched with
+  `/\*"([^"]+)"\*/g` and the empty-after-trim spans skipped, exactly as `:1816` and `:2102` do it —
+  returns **78** over a 128,602-character body. **The floor of 45 still clears, so the guard is not
+  vacuous** and nothing is currently red; what is gone is the **derived tightness** the neighbouring
+  floors are justified by, since the whole argument at `:1905-1914` is that a floor with slack a real
+  regression could sit inside is a floor that would stay green through the regression it was moved
+  for. **TRIGGER: next landing that opens this file.**
+  📌 **Adjacent site, flagged rather than verified as a defect.**
+  `docs/design/DESIGN-DIRECTION.md:3044` says *"the `*"…"*` spans, 56 of them"* — a third figure again,
+  outside this sweep's shard and not checked against its own derivation. **Check it; do not assume
+  this entry covers it.**
+
+* 🚩 **`LS-396.24` — `docs/design/check.mjs:1819-1821` quotes §17.7's banner in the bare-`HH:MM` form
+  §17.7 names as its own worked failure.** `:1820` reads *"Its banner is quoted as 'Kavita is
+  unreachable — showing cached data from 14:02'"*; §17.7 carries the relative clause at
+  `docs/ARCHITECTURE.md:4436-4437` — *"showing cached data from 14:02, 6 minutes ago"* — and at
+  `:4462-4467` records that **both exemplars quoted a bare `HH:MM` until 2026-08-21**, that
+  `docs/design/DESIGN-DIRECTION.md` §9.1 bans exactly that, and that it names **this banner** as its
+  worked example. **The sibling map key at `:1996` was updated for that same 2026-08-21 edit** — it
+  carries `, 3 hours ago` — and its own comment at `:1978-1995` explains why exact-match keying must
+  not be softened. **So one half of this file tracked the ruling and the prose beside it did not**,
+  which is the shape worth recording rather than the typo. **TRIGGER: next landing that opens this
+  file.**
+
+* 🚩 **`LS-396.25` — six identical copies of a sidebar comment cite §17.2 for two rules ADR-0053
+  removed from it, and the markup implements the comment.** The comment is at **`:207-222`** in
+  `docs/design/mockups/index.html`, `libraries.html`, `requests.html`, `search.html` and
+  `services.html`, and at **`:2217-2232`** in `docs/design/mockups/prototype.html`. It claims *"a type
+  with no items is not rendered at all"* and *"Counts respect the scope chip above"*, citing
+  `ARCHITECTURE.md 17.2`. **[ADR-0053](./DECISIONS.md#adr-0053) (2026-08-19, index row
+  `docs/DECISIONS.md:118`) removed both**: *"all six render unconditionally, no row carries a count"*.
+  In §17.2 — `docs/ARCHITECTURE.md:3481` (*"all six, always"*), `:3644` (*"every media-type row is
+  unconditional, and no row carries a count"*), `:3662`, and `:3574-3575` (*"the sidebar has carried
+  no counts since ADR-0053"*). §17.2 at `:3651-3652` scopes the not-shown-at-all rule to **Block A and
+  search groups**, and `:3657-3662` states the sidebar carve-out explicitly. ⚠️ **The markup
+  faithfully implements the comment**, so this is not a comment-only fix in its effect on the
+  drawing: each file's `nav__group` gates its rows on `data-inst`, and every rendered row carries a
+  `nav__num` count, where §17.2 now specifies six unconditional countless rows. **The comment is still
+  the fix this entry claims**; the markup is named so the next reader does not correct the prose and
+  leave the sidebar drawing the superseded shape. **TRIGGER: next landing that opens any of the six
+  files.**
+
+**Spans two owners.** *One entry, filed here rather than under either lane, so neither assumes the
+other holds it.*
+
+* ⚠️ **`LS-396.26` — the `?lib=` scope chip attributed to §17.8 has a third site in `web/`.**
+  `web/src/routes/library/[type]/+page.svelte:5` reads *"ARCHITECTURE.md §17.2's per-type view and
+  §17.8's library scope"* — the same misattribution as `LS-396.8`'s two sites, corrected in full there
+  and not restated here. **The defect is one; the files are under two leads.**
+  `web/src/lib/librarygrid.ts:4-8`, in the same directory as the frontend site, is where the
+  correction was already written down. **TRIGGER: next landing that opens this file** — and **a
+  landing that closes `LS-396.8` has NOT closed this site.**
+
+**Closure, which is the drafting lane's own rule and is kept.** A deferral onto a trigger needs its
+closure **verified, not assumed**. Every entry above closes on a **push-fact**: the commit that
+carries the corrected comment, on `origin/main`, named. ⚠️ **A landing that opens one of these files
+and does not carry the correction has fired the trigger without discharging it**, and the entry stays
+open with that recorded against it rather than being re-triggered later as if nothing had happened.
