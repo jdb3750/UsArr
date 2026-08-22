@@ -40,8 +40,24 @@
 > [`81e7310`](https://github.com/jdb3750/UsArr/commit/81e7310) (2026-08-18), the commit that created
 > this file, and **neither of them cites a source**; `docs/PROJECT-INSTRUCTIONS.md`, the canonical
 > copy of the instruction text applied to the project's own settings, carries no clause of this kind
-> in **any** version from v1.0 to v1.7. So the underlying instruction is referenced here exactly as
-> the struck sentence referenced it, and no fresher claim about its wording is made.
+> in **any version it records**. So the underlying instruction is referenced here exactly as the
+> struck sentence referenced it, and no fresher claim about its wording is made.
+>
+> ⚠️ **That sentence used to enumerate — *"in any version from v1.0 to v1.7"* — and the enumeration
+> went stale when v1.8 was drafted, while the claim itself stayed true.** It is restated without a
+> version list on 2026-08-22, because a count re-arms the same trap at every future version; **the
+> claim is unchanged and was re-checked rather than carried forward.** The check, which is a command
+> and its discriminating condition per this file's own rule, and which searches a *different* file so
+> it cannot match itself or the sentence carrying it:
+>
+> ```
+> grep -niE 'estimate|deadline|no dates|delivery date|timeline' docs/PROJECT-INSTRUCTIONS.md
+> ```
+>
+> **The discriminating condition: every hit is editorial rather than instructional.** At 2026-08-22,
+> with v1.8 the newest version recorded, it returned exactly one line — a Changelog note reading
+> *"Measured, not estimated"* about the file's own character count — and no clause in any version
+> section. A hit inside a `## v1.x` body, rather than in the Changelog, is what would falsify this.
 >
 > ⚠️ **THE OWNER WAS ASKED, AND REPLIED — RECORDED 2026-08-21 AS A REPLY RATHER THAN AS AN ANSWER,
 > WHICH IS THE WHOLE POINT OF THE ENTRY.** The question put to him was whether to scope the struck
