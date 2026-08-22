@@ -18,7 +18,7 @@
 
 import { describe, expect, it, vi } from 'vitest';
 import { ApiError } from './api';
-import { userFacingMarkup } from './copyguard';
+import { branchMarkup, userFacingMarkup } from './copyguard';
 import { cursorRejected, MEDIA_TYPES, type MediaType, type RecentPage } from './library';
 import { findContentSizedTracks } from './list';
 import {
@@ -1117,12 +1117,32 @@ describe('the libraries read is an enrichment, never a precondition', () => {
 			expect(markup, `${where} still prints the slug list verbatim`).not.toContain(
 				'query.libraries.join'
 			);
-			// Nothing renders unscoped: the whole block is behind the scope test.
-			const label = markup.indexOf('{scopeLine}');
-			const guard = markup.lastIndexOf('{#if query.libraries.length > 0}', label);
-			expect(guard, `${where}'s scope line is not behind the scoped test`).toBeGreaterThanOrEqual(
-				0
-			);
+			/*
+			 * ⚠️ CONTAINMENT, NOT PRECEDENCE, AND THAT IS THE WHOLE POINT OF THE
+			 * SLICE. This read `lastIndexOf('{#if query.libraries.length > 0}',
+			 * label) >= 0`, which asks only whether the guard literal appears at or
+			 * before the label — so lifting the `{scopeLine}` line out of the block
+			 * and pasting it AFTER the matching `{/if}` left the assertion green
+			 * while the scope line rendered on every unscoped view, the exact thing
+			 * the sentence above claims it prevents. Any unrelated
+			 * `{#if query.libraries.length > 0}` earlier in the toolbar would have
+			 * satisfied it for good.
+			 *
+			 * `branchMarkup` bounds the arm the guard opens, so the label has to be
+			 * INSIDE it. It bounds to the arm rather than to the whole `{#if}`
+			 * deliberately: a scope line moved into an `{:else}` of this same block
+			 * renders exactly when unscoped, and that has to be red too.
+			 *
+			 * THE MARKER IS THE WHOLE OPENING TAG because `[type]` carries a second,
+			 * different scope test — `{#if query !== undefined && query.libraries
+			 * .length > 0}`, over the empty state's clear-scope button — which is
+			 * not this block and must not be what gets sliced.
+			 */
+			const scoped = branchMarkup(markup, '{#if query.libraries.length > 0}');
+			expect(
+				scoped,
+				`${where}'s scope line is not inside the scoped test, so it renders unscoped`
+			).toContain('{scopeLine}');
 			/*
 			 * ⚠️ THIS USED TO PIN THAT THE NAMES WERE ASKED FOR ONLY ON A SCOPED
 			 * VIEW — it read `expect(code).toContain('query?.libraries.length ?? 0)
