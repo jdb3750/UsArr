@@ -3481,6 +3481,15 @@ Concretely, this constrains implementation:
 | **Media type** | a closed enum — movies, TV, music, ebooks, audiobooks, comics | **navigation**: one sidebar entry per type — **all six, always** ([ADR-0053](./DECISIONS.md#adr-0053); this cell said *"that has content"* until 2026-08-19) | **bounded at 6, by construction** |
 | **Library** | a user-defined grouping (§6.5), configured separately from services | **scope**: a multi-select chip above the nav, reflected in the URL | **unbounded — and therefore never a nav list** |
 
+⚠️ **This row's `Library` is the scope chip and nothing else, and the word carries two other
+senses in the product (2026-08-22).** The sidebar labels the cross-type catalogue screen `Library`
+(`web/src/routes/library`), and §17.8 specifies a setup screen called `Libraries`. So a §17
+sentence that means a screen names its route rather than the bare word — the precedent §16.1 sets
+at :3095-3097, and what §17.7's degraded-banner bullet does. `web/src/routes/+layout.svelte:149-167`
+records the same collision at the nav in its own voice and accepts it rather than resolving it, on
+the ground that the alternative label is false rather than merely ambiguous; this paragraph records
+it in the specification for the same reason and with the same outcome.
+
 **"Media type" is not `work.kind`, and the mapping has to be written down or the sidebar cannot be
 built.** `work.kind` has twelve members; the navigation enum has six; and for two of the six the
 media type is a `(kind, formats)` **pair**, because §6.1 deliberately makes an audiobook an `edition`
@@ -4432,18 +4441,24 @@ Each is a named screen, not an accident.
   because an empty library with a healthy service means the import has not run and the user should
   see that, not a blank grid.
 - **Import in progress** → the populated-so-far sections plus the progress affordance.
-- **Instance degraded / backend offline** → a non-modal banner **on the Library screen and on every
-  per-type grid**, naming it ("Kavita is unreachable — showing cached data from 14:02, 6 minutes
-  ago") and linking to the Services screen. **The catalogue does not grey
+- **Instance degraded / backend offline** → a non-modal banner **on the catalogue screens — the
+  cross-type Library screen at `web/src/routes/library`, and every per-type grid under it at
+  `web/src/routes/library/[type]`**, which are the two routes §16.1 already names for this banner
+  and are not §17.8's Libraries setup screen — naming it ("Kavita is unreachable — showing cached
+  data from 14:02, 6 minutes ago") and linking to the Services screen. **The catalogue does not grey
   out**; browse, search, sort and filter keep working from the replica. Home is deliberately not in
   that list and is not an omission: Block B is the attention block and a degraded instance is
   already one of the things it reports (§17.2). ⚠️ **This bullet named no screen at all until
   2026-08-21**, while both bullets under it named theirs — and a requirement that says what to draw
   without saying where is one a screen can decline without contradicting it, which is what the tree
-  did. The screens are the catalogue's, and §16.1 funds the banner on them. The banner names the
-  **instance**, by the name the user gave it (§17.3), never the kind — which is what makes it
-  legible on a stack running two of the same thing. ⚠️ **The write half of this state keeps an \*Arr
-  deliberately, and it is not an oversight**: writes to a media backend do not exist — §7.6's writes
+  did. The screens are the catalogue's, and §16.1 funds the banner on them. ⚠️ **And they are named
+  by route from 2026-08-22**, because §17 defines no screen called "the Library screen": §17.2's
+  sidebar inventory (:3523-3524) has no Library entry, and §17.2's axes table gives the singular
+  noun to the scope chip. The route is the only name for this screen the document already uses.
+  The banner names the **instance**, by the name the user gave it (§17.3), never the kind — which
+  is what makes it legible on a stack running two of the same thing. ⚠️ **The write half of this
+  state keeps an \*Arr deliberately, and it is not an oversight**: writes to a media backend do not
+  exist — §7.6's writes
   are request, toggle monitored and delete, which only an acquisition app accepts — so the queued
   label is "queued — Radarr 4K is unreachable" (§7.5), and the two-Radarr instance name is the whole
   point of the example. Do not convert this one to a v0.1 service. ⚠️ The banner and the count above
@@ -4508,6 +4523,22 @@ sub-page of it**, and the split is meaningful:
 
 > **Services answers "is the pipe up, and how do I fix it?". Libraries answers "what is in it, what
 > is it called, and where do requests go?".**
+
+⚠️ **The route named above is not the route the tree serves, and this note does not decide which
+one moves (2026-08-22).** §17.8 specifies `/settings/libraries`, and `docs/design/mockups/README.md`
+says the same at :1196 — two documents agreeing with each other. The shipped SPA serves
+`/libraries`: `web/src/routes/libraries/+page.svelte` is the only page for this screen,
+`web/src/routes/+layout.svelte:174` places it in the configuration nav group beside Services and
+Settings, and `web/src/routes/library/+page.svelte:222` and
+`web/src/routes/library/[type]/+page.svelte:205` both link to it by that path. Nothing in the tree
+serves `/settings/libraries`; for every place the string occurs, read
+`grep -rn 'settings/libraries'` at the tree you are on rather than a count fixed here — at
+2026-08-22 it returns those two documents plus `docs/reference/http-api.md` and three Go comments
+under `internal/`, and none of the six is a route registration. **This is a divergence between
+specification and implementation, not a typo**, and which side moves is a decision rather than a
+correction: a URL is bookmarkable, so rewriting either side to match the other closes the question
+by default instead of by ruling. It is recorded here as **open**. Whoever closes it moves the
+document, the mockups README and the tree in the same pass, and states which way it went.
 
 ⚠️ **What this screen holds in v0.1, before the examples below are read.** v0.1 connects **one**
 catalogue source plus Prowlarr, which has no library at all; the remaining sources sequence after it,
