@@ -988,10 +988,14 @@ re-sectioned on the strength of this note**, and none of the three is thereby pl
       `internal/httpapi/proposals.go` puts both on the wire as
       `GET /api/v1/libraries/proposals` and `POST /api/v1/libraries/accept`
       (`docs/reference/http-api.md` §2a, §2b). What the criterion never named is the half the
-      heading does — **the FLOW**: no screen calls either route (`web/src/routes` is authoritative),
-      and the bootstrap import still creates libraries unconditionally, which is the removal §17.8
-      and ADR-0048 both assign to this thread. Ticking on the clause as written would claim a flow
-      that does not exist, so the box waits for those two.
+      heading does — **the FLOW**: no screen calls either route, and `web/src/routes` is
+      authoritative for that, not this line. The box waits on the flow, because ticking on the
+      clause as written would claim one that a route table alone does not give.
+      ⚠️ **This item also said `the bootstrap import still creates libraries unconditionally`, as a
+      second thing the box was waiting on.** That was written one commit after `a83ff9c` removed the
+      create from `bindOneContainer`; do not restore it, and do not write a fresher sentence in its
+      place — `internal/store/catalogue.go` and a `grep` for `INSERT INTO library` over non-test Go
+      answer it directly.
 
 - [ ] **The per-series volume and chapter walk, and the rows it writes.** Phase A is served; the walk
       that fills `work_comic_issue` and `media_file` is not fetched and is not faked.

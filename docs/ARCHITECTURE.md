@@ -4526,20 +4526,24 @@ scope*, which is a different question from *what is built*, and the two have bee
 before. Measured against `web/src/routes`, `internal/` and `internal/db/migrations` rather than
 asserted:
 
-- **Libraries come into existence, on a first successful connect to a Kavita, with no screen
-  involved.** Building a Kavita client stack fires `bootstrapImport` once per instance per database,
-  gated on `last_full_sync_at` being unset (`cmd/usarr/services.go`, `cmd/usarr/import.go`); that runs
-  the full import, which calls `store.BindContainers` → `bindOneContainer`, which joins an existing
-  library on the name key or creates one (`internal/store/catalogue.go`). Rows appear; nothing asked.
-  ⚠️ **This bullet ended `The Accept step below does not gate it, because the Accept step does not
-  exist`, and the reason has moved while the fact has not.** Parts of the Accept step DO exist —
-  read the tree, not this line: `internal/store/proposals.go` is its storage and
-  `internal/httpapi/proposals.go` its two routes, `GET /api/v1/libraries/proposals` and
-  `POST /api/v1/libraries/accept` (`docs/reference/http-api.md` §2a, §2b), with `web/src/routes`
-  authoritative for whether a screen calls either. What is unchanged is the **gating**: the bootstrap
-  path above still creates libraries unconditionally, and removing that creation is still this
-  section's thread's to perform ([ADR-0048](./DECISIONS.md#adr-0048)'s Fact 2 and Consequences both
-  assign it there).
+- **What a first successful connect to a Kavita leaves behind is `internal/store/catalogue.go`'s
+  answer, not this bullet's.** The trigger half is stable and still worth naming: building a Kavita
+  client stack fires `bootstrapImport` once per instance per database, gated on `last_full_sync_at`
+  being unset (`cmd/usarr/services.go`, `cmd/usarr/import.go`), and that runs the full import, which
+  reaches `store.BindContainers` → `bindOneContainer`. **What that bind path does with a container
+  matching nothing is read off `bindOneContainer`'s numbered steps, and who may write a `library`
+  row at all is read off `grep -rn 'INSERT INTO library' --include='*.go'` filtered to non-test
+  files** — two greps, either of which settles the question this bullet kept getting wrong.
+  ⚠️ **This bullet has now asserted the answer twice and been falsified twice, which is why it
+  points instead.** It read `Libraries come into existence … with no screen involved` and
+  `… joins an existing library on the name key or creates one`, so `rows appear; nothing asked`;
+  `a83ff9c` performed [ADR-0048](./DECISIONS.md#adr-0048)'s removal and the sentence outlived it by
+  one commit. Before that it ended `The Accept step below does not gate it, because the Accept step
+  does not exist`, and `58b2655` falsified that. Parts of the Accept step do exist —
+  `internal/store/proposals.go` is its storage and `internal/httpapi/proposals.go` its two routes,
+  `GET /api/v1/libraries/proposals` and `POST /api/v1/libraries/accept`
+  (`docs/reference/http-api.md` §2a, §2b), with `web/src/routes` authoritative for whether a screen
+  calls either.
 - **That is not the only trigger; the second one is a button.** ⚠️ This bullet used to read
   *"`FullImport` is a Go method with no HTTP route and no CLI subcommand: `internal/httpapi/server.go`'s
   route table registers nothing that reaches it. So on the shipped binary an import happens on a
@@ -4600,15 +4604,19 @@ asserted:
   `internal/db/testdata/schema.sql`, besides `docs/reference/`. None of those was ever a writer,
   which is why a count of occurrences was never the claim that carried the point.
 
-**And the Accept step is a removal, not an addition.** Because the import already creates rows
-unconditionally, implementing Accept means taking creation out of the bootstrap path — a change to
-code that works today, with an upgrade story owed to installs that have already auto-created
-libraries. **[ADR-0048](./DECISIONS.md#adr-0048) decides the storage question that blocked it**: a
+**And the Accept step's harder half is a removal, not an addition.** ⚠️ **This paragraph opened
+`Because the import already creates rows unconditionally, implementing Accept means taking creation
+out of the bootstrap path — a change to code that works today`, in the present tense, and that
+premise is not this document's to report on: `internal/store/catalogue.go`'s `bindOneContainer` is
+authoritative for what the bind path does, and `a83ff9c` is the commit that moved it.** What does not
+depend on the tree is the shape of the work and the debt it carries: taking creation out of a working
+path owes an upgrade story to installs that have already auto-created libraries.
+**[ADR-0048](./DECISIONS.md#adr-0048) decides the storage question that blocked it**: a
 proposal is not a row in `library` and is never persisted, a row is created only on Accept, and
 existing auto-created rows are declared accepted on upgrade. That ADR does **not** perform the
-removal or schedule it; it belongs to the thread that builds this screen. ⚠️ **Until then, every
-sentence below describing what a user sees, edits, accepts or declines is a specification of intent.
-None of it is a report of behaviour.**
+removal or schedule it; it belongs to the thread that builds this screen. ⚠️ **Until a screen under
+`web/src/routes` calls those two routes, every sentence below describing what a user sees, edits,
+accepts or declines is a specification of intent. None of it is a report of behaviour.**
 
 **The definition of a library is shipping copy under the page title, not a note.** One sentence —
 *"A library is a name you own over containers your services already computed: a whole instance, a
