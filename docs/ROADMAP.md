@@ -62,21 +62,35 @@
 > ground was **withdrawn by its author the same day**, as a requote carrying no address — the same
 > defect one hop further up. **Nothing here upgrades what is known about what he said.**
 >
-> 🔻 **The rider that raised the divergence between that instruction and this file's practice is
-> CLOSED, 2026-08-21, the same day it was raised**,
+> ~~⚠️ **DATED RIDER, 2026-08-21 — THE SENTENCE ABOVE IS FALSIFIED BY THIS FILE'S OWN PRACTICE, AND
+> THE DIVERGENCE IS RECORDED HERE RATHER THAN RESOLVED.**~~ 🔻 **The rider that raised the
+> divergence between that instruction and this file's practice is CLOSED, 2026-08-21, the same day
+> it was raised — the heading is struck because it now says the opposite of what happened**,
 > and the finding it recorded is the one the ruling
 > acted on: dates are throughout — every dated rider in §2 carries one — and **the practice reads as
 > scoped to DELIVERY dates and estimates**, no line in this file predicting when anything will land,
-> while **correction dates are load-bearing**. **The reading is a decision now rather than an
-> inference, the PM took it, and the sentence above IS changed on the strength of it.**
+> while **correction dates are load-bearing**. ~~🔍 **That reading is an inference and it is not a
+> decision.** The sentence is the owner's standing instruction, so **scoping it is the owner's**,
+> and nothing here scopes it, rewrites it or acts on it. **No line above or below is changed on the
+> strength of this rider** — it records a divergence and decides nothing.~~ **The struck clauses are
+> spent, every one of them: the reading is a decision now rather than an inference, the PM took it,
+> and the sentence above IS changed on the strength of it.**
+> ⚠️ **BOTH STRUCK BLOCKS WERE DELETED ON 2026-08-22 AND ARE RESTORED THE SAME DAY** — deleted by
+> the commit that promoted *"Strike in place; never delete"* to a rule in this same blockquote,
+> which is as close to a self-refuting edit as this file has managed. **The 🔍 one is the
+> load-bearing half:** it is the prior position that **scoping this sentence was the owner's to
+> do**, and without it a reader cannot see what the PM ruling overrode.
 >
 > Where a line is inference rather than something read off §16, an ADR or the tree, it is marked 🔍.
 >
 > **Citation policy:** prefer function and symbol names over `file:<n>` line citations for any file
 > that moves, Go and Svelte especially. A wrong line number still resolves to a plausible
-> line — a comment inside the right file, usually
-> within a few dozen lines of the truth — so it fails
-> invisibly and reads as checked. ⚠️ **No sweep has ever applied it to the whole file**, and the
+> line — a comment inside the right file — so it fails
+> invisibly and reads as checked. ⚠️ **HOW FAR OFF IT LANDS IS NOT BOUNDED, and a clause here used
+> to say *"~~usually within a few dozen lines of the truth~~"*, which this file's own record
+> refutes:** the repaired `ARCHITECTURE.md` citation on the image item went *"several hundred lines
+> off in its turn"*, and `http-api.md:774-801` on the LS-170 item now lands on `file_walk_failed`
+> prose. **Both still plausible; neither near.** ⚠️ **No sweep has ever applied it to the whole file**, and the
 > passes that named their coverage all ended the same way: *"every other line citation in this file
 > is still unvetted."* **Read every `file:<n>` in
 > this file as unvetted unless the box around it says
@@ -84,7 +98,10 @@
 > 🔻 **PARTIALLY DISCHARGED 2026-08-22 by the checks-to-pointers pass, WHICH IS NOT A SWEEP EITHER.**
 > That pass converted the citations that sat inside item criteria and repaired every citation it had
 > measured wrong; **the rest are untouched and stay unvetted**, and are registered as a residual in
-> [`REVIEW-LOG.md`](./REVIEW-LOG.md) rather than fixed here.
+> [`REVIEW-LOG.md`](./REVIEW-LOG.md)'s **`LS-395.1`**, with the condition that closes it, rather
+> than fixed here. ⚠️ **THIS POINTER NAMED NO ENTRY AND HAD NO REFERENT UNTIL 2026-08-22**: it
+> landed a commit ahead of the record it points at, which is the pointer defect this file exists to
+> catch, committed by the file that catches it.
 >
 > **Counting rule, added 2026-08-22, after a re-fire found this file asserting counts of other
 > documents' and the tree's current contents throughout — and no tally of how many is written here,
@@ -93,11 +110,22 @@
 > ([`DEVELOPMENT.md`](./DEVELOPMENT.md) §11). So a box names **the locator and the discriminating
 > condition** and **enumerates rather than tallies** — the list is what a later pass re-fires one by
 > one, and the number is never the thing you re-check.
-> **Two exceptions, and they are the only two:**
-> **(a)** a count over a commit range **whose both endpoints are named SHAs** is durable provenance
-> rather than derived status, because the range never changes; **(b)** a count that **is** the
-> criterion rather than an observation of one — *zero rows with a null parent*, *one request per
-> library per import* — stays, because deleting it would delete the obligation.
+> **The exceptions, and the set is OPEN rather than closed — the test is whether the count can go
+> stale, not whether it appears on a list:**
+> **(a)** a count over anything frozen — a commit range **whose both endpoints are named SHAs**, a
+> **pinned upstream commit**, a **verbatim quotation of a historical measurement** — is durable
+> provenance rather than derived status, because the thing counted never changes; **(b)** a count
+> that **is** the criterion rather than an observation of one — *zero rows with a null parent*,
+> *one request per library per import* — stays, because deleting it would delete the obligation.
+> ⚠️ **THE SET READ *"~~Two exceptions, and they are the only two~~"* UNTIL 2026-08-22, AND CLOSING
+> IT WAS ITSELF THE DEFECT.** A closed exception set is a count of exceptions, and this one was
+> wrong within its own first pass: it drove the removal of a routes figure **pinned to a frozen
+> upstream commit** and the ellipsis-removal of a number **inside a quotation**, neither of which
+> could go stale. Both are restored below.
+> ⚠️ **AND NO SWEEP HAS APPLIED THIS RULE TO THE WHOLE FILE, exactly as none has applied the
+> citation policy above.** The pass that added it fixed the counts it had measured — enumerated in
+> [`REVIEW-LOG.md`](./REVIEW-LOG.md)'s `LS-395` — and read no others. **Read every count in this
+> file as unvetted against this rule unless the box around it says otherwise.**
 >
 > **Self-match rule, added 2026-08-22, and it is the class this file's own repairs keep landing
 > on:** a criterion written
@@ -109,6 +137,14 @@
 > risk in the box** rather than leaving it for the next reader. Where the self-match cannot be
 > engineered away, **name it rather than contorting the grep around it** — a criterion that matches
 > its own record-keeping is cheaper to disclose than to dodge.
+> ⚠️ **THAT ORDERING CHANGES A RECORDED RULING RATHER THAN RESTATING IT — DATED 2026-08-22 SO THE
+> CHANGE IS LEGIBLE.** The position this file recorded on 2026-08-21, inside the attestation the
+> chain collapse removed, put naming **first**: *"That self-match is named rather than dodged …
+> stating it is cheaper than a grep contorted to avoid itself."* **What reconciles the two is which
+> case each was about**: the arm64 criterion could be scoped, and was, by `--exclude=ROADMAP.md`;
+> the retracted-citation self-match could not be, and was named. So scoping leads **where it is
+> available** and the 2026-08-21 sentence governs where it is not — **but the order did move, and a
+> rule that silently reverses a ruling is worse than either ordering.**
 >
 > **Absence rule, added 2026-08-19 after this file wrongly recorded a probe as *"never run"*:**
 > a missing artefact **in the repo** does not establish that something never happened — a result can
@@ -171,13 +207,47 @@ files moved in it — `web/src/lib/home.ts`, `internal/store/serviceinstance.go`
 `internal/imagepipeline/pipeline.go` — and the first two are the files two of this pass's own
 repairs turn on. **Both endpoints are named SHAs, so that measurement
 is the counting rule's exception (a) and does not go stale.**
+⚠️ **AND THE RANGE ONE LEVEL BELOW IT SURVIVES THE COLLAPSE FOR THE SAME REASON, RESTORED
+2026-08-22:** `git log --no-merges --oneline 6533f1c..7c8cb1b | wc -l` → **114** (172 including
+merges, 99 files), *"measured, not inherited"* on a clone unshallowed for the purpose, because the
+environment the pass before it ran in was shallow and could not resolve `6533f1c` at all. **It went
+out with the chain and should not have**: both endpoints are named SHAs, so it is durable provenance
+and nothing about it can go stale.
+
+⚠️ **WHAT THIS BASELINE ATTESTS IS THE COMMANDS, NOT THE PROSE — AND THE INHERITANCE RULE IS HOW A
+READER TELLS WHICH TIP A BOX'S PROSE IS ATTESTED AT. RESTORED 2026-08-22, BECAUSE ITS DELETION MADE
+THAT UNKNOWABLE.** The collapsed chain carried it as *"read every box this pass does not name as
+attested at `<older SHA>`"*, which needed the chain. Restated for a file with none in it: **a box's
+prose is attested at the tip named in the box's own dated rider; where a box carries none, it is
+attested at the baseline named by the pass that wrote the box** — found with `git log -S '<a
+distinctive string from the box>' -- docs/ROADMAP.md`, whose answer is one of the eight SHAs
+enumerated below. **Only the commands in this file are attested at `5ff882c5b100`.** A pointer is
+not a loss of information; a deleted rule is.
 
 ⚠️ **WHAT THIS ATTESTATION CLAIMS IS NARROW, AND SAYING SO IS THE POINT.** This pass **re-fired
-every command that appears in this file** against `5ff882c5b100` and rewrote what it found — it did
-**not** re-decide any item's substance, re-scope anything, or add or remove an obligation. **Nothing
+every command in this file it could fire** against `5ff882c5b100` and rewrote what it found — the
+commands it could not fire are named immediately below, and they are the list every pass here
+inherits. It did **not** re-decide any item's substance, re-scope anything, or add or remove an
+**item-level** obligation. **Nothing
 about the roadmap's substance moved: no box changed state, no open item turned out to be shipped,
 and no ticked item turned out to be absent.** Only the derived
 material moved, which is this file's own thesis about itself.
+⚠️ **THAT SENTENCE READ *"~~re-fired every command that appears in this file~~"* UNTIL 2026-08-22,
+AND ITS OWN NEXT PARAGRAPH FALSIFIED IT** — three `vitest` commands, six `make` targets and the
+`/img` `curl` appear in this file and were not fired. **The claim moved to what was done rather than
+the exceptions being quietly widened.**
+⚠️ **AND IT DID ADD OBLIGATIONS AT THE FILE LEVEL, WHICH THE EARLIER FORM OF THIS PARAGRAPH DENIED
+FLAT.** The same commit minted three named rules in the blockquote above — **the Counting rule**,
+**the Self-match rule** and **Strike in place; never delete** — and added *"and add none"* to the
+citation policy. **All four are new as written rules and none is new as practice**, and which is
+which is stated rather than left to a reader: the counting ground is
+[`DEVELOPMENT.md`](./DEVELOPMENT.md) §11 and this file had been *"enumerated rather than counted"*
+since 2026-08-21; the self-match moves are the arm64 box's own repair, **with one ordering changed
+and ridden above rather than presented as a restatement**; strike-in-place was this file's practice
+with its justification sentence already written (*"the record of an alarming box having been wrong
+is worth more than a clean page"*); and *"Cite the content commit, never the merge"*, in that same
+paragraph, is **carried, not new** — boxes throughout already cite it as *"this file's standing
+rule"*. **A pass that codifies is adding something, and an honest charter beats a quiet one.**
 
 **NOT fired by this pass, and therefore inherited:** the three `web` vitest commands —
 `web/node_modules` is absent and installing it needs the network · `make check`, `make
@@ -187,15 +257,50 @@ instance"* leg in this file is untouched · **no Go test was fired as
 EVIDENCE for any claim here** — a green gate is not evidence for a box.
 
 ⚠️ **THE STANDING SCOPE LIMITS SURVIVE THE COLLAPSE OF THE INHERITED CHAIN, BECAUSE THEY ARE STILL
-TRUE, AND THEY ARE ENUMERATED RATHER THAN COUNTED:** the image-pipeline item's **LS-260 paragraphs
-and its Obligation 2 have never been re-read** by any pass that declared its scope · **§3 was not
-opened** by the pass before this one · and **no line-citation sweep has ever happened** (the
-citation policy above carries that one).
+TRUE. WHAT FOLLOWS IS THE WHOLE OF THEM:** the image-pipeline item's **LS-260 paragraphs and its
+Obligation 2 have never been re-read** by any pass that declared its scope · §3's **"Verified
+facts" bullets have never been re-read** either — they are about BookOrbit's own source rather than
+about UsArr's, and the 2026-08-20 pass that struck the open-defect block above them said so in
+terms · the **facet-consumer item's ADR-0053 / ADR-0059 argument, its empty-state paragraph, its 🔍
+budget inference and its shared-action-string rider are inherited unread**, the ADR sentences doubly
+so, because the pass that wrote them read **no ADR text at all** · **§3 was not opened** by the pass
+before this one · and **no line-citation sweep has ever happened** (the citation policy above
+carries that one).
+⚠️ **THAT LIST CLAIMED TO BE ENUMERATED AND WAS NOT, 2026-08-22, AND THE TWO IT DROPPED ARE THE TWO
+RESTORED ABOVE.** Losing a recorded limit is the one thing a chain collapse may not do, because a
+limit is what stops a reader treating an unread paragraph as attested. **Re-derived at
+`5ff882c5b100` from the pre-collapse file rather than from the collapsing pass's account of it** —
+`git show 5ff882c5b100:docs/ROADMAP.md`, every *"… and to NOTHING ELSE"* paragraph read and resolved
+to the limit it states. That tree is frozen, so the figures are the counting rule's durable case:
+**ten such paragraphs carrying six distinct limits between them**, of which four survived the
+collapse and two did not.
+⚠️ **AND NO FREQUENCY RULE EXPLAINS WHICH — that was the first answer and it is wrong.** *"§3 was
+not opened"* is stated exactly once as well — the last clause of the 2026-08-21 paragraph — and it
+was carried forward, while the shared-action-string limit, stated exactly once in the paragraph
+before it, was not. **What separates them is that the four carried are the four the
+collapsing pass's own summary already named, and the two lost sat only inside paragraphs it deleted
+whole.** So a collapse has to be re-derived from the pre-image rather than summarised from the
+collapsing pass's notes, which is how this list is now derived.
+📌 **METHOD, BECAUSE A LINE-ORIENTED GREP CANNOT DO THIS ONE.** Two of the ten wrap their scope
+phrase across a line break — the Kavita-sunset paragraph as `nothing` / `else`, the Block-A /
+facet-consumer paragraph as `NOTHING` / `ELSE` — so a line-oriented search reaches eight of the ten
+and silently misses both, and it returns hits from the inherited blocks that are not scope
+paragraphs at all. **The enumeration was done on whitespace-flattened text**, blockquote
+continuations unwrapped before matching, which is [`REVIEW-LOG.md`](./REVIEW-LOG.md)'s `LS-394.26`
+reproducing itself one file over.
 
 ⚠️ **THE `INHERITED from the …` CHAIN IS COLLAPSED, 2026-08-22, AND WHAT DIED WAS DERIVED STATUS
-ONLY.** It had reached **seven nesting levels** — eight baseline SHAs, each with its own `FIRED at
+ONLY.** At `5ff882c5b100`, and measured there, it nested **eight baseline SHAs one inside the
+next** — `7c8cb1b`, then `6533f1c`, `0a5d66e`, `4d95d36`, `a51d3c3`, `0085676`, `13878f2`,
+`c7d9ed3` — each with its own `FIRED at
 …` list, `NOT fired …` list and range rider, growing by exactly one level per pass with nothing ever
-retired, the oldest carried verbatim and explicitly un-re-fired through seven subsequent passes.
+retired, the oldest carried verbatim and explicitly un-re-fired through every pass after it.
+**That figure is over a frozen tree, so it is the counting rule's durable case rather than derived
+status**, and the SHAs are named because **the enumeration is the thing a reader walks**: each one
+addresses the tip its level was attested at.
+⚠️ **THIS SENTENCE READ *"~~seven nesting levels — eight baseline SHAs~~"* AND *"~~seven subsequent
+passes~~"* UNTIL 2026-08-22**, unpinned and unenumerated, in the paragraph that announces the
+counting rule two screens above it.
 **Every rule, ruling and worked example in it was moved into the blockquote above rather than
 dropped** — the absence rule, the Done-when rule, the citation policy, the no-delivery-dates scoping
 and its narrow-attribution riders, the shallow-clone method note, the ADR-numbering worked example,
@@ -203,6 +308,18 @@ the strike-in-place rule and the self-match rule. **What died is what each level
 tree that has since moved**, which is exactly the material a reader was reading as current. **The
 history is not lost: `git log -- docs/ROADMAP.md` holds every one of those attestations at the tip
 that wrote it**, which is where a claim of the form *"X was true at SHA Y"* belongs.
+⚠️ **ONE THING IN THE CHAIN WAS NOT DERIVED STATUS AND WENT OUT WITH IT ANYWAY — A RECORDED,
+UNDISCHARGED FINDING. IT IS RESTORED HERE, AND CLOSED HERE, 2026-08-22.** The `6533f1c` level
+carried it: *"~~One stale sentence was SEEN AND DELIBERATELY LEFT, because it is another lane's:
+§2's opening ⚠️ still lists the "zero-external-providers evidence clause" among items "None of them
+is re-pointed line by line here", and `8cdf399` re-pointed exactly that one. Not this pass's to fix,
+and flagged rather than quietly corrected.~~"* 🔻 **CLOSED: the condition it names no longer holds,
+and it was discharged before the collapse rather than by it.** `2263c6f` (2026-08-21) put the
+⚠️ headed *"THE ZERO-EXTERNAL-PROVIDERS EVIDENCE CLAUSE IS RE-POINTED, 2026-08-20"* directly beneath
+that sentence, conceding the re-pointing, citing `8cdf399` rather than either merge, and separating
+the **source name** having moved from the per-item **rewrite** the sentence defers. **A flag whose
+condition has lapsed gets a dated closure naming what discharged it; it does not get deleted**, or
+the next reader cannot tell an answered finding from one nobody ever took.
 
 ---
 
@@ -290,8 +407,8 @@ Items marked 🛑 **STOPPED** are the different case: those are stopped by the d
 
 ⚠️ **AND THIS SECTION NOW CARRIES ITEMS §16 HAS NOT ASSIGNED TO v0.1 — RECORDED 2026-08-21 BECAUSE
 THE HEADING INFERS A MILESTONE THE ITEMS THEMSELVES DISCLAIM.** `## 2. v0.1 remaining work` is a
-milestone assignment by placement, and **three items below say in their own prose that §16 has not
-made it**: the **arm64 RSS spike** (*"this box is not v0.1 work and is not cut either"* — it gates
+milestone assignment by placement, and **the items below that say in their own prose that §16 has
+not made it are named rather than counted**: the **arm64 RSS spike** (*"this box is not v0.1 work and is not cut either"* — it gates
 the arm64 support claim, [ADR-0072](./DECISIONS.md#adr-0072)); the **`System` nav entry**
 (*"§16 IS SILENT"*, and the box *"infers none"*); and the **per-type `ok` state** (*"§17 owns
 whether a third one exists, and §16 is silent"* — a design decision rather than a milestone
@@ -302,7 +419,12 @@ to claim, and **this file may not claim one**. 🔍 **Inference, labelled, and N
 re-sectioned on the strength of this note**, and none of the three is thereby placed in v0.1.
 
 - [x] **Channel 3b — the ordered page-walk delta, ~~for Kavita~~ for BookOrbit's `work_book`.**
-      🗓️ **Met at `5ff882c5b100`, 2026-08-22 — a claim about that tree, not about yours.** The
+      🗓️ **Met at `5ff882c5b100`, 2026-08-22 — a claim about that tree, not about yours.**
+      🧾 **RECORD-KEEPING CHECK, AND THE MARK WAS MISSING UNTIL 2026-08-22: this tick is taken
+      under the *Done when* carve-out**, on the missing prerequisite the unfired obligation below
+      names — *"NO DELTA HAS EVER WALKED A REAL BookOrbit"* — and on the reversal recorded further
+      down this box. **The preamble requires the mark in place so a reader meets the limit at the
+      criterion**, and this box was ticked under the carve-out without one. The
       checks are kept below so a reader can re-fire them; if one now
       disagrees with this tick, **the check is right and the tick is stale.**
       ~~The watermark walk with an overlap window and a client-side stop, so an import is not the
@@ -450,13 +572,28 @@ re-sectioned on the strength of this note**, and none of the three is thereby pl
       `internal/store/reconcile.go`'s `sweepContainers` and `sweepOrphans` now set **both**. What is
       left is the greps that still come back empty:
       1. **The drift step** —
-         `grep -rn 'SELECT' --include=*.go . | grep -v _test.go | grep remote_hash` must be
-         **empty**. **Both filters are load-bearing.** The `SELECT` qualifier is what makes the leg
-         discriminate: the bare column name appears in non-test Go in comments and in an `INSERT …
-         ON CONFLICT` column list, so a form without it could not come back empty for the reason it
-         was written. And the `_test.go` exclusion is what the criterion has always SAID — *"a
-         `SELECT` in **non-test** Go"* — but had never been written into the command; **without it
-         the check returns test-fixture `SELECT`s and reads as though the drift step existed.**
+         `grep -rn remote_hash --include=*.go . | grep -v _test.go`, read rather than counted.
+         **What a reader is looking for is a hit inside a READ.** The drift step has not landed
+         while every hit is a comment or the `INSERT … ON CONFLICT` column list in
+         `internal/store/catalogue.go`; it has landed when one of them sits in a statement that
+         selects the column back out. The `_test.go` exclusion is what the criterion has always
+         SAID — *"a `SELECT` in **non-test** Go"* — and stays: **without it the check returns
+         test-fixture SQL and reads as though the drift step existed.**
+         ⚠️ **THE `SELECT` FILTER IS GONE, 2026-08-22, AND IT WAS THE HALF THAT COULD NOT WORK.**
+         The leg read *"~~`grep -rn 'SELECT' --include=*.go . | grep -v _test.go | grep remote_hash`
+         must be **empty**~~"*, which requires `SELECT` and the column name **on one physical
+         line** — and this codebase writes its SQL across many, in raw backtick strings with the
+         `SELECT` on its own line. **A pipeline that cannot see a multi-line read comes back empty
+         whether or not the drift step exists**, which is the falsely-greenable shape this file
+         keeps finding on its own checks.
+         ⚠️ **NEGATIVE CONTROL, FIRED 2026-08-22 RATHER THAN ASSUMED, because the Self-match rule
+         above requires a shape be shown to find a positive:** run both shapes over
+         `last_full_sync_at`, a column non-test Go genuinely reads. The struck shape
+         (`… 'SELECT' … | grep last_full_sync_at`) returns **only** the single-line
+         `SELECT last_full_sync_at FROM service_instance …` in `internal/store/catalogue.go` and
+         **walks straight past** `FileWalkFailuresByInstance` in the same file, whose read spells
+         `SELECT` on one line and `i.last_full_sync_at` four lines down. The replacement shape
+         returns that read. **So the old form misses real readers and the new one does not.**
       2. **Guard 2** — ⚠️ **THIS LEG WAS PROSE UNTIL 2026-08-22, AND EVERY LITERAL MECHANISATION
          OF IT SELF-MATCHED AGAINST A FOREIGN FILE.** It read *"~~a reader of
          `identity_fingerprint` or `max_remote_id_seen`~~"*, and
@@ -612,12 +749,16 @@ re-sectioned on the strength of this note**, and none of the three is thereby pl
       what §17's owner is being asked, and **nothing is chosen here.** ⚠️ **DATED RIDER 2026-08-22 —
       THIS RIDER'S TWO CLOSING CLAUSES ARE INVERTED, NOT DELETED, AND THE POINTER THEY CARRIED IS
       DEAD.** They read *"~~The stale sentence is in the tree, not in this file~~"* and *"~~fixing
-      it is not this box's~~"*, and **both are false**: the sentence was removed from `home.ts` by
-      content commit **`b2a91e2`** (*"docs(web): home.ts's "no periodic re-sync" is false, and
+      it is not this box's~~"*, and **both are false**: the sentence was **inverted in place** in
+      `home.ts` by content commit **`b2a91e2`** (*"docs(web): home.ts's "no periodic re-sync" is false, and
       ADR-0076 is why"*, single-parent, `web/src/lib/home.ts` only), **1 h 22 m after the rider
       naming it landed** in `d4b7d65`. **The rider outlived its subject by less than two hours** —
       which is the shelf life this whole file is written against, and is why it is inverted in place
-      rather than quietly dropped. ⚠️ **The substance is untouched:** `home.ts`'s replacement text
+      rather than quietly dropped. ⚠️ **AND *"~~removed~~"* WAS THE WRONG WORD FOR WHAT `b2a91e2`
+      DID, CORRECTED 2026-08-22:** the sentence is still in `home.ts`, quoted inside the comment
+      that overturns it — *"This read …"* — which is the tree doing to itself exactly what the
+      **Strike in place; never delete** rule above asks of this file. **Reporting a strike as a
+      deletion sends the next reader looking for something that is there.** ⚠️ **The substance is untouched:** `home.ts`'s replacement text
       reaches the same conclusion this rider did — the premise changed and the word stands — so
       **read `home.ts` for what it says now**, and read this rider
       only for the fact that it was once pointing at a live defect.
@@ -876,7 +1017,8 @@ re-sectioned on the strength of this note**, and none of the three is thereby pl
       would otherwise still believe: *"~~The **writes** clause still holds … nothing outside
       `_test.go` writes an `image_asset` row, so nothing fetches, decodes or stores a cover — every
       `/img` request answers `not_cached` and every row's `poster_key` is absent on every real
-      install.~~"* **Every clause of that is wrong on the baseline above**, and the checks that
+      install.~~"* **Every clause of that is wrong at `4d95d36`** — `39cc459`'s tree, **pinned
+      2026-08-22** where it read *"~~on the baseline above~~"* — and the checks that
       falsified it are leg 2 and Obligations 1 and 3.
       **What actually exists, read off the tree rather than off a commit subject:** `PutPosterAsset`
       (`internal/store/imagewrite.go`) is a **non-test** `INSERT INTO image_asset`, and it is called
@@ -1029,8 +1171,13 @@ re-sectioned on the strength of this note**, and none of the three is thereby pl
       than a hedge. This item used to read *"~~nobody has read the full paste on that point~~"*;
       somebody has, and `REVIEW-LOG.md`'s LS-260 closure is the record.** The probe scanned **every
       series on the page** — not the sampled subset — for a null-or-empty `coverImage` and **found
-      none**, so in its own words *"all … series on the scanned page have a coverImage, so there was
-      no coverless series to ask about. Not guessed."* A **nonexistent** series id is a different
+      none**, so in its own words *"all 151 series on the scanned page have a coverImage, so there
+      was no coverless series to ask about. Not guessed."*
+      ⚠️ **THE `151` WAS ELLIPSED OUT OF THAT QUOTATION ON 2026-08-22 AND IS RESTORED THE SAME
+      DAY.** It was removed as a count of a moving thing; it is neither. **Quoting is not counting**
+      — the words are LS-260's, fixed at the tip that wrote them, and the figure is a **historical
+      measurement of one probe run**, which is the counting rule's durable case. Cutting a number
+      out of somebody else's sentence with an ellipsis misreports the source and buys nothing. A **nonexistent** series id is a different
       question, measured separately and labelled so — it answers **404** — and the log refuses to
       conflate the two. **The figures are LS-260's and the thread's; they are not restated here.**
       ⚠️ **WHAT THAT LEAVES OWED, stated as an obligation rather than as a state:** whether a series
@@ -1051,7 +1198,7 @@ re-sectioned on the strength of this note**, and none of the three is thereby pl
       stated condition — *"every other thread was told to record nothing new until this landed"* — is
       **discharged**. `internal/vcrscrub` is in the tree (merged `36d7f71`), it is the **only**
       cassette opener, it **installs** the `BeforeSave` hook rather than offering it as an option,
-      `USARR_RECORD` finally has an implementation behind the five places that documented it, and the
+      `USARR_RECORD` finally has an implementation behind the places that documented it, and the
       **credential-in-path drill was fired in both directions** — LS-344's table measures `gitleaks`
       catching `?apiKey=<guid>` and **missing the same GUID as a bare path segment**, which is the
       shape Kavita's OPDS routes use, so the scrubber is green exactly where the gate is not.
@@ -1109,19 +1256,32 @@ re-sectioned on the strength of this note**, and none of the three is thereby pl
       alone, and legs 1 and 3 are what refuse it.
       ⚠️ **THIS IS THE SECOND FALSELY-GREENABLE CHECK ON THIS ONE ITEM, AND RECORDING THAT IS THE
       POINT.** The **first** read `grep -rln image_asset --include=*.go internal/ cmd/` and matched
-      **only comment-only mentions in `internal/ssrf` and a pair of tests — not one writer among
-      them.** ⚠️ **The file count that used to stand here — *"~~matched five files~~"* — was
-      measured wrong at `5ff882c5b100`, by a wide margin and in the direction that flatters the
-      check, 2026-08-22.** It was a count of a moving tree recorded as evidence, and **the fact it
-      was recording is that the matches were mentions rather than writers, which the count never
-      carried.** No replacement number is written; the struck form is history and nothing checks it.
+      **not one writer among them** — the matches were three comment-only mentions in
+      `internal/ssrf` (`policy.go`, `ssrf.go`, `redact.go`), a **fourth comment-only non-test file**,
+      `internal/store/images.go`, which at that tree held the format vocabulary and no SQL at all,
+      and four tests (`internal/db/migrate_test.go`, `internal/db/queryplan_test.go`,
+      `internal/store/imagelint_test.go`, `internal/store/images_test.go`).
+      ⚠️ **THAT ENUMERATION REPLACES TWO WRONG ACCOUNTS OF THE SAME LINE, 2026-08-22.** It read
+      *"~~matched five files — three comment-only mentions in `internal/ssrf` … and two tests~~"*,
+      and the repair written for it on 2026-08-22 declared the figure *"~~measured wrong at
+      `5ff882c5b100`~~"* and replaced the list with *"~~a pair of tests~~"*. **Both moves were
+      wrong.** The sentence records what the check matched **when it was written**, so the tree that
+      settles it is `c38088f`'s — and re-measured there the answer is **eight files, not five and
+      not seven**, with a non-test file among them the old list did not mention. Measuring a
+      historical record against a later tree is how a true record gets marked false; **replacing an
+      enumeration with a verbal tally is this file's own counting rule read backwards.** ⚠️ **The
+      claim the line exists to make survives all of it, and was re-verified rather than assumed:**
+      `internal/store/images.go` at `c38088f` mentions `image_asset` in five comments and contains
+      no `INSERT`, `UPDATE`, `REPLACE` or `SELECT` at all, so *"not one writer among them"* holds.
       Its replacement,
       `grep -rn 'INSERT INTO image_asset' … outside _test.go`, was **also** falsely greenable, for
       the reason in the clause above. Two misses on one line is a pattern, not luck: **a done-check
       for a pipeline has to name the pipeline's OUTPUT, never one of its INSERTs.**
 
       **SO WHAT IS ACTUALLY STILL OWED ON THIS ITEM. Four things, and §4.4.1 is three of them.**
-      Fired against the tree at the baseline above.
+      Fired against the tree at `4d95d36`, by `39cc459`, the pass that wrote this block —
+      **pinned 2026-08-22**, where it read *"~~at the baseline above~~"* and had been re-aimed at
+      two later tips by two baseline advances that never re-fired it.
       1. **THE FIRST REAL RUN — leg 3, and it is the only one that cannot be closed by writing
          code.** Covered above; it needs a host with a BookOrbit and a completed `usarr import`.
       2. **§4.4.1's COLD START IS UNBUILT IN FULL, and the columns for it have been in the schema
@@ -1169,7 +1329,18 @@ re-sectioned on the strength of this note**, and none of the three is thereby pl
       tense throughout, because no writer existed. `7e5934d` is that writer.** The list is kept whole
       rather than pruned, because **which obligations a writer met, and how, is the thing a second
       writer needs** — the tint pass and any second catalogue source will each write this table
-      again. Every verdict below was re-fired against the tree at the baseline above.
+      again. **Every verdict below except Obligation 2's was re-fired against the tree at
+      `4d95d36`**, by `39cc459`, the pass that wrote this block.
+      ⚠️ **PINNED 2026-08-22. IT READ *"~~re-fired against the tree at the baseline above~~"*, AND
+      ADVANCING THE BASELINE RE-AIMED IT AT A TREE NOBODY FIRED IT ON.** By 2026-08-22 *"the
+      baseline above"* said `5ff882c5b100`, which put this sentence in direct contradiction of the
+      preamble's standing limit that **Obligation 2 has never been re-read**. **A relative
+      attestation is not a claim about a tree; it is a claim about whatever line happens to sit
+      above it** — the exact defect §3's struck open-defect block below was kept in place to record,
+      reproduced by the pass that re-read it. ⚠️ **AND THE OBLIGATION 2 CARVE-OUT IS NOT NEW EITHER:**
+      `39cc459`'s own scope paragraph said *"Obligation 2 and every LS-260 paragraph were NOT
+      re-read"* in the same commit that wrote *"Every verdict below"*, so the sentence over-claimed
+      on the day it was born and the pin is what makes it true.
 
       **Obligation 1 — the format vocabulary. ✅ DISCHARGED, AND BY A CALL RATHER THAN BY A
       MENTION.** `PosterAsset.validate` (`internal/store/imagewrite.go`) **calls**
@@ -1201,7 +1372,10 @@ re-sectioned on the strength of this note**, and none of the three is thereby pl
         `internal/httpapi/library.go`. **So a colour field added to `RecentWork` lands on the
         library grid as well as on Home's recently-added table — and the grid is the screen tinted
         tiles are for.** That is a property of the shape, not an accident.
-        ⚠️ **`/api/v1/search` is NOT a third one, and the tree is explicit about why.** It returns
+        ⚠️ **`/api/v1/search` is NOT among them, and the tree is explicit about why.** ⚠️ **It read
+        *"~~NOT a third one~~"* until 2026-08-22, one clause after the count it counted from was
+        removed** — the same referent-without-antecedent shape the counting rule keeps producing
+        when a number is deleted instead of enumerated. It returns
         `store.SearchHit` through its own allowlist in `internal/httpapi/librarysearch.go`;
         `internal/store/searchlibrary.go`'s doc comment says it in terms — *"THE FIELDS ARE
         RecentWork'S FIELDS, ON PURPOSE … Nothing is shared in the type system yet"*. Giving search
@@ -1245,7 +1419,9 @@ re-sectioned on the strength of this note**, and none of the three is thereby pl
         not implemented"*) is what fixed the tense, landing while this pass was running — §5 now
         reads *"no row may be written whose `source_url` still carries a credential parameter — the
         ingest path that writes these rows **owes** that assertion"*, and §12 the same. **Both
-        reference files are correct as of the baseline above; the obligation is still unmet in
+        reference files are correct as of `3c88b2e`** — the Kavita-sunset pass's baseline,
+        `c38088f`, which read both files directly as they landed mid-pass; **pinned 2026-08-22**,
+        where it read *"~~as of the baseline above~~"* — **and the obligation is still unmet in
         code.**
       - **The obligation as it was written, kept verbatim so the divergence above is legible:**
         *"strip credential parameters before the row is written, with the names taken from
@@ -1721,7 +1897,8 @@ re-sectioned on the strength of this note**, and none of the three is thereby pl
       and navigate with `pushState` from `onScope`. `scopeSelectWorthShowing` keeps a control that
       can do nothing off the screen at zero libraries. **A grid can now CHANGE a scope, which is
       exactly what the struck sentence said it could not do.**
-      ⚠️ **AND IT IS A STRICT SUBSET OF §8.1, WHICH THE CODE SAYS ABOUT ITSELF IN THREE PLACES.**
+      ⚠️ **AND IT IS A STRICT SUBSET OF §8.1, WHICH THE CODE SAYS ABOUT ITSELF IN THE PLACES
+      ENUMERATED HERE.**
       `$lib/scopeselect`'s header opens *"THIS IS NOT DESIGN-DIRECTION §8.1's SCOPE CHIP, AND §8.1's
       CHIP REMAINS UNBUILT"*; `web/src/routes/+layout.svelte`'s header says **THE SCOPE CHIP IS
       STILL NOT HERE**; and `scopeselect.test.ts` fails if either route's `{#if showScopeSelect}`
@@ -2022,9 +2199,13 @@ re-sectioned on the strength of this note**, and none of the three is thereby pl
       it**, not a file that defines it. **Negative control fired rather than assumed, 2026-08-22:**
       `git show 6a96392cf525:cmd/usarr/main.go | grep -n 'runKeyRotate('` is **empty** — a
       single-parent tree from before `4c63076` added `cmd/usarr/keyrotate.go`, so the shape is shown
-      to reach empty on a tree that lacks the subcommand. ⚠️ **A comment cannot satisfy the
-      replacement the way it satisfied the original**, because the pattern requires the open
-      parenthesis of a call and the range is the one file that dispatches.
+      to reach empty on a tree that lacks the subcommand. ⚠️ **A comment is much harder to satisfy
+      the replacement with than it was to satisfy the original** — the pattern requires the open
+      parenthesis of a call and the range is the one file that dispatches, so what matches it is a
+      call spelling rather than the bare word. ⚠️ **It is not impossible, and the earlier form said
+      it was: *"~~A comment cannot satisfy the replacement~~"*.** A comment in `cmd/usarr/main.go`
+      writing `runKeyRotate(` would match. **The residual is stated rather than dodged**, per the
+      Self-match rule's third move.
 
 - [x] **LS-170 — lift `httpapi.redactText` into `internal/ssrf`, and the three fixes around it.**
       🗓️ **Met at `5ff882c5b100`, 2026-08-22.** Re-fire it by reading `ssrf.RedactText` in
@@ -2047,8 +2228,12 @@ re-sectioned on the strength of this note**, and none of the three is thereby pl
       immediately reject**, which is the invisible failure the citation policy names. **No
       replacement number is written**; the LS-170 material in `http-api.md` is locatable by symbol,
       on the sentences naming `parseErrorBody` and `ssrf.RedactText`. **The claim:** the thread
-      **did** correct it. `http-api.md` now says in terms *"That is stale. It closed in LS-170"* and
-      cites **`cdeb2f2`** for the closure. ⚠️ **That is a different SHA from the four this box
+      **did** correct it. `http-api.md`'s item 2 now records that the redactor half *"closed in
+      **LS-170**"* and cites **`cdeb2f2`** for the closure. ⚠️ **Quoted accurately 2026-08-22.** It
+      read *"~~That is stale. It closed in LS-170~~"*, which welds the end of one bolded run to the
+      start of the next sentence and reports *"That is stale"* as being about the redactor gap; in
+      the source it is about **that item's own superseded text**. **A quotation that reads smoothly
+      and re-points its subject is the citation policy's failure mode in prose form.** ⚠️ **That is a different SHA from the four this box
       cites** — not a contradiction, four steps against one commit, but the two documents do not
       agree on a single citation and **neither is corrected here**, because `http-api.md` is that
       thread's and this box is a pointer to it rather than a second opinion.
@@ -2178,7 +2363,11 @@ re-sectioned on the strength of this note**, and none of the three is thereby pl
       documents that could carry the figure~~"*, and **that four-file boundary was asserted rather
       than argued**: `grep -rln -i arm64 docs/` also returns `docs/RESEARCH.md` and
       `docs/reference/sync.md`, so two files that do discuss arm64 sat outside the search with no
-      reason given. **`--exclude=ROADMAP.md` is what buys self-match immunity**, and it buys it
+      reason given. ⚠️ **That grep is the ARGUMENT for the range and is not the criterion, and the
+      distinction matters here more than usual: `docs/ROADMAP.md` is among what it returns** — this
+      box's own prose says `arm64` repeatedly. **The criterion is the one three paragraphs above,
+      which carries `--exclude=ROADMAP.md`**; the argumentative grep is quoted bare, and a reader re-running it
+      should expect this file in the answer. **`--exclude=ROADMAP.md` is what buys self-match immunity**, and it buys it
       **by construction** rather than by luck: the four-file form was immune only because this
       box's own sentence happens to wrap `arm64` and `GiB` onto different physical lines, and a
       re-wrap would have made the criterion match itself and stop discriminating — **the exact
@@ -2409,10 +2598,14 @@ Tier 0 adapter, and ADR-0052 backs it.
       exists at all~~"*. Somebody has, against BookOrbit's own source at HEAD **`73b7877`**
       (re-checked at the evaluation's `4a420a04`, identical at both), and **there is no series-level
       ordered read in BookOrbit at all**:
-      - the series controller exposes `GET /series` and `GET /series/:seriesId/books` and **nothing
-        else** — **no `POST …/query` counterpart** to `POST /books/query`; **the routes are named
-        rather than tallied**, so a third one appearing upstream
-        falsifies the sentence rather than just a number in it;
+      - the series controller exposes **exactly two** routes, `GET /series` and
+        `GET /series/:seriesId/books` — **no `POST …/query` counterpart** to `POST /books/query`;
+        ⚠️ **the *"exactly two"* was removed on 2026-08-22 as a count that could drift and is
+        RESTORED the same day**, because this one cannot: the claim is pinned to BookOrbit's own
+        source at HEAD **`73b7877`**, release `v2.6.0`, re-checked at `4a420a04` and identical at
+        both. **A frozen upstream commit is the counting rule's durable case**, and a route
+        appearing upstream after it does not touch a measurement taken at a named commit — it
+        raises a new question about a newer commit;
       - `SERIES_LIST_SORTS` is `name`, `bookCount`, `lastAddedAt`, `readProgress` — **no `updatedAt`**
         — and an `@IsIn` validator **rejects** one with a `400` rather than ignoring it;
       - `book_series.updated_at` **exists** as a column with `$onUpdateFn` and **is never selected**:
@@ -2463,8 +2656,11 @@ Tier 0 adapter, and ADR-0052 backs it.
       `serviceKinds` (`internal/httpapi/services.go`,
       where `"bookorbit"` maps to the `library` role), the per-instance client switch in
       `cmd/usarr/services.go`, and `SERVICE_KINDS` (`web/src/lib/api.ts`, now
-      `['prowlarr', 'kavita', 'bookorbit']`). ⚠️ **The old text warned that one of the three is
-      `web/`, ANOTHER LANE'S TERRITORY; the edit crossed it, as that warning said it would have to.**
+      `['prowlarr', 'kavita', 'bookorbit']`). ⚠️ **The old text warned that one of them —
+      `SERVICE_KINDS`, in `web/src/lib/api.ts` — is `web/`, ANOTHER LANE'S TERRITORY; the edit
+      crossed it, as that warning said it would have to.** ⚠️ **Named rather than counted,
+      2026-08-22:** it read *"~~one of the three~~"* after the count above it had been struck, so
+      the referent was gone.
 
       ✅ **SLICE 1 SHIPPED — PROSE BOOKS, END TO END. STILL NOT A TICK.** `862a0ca`
       (*"feat(bookorbit): slice 1 — one library's prose books, end to end"*) adds
@@ -2527,11 +2723,15 @@ Tier 0 adapter, and ADR-0052 backs it.
       `(service_instance_id, kind, remote_kind, remote_id, id)` — **one index and nothing else, an
       index-only migration like `00009` and `00010` before it.**
       **Why the read needs it:** `internal/store/libraries.go`'s `libraryCompletenessSQL` picks the
-      newest verdict per `(instance, container_ref)` with a correlated subquery carrying **an
-      equality per leading index column and a descending
+      newest verdict per `(instance, container_ref)` with a correlated subquery carrying
+      **equalities on `service_instance_id`, `kind`, `remote_kind` and `remote_id`, and a descending
       `id` pick**, and `00005`'s `ix_sync_report_instance` —
-      `(service_instance_id, created_at DESC)` — serves the first predicate, none of the other three,
-      and sorts on the wrong column. Measured before: `USE TEMP B-TREE FOR ORDER BY`, **per
+      `(service_instance_id, created_at DESC)` — serves the `service_instance_id` equality, none of
+      the other three, and sorts on the wrong column. ⚠️ **The equalities are ENUMERATED here
+      2026-08-22 because the count was removed and the referent went with it:** the sentence read
+      *"~~four equalities~~"*, that *"four"* was struck as a tally, and *"none of the other three"*
+      one clause later was left pointing at nothing. **Removing a number does not discharge the
+      counting rule if a later clause was counting on it — the fix is the list, not the deletion.** Measured before: `USE TEMP B-TREE FOR ORDER BY`, **per
       `library_source` row**. After: a `COVERING` seek with **no row fetch and the sort gone**.
       `sync_report` is append-only and this kind writes one row per container per import, so
       **the walked-and-sorted set grew with IMPORT COUNT, forever, on a render path** — principle 1
@@ -2687,7 +2887,8 @@ Specific numbers are cited below because citing a specific ADR is not what went 
   `internal/bookorbit/scope.go` implements (the slice-0 record above), and which
   **[ADR-0052](./DECISIONS.md#adr-0052)'s §14 scope gate cites in a dated inline discharge note.**
 - ⚠️ **THIS SUBSECTION WAS WRITTEN AS *"~~allocated … neither ADR is written, and that note is not
-  there yet~~"*, AND WAS FALSE BEFORE IT WAS PUSHED.** It was fired at the baseline above, where
+  there yet~~"*, AND WAS FALSE BEFORE IT WAS PUSHED.** It was fired at `0085676` — `bdb29e4`'s
+  baseline, **pinned 2026-08-22** where it read *"~~at the baseline above~~"* — a tree on which
   `grep -n '^## ADR-005[5-8]' docs/DECISIONS.md` returned nothing — and `24c4a4d`
   (*"docs: ADR-0057 and ADR-0058 record what slice 0 decided"*) landed in the same window. **Both
   ADRs are written**, and **ADR-0052 carries its dated inline discharge note pointing at ADR-0058**,
