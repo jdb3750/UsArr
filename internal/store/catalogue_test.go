@@ -1758,3 +1758,184 @@ func TestContainerObservationsAreRedactedAtRest(t *testing.T) {
 		t.Errorf("the stored name is %q, want ssrf.RedactText's own answer %q", got[0].Name, want)
 	}
 }
+
+// ── the unfiled state: applied, searchable, and a member of nothing ─────────
+
+// TestAnUnacceptedContainersItemsAreAppliedAndFiledNowhere is the heart of
+// ADR-0048's ordering, and every assertion in it is about an EFFECT rather than
+// a field.
+//
+// The amendment of 2026-08-21 runs the first import BEFORE Accept so that the
+// proposals carry real item counts. That is only true if an item whose container
+// has no accepted library is written in full — and only safe if it is written
+// into no library at all, including the reserved one.
+//
+// ⚠️ THE `library_member` ASSERTION NAMES library 0 EXPLICITLY, and that is what
+// makes it a test rather than a label. `NoLibrary` spelled as `LibraryID == 0`
+// compiles, type-checks and passes any assertion phrased as "the binding says
+// unfiled" — and files every work into UnfiledLibraryID's membership, where §7
+// invariant 5 has already put the document. The membership row is the one thing
+// that tells the two apart.
+func TestAnUnacceptedContainersItemsAreAppliedAndFiledNowhere(t *testing.T) {
+	s := newTestStore(t)
+	inst := fixtureInstance(t, s, "kavita")
+
+	binds, _, err := s.BindContainers(t.Context(), inst, SystemUserID,
+		[]CatalogueContainer{comicContainer("1", "Manga")})
+	if err != nil {
+		t.Fatalf("BindContainers: %v", err)
+	}
+	if !binds["1"].NoLibrary {
+		t.Fatalf("the container was bound to library %d; this test measures nothing without "+
+			"the unfiled state", binds["1"].LibraryID)
+	}
+	res, err := s.ApplyCatalogueBatch(t.Context(), inst, binds,
+		[]CatalogueItem{item("41", "1", "comic", "Frieren")}, testNow)
+	if err != nil {
+		t.Fatalf("ApplyCatalogueBatch: %v", err)
+	}
+
+	// APPLIED. The batch did the work, and said so.
+	if res.WorksCreated != 1 || res.SearchDocs != 1 {
+		t.Errorf("result = %+v, want one work and one document — an item with no library "+
+			"must still be replicated, or the proposal beside it counts nothing", res)
+	}
+	if res.Members != 0 {
+		t.Errorf("result reports %d membership writes, want 0", res.Members)
+	}
+	if n := count(t, s, `SELECT COUNT(*) FROM work WHERE deleted_at IS NULL`); n != 1 {
+		t.Errorf("work rows = %d, want 1", n)
+	}
+	// THE LINK, WITH ITS CONTAINER. This is the column §17.8's item count joins
+	// on, so an item applied without it is an item no proposal can count.
+	var container string
+	if err := s.db.Read().QueryRowContext(t.Context(),
+		`SELECT remote_library_id FROM service_item_link WHERE service_instance_id = ?`,
+		inst).Scan(&container); err != nil {
+		t.Fatalf("read the link: %v", err)
+	}
+	if container != "1" {
+		t.Errorf("the link names container %q, want \"1\"", container)
+	}
+
+	// FILED NOWHERE — including, and especially, not into library 0.
+	if n := count(t, s, `SELECT COUNT(*) FROM library_member`); n != 0 {
+		t.Errorf("%d library_member rows exist, want 0", n)
+	}
+	if n := count(t, s, `SELECT COUNT(*) FROM library_member WHERE library_id = ?`,
+		UnfiledLibraryID); n != 0 {
+		t.Errorf("%d works were filed into the reserved Unfiled library. `NoLibrary` spelled "+
+			"as `LibraryID == 0` produces exactly this row, and nothing else in the schema "+
+			"distinguishes it from a library the user accepted", n)
+	}
+
+	// AND STILL SEARCHABLE, through §7 invariant 5's EXISTING fallback and no new
+	// rule: a document whose work is a member of nothing is scoped to library 0.
+	var workID int64
+	if err := s.db.Read().QueryRowContext(t.Context(),
+		`SELECT id FROM work LIMIT 1`).Scan(&workID); err != nil {
+		t.Fatalf("read the work: %v", err)
+	}
+	if got := docScopes(t, s, workID); len(got) != 1 || got[0] != UnfiledLibraryID {
+		t.Errorf("the unfiled work's document is scoped to %v, want exactly [%d] — invariant "+
+			"5's fallback is what keeps a pre-Accept catalogue searchable, and a doc with no "+
+			"scope row is invisible to every user including its owner", got, UnfiledLibraryID)
+	}
+	if n := docsWithNoScope(t, s); n != 0 {
+		t.Errorf("§7 invariant 5 broken: %d documents have no scope at all", n)
+	}
+}
+
+// TestADeclinedContainerIsNotAnUnfiledOne is the distinction ADR-0048 leaves
+// standing, asserted by what happens to the ITEMS rather than by a flag.
+//
+// A DECLINE is the adapter saying UsArr has no work.kind for this container, so
+// there is nothing to write and its items are never applied. "No accepted
+// library" is a user who has not ticked a box yet, and its items are applied in
+// full. Collapsing the two in either direction is a data-loss bug in one
+// direction and an unwritable-row bug in the other.
+func TestADeclinedContainerIsNotAnUnfiledOne(t *testing.T) {
+	s := newTestStore(t)
+	inst := fixtureInstance(t, s, "kavita")
+
+	binds, _, err := s.BindContainers(t.Context(), inst, SystemUserID, []CatalogueContainer{
+		comicContainer("1", "Manga"),
+		{RemoteID: "2", Name: "Wallpapers", DeclineReason: "no work.kind for an image"},
+	})
+	if err != nil {
+		t.Fatalf("BindContainers: %v", err)
+	}
+	if _, err := s.ApplyCatalogueBatch(t.Context(), inst, binds, []CatalogueItem{
+		item("41", "1", "comic", "Frieren"),
+		item("42", "2", "comic", "A Wallpaper"),
+	}, testNow); err != nil {
+		t.Fatalf("ApplyCatalogueBatch: %v", err)
+	}
+
+	// The unfiled item was applied; the declined one was not.
+	if n := count(t, s, `SELECT COUNT(*) FROM work`); n != 1 {
+		t.Fatalf("%d works exist, want 1 — the unfiled container's item and not the "+
+			"declined container's", n)
+	}
+	var container string
+	if err := s.db.Read().QueryRowContext(t.Context(),
+		`SELECT remote_library_id FROM service_item_link`).Scan(&container); err != nil {
+		t.Fatalf("read the link: %v", err)
+	}
+	if container != "1" {
+		t.Errorf("the one link came from container %q, want the UNFILED container \"1\"; "+
+			"a declined container's items are never fetched, let alone written", container)
+	}
+	// Both are visible to the Accept screen, and only one of them will ever be
+	// acceptable — which is why the observation carries the decline reason.
+	got := observations(t, s, inst)
+	if len(got["1"]) != 1 || len(got["2"]) != 1 {
+		t.Fatalf("observations = %+v, want one per container", got)
+	}
+	if got["1"][0].DeclineReason != "" || got["2"][0].DeclineReason == "" {
+		t.Errorf("the decline reason did not travel with the right container: %+v", got)
+	}
+}
+
+// TestTheSweepIsBlindToTheUnfiledState is the cheap assertion that ADR-0048 did
+// not reach channel 4.
+//
+// Both halves are readable from the code and are pinned here because "it does
+// not touch that" is exactly the claim that rots: `absentLinks` keys on
+// `service_item_link` and never reads `library_member` or `library`, so an
+// unfiled item is swept precisely as a filed one is; and `sweepOrphans` draws
+// its candidates from `fedLibraries`, which reads `library_source`, so a
+// container with no accepted library has nothing that could be stamped orphaned.
+func TestTheSweepIsBlindToTheUnfiledState(t *testing.T) {
+	s := newTestStore(t)
+	inst := fixtureInstance(t, s, "kavita")
+
+	binds, _, err := s.BindContainers(t.Context(), inst, SystemUserID,
+		[]CatalogueContainer{comicContainer("1", "Manga")})
+	if err != nil {
+		t.Fatalf("BindContainers: %v", err)
+	}
+	if _, err := s.ApplyCatalogueBatch(t.Context(), inst, binds, []CatalogueItem{
+		item("41", "1", "comic", "Frieren"),
+		item("42", "1", "comic", "Berserk"),
+	}, testNow); err != nil {
+		t.Fatalf("ApplyCatalogueBatch: %v", err)
+	}
+
+	// The upstream stops reporting item 42. The container is still reported.
+	res, err := s.SweepDeletions(t.Context(), inst,
+		[]LinkRef{{RemoteKind: "series", RemoteID: "41"}},
+		SweepScope{Reported: []string{"1"}, Observed: []string{"1"}},
+		testNow.Add(time.Hour))
+	if err != nil {
+		t.Fatalf("SweepDeletions: %v", err)
+	}
+	if res.LinksTombstoned != 1 {
+		t.Errorf("result = %+v, want the one absent link tombstoned — the sweep keys on "+
+			"service_item_link and an unfiled item is as sweepable as a filed one", res)
+	}
+	if res.LibrariesOrphaned != 0 || res.SourcesMissing != 0 {
+		t.Errorf("result = %+v, want nothing stamped: with no library_source row there is "+
+			"no candidate for fedLibraries to hand sweepOrphans", res)
+	}
+}
