@@ -8,6 +8,7 @@ import (
 	"sort"
 	"time"
 
+	"github.com/jdb3750/UsArr/internal/ssrf"
 	"github.com/jdb3750/UsArr/internal/store"
 )
 
@@ -531,7 +532,12 @@ func (im *Importer) FullImport(ctx context.Context, instanceID int64) (rep Repor
 		// The merge SIGNAL, recorded rather than merged. v0.1 has no work_merge
 		// table; see ApplyCatalogueBatch's doc comment for what is done instead.
 		detail, err := json.Marshal(map[string]any{
-			"source": c.Source, "value": c.Value,
+			// `value` is an external identifier lifted straight off the upstream
+			// payload, and one of the sources UsArr accepts is a web link — so
+			// this is the one field in this row that can be URL-shaped.
+			// ssrf.RedactText closes exactly that case and nothing wider: its own
+			// doc says a bare secret outside a URL passes through untouched.
+			"source": c.Source, "value": ssrf.RedactText(c.Value),
 			"existing_work_id": c.ExistingWorkID, "attempted_work_id": c.AttemptedWorkID,
 			"resolution": "the existing work keeps the identifier; no merge machinery exists in v0.1",
 		})
@@ -726,7 +732,18 @@ func (im *Importer) bindPhase(
 	// has no caller left to read the Report by the time anyone asks why a Kavita
 	// library is missing from the Libraries screen.
 	for _, d := range rep.DeclinedContainers {
-		detail, err := json.Marshal(map[string]string{"name": d.Name, "reason": d.Reason})
+		// Both strings redacted at the write, on recordContainerObservation's
+		// rule — that function already redacts this exact pair onto a
+		// `container_observed` row, and one of the two kinds guarding a value the
+		// other does not is how a leak survives a green suite. The limit is the
+		// same and is not overstated: ssrf.RedactText finds http/https substrings
+		// and strips credential-named query params; a bare secret that is not
+		// inside a URL passes through. `reason` is UsArr's own closed-set prose
+		// today, so redaction is a no-op on it — it is applied anyway so the
+		// invariant is the field's rather than today's producer's.
+		detail, err := json.Marshal(map[string]string{
+			"name": ssrf.RedactText(d.Name), "reason": ssrf.RedactText(d.Reason),
+		})
 		if err != nil {
 			return nil, nil, fmt.Errorf("%s of service_instance %d: encode decline: %w", what, instanceID, err)
 		}

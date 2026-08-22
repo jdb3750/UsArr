@@ -588,7 +588,28 @@ func (s *Store) BindContainers(
 			if _, err := tx.ExecContext(ctx, "RELEASE SAVEPOINT "+sp); err != nil {
 				return fmt.Errorf("release savepoint %s: %w", sp, err)
 			}
-			sk := SkippedContainer{RemoteID: c.RemoteID, Name: c.Name, Reason: bindErr.Error()}
+			// ⚠️ REDACTED AT THE ASSIGNMENT, NOT ON THE MAP AND NOT ON THE READ,
+			// and the placement is the invariant. This struct value is returned
+			// to the caller and reaches a log line as well as this JSON, so a
+			// redaction on the map below would leave the log carrying whatever
+			// the assignment carried — one string with two exits and only one of
+			// them guarded. Redacting on the READ is worse still: it makes the
+			// value shown differ from the value stored, which is the failure
+			// recordContainerObservation's comment works through at length.
+			//
+			// ⚠️ AND THE LIMIT IS STATED RATHER THAN IMPLIED. ssrf.RedactText
+			// finds http/https substrings and strips credential-named query
+			// params from them; its own doc says a bare secret outside a URL
+			// passes through untouched. It closes the URL-shaped case, which is
+			// the case reference/security.md §5 cites. It does not make either
+			// string safe in general, and nothing here should be read as saying
+			// it does — `bindErr.Error()` is a SQLite constraint message today,
+			// and `c.Name` is the upstream's own text at all times.
+			sk := SkippedContainer{
+				RemoteID: c.RemoteID,
+				Name:     ssrf.RedactText(c.Name),
+				Reason:   ssrf.RedactText(bindErr.Error()),
+			}
 			detail, err := json.Marshal(map[string]string{"name": sk.Name, "reason": sk.Reason})
 			if err != nil {
 				return fmt.Errorf("encode skipped container %q: %w", c.RemoteID, err)
@@ -1113,7 +1134,10 @@ func noteKindChange(
 		was = append(was, map[string]any{"kind": r.kind, "library_id": r.id})
 	}
 	detail, err := json.Marshal(map[string]any{
-		"name": c.Name,
+		// Upstream text into sync_report.detail, redacted where it is written on
+		// recordContainerObservation's rule and with the same stated limit:
+		// ssrf.RedactText closes the URL-shaped case and nothing wider.
+		"name": ssrf.RedactText(c.Name),
 		"was":  was,
 		"now":  map[string]any{"kind": c.Kind, "library_id": boundTo},
 	})

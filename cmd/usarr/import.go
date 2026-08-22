@@ -11,6 +11,7 @@ import (
 	"github.com/jdb3750/UsArr/internal/imagecache"
 	"github.com/jdb3750/UsArr/internal/imagepipeline"
 	"github.com/jdb3750/UsArr/internal/libsync"
+	"github.com/jdb3750/UsArr/internal/ssrf"
 	"github.com/jdb3750/UsArr/internal/store"
 )
 
@@ -459,7 +460,32 @@ func (g *registry) recordSkippedItems(
 ) {
 	for _, s := range skips {
 		note := store.SkipNote{
-			Name:         s.Name,
+			// Upstream text into sync_report.detail, redacted at the ASSIGNMENT
+			// rather than on the map or the read, on the rule
+			// internal/store/catalogue.go's recordContainerObservation states.
+			//
+			// ⚠️ TODAY THIS IS A SECOND APPLICATION AND NOT THE ONE THAT SAVES
+			// YOU, and saying otherwise would overstate it. ContainerSkips comes
+			// only from the BookOrbit adapter, and internal/bookorbit puts every
+			// piece of upstream prose through ssrf.RedactText at its own client
+			// boundary (catalogue.go's text → clean), so this call is provably a
+			// no-op for the one producer there is. It is here because the
+			// invariant belongs to the FIELD rather than to one adapter:
+			// internal/kavita does NOT redact a container name on the way out
+			// (internal/kavita/redact.go's LibraryView), so the second adapter to
+			// feed this type would arrive unredacted. The measured consequence is
+			// that no test can currently make this line fire — the write-seam
+			// guard that covers the store and libsync writers
+			// (internal/libsync/syncreportwriteseam_test.go) cannot reach a
+			// cmd/usarr writer with poison, because the only route to one runs
+			// through the client that already cleaned it.
+			//
+			// ⚠️ AND THE LIMIT OF THE FUNCTION IS STATED RATHER THAN IMPLIED:
+			// ssrf.RedactText finds http/https substrings and strips
+			// credential-named query params from them, and its own doc says a
+			// bare secret outside a URL passes through untouched. It closes the
+			// URL-shaped case §5 cites; it does not make the column safe.
+			Name:         ssrf.RedactText(s.Name),
 			Comics:       int64(s.Comics),
 			Unknown:      int64(s.Unknown),
 			Covers:       skipCovers,
@@ -544,8 +570,19 @@ func (g *registry) recordCompleteness(
 ) {
 	for _, c := range checks {
 		note := store.CompletenessNote{
-			State:        string(c.State),
-			Container:    c.Name,
+			State: string(c.State),
+			// The upstream's own container name. Redacted at the write on the
+			// same rule, with the same stated limit, and with the same honest
+			// caveat as SkipNote.Name above: BookOrbit is the only producer of
+			// this type and its client already redacts, so this is defence in
+			// depth against the next adapter rather than a live guard.
+			//
+			// Reason is NOT redacted, and that is a different judgement rather
+			// than an omission: it is not upstream text at all but a closed set
+			// of UsArr's own sentences, pinned by the membership assertions in
+			// bookorbit_completeness_e2e_test.go and in
+			// internal/libsync/bookorbitcompleteness_test.go.
+			Container:    ssrf.RedactText(c.Name),
 			Total:        c.Total,
 			Visible:      c.Visible,
 			Hidden:       c.Hidden(),
@@ -664,7 +701,10 @@ func (g *registry) recordComicResidue(
 ) {
 	for _, c := range comics {
 		synth := comicResidueNote{
-			Name:              c.Name,
+			// Upstream text into sync_report.detail; same rule, same limit and
+			// same caveat as SkipNote.Name above. `declined` is copied from this
+			// struct, so the one assignment covers both rows.
+			Name:              ssrf.RedactText(c.Name),
 			SynthesizedSeries: c.SynthesizedSeries,
 			MultiSeries:       c.MultiSeries,
 			ExtraMemberships:  c.ExtraMemberships,
