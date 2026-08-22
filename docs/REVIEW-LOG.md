@@ -27564,9 +27564,29 @@ commit `a7729a1c8279`, tree `fa20481c9b69`, the mockups still draw the banner on
 argument on the merits — the same argument the paragraph above makes — so what is being removed, if
 it is removed, is not decoration.
 
-**Removal SHA:** *recorded when the D8 removal lands.* Not landed at this tree; the banner is present
-at `fa20481c9b69` as tabulated. Until that content commit exists this slot names the condition rather
-than sitting blank, and the table above is what a reader compares it against.
+**Removal SHA:** `ca4d5b507c9b2944344355daac161f3086517741` — *"the degraded-instance banner leaves
+Home and Search, which §17 never granted it to"*, authored 2026-08-22. ✅ **Verified at this clone**,
+by three checks run independently rather than by the abbreviation resolving: it is a **commit** and
+**not a merge** — its raw object carries exactly one `parent` line; its single parent is
+`f62f9635416b0ff21e8370642e45891c2c612b03`; and it is an **ancestor** of main's tip
+`dfe1238971e5b9bc178e829faa369eb33ed39a9c`, by `git merge-base --is-ancestor`. ⚠️ **The clone is
+shallow and the parent count was checked against that**: neither the commit nor its parent appears in
+`.git/shallow`, so the single parent is the commit's own and not an artefact of the horizon. The
+object was absent before the fetch that brought main to `dfe1238` and resolves after it.
+
+⚠️ **IT REMOVES THREE OF THE FIVE TABULATED ROWS, AND THE REMAINDER IS STATED RATHER THAN ROUNDED
+OFF.** The commit deletes the whole `banner banner--warn` block from `search.html`, so rows 1, 2 and
+4 are gone at this tree — the banner title, its body text, and the same title in the assembled
+prototype. **Rows 3 and 5 SURVIVE**: the state selector's
+`<option value="stale">Results, one instance unreachable</option>` still stands at
+`docs/design/mockups/search.html:285` and at `docs/design/mockups/prototype.html:4725` — row 5's
+`:4732` has moved, and the line number here is this tree's. So the mockups no longer **draw** a
+surface §17 withheld, but they still **offer the state** that drew it, and a reader comparing this
+slot against the table above should expect two rows still standing rather than none.
+
+📌 **This does not close the entry, and the commit says so in its own message** — it records that it
+does not decide whether Search should carry the banner on the merits, and that the question is
+recorded elsewhere and untouched. The heading stays **OPEN**, and the trigger below is unchanged.
 
 **Trigger.** The next motion that opens §17.7. Whoever opens it decides Search on the merits and
 writes the decision into the bullet — either name Search in the list, or exclude it with a reason the
