@@ -386,6 +386,23 @@ type acceptLibrariesResponse struct {
 // instance, whether the kind is one the schema has — belongs to the store, which
 // decides it inside the transaction where it cannot be raced, and returns a
 // sentinel acceptLibrariesError maps.
+//
+// # WHY THIS WRITE IS NOT SUDO-GATED WHEN EVERY SERVICES-SCREEN WRITE IS
+//
+// Stated here rather than left implicit, because an unexplained difference
+// between two write endpoints is the kind of thing a later reviewer closes by
+// tightening the wrong one — and the cheap tightening is the wrong one. Sudo
+// exists to re-prove the operator in front of a STORED CREDENTIAL, and §17.3.3
+// gives that as the reason for each of the Services writes it gates: create,
+// update and delete set or destroy an *Arr API key; both test endpoints send one
+// somewhere; both sync endpoints read a library over a stored full-admin
+// credential. This endpoint does none of those. It writes `library`, `library_source`, `library_member` and
+// `search_doc_library`, and it reads a service instance's id only to decide the
+// caller may name it — §17.8 puts no credential field on the Libraries screen at
+// all. POST /releases/{id}/grab sits in the same position and is gated the same
+// way. ARCHITECTURE §17.3.3's *"every endpoint that changes anything"* is scoped
+// to the SERVICES screen; reading it as a rule over every write in the API is
+// what would put a re-authentication prompt in front of ticking a checkbox.
 func (s *Server) handleAcceptLibraries(w http.ResponseWriter, r *http.Request) error {
 	a, ok := sessionFrom(r)
 	if !ok {
