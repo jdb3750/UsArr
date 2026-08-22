@@ -137,6 +137,7 @@ because no ADR ever decided it. Annotating leaves that failure mode nowhere to h
 | [0074](#adr-0074) | Channel 4's `remote_hash` drift gate is **DROPPED for BookOrbit**; the hash may gate the **store seam only** and **NEVER the credit re-apply**; **guard 1 ships wired, guard 2 is deferred on a void premise** | **Accepted** — 2026-08-21; **source-conditional, the same shape [ADR-0070](#adr-0070) used to put BookOrbit outside §7.1a's client-side stop** — §7.4's gate stands unchanged for every source whose drift consequence is a refetch, and Kavita's is one (`internal/libsync/credits.go`'s `StreamCredits`, one `GET /api/Series/metadata` per series); **BookOrbit has no refetch to gate** — its credits ride the item payload into an in-memory map (`internal/libsync/bookorbit.go`'s `keepCard`, read back by `internal/libsync/bookorbitcredits.go`'s `StreamCredits`, a file that imports no HTTP client at all); ⚠️ **THE ADR LANDS BEHIND ITS CODE AND SEPARATES WHAT IT AUTHORISES FROM WHAT IT RECORDS** — measured at `d9a3f37`, the deletion pass and guard 1 are in the tree and **the store-seam gate is NOT**, so `remote_hash` still has **no production reader** (no `SELECT` in non-test Go names it; its only reader is a test assertion) and the column this slice actually gave a first reader is its sibling `remote_identity_hash`; ⚠️ **the repurposing is BOUNDED TO ONE SEAM and the boundary is the whole decision** — the hash may gate the local write inside `internal/store/catalogue.go`'s `applyOneItem` and **may never gate the credit re-apply**, because `internal/libsync/importer.go`'s `streamAndApply` builds `imported` unfiltered and a gate there drops the item **before a `CreditRequest` is minted**, so `applyOneCreditSet` never runs and **the deafness this ADR exists to close returns identically** — worse here than for Kavita, since `keepCard` would be holding the corrected authors in memory, unread, while the row on disk stayed stale; **what the gate WOULD SAVE is claimed narrowly and is a claim about SHAPE, not size** — the `work_credit` delete-and-reinsert and its per-credit `personWorkID` lookups (`internal/store/credits.go`'s `applyOneCreditSet`, step 3), **NOT the FTS write**, which is already suppressed by the rendered-name-list compare, as year is by `year IS NOT ?` and status and declared total by the same shape, and **nobody has measured it** — if it is negligible the answer is to drop the gate, never to move it earlier; **guard 1 SHIPPED WIRED** — `applyOneItem`'s step 1a compares the stored `remote_identity_hash` against `CatalogueItem.identityHash` on any upsert that would clear `deleted_at`, hard-deletes the tombstoned link (**forced**: `ux_sil` is a plain UNIQUE index, not partial on `deleted_at`, so a tombstone and a fresh link cannot coexist), emits `store.SyncReportIDReused` and counts it on `BatchResult.IDsReused`, leaving the abandoned **work** tombstoned with its owned corrections; a NULL stored hash is **unknown, not mismatched**; **the sequencing was a ruling condition** — the guard-2 deferral is defensible only because this landed with it; **guard 2 is DEFERRED FOR BOOKORBIT ONLY, on a recorded void premise** — §7.4's "ids are reused after deletion" is a SQLite-rowid fact about the \*Arrs and BookOrbit's `books.id` / `libraries.id` are PostgreSQL `serial` with no `setval(`, no SQL `TRUNCATE`, no `RESTART IDENTITY` in `server/src` at `73b7877d2fed`, **so the premise is void for this source and stays LIVE for the \*Arrs**; ⚠️ **FOUR HAZARDS SURVIVE AS NAMED GAPS WITH NO GUARD** rather than being dropped with the premise — an older `pg_dump` restored; the instance repointed at a rebuilt server; ⚠️ **`identityHash` over an empty external-id list is the hash of an empty list and `bookOrbitExternalIDs` writes exactly one identifier (`hardcover_book`), null for any book the operator has not matched, so EVERY UNIDENTIFIED ITEM SHARES ONE IDENTITY HASH and guard 1 certifies nothing for those items**; and ⚠️ **a full list read returning zero from a source that had thousands tombstones the whole library** — more likely a broken credential than a mass deletion — mitigated only by every absence being a stamped column on a **retained** row that the next good import clears, and **NO REFUSAL THRESHOLD IS SET**, because a number is a ruling this ADR does not have; **the four `service_instance` guard-2 columns stay as an ANNOTATED SEAM** carrying the void-premise measurement at the site, on the form `internal/store/libraries.go`'s `Library.OrphanedAt` carried **at `b90b031`, before `0adfe1f` falsified it** — **its form, not its placement**, since those four are absent from `ServiceInstance` and from `serviceInstanceColumns` and it is their absence being annotated; **the deletion pass moves FOUR columns meaning four things** (`internal/store/reconcile.go`'s `SweepDeletions`, set difference in Go and never in SQL): `service_item_link.deleted_at`, `work.deleted_at` on the last live link **anywhere**, `library_source.missing_since` — **the sweep is its first writer** — and `library.orphaned_at`, set and **cleared** by `sweepOrphans`; all four `IS NULL`-guarded so they are **first-observed-absent** and the counts are transitions; ⚠️ **NO TIMER** — §7.4's every-6-h scheduler **does not exist**, the sweep runs from `FullImport`'s success path only (a partial import never sweeps, `DeltaSync` passes a nil seen-set), **and there is no reaper**: nothing hard-deletes a tombstone after seven days, so reconciliation is **not automatic**; **the drift half of channel 4 is unbuilt for every source**; ⚠️ **the two "mandatory" sentences take a SCOPING RIDER, not a deletion** (ARCHITECTURE §2.2, §7.4's heading, [ADR-0012](#adr-0012), and this file's own ADR-0070 *What this does NOT decide* §1 — **two documents, four sites; three documents specify both guards**), because with guard 2 unbuilt no document may go on saying the sweep has two mandatory guards without saying **for which source**; **no migration and no new index** — the plan guard is a **demand** on the per-item lookup (`USING INDEX ux_sil (` plus all three key columns, EXPLAINing the shipped `linkLookupSQL` constant, with `TestResurrectionPlanGuardFiresWhenRemoteKindIsDropped` as its fired positive control) and a deliberately weaker **acceptance** on the instance sweep, **never a general accept-SCAN**; ⚠️ **[`ARCHITECTURE.md`](./ARCHITECTURE.md) §7.4, §7.1a and [`reference/sync.md`](./reference/sync.md) §4 take the conditional IN THE SAME MOTION**, and `cmd/usarr/import.go`'s channel-4 comment block is a correction site in it — its *"assigning it to channel 4 would be assigning it to nothing"* is falsified by this slice, and the file already flags the credits half of that as "under correction elsewhere"; **two riders ride the landing as their own commit** — [ADR-0070](#adr-0070)'s *"The FIELD does have one"* understates the hole by a layer (`remote_hash` has no production `SELECT` either, **and this slice did not close it**), and `internal/libsync/delta.go`'s `SyncReportDeltaWalk` vocabulary check names `comic_residue`, **a member the tree does not have** — the real literals are `comic_series_synthesized` and `comic_series_memberships_declined` (`cmd/usarr/import.go`), and a vocabulary check naming a non-member is a check that did not run ; ⚠️ **AMENDED 2026-08-21 BY THE REST OF ITS OWN SLICE, WHICH FALSIFIED CLAIMS IN THIS ROW** (`REVIEW-LOG.md` LS-392 carries the re-derivation): **the hazard list is COUNT-FREE and re-derived at the branch tip** — *"FOUR HAZARDS SURVIVE AS NAMED GAPS WITH NO GUARD"* was written five commits before the branch stopped moving; **gap (c) is NARROWED, not closed** — *"EVERY UNIDENTIFIED ITEM SHARES ONE IDENTITY HASH and guard 1 certifies nothing for those items"* stands, but the vacuous equality is gone (a length test precedes the comparison) and the residue is that **a genuine id reuse on an unidentified item is silently MERGED rather than split, chosen and not overlooked**, recorded by `store.SyncReportRevivedWithoutIdentity` — a record, not a guard — and **reopened only by identity coverage improving or by a merge path existing**; **gap (d)'s zero read is REFUSED** — *"a full list read returning zero from a source that had thousands tombstones the whole library … mitigated only by every absence being a stamped column on a retained row"* is superseded: `SweepDeletions` refuses instance-wide (`ErrSweepRefusedEmptyRead`, and the import fails with it) and withholds per container (`SweepScope.Observed`), while **NO REFUSAL THRESHOLD IS SET remains true** and the large-but-nonzero drop is still unguarded; **the freezing rule is NARROWED** — *"written at first sight and never overwritten"* was wrong on the ordinary case, and `remote_identity_hash` now moves for exactly one transition, `empty → present`, with **a wrong first identity frozen too** and its repair v0.2's *"fix this match"*; **the scoping-rider inventory is a LIST, not a count** — *"two documents, four sites; three documents specify both guards"* missed §16.1's v0.1 entry, the site `CLAUDE.md` calls authoritative for scope, whose *"for everything"* takes a dated narrowing rider, and §7.4's heading had *"mandatory"* struck rather than ridden and has it back; ⚠️ **and the closed set names its boundary** — the deletion pass is scoped by NOTHING and runs for **Kavita**, a wired source no measurement here covers, so **guard 2's standing requirement is not deferred for it** |
 | [0075](#adr-0075) | The declared SQLite floor is honoured by **rewriting the trigger body**, not by raising the floor: `RAISE()`'s message must be a **static literal** in any object that reaches the **persisted** schema | **Accepted** — 2026-08-21; **the persisted schema did not honour the floor the documents declare** — [`reference/schema.md`](./reference/schema.md) §1 and [`ARCHITECTURE.md`](./ARCHITECTURE.md) §6 both state **3.43.0**, while `trg_library_unfiled_no_delete` (migration 0005) raised a message built from four fragments joined with `\|\|`, which SQLite accepted as `RAISE()`'s second argument only from **3.47.0** (2024-10-21, *"Allow arbitrary expressions in the second argument to the RAISE function"*); ⚠️ **SQLite stores schema objects as TEXT, so this is a READER defect and it fires at PREPARE on EVERY statement**, not on the delete the trigger guards — verbatim `malformed database schema (trg_library_unfiled_no_delete) - near "\|\|": syntax error (11)`; ⚠️ **the operator-facing form is reachable straight from this repo's own instructions** — [`CONFIGURATION.md`](./CONFIGURATION.md) §6.2's by-hand `sqlite3 … "VACUUM INTO …"` backup answers `Error: stepping, database disk image is malformed (11)`, exits **11** and **writes no backup**, with `PRAGMA integrity_check` failing identically, so a healthy database reports itself corrupt at the moment the operator is trying to protect it; **the repair is migration `00013`, one trigger dropped and re-created**, no table, column, index or row, with the event, the `WHEN OLD.id = 0` condition and the effect carried across unchanged and the message **byte-for-byte** the 316-character string the four fragments concatenate to — proven by running the refused delete at 13 and at 12 and requiring the two error strings equal, not by diffing files; ⚠️ **verified at the DECLARED FLOOR, which is stronger than the defect was routed as** — the slice was scoped to 3.46.1 and the post-0013 database is read by **3.43.0** (built from the official amalgamation with FTS5): `PRAGMA integrity_check` → `ok`, **123 objects**, counts served off the contentless FTS5 tables, a `WITHOUT ROWID` table and `STRICT` tables alike, with 3.45.1 and 3.46.1 the same and **every one of them failing on the pre-0013 control**; **only one persisted object ever carried the construct** — of 123 objects three are triggers, and the other two already raised the literal `'audit_log is append-only'`; 🚫 **the live alternative it closes is raising the floor to 3.47.0 and editing the documents** — the cheaper edit and the worse outcome, spending a real compatibility promise on a **diagnostic string**, excluding the sqlite3 that distributions still in support ship, and excluding them from the one operation an operator performs when already frightened, while the concatenation buys nothing at runtime; 🚫 also refused: shortening the operator-facing message for source tidiness, editing merged migration 0005 (useless — existing databases already store the old trigger), and documenting the requirement instead; **enforced by a test rather than a convention** — `TestPersistedSchemaRaisesOnlyLiterals` blanks literals and comments and fails on `\|\|` inside any `RAISE()` argument, carries a vacuity check, and **both halves were fired deliberately**; ⚠️ **what it does NOT decide, stated so the next grep-driven pass does not reopen it**: the second `RAISE(… \|\| …)`, `trg_wq_rebuild_guard` at `00005_library_sync.sql:961`, **STAYS** — created on the scratch table `write_queue_new`, dropped by 0005 itself at `:984` before the rename at `:986`, **absent from the snapshot and returning 0 from `sqlite_master` on a live migrated database**, so no reader ever prepares it, and its expression message is load-bearing there because it carries the COUNT of rows that would be discarded; ⚠️ **and it does not claim the sqlite3 CLI can BUILD this schema** — it cannot, 0005 is unedited, **building and reading are different claims**, and the two sites recording the build limitation take dated riders rather than deletions |
 | [0076](#adr-0076) | §7.4's sweep gets its **six-hourly schedule** and **no reaper**: the seven-day tombstone is a **restoration window**, and a retention limit is a **joint decision with guard 1** that nobody has taken | **Accepted** — 2026-08-21; **costs no migration, no column, no index and no configuration key** — the interval is a constant; the schedule is a **timer over `FullImport`**, not over `SweepDeletions`, because the sweep's precondition is that the seen-set it is handed is the upstream's WHOLE list and a timer holds no such list — a scheduler reaching for the sweep directly would have to synthesise a set it never observed, and the difference between that set and the truth is tombstoned, which is the whole library on a partial read; §7.4's *"plus on demand"* was **already built** — the Services screen's *"Run full sync now"* — and takes the **identical** `beginImport` claim, so nothing is duplicated, ⚠️ **but the guard is identical and the pass is NOT**, and the shutdown, cancellation and never-synced differences are enumerated in the ADR rather than elided; [REVIEW-LOG](./REVIEW-LOG.md) **C-7's single-writer figures were RE-MEASURED rather than carried forward** (**132 ms** at 1,000 absent links, **2.80 s** at 20,000, **57 ms** for a no-op over 20,000 live links — all ~1.3× C-7 on a different machine, with the ratio between the cells unchanged, which is what makes it a machine and not a regression), and **the material cell is the no-op**, because a six-hourly tick produces the healthy shape and a library-scale absence is an EVENT that costs the same whether the timer discovers it or the operator does; the `write_queue` precondition is **not applicable rather than satisfied** — the sweep has no write-back path and nothing in the production binary creates a `write_queue` row, so a guard added today would be **a check that cannot fail, which this repo counts as no check at all**; ⚠️ **it corrects a doc sentence that promised a deletion nothing has ever performed** (`reference/sync.md` §4, guard 2's clause (b)) — the seven days are a **restoration window** and nothing hard-deletes at their end; **a retention limit is a JOINT decision with guard 1**, because `ux_sil` is plain rather than partial, so a tombstoned link still occupies its `(instance, kind, remote_id)` slot and reaping one **sets guard 1's expiry by accident**; **`ARCHITECTURE.md` §7.4 gains nothing and loses nothing — it was never wrong** |
+| [0078](#adr-0078) | The **proposal set** is computed from `container_observed` observations in the local file; **`AcceptLibraries` is the only creator of a `library` row** | **Accepted** — 2026-08-22; **implements [ADR-0048](#adr-0048) and changes none of its five clauses** — clause 1's *"a value computed by the probe, not a table"* keeps the value and **relocates its first input** from the probe response to `sync_report` rows, because a proposal that lives only in a probe response is *"available for a few seconds after adding a service and never again"* and §17.8 is a screen the user navigates to; **an observation is not a proposal** — no lifecycle, no accept flag, superseded by the next run, never read as user state; **the observation is written INSIDE `BindContainers`' transaction, before the decline skip and before the savepoint**, so an ABSENT row is a fact rather than a lost write, and its error is returned rather than logged — the shape refused is `content_completeness`'s; **"this container went away" is a SERVER-SET `not_seen_by_last_sync`**, the only signal there is for an unbound container, flagged rather than hidden; **performs the removal ADR-0048 named and deferred** — `bindOneContainer`'s step 3 is gone and one grep is the falsifier; **`managed_by = 'user'` gets its first writer**, so §17.8's one-way door has a hinge — ⚠️ but the WIRE carries `edited`, never `managed_by`; **membership is a BACKFILL from `service_item_link.remote_library_id` under `ix_sil_container`**, not a move out of `Unfiled` — an unfiled work has **no `library_member` row at all**, and `NoLibrary` is a named state rather than `LibraryID == 0`; **Accept is all-or-nothing across a batch**, with the per-acceptance savepoint deferred to the commit that would need it; **no migration, no column, no table and no index**; ⚠️ **it falsifies four statements in [ADR-0048](#adr-0048), one in [ADR-0068](#adr-0068) decision 5 and `ARCHITECTURE.md` §6.5 rule 6** — each takes a dated rider in the same motion; ⚠️ **the done-check is NOT run** — it needs a live upstream no test here can reach |
 
 ---
 
@@ -14201,3 +14202,334 @@ question has to be asked again — the list is a measurement of a schema at a ve
   Rejected on `maintenance.go`'s standing ruling: an operator asked to pick this number must know how
   long their upstream takes to walk and how fast their catalogue churns, and §7.4 already chose the
   honest default for them.
+
+---
+
+<a id="adr-0078"></a>
+## ADR-0078 — The proposal set is computed from `container_observed` observations in the local file, and **Accept is the only creator of a `library` row**
+
+**Status:** Accepted — 2026-08-22 ·
+**Implements [ADR-0048](#adr-0048) and changes none of its five clauses** — clause 1 said a proposal
+is *"a value computed by the probe, not a table"*; this record keeps the value and **relocates its
+first input** from the probe's response to `container_observed` rows in `sync_report` ·
+**Performs the removal ADR-0048 named and deferred** — `bindOneContainer`'s step 3 is gone, and
+ADR-0048's Consequences take a dated rider saying so ·
+**Costs no migration, no column, no table and no index** — `sync_report` carries no `CHECK` on `kind`,
+and `ix_sync_report_container_latest` (migration 0011) and `ix_sil_container` (migration 0005) are
+both pre-existing ·
+⚠️ **It falsifies four statements in [ADR-0048](#adr-0048), one in [ADR-0068](#adr-0068) decision 5,
+and `ARCHITECTURE.md` §6.5 rule 6** — each takes a dated rider in the same motion, and landing this
+without them is not permitted ·
+**Applies principle 1 rather than excepting it**: §17.8's Accept screen is a screen the user navigates
+to, so it renders from the local file with no outbound call ·
+⚠️ **The done-check is NOT run** — it needs a live Kavita or BookOrbit, which no test in this repo can
+reach; what is measured is stated per decision below
+
+### Context
+
+**ADR-0048 clause 1 named two inputs and one of them is not available to a screen.** The clause
+computes the proposal set from *"what the connected instance reports as its containers, and what is
+already bound in `library_source` for that user"*, and clause 5 excuses the connect probe's upstream
+call as a setup action. Neither gives §17.8's Accept screen anything to render on a second visit: a
+proposal that lives only inside a probe response is available for a few seconds after adding a service
+and never again. §17.8 is not a moment in a wizard — it is `/settings/libraries`, and a user reaches
+it whenever they like.
+
+**Re-probing on every visit is the one answer principle 1 forbids.** `CLAUDE.md` principle 1 and
+`ARCHITECTURE.md` §2 bind *every user-facing read* to the local file. Clause 5's exception is for the
+act of configuring a service, not for a settings screen's ordinary render, and a screen that blocks on
+a Kavita that is switched off is the failure the principle exists to prevent.
+
+**The containers are already in the local file, but nothing was writing them down.** Before this
+slice, an import recorded a container only when it **declined** it (`container_declined`). A container
+UsArr bound left a `library_source` row; a container it neither bound nor declined left nothing at
+all — which is precisely the set a proposal is drawn from once creation is conditional.
+
+**And ADR-0048's own deferral had come due.** Its Fact 2 and its Consequences both assigned the
+removal of unconditional creation to *"the library thread that builds §17.8"*, and its 2026-08-21
+amendment restated the assignment. This is that thread.
+
+### Decision 1 — the proposal set's container input is `container_observed`, written by the bind transaction
+
+**`sync_report.kind = 'container_observed'`, one row per container per import, `remote_kind =
+'library'`, `remote_id` the container's own upstream ref, `detail` a JSON blob carrying the name, the
+kind, `kind_provisional` and the decline reason.** `store.ProposedContainers` reads the newest such row
+per (instance, container) and composes the result with `DescribeContainers`, which is unchanged and
+still takes a container slice as an argument.
+
+**ADR-0048 clause 1 survives whole.** There is still no proposal table, no proposal state on `library`,
+nothing to garbage-collect and no proposal id — the wire's identity for a proposal is the
+(`service_instance_id`, `container_ref`) pair, because *"an id would be a handle on a row that does not
+exist."* What changes is where the *container list* comes from: an observation of what an import saw,
+rather than a probe response the screen cannot re-obtain.
+
+**An observation is not a proposal, and the distinction is load-bearing rather than semantic.** A
+`container_observed` row records **what an import saw**. It carries no accepted flag, no declined-by-
+the-user flag and no lifecycle; it is replaced by the next run's row for the same container and it is
+never read as user state. The proposal is still a computed value — observation ⋈ `library_source` ⋈
+`library` — and it stops being one the moment the container is bound at the observed kind.
+
+**The store layer never learns where the container list came from.** `DescribeContainers` takes the
+slice, calls nothing outbound and issues two statements against the local file; `ProposedContainers`
+imports nothing from `internal/libsync` and nothing from any adapter package. That is structural
+rather than a convention: the argument above collapses the moment a render path can reach an adapter.
+
+**MEASURED, and the guard is over the shipped statement.** `observedContainersSQL` drives from
+`service_instance` with a `CROSS JOIN` barrier — SQLite documents `CROSS JOIN` as suppressing join
+reordering, and it is the only reason it is written. On `github.com/ncruces/go-sqlite3`, SQLite
+3.53.4, this schema, no `ANALYZE`, with a plain `JOIN` the plan is
+`SCAN r USING INDEX ix_sync_report_container_latest` plus `USE TEMP B-TREE FOR ORDER BY`; with the
+barrier it is `SCAN si` (one row per configured service) plus a three-column seek on the same index
+and **no sort at all**, in either access scope. `TestProposedContainersPlanIsSeeksAndNoSort` EXPLAINs
+the shipped function rather than a copy of its text, and `TestProposedContainersPlanGuardFires`
+removes the barrier and watches the scan and the sort come back.
+
+### Decision 2 — the observation is written INSIDE the bind transaction, first in the loop, and a failure to write it fails the import
+
+`recordContainerObservation` is called from `BindContainers`, **before the decline skip and before the
+per-container savepoint**, and its error is **returned rather than logged**.
+
+**Both positions are load-bearing.** Before the skip, because a declined container is still a container
+the upstream reported and §17.8 requires it be *"declined with a reason"* rather than silently dropped.
+Before the savepoint, because a bind that rolls back must not take the record of what upstream said
+with it — the bind failed; the observation still happened.
+
+**The transaction is what makes an ABSENT row mean something.** Decision 3 reads absence as a fact —
+*"the last completed run did not report this container"* — so the write must be impossible to lose
+independently of the run that made it true. Inside the transaction the rows and the bind commit or
+vanish together, and a whole-transaction failure returns before `FullImport` can stamp
+`last_full_sync_at`.
+
+⚠️ **The shape refused is `content_completeness`'s**, which `cmd/usarr` writes *after* `FullImport`
+returns, outside the transaction, logging and carrying on when it fails. A run of that shape can stamp
+its completion and then fail to record a container it demonstrably saw, which is exactly the reading
+absence must not admit.
+
+**The blob is redacted on the way in**, on `reference/security.md` §5's rule for `sync_report.detail`,
+and the sharper reason is not the secret: the container name must be **one string**. It is the input to
+§17.8's suggested name, and whether an accepted library is `managed_by = 'user'` is decided by comparing
+what the user submits against that default. Redacting on the read instead would make every unedited
+proposal compare as edited, so every accepted library would silently become user-managed and §17.8's
+one-way door would close on every library anyone ever accepts. ⚠️ **The limit is stated rather than
+implied:** `ssrf.RedactText` finds http/https substrings and strips credential-named query params; a
+bare secret not inside a URL passes through. This closes the URL-shaped case and does not make the
+column safe.
+
+### Decision 3 — "this container went away" is a SERVER-SET field, `not_seen_by_last_sync`, and it is the only thing that can say it
+
+The proposal carries a decided boolean, computed server-side from the observation's own timestamp
+against `service_instance.last_full_sync_at`. The wire carries the **answer** and not its inputs.
+
+**Nothing else in the schema can say it.** A *bound* container has `library_source.missing_since`,
+maintained by the whole-list sweep and cleared on every rebind. An *unbound* one has no
+`library_source` row, so the only trace of it going away is that its observation stops being replaced.
+
+**A container the last completed sync did not report is FLAGGED, never hidden.** Hiding it would make a
+container that vanished upstream indistinguishable from one that was never there, on the only screen
+that could say so.
+
+**Why the server and not the browser.** Publishing `instance_last_full_sync_at` beside the observation
+stamp and letting the client compare them would put the same fact on two endpoints with two
+derivations behind one screen — the timestamp is already `GET /api/v1/services/health`'s field. It
+would also export a correctness condition that is not the client's to hold: the comparison is
+lexicographic, and it is chronological **only** because both operands are written through the same
+fixed-width zero-padded UTC layout (`store.go`'s `timeLayout`, and SQLite's `datetime('now')` default,
+which emits the same one).
+
+**An instance that has never completed a full sync flags nothing**, because there is no completed run
+for a container to have been missed by. 🔍 **That branch is redundant and is written out on purpose:**
+the empty string sorts before every timestamp this layout produces, so deleting it changes no answer —
+and ⚠️ **the drill on it is therefore partial, which is recorded rather than glossed**: deleting the
+branch does not turn `TestProposedContainersFlagsNothingOnANeverSyncedInstance` red (measured,
+2026-08-22); making it answer `true` does. The test guards the answer; nothing can guard the branch.
+
+### Decision 4 — `AcceptLibraries` is the ONLY creator of a `library` row, and the first writer of `managed_by = 'user'`
+
+`bindOneContainer`'s step 3 — the create, with the name and slug derivation that fed it — is
+**removed**. A container that matches nothing at step 1 (already bound at this kind) or step 2 (joins
+an existing library on §17.8's case-insensitive, whitespace-trimmed, per-user name key) returns a
+`CatalogueBinding` with `NoLibrary` set. Its items are applied in full and get **no `library_member`
+row**.
+
+**The falsifier is one grep**, and it is the check to re-run rather than a status claim to trust:
+`grep -rn 'INSERT INTO library' --include='*.go' . | grep -v '_test.go'` returns exactly one insert
+into `library`, in `internal/store/proposals.go`.
+
+**Steps 1 and 2 are untouched, and that is what keeps an existing install working.** ADR-0048 clause 4
+declares the rows an earlier build auto-created to be accepted, and those rows keep matching at steps 1
+and 2 before any create path could have run.
+
+**`managed_by = 'user'` gets its first writer**, so §17.8's one-way door has a hinge for the first
+time. ⚠️ **The wire does not carry `managed_by`.** It carries `edited`, and the translation is one line
+in `internal/httpapi/proposals.go` — `DEVELOPMENT.md` §11's rule that a wire vocabulary and a storage
+vocabulary never share a term, applied at the one place the two meet.
+
+**"No library" is a NAMED STATE, never `LibraryID == 0`.** Library 0 is `Unfiled`, a real seeded row
+with a `BEFORE DELETE` trigger, and the two states are opposites: "filed into the reserved Unfiled
+library" is a membership row nothing may create, and "no library" is no membership row at all.
+Spelling the second as the first compiles, type-checks and passes any assertion phrased as *"the
+binding says unfiled"* — and files every unaccepted work into library 0, where §7 invariant 5 has
+already put the search document, so search would look right and the Accept screen's item count would
+read 0 for a container full of works.
+
+**Accept is all-or-nothing across a batch.** A name colliding at another kind, a source outside the
+caller's access scope, or a container kind with no membership derivation returns its error and nothing
+is written — not even the acceptances that had already succeeded in the loop. ⚠️ **The alternative was
+real:** `BindContainers` keeps its per-container savepoint, because that path is an unattended
+bootstrap whose caller is a log line. This one is a screen, and clause 1 is what makes all-or-nothing
+nearly free here: the rows that were not created are still proposals, the screen recomputes the same
+set, and the cost of a rejected submission is one edited name and another click.
+
+### Decision 5 — Accept files membership by BACKFILL from `service_item_link`, and moves nothing out of `Unfiled`
+
+`fileContainerMembers` issues
+`INSERT OR IGNORE INTO library_member … SELECT DISTINCT … FROM service_item_link sil JOIN work w …
+WHERE sil.service_instance_id = ? AND sil.remote_library_id = ? AND sil.deleted_at IS NULL AND
+w.deleted_at IS NULL AND <child kinds excluded> AND w.kind = ?`, a seek on migration 0005's partial
+index `ix_sil_container(service_instance_id, remote_library_id) WHERE deleted_at IS NULL AND
+remote_library_id IS NOT NULL`. `rescopeSearchDocs` then re-derives `search_doc_library` for the works
+the library now holds, real scopes first and the library-0 rows removed second, and only for documents
+the first statement has just given a real scope.
+
+**The container id this needs was already on every applied row.** `service_item_link.remote_library_id`
+is written verbatim by the item pass, which is why an unaccepted container can carry a real item count
+on the Accept screen and why filing it later needs no re-walk of the upstream.
+
+**`library.kind` is on the membership statement, and ADR-0066 decision 5 is why.** One container ref may
+legitimately feed a `book` library and a `comic` library. Without the kind predicate, accepting either
+files **every** work in the container into it.
+
+**`INSERT OR IGNORE` is what makes accepting the same container twice idempotent**, so `MembersFiled` is
+the number of works that **moved** into the library, never the library's size.
+
+⚠️ **`edition_id` is 0**, the whole-work sentinel, exactly as the item pass writes it. Edition-grained
+membership is what `library.formats` will need when the Audiobookshelf split lands, and neither half of
+that is v0.1's.
+
+⚠️ **Only `container_kind = 'remote_library'` has a membership derivation in the tree.** §6.5 rule 3
+tabulates a different predicate per kind — a path prefix for `root_folder`, `remote_tag_ids` for
+`tag`, `remote_subtype` for `series_type`. The others are **refused loudly** rather than accepted into
+a library that would then file nothing and read as empty.
+
+### Why
+
+**Because a screen is not a moment.** Every other answer here was available and each one either blocks
+a render path on an upstream, or stores a proposal, or gives the user a screen that is empty on the
+second visit. Reading a screen off rows an import already had every reason to write costs one
+`sync_report` kind, no migration, and nothing that can go stale in a way the screen cannot report.
+
+**Because absence is the fact the screen most needs and the schema could not state.** `missing_since`
+covers bound containers only. Without decision 2's placement inside the transaction, a missing
+observation would be ambiguous between "upstream stopped reporting it" and "the write failed", and a
+flag that can mean either is worse than no flag on a settings screen.
+
+**Because the item count is what the owner was promised.** ADR-0048's amendment rests on ticking a
+proposal *"with real item counts beside them"* against *"deciding blind"*. That is only true if an
+unaccepted container's items are written in full — and only safe if they are written into **no library
+at all**, including the reserved one.
+
+### Alternatives rejected
+
+**(a) A `library_proposal` table.** Rejected, and it is re-argued here rather than deferred to
+[ADR-0048](#adr-0048) alternative (c) because **this record could be misread as building one**:
+`container_observed` rows are durable and there is one per container. What defeats it is what a row
+would have to be. A proposal table's rows are **user state** — they need a lifecycle, a cleanup rule,
+an accepted/declined flag and an answer for a container the upstream has since renamed or deleted. An
+observation is none of that: it is a record of what one import saw, it is superseded by the next run's
+row for the same container, and it is never read as consent. The staleness problem ADR-0048 rejected
+the table over is not merely avoided here — it is **reported**, as `not_seen_by_last_sync`.
+
+**(b) Re-probe the connected service on every visit to `/settings/libraries`.** Rejected on principle 1
+and on nothing else, because nothing else is needed: it is a user-facing read that blocks on an
+upstream. It also fails honestly-degrade — a Kavita that is switched off would empty a settings screen
+whose entire purpose is to tell the user what is wrong. Clause 5 of ADR-0048 does not cover it: that
+excuses *the act of configuring a service*, not a screen's ordinary render.
+
+**(c) Reconstruct the container list from `library_source` and `service_item_link.remote_library_id`.**
+Rejected, and it is the closest alternative — both tables are local, both are already written, and it
+needs no new `sync_report` kind. **It cannot see the two containers the screen most needs to show.** A
+container the upstream reported that holds **no items** produces no `service_item_link` row and no
+`library_source` row, so it would be unproposable — and an empty upstream library is an ordinary thing
+a user still wants organised. A **declined** container produces neither either, and §17.8 requires it be
+listed with its reason in the `Decision` column. The pair reconstructs the containers UsArr *acted on*;
+the proposal set is the containers upstream *reported*, and those are different sets.
+
+**(d) Write the observation after `FullImport` returns.** Rejected — see decision 2. It is
+`content_completeness`'s shape, and it admits a run that stamps its own completion and then fails to
+record a container it saw.
+
+**(e) Let the browser decide whether a container went away.** Rejected — see decision 3. Two
+derivations of one fact behind one screen, and it exports a correctness condition that belongs to the
+store's timestamp layout.
+
+**(f) Keep `LibrariesCreated` at zero rather than removing it.** Rejected. With no create in the bind
+path the counter was structurally 0 on every import, and a status figure that cannot be anything but
+zero is a false surface rather than a measurement. Every reader of it was internal — one log line and
+this package's tests — and went with it. Its sibling `LibrariesJoined` survives because a container
+still resolves to an existing library, and `CatalogueBinding.SourceAttached` survives because binding
+an instance to a container it was not bound to before still happens.
+
+**(g) Spell the unfiled binding as `LibraryID = 0` and skip the `NoLibrary` field.** Rejected — see
+decision 4. This project has caught that conflation before, and a bool cannot be confused with an id.
+
+**(h) Accept partially: create the libraries whose acceptances were valid and report the rest.**
+Rejected for now, on decision 4's reasoning, and **the refusal names its own reopening**: if partial
+acceptance is ever wanted, the per-acceptance savepoint arrives **with** it, in the same commit as the
+result type that reports which acceptance failed. There is no savepoint today because with
+all-or-nothing there is nothing for one to save.
+
+### Consequences
+
+* **A first connect no longer produces a catalogue organised into libraries**, which is the trade
+  [ADR-0048](#adr-0048)'s Consequences named and left undecided. **It still produces a searchable
+  one**: every item is applied in full — work, editions, external ids, `service_item_link` — and §7
+  invariant 5 scopes each document to library 0, so the catalogue is searchable before a single
+  proposal is ticked.
+* **A work can exist with no `library_member` row at all.** That state was previously unreachable, and
+  `ARCHITECTURE.md` §6.5 rule 6 asserts the opposite; it takes a dated amendment in the same motion.
+* **[ADR-0048](#adr-0048) takes a four-note dated rider** — its amendment's holding-library mechanism,
+  Fact 2's `LibrariesCreated` counter, Fact 1's *"never written by any code path"* (and the same
+  sentence in the ADR index row), and the Consequences' undischarged premise.
+* **[ADR-0068](#adr-0068) decision 5 takes a flag** on one sentence, *"No series work is ever minted
+  into no library at all"*. Which library a comic series belongs to is unchanged.
+* **`CatalogueBinding.Created` and `libsync.Report.LibrariesCreated` are gone.** `LibrariesJoined`,
+  `SourceAttached` and `SkippedContainers` remain and now mean strictly what they say.
+* **`library.managed_by` gets its first `'user'` writer — and its one non-test reader is OLDER than
+  this landing.** The writer is `AcceptLibraries`. ⚠️ **The reader half of this bullet previously
+  read *"and a non-test reader for the first time"*, and that was false when written.** Measured over
+  non-test Go in `internal/` and `cmd/` on 2026-08-22, `library.managed_by` has **exactly one**
+  reader: `bindProvisional` (`internal/store/catalogue.go:1050`, selecting the column at `:1079` and
+  branching on it at `:1086`), which refuses to retype a library the user owns. It is present at
+  `7accaf92eeff` (2026-08-20 07:23:41), the oldest commit this shallow clone can see, so the column
+  had a non-test reader before this work began; how much earlier is beyond the horizon and is not
+  claimed. See Note 5, which records the same limb and its bound. ⚠️ **`service_instance.managed_by`
+  is a DIFFERENT column on a different table** — CHECK `('ui','env','file')` against this one's
+  `('auto','user')` — and its readers are deliberately not in that count.
+* **An upgraded install keeps every library an earlier build auto-created**, and keeps matching them at
+  steps 1 and 2. ADR-0048 clause 4's declaration is what makes that correct rather than accidental.
+* **Two endpoints exist**: `GET /api/v1/libraries/proposals` and `POST /api/v1/libraries/accept`.
+  Accept is a sub-route rather than `POST /api/v1/libraries` — read `internal/httpapi/server.go` for
+  the reason at the registration.
+
+### ⚠️ What this does NOT decide
+
+* **Whether a USER's decline is remembered.** [ADR-0048](#adr-0048) open question 3 conflates two
+  declines, and only one of them is answered here. **The ADAPTER's decline is now remembered** — the
+  observation carries `decline_reason` and the wire renders it in §17.8's `Decision` column. **The
+  user's is not**: unticking a proposal writes nothing, and the container is proposed again on the next
+  visit. Open question 3 stands, narrowed to the half that is still open.
+* **Partial acceptance**, and the savepoint that would come with it. See alternative (h).
+* **Container kinds other than `remote_library`.** The other four have no membership derivation, and the
+  wire has no `container_kind` field for the same reason: every proposal this endpoint can serve is a
+  `remote_library`, and a column whose value is identical for every row is not data (§17.4 rule 5). The
+  field arrives with the second kind that can be filed, on the same commit.
+* **Edition-grained membership.** `edition_id` is 0 on every row this writes.
+* **Whether a connect probe ever supplies the FIRST proposal set.** `DescribeContainers` still takes a
+  container slice and calls nothing outbound, so the door ADR-0048 clause 5 opened is still open —
+  but nothing in the tree walks through it: its only non-test caller is `ProposedContainers`, which
+  reads local state. Read `internal/httpapi/proposals.go` for what exists.
+* **[ADR-0048](#adr-0048) open question 2** — what the probe proposes on an install that already has
+  bound libraries. `boundAtKind` drops a container already bound **at the observed kind** and keeps one
+  bound only at another; §17.8's *"can only offer to add sources"* rule for a user-managed library is
+  still unexercised.
+* **`LS-06`** — which container a source binds to — stays owed.
