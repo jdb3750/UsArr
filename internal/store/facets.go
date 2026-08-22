@@ -108,9 +108,16 @@ import (
 //
 //   - TRUE: migration 0005 seeds `library.id = 0`, "Unfiled", `managed_by =
 //     'auto'`, `user_id = 0`, and protects it with trg_library_unfiled_no_delete.
-//   - TRUE: `managed_by = 'user'` is written by NOTHING in non-test Go. The two
-//     writers of the column are the seed above and catalogue.go's create, which
-//     hardcodes `'auto'`.
+//   - ⚠️ FALSIFIED SINCE, IN BOTH HALVES. This read: `managed_by = 'user'` is
+//     written by NOTHING in non-test Go, the two writers being the seed above
+//     and catalogue.go's create, which hardcodes `'auto'`. `'user'` HAS a
+//     non-test writer now — `managedBy(edited bool)` in
+//     internal/httpapi/proposals.go returns it for an edited proposal and
+//     AcceptLibraries stores it — and catalogue.go's create is gone, removed by
+//     `a83ff9c`. Read the column's writers off the tree rather than off this
+//     line: the seed above, plus every non-test hit of
+//     `grep -rn 'managed_by' --include='*.go'` that is a write. Neither that
+//     read nor this bullet is a closed set.
 //   - TRUE: the existing reads exclude it in the SQL — listLibrariesSQL and
 //     LibraryIDsBySlug both bind `l.id <> ?` from UnfiledLibraryID.
 //   - ⚠️ FALSE, AND THIS IS THE HALF THAT CHANGES THE QUESTION: there are no

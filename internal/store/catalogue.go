@@ -1011,18 +1011,27 @@ func bindOneContainer(
 // # The item pass may RETYPE, because its kind is evidence
 //
 // bindSiblingKind is a walk that has actually seen a comic. If the only library
-// over this container is still EMPTY, it is the row the eager pass minted at the
-// fallback kind and nothing has been filed into it — so the honest answer is that
-// one library, at the kind the contents just proved, keeping its name and its
-// slug. Minting a sibling instead is what produced two rows for a comics-only
-// container: `Comics` holding nothing and `Comics (Comics)` carrying a qualifier
+// over this container is still EMPTY, it stands at the fallback kind with nothing
+// filed into it — so the honest answer is that one library, at the kind the
+// contents just proved, keeping its name and its slug. Minting a sibling instead
+// is what produced two rows for a comics-only container: `Comics` holding
+// nothing and `Comics (Comics)` carrying a qualifier
 // that answers a question nobody asked.
 //
 // ⚠️ THE ROW IS RETYPED, NEVER REMOVED, AND THAT IS ADR-0066 DECISION 1. A
 // container whose every item is skipped must still be bound and still render
 // "with an item count of zero and a sentence". Nothing here can delete a library
-// or decline to create one: the eager pass has already created it, and a walk
-// that yields nothing simply never reaches this function.
+// or decline to create one: this function is reached only where
+// containerBoundKinds already found one, and a walk that yields nothing simply
+// never reaches it.
+//
+// ⚠️ AND `minting` ABOVE NAMES THE ALTERNATIVE THIS DESIGN REFUSED, NOT ONE THE
+// BIND PATH STILL HAS. `a83ff9c` removed the create from bindOneContainer — step
+// 3's own comment states it — so a container that adopts nothing here and joins
+// nothing at step 2 now ends with NO library rather than a fresh one at the
+// fallback kind. That does not touch the adoption rule: this function runs only
+// on a container ALREADY bound at some other kind, which is the state
+// containerBoundKinds reports and the only state it ever sees.
 //
 // # Every guard on the retype, and the state each one refuses
 //

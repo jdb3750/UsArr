@@ -36,11 +36,13 @@ import (
 // statements against the local file. A parameter that assumed a live probe, or a
 // call into an adapter from here, would close that door.
 //
-// ⚠️ NEITHER FUNCTION REMOVES CREATION FROM THE BOOTSTRAP IMPORT, and that is
-// the other half of the Accept step. ADR-0048's Fact 2 and §17.8 both assign
-// that removal to this thread; this commit builds the storage the screen needs
-// and leaves `bindOneContainer` reachable from `FullImport` exactly as it is.
-// Read `cmd/usarr/import.go` for what still triggers an import.
+// ⚠️ THE REMOVAL THIS PARAGRAPH CALLED OUTSTANDING HAS SINCE BEEN PERFORMED.
+// It read "NEITHER FUNCTION REMOVES CREATION FROM THE BOOTSTRAP IMPORT", the
+// other half of the Accept step that ADR-0048's Fact 2 and §17.8 assign to this
+// thread. `a83ff9c` did it: `bindOneContainer`'s step 3 is gone, and the comment
+// standing where it was says so in its own words. Read that function's numbered
+// steps in `internal/store/catalogue.go` for what the bind path does now, and
+// `cmd/usarr/import.go` for what triggers an import.
 //
 // WHICH SIDE OF THE ACCESS-SCOPE RULE THESE ARE ON (store.go rule 2), which is a
 // design question here rather than a style one because catalogue.go's whole file

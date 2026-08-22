@@ -95,13 +95,17 @@ type Library struct {
 	// at all for two of the six. Reading it costs nothing: it is a column on
 	// the row this statement already reads, no join and no second statement.
 	//
-	// ⚠️ ITS ONLY WRITER IS THE ACCEPT STEP, so a library the import path
-	// created is NULL here. catalogue.go's create names user_id, name, slug,
-	// kind, managed_by, enabled and include_in_search and no more, and none of
-	// the four `UPDATE library` statements in non-test Go touches this column:
-	// two in catalogue.go (a minted library's name, a provisional library's
-	// kind) and two in reconcile.go's sweepOrphans (orphaned_at, set and
-	// cleared). Only a library accepted with a format filter carries a value
+	// ⚠️ ITS ONLY WRITER IS THE ACCEPT STEP, so a row created by anything else
+	// is NULL here. ⚠️ THE TWO PREMISES THIS USED TO GIVE FOR THAT WERE BOTH
+	// WRONG. It cited catalogue.go's create, which `a83ff9c` removed, and it
+	// counted "the four `UPDATE library` statements in non-test Go" when there
+	// are three: catalogue.go's `UPDATE library SET kind` in bindProvisional,
+	// and reconcile.go's sweepOrphans setting and clearing `orphaned_at`. The
+	// CONCLUSION survives both corrections — none of the three names `formats`
+	// — but re-measure it rather than trusting the count, with
+	// `grep -rnE 'UPDATE\s+library\b' --include='*.go'` filtered to non-test
+	// files; a fourth statement would show up there and not here. Only a
+	// library accepted with a format filter carries a value
 	// (AcceptLibraries, §17.8); for every other row a renderer falls back to
 	// kind alone. The column is the seam the Audiobookshelf split lands on, and
 	// the split is not v0.1's (§17.8 marks it "from the milestone Audiobookshelf
