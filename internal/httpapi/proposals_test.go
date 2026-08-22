@@ -61,15 +61,34 @@ func observation(instanceID int64, ref, name, kind, declineReason string, provis
 		instanceID, store.SyncReportContainerObserved, ref, string(detail))
 }
 
+// The service-side values this fixture seeds, named ONCE so the leak test below
+// can be built from them instead of restating them.
+//
+// ⚠️ THEY ARE CONSTANTS RATHER THAN LITERALS BECAUSE A RESTATED LIST DRIFTS.
+// TestLibraryProposalsShipNoCredentialOrAddress used to spell `deadbeef`,
+// `one.internal.example` and `5000` again in its own denylist, so changing a
+// seeded host or key here would have left that test asserting the absence of a
+// value the fixture no longer contains — green, and guarding nothing. Deriving
+// the forbidden values from the seed makes that failure unrepresentable.
+const (
+	fixtureKeyOne  = "DEADBEEF"
+	fixtureKeyTwo  = "CAFEBABE"
+	fixtureHostOne = "one.internal.example"
+	fixtureHostTwo = "two.internal.example"
+	fixturePort    = "5000"
+)
+
 func seedProposalsScreenCorpus(t *testing.T, s *Server) {
 	t.Helper()
 	stmts := []string{
-		`INSERT INTO service_instance (id, kind, role, name, base_url, api_key_enc, last_full_sync_at)
+		fmt.Sprintf(`INSERT INTO service_instance (id, kind, role, name, base_url, api_key_enc, last_full_sync_at)
 		   VALUES (1, 'kavita', 'library', 'Kavita One',
-		           'http://one.internal.example:5000', X'DEADBEEF', '2026-02-01 00:00:00')`,
-		`INSERT INTO service_instance (id, kind, role, name, base_url, api_key_enc)
+		           'http://%s:%s', X'%s', '2026-02-01 00:00:00')`,
+			fixtureHostOne, fixturePort, fixtureKeyOne),
+		fmt.Sprintf(`INSERT INTO service_instance (id, kind, role, name, base_url, api_key_enc)
 		   VALUES (2, 'kavita', 'library', 'Kavita Two',
-		           'http://two.internal.example:5000', X'CAFEBABE')`,
+		           'http://%s:%s', X'%s')`,
+			fixtureHostTwo, fixturePort, fixtureKeyTwo),
 	}
 	works := []struct {
 		id        int64
@@ -388,6 +407,30 @@ func TestProposalsResponseKeysAreTheAllowlist(t *testing.T) {
 // full-admin *Arr credential and an internal host the user typed.
 // internal/store's TestTheProposalStatementReadsNoCredentialColumn is the other
 // half: it keeps the columns off the READ, and this keeps them off the WIRE.
+//
+// ⚠️ IT IS A DENYLIST, WHICH IS THE INSTRUMENT SHAPE reference/security.md WARNS
+// ABOUT, AND IT IS KEPT DELIBERATELY. The reasoning, so the next reader does not
+// have to redo it:
+//
+//   - THE STRUCTURAL GUARD IS ELSEWHERE AND IS EXHAUSTIVE.
+//     TestProposalsResponseKeysAreTheAllowlist pins the exact key set of the
+//     envelope and of every row and fails on any key outside it. That is a
+//     positive allowlist, and it is what makes "no unexpected FIELD ships" a
+//     complete claim. This test is not carrying that weight.
+//   - WHAT IT ADDS IS THE VALUE LEVEL, WHICH AN ALLOWLIST OVER KEYS CANNOT REACH.
+//     `service_name` is an allowed key; a credential appearing INSIDE it is
+//     invisible to a key allowlist and visible here. That is the whole of this
+//     test's job.
+//   - ⚠️ IT IS NOT EXHAUSTIVE AND MUST NOT BE READ AS IF IT WERE. A secret in a
+//     shape no token below matches passes. Making it exhaustive would mean
+//     asserting the response contains ONLY values derivable from non-secret
+//     columns, which is a different and much larger instrument.
+//   - THE DRIFT security.md OBJECTS TO IS CLOSED WHERE IT CAN BE. The credential
+//     and address tokens are the fixture's own constants rather than a second
+//     copy of them, so a seeded value that changes cannot leave this list
+//     asserting the absence of something that was never there. The remaining
+//     hand-written entries are COLUMN NAMES, and those are backed by the key
+//     allowlist above rather than resting on this list alone.
 func TestLibraryProposalsShipNoCredentialOrAddress(t *testing.T) {
 	s := newTestServer(t, nil)
 	seedProposalsScreenCorpus(t, s)
@@ -396,11 +439,19 @@ func TestLibraryProposalsShipNoCredentialOrAddress(t *testing.T) {
 	if !strings.Contains(body, "Kavita One") {
 		t.Fatalf("the response names no service at all, so this test proves nothing: %s", body)
 	}
-	for _, forbidden := range []string{
-		"api_key", "apikey", "api_key_enc", "deadbeef", "DEADBEEF", "cafebabe", "CAFEBABE",
-		"base_url", "one.internal.example", "two.internal.example", "5000",
-		"tls_spki_pin", "kek", "salt", "password", "token",
-	} {
+	forbidden := []string{
+		// Column names. Backed by the key allowlist next door, listed here so a
+		// value echoed under a different key is still caught.
+		"api_key", "apikey", "api_key_enc", "base_url", "tls_spki_pin", "kek",
+		"salt", "password", "token",
+	}
+	// The fixture's OWN secrets and addresses, in both cases, derived rather than
+	// restated. Hex is compared case-insensitively because a marshaller may emit
+	// either.
+	for _, v := range []string{fixtureKeyOne, fixtureKeyTwo, fixtureHostOne, fixtureHostTwo, fixturePort} {
+		forbidden = append(forbidden, v, strings.ToLower(v), strings.ToUpper(v))
+	}
+	for _, forbidden := range forbidden {
 		if strings.Contains(body, forbidden) {
 			t.Errorf("%q reached the browser: %s", forbidden, body)
 		}
@@ -457,15 +508,35 @@ func TestLibraryProposalHandlersReachNothingOutbound(t *testing.T) {
 	if err != nil {
 		t.Fatalf("parse proposals.go: %v", err)
 	}
+	// ⚠️ EACH ENTRY CARRIES ITS OWN REASON, BECAUSE ONE SHARED REASON WAS WRONG
+	// FOR ONE OF THEM AND A WRONG REASON MISDIRECTS THE NEXT AUTHOR. Every
+	// package here used to be refused as *"a package that can make a request"*.
+	// That is true of six of them and false of `internal/ssrf`: it makes no
+	// requests, and it is the repo's ONLY text redactor. Told that ssrf is
+	// banned here because it can call out, an author who needs to redact a string
+	// in this file would reasonably conclude they must write a second redactor —
+	// which is precisely the drift reference/security.md refuses when it says the
+	// credential list *"lives in exactly one place … and there is deliberately no
+	// second copy"*. The ban stays; the reason is now the real one, and it names
+	// the sanctioned route.
+	forbidden := map[string]string{
+		"libsync":  "it runs imports, and an import on a render path is principle 1's whole subject",
+		"adapter":  "it is the outbound port; a handler holding one can call it",
+		"kavita":   "it is an upstream client",
+		"prowlarr": "it is an upstream client",
+		"servarr":  "it is an upstream client",
+		"releases": "it reaches Prowlarr, which is why grab.go may import it and this file may not",
+		"ssrf": "it is refused for a DIFFERENT reason from the rest of this list — internal/ssrf " +
+			"makes no requests at all. It is the repo's single text redactor, and this package " +
+			"already exposes it as the one-line shim redactText() in redact.go. Use that shim; " +
+			"never write a second redactor, and never import internal/ssrf directly from this file",
+	}
 	for _, imp := range file.Imports {
 		path := strings.Trim(imp.Path.Value, `"`)
-		for _, forbidden := range []string{
-			"libsync", "adapter", "kavita", "prowlarr", "servarr", "releases", "ssrf",
-		} {
-			if strings.Contains(path, forbidden) {
-				t.Errorf("proposals.go imports %q. The Accept screen renders from local SQLite; "+
-					"a package that can make a request is one refactor away from doing it on a "+
-					"render path.", path)
+		for name, why := range forbidden {
+			if strings.Contains(path, name) {
+				t.Errorf("proposals.go imports %q. The Accept screen renders from local SQLite, "+
+					"and this import is refused because %s.", path, why)
 			}
 		}
 	}

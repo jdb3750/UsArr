@@ -14359,6 +14359,28 @@ into `library`, in `internal/store/proposals.go`.
 declares the rows an earlier build auto-created to be accepted, and those rows keep matching at steps 1
 and 2 before any create path could have run.
 
+> ℹ️ **Rider, 2026-08-22 — the sentence above was MEASURED and it HOLDS; what is added here is its
+> boundary, because it has already been misread once.** A review of this landing reported the second
+> half false, on the reasoning that step 2 calls `userLibraries`, which read `user_id = ?` at the time
+> this ADR was written. **Measured rather than reasoned, and the finding does not survive the
+> measurement.** The rows this sentence is about are the ones *an earlier build auto-created*, and
+> `cmd/usarr/import.go` builds its `Importer` at `store.SystemUserID`, so those rows sit at
+> `user_id = 0` **and the import that re-reads them also runs at 0**. Strict equality at 0 returns
+> exactly the user_id 0 rows, so step 2 matched them then and matches them now — the predicate change
+> landing in this same pass does not alter this case at all, which was confirmed by running the
+> fixture under both predicates and getting identical results. `TestAnUpgradingInstallStillMatchesAtStepsOneAndTwo`
+> (`internal/libsync/delta_test.go`) is that measurement, kept as a test: it seeds one library already
+> bound to a container and one bound to nothing whose name a container carries, both at user_id 0,
+> imports at `SystemUserID`, and requires both to be joined and none to be created.
+>
+> ⚠️ **The boundary, which is the part worth having.** The sentence is true of the UPGRADE population
+> and does not extend to rows **Accept** creates. Those belong to the accepting session's user, whose
+> id is always >= 1, and step 2 — reading `user_id IN (0, :uid)` at the importer's uid of 0 — cannot
+> see them. That gap is real, it is not what this sentence claims, and it is measured in
+> `TestADeltaEscalatesAtARealSessionUser`'s comment. Closing it means giving the import a real owner
+> id, which is a decision about an existing data population rather than a correction to this record.
+> Registered in [`docs/REVIEW-LOG.md`](./REVIEW-LOG.md) as `LS-395.9`.
+
 **`managed_by = 'user'` gets its first writer**, so §17.8's one-way door has a hinge for the first
 time. ⚠️ **The wire does not carry `managed_by`.** It carries `edited`, and the translation is one line
 in `internal/httpapi/proposals.go` — `DEVELOPMENT.md` §11's rule that a wire vocabulary and a storage

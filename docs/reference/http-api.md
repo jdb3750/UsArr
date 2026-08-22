@@ -905,12 +905,25 @@ explicit that *"No credential field ever appears on this screen"*.
 | `accept` | array | The ticked proposals. **At least one**; an empty batch is a `400`. |
 | `accept[].name` | string | What the user is accepting, after any inline edit. Matched on §17.8's merge key (§2b.3). Required, and bounded at 200 bytes on the wire. |
 | `accept[].kind` | string | `library.kind`: exactly one value, required (§6.5 rule 4). |
-| `accept[].formats` | array | The format filter over `edition.format`. Absent or empty means **any**, stored as NULL — the column §17.8's Ebooks/Audiobooks split lands on. |
+| `accept[].formats` | array | Stored verbatim into `library.formats`. Absent or empty means **any**, stored as NULL. ⚠️ **It is recorded, not applied** — see the note below. Bounded on the wire at 32 entries of 64 bytes. |
 | `accept[].edited` | boolean | §17.8's one-way door: *"Editing any proposal marks that library user-managed."* (§2b.2) |
 | `accept[].sources` | array | The containers this library binds. **At least one.** Two proposals merged by §17.8's rename rule arrive as **one** acceptance carrying both. |
 | `sources[].service_instance_id` | integer | From the proposal, unchanged. |
 | `sources[].container_ref` | string | From the proposal, unchanged. |
 | `sources[].container_name` | string | The container's own upstream name, recorded so an upstream that reuses ids cannot silently rebind the library to a different container. |
+
+> ⚠️ **`formats` FILTERS NOTHING TODAY, AND THIS TABLE USED TO SAY IT DID (corrected 2026-08-22).**
+> The row above read *"The format filter over `edition.format`"*, which describes behaviour no
+> statement in the tree performs. Accept's membership statement
+> (`fileContainerMembersSQL`, `internal/store/proposals.go`) files **every top-level work of the
+> library's kind** that the container replicated, filtered on `w.kind` and on the child-kind
+> exclusion, and on nothing else — `library.formats` appears in it nowhere. The value is written to
+> the column and read back by `GET /api/v1/libraries`; it does not change which works a library
+> holds. §2.4 already records the read side of the same gap for `items[].formats`, and the code
+> comment on `fileContainerMembers` states it plainly; this table was the one place the contract
+> claimed otherwise. What the filter needs is edition-grained membership — `library_member.edition_id`
+> is written as the `0` whole-work sentinel by every writer there is — and that lands with the
+> Audiobookshelf split, not in v0.1.
 
 **Unknown fields are refused with a `400`**, unlike an unknown *query parameter* (see this file's
 header). The two rules point in opposite directions on purpose: a request body on a configuration API
@@ -988,11 +1001,39 @@ recomputes the same set, and the cost of a refusal is the user fixing one name a
 | `200` | — | Every acceptance was created or joined. | — |
 | `400` | `bad_request` | Two groups. **A fact about the request document**: an empty batch, an acceptance with no name, no kind or no source, a source naming no service or no container, a name past the wire bound, an unknown field, or a body that is not one JSON object — the message names which acceptance, by index. **Or a `kind` the schema does not have** (§2b.7), whose message names no index and no kinds. | (varies) |
 | `409` | `library_name_taken` | The name is not available to this user (§2b.6). | `Choose a different name` |
+| `409` | `container_already_bound` | One of the containers already provides another of this user's libraries **of the same kind**. [ADR-0066](../DECISIONS.md#adr-0066) decision 5 licenses two libraries over one container ref only at **different** kinds; the same-kind pair would make `bindOneContainer`'s step 1 pick arbitrarily between them. Its own code rather than `library_name_taken` because renaming does not clear it — the container is what is spoken for, not the name. The message names no other library: it may be one this caller's scope has no business enumerating, and the fix is the same either way. | `Accept it at a different media kind, or remove the other library's source` |
 | `404` | `not_found` | A source names a service instance the caller cannot bind: **outside the caller's access scope**, **naming no row at all**, or **soft-deleted**. **Three conditions, one code**, on §4.4's reasoning: "no such instance" and "not yours" are deliberately indistinguishable, because the difference is an existence oracle. | — |
 | `403` | `csrf` | Stale page token. | (its own) |
 | `401` | `unauthorized` | No session, or one that has expired. | — |
 | `415` | `unsupported_media_type` | Not sent as `Content-Type: application/json`. Checked **first**, ahead of the CSRF token, because the header requirement is itself half the CSRF defence. | — |
 | `500` | `internal` | The acceptance could not be written. **The store's own sentence is not forwarded**: it names an internal row id and a database-layer prefix, and the caller can act on none of it. The cause is in the process log. | — |
+
+#### What this endpoint writes to `audit_log`
+
+**One row per accepted library on success**, `action = library.accept`, `result = ok`, with
+`target_id` the library's id and metadata carrying `outcome` (`created` or `joined`), `kind`,
+`library_name` and `members_filed`. ⚠️ **The metadata is what makes the two outcomes
+distinguishable**: the row used to carry none, so a join into a library that already had every one
+of these sources — a no-op re-accept — was indistinguishable in the journal from a create.
+
+**One row when the store refuses the batch**, `result = fail`, no `target_id` (nothing was created,
+and naming a requested name would assert a row that is not there), metadata carrying the `error`
+code, the message and the batch size. ⚠️ **This arm wrote nothing before 2026-08-22**, which made
+this endpoint the only write in the package whose failures left no trace — `auth.login`,
+`auth.sudo`, `service.credential.added` and `release.grab` all audit theirs.
+
+**Rows even when the response cannot be rendered.** If the store returns a library that is neither
+created nor joined, the batch has already COMMITTED, so the libraries exist; the handler writes one
+`result = warn` row per library with `outcome = indeterminate` and then returns `500`. `warn` rather
+than `fail` on `release.grab`'s distinction: `fail` asserts the work provably did not happen, and
+here it provably did.
+
+**Three early returns deliberately write nothing**: no session (there is no actor, `actor_user_id`
+would be NULL and the scoped read `actor_user_id IN (0, :uid)` could never return the row — and it
+is the one branch reachable without credentials, so writing here would let anyone who can reach the
+port grow an append-only table by request), an undecodable body, and a request-shaped validation
+failure. Both of the latter are rejected before any acceptance is read, so none of the fields the
+row exists to carry has a value. This is `release.grab`'s line, applied unchanged.
 
 ### 2b.6 `library_name_taken` covers three conditions, and one action fixes all of them
 

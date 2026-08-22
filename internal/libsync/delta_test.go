@@ -2,6 +2,7 @@ package libsync
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"errors"
 	"strings"
@@ -701,6 +702,86 @@ func TestADeltaEscalatesAtARealSessionUser(t *testing.T) {
 		t.Errorf("LibrariesJoined = %d, want 2 — at user %d the second instance's `Fiction` "+
 			"must join the first instance's, which is the whole case a creation detector misses",
 			rep.LibrariesJoined, uid)
+	}
+}
+
+// ADR-0078's "an existing install keeps working" claim, MADE EXECUTABLE.
+//
+// The ADR argues: *"Steps 1 and 2 are untouched, and that is what keeps an
+// existing install working. ADR-0048 clause 4 declares the rows an earlier build
+// auto-created to be accepted, and those rows keep matching at steps 1 and 2
+// before any create path could have run."* That sentence is load-bearing —
+// removing step 3's create is safe only if the two surviving steps still match
+// what an upgrading install already has — and it had no test.
+//
+// ⚠️ WHAT AN UPGRADING INSTALL ACTUALLY HAS, which is the fixture below and the
+// reason it is seeded by hand rather than by an Accept. An earlier build's
+// libraries were created by the IMPORT, and cmd/usarr/import.go builds its
+// Importer at store.SystemUserID, so those rows sit at `user_id = 0` — not at
+// any real user's id. This test seeds exactly that shape: one library already
+// bound to a container (step 1's case) and one bound to nothing whose NAME a
+// container carries (step 2's case), both at user_id 0, then imports at the id
+// cmd/usarr really uses.
+//
+// ⚠️ AND IT IS SCOPED TO THAT POPULATION ON PURPOSE, because the neighbouring
+// claim is a different one and is NOT true. A library created by ACCEPT belongs
+// to the accepting session's user (>= 1), and step 2 — which reads
+// `user_id IN (0, :uid)` at the importer's uid of 0 — cannot see it. See
+// TestADeltaEscalatesAtARealSessionUser, whose comment measures that gap. The
+// ADR's sentence does not claim otherwise: it is about *"the rows an earlier
+// build auto-created"*, and those are precisely the user_id 0 rows this test
+// pins. Read it as a claim about Accept-created rows and it is false; read it as
+// written and it holds, which is what this test exists to keep true.
+func TestAnUpgradingInstallStillMatchesAtStepsOneAndTwo(t *testing.T) {
+	f := newDeltaFixture(t,
+		[]bookorbit.Library{{ID: 1, Name: "Fiction", BookCount: 1}},
+		map[int64][]bookorbit.Book{1: {bookAt(1, "One", at(0))}})
+
+	if err := f.st.DB().Write(t.Context(), func(ctx context.Context, tx *sql.Tx) error {
+		// STEP 1's case: already bound to container ref "1".
+		if _, err := tx.ExecContext(ctx, `
+			INSERT INTO library (id, user_id, name, slug, kind, managed_by)
+			VALUES (500, 0, 'Fiction', 'fiction', 'book', 'auto')`); err != nil {
+			return err
+		}
+		if _, err := tx.ExecContext(ctx, `
+			INSERT INTO library_source
+			  (library_id, service_instance_id, container_kind, container_ref, container_identity)
+			VALUES (500, ?, 'remote_library', '1', 'Fiction')`, f.instance); err != nil {
+			return err
+		}
+		// STEP 2's case: bound to nothing, but holding the name container "2" has.
+		_, err := tx.ExecContext(ctx, `
+			INSERT INTO library (id, user_id, name, slug, kind, managed_by)
+			VALUES (501, 0, 'Audio', 'audio', 'book', 'auto')`)
+		return err
+	}); err != nil {
+		t.Fatalf("seed an upgrading install: %v", err)
+	}
+
+	f.reader.libs = append(f.reader.libs, bookorbit.Library{ID: 2, Name: "Audio", BookCount: 1})
+	f.reader.books[2] = []bookorbit.Book{bookAt(2, "Two", at(0))}
+	f.reopen()
+
+	rep, err := (&Importer{Store: f.st, Source: f.src, UserID: store.SystemUserID}).
+		FullImport(t.Context(), f.instance)
+	if err != nil {
+		t.Fatalf("FullImport over an upgrading install: %v", err)
+	}
+	if rep.LibrariesJoined != 2 {
+		t.Errorf("LibrariesJoined = %d, want 2 — step 1 must match library 500 by its existing "+
+			"source and step 2 must match library 501 by name, or ADR-0078's "+
+			"keeps-an-existing-install-working argument does not hold", rep.LibrariesJoined)
+	}
+	// Step 2's proof specifically: library 501 had NO source and must have gained
+	// one. Without it the container would have bound nowhere and its books would
+	// carry no membership at all.
+	if n := countRows(t, f.st, `SELECT COUNT(*) FROM library_source WHERE library_id = 501`); n != 1 {
+		t.Errorf("library 501 has %d source rows, want 1: step 2 did not match it by name", n)
+	}
+	// And nothing was created, which is ADR-0078 decision 4's other half.
+	if n := countRows(t, f.st, `SELECT COUNT(*) FROM library WHERE id NOT IN (0, 500, 501)`); n != 0 {
+		t.Errorf("%d libraries were created; an import creates none", n)
 	}
 }
 

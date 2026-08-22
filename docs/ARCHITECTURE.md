@@ -4556,6 +4556,8 @@ correction: a URL is bookmarkable, so rewriting either side to match the other c
 by default instead of by ruling. It is recorded here as **open**. Whoever closes it moves the
 document, the mockups README and the tree in the same pass, and states which way it went.
 
+> ⚠️ **Decided 2026-08-22; the document has not moved yet.** The direction is settled — the route is `/libraries`, which is what the shell links and what the route directories answer — and this note stays as written until the closing pass it describes actually runs. That pass moves §17.8's sentence, the mockups README's dead-route line and the phrase it requotes, `docs/reference/http-api.md`, and the `internal/` references, each re-measured at that pass's own tip. ADR bodies are outside it: `docs/DECISIONS.md`'s convention annotates them rather than rewriting them.
+
 ⚠️ **What this screen holds in v0.1, before the examples below are read.** v0.1 connects **one**
 catalogue source plus Prowlarr, which has no library at all; the remaining sources sequence after it,
 one at a time. **§16 is authoritative for which source that is, and this section does not restate it**
