@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/jdb3750/UsArr/internal/httpapi"
+	"github.com/jdb3750/UsArr/internal/store"
 )
 
 // The catalogue import's WIRING, end to end through the real binary's own
@@ -208,6 +209,21 @@ func TestAddingAKavitaProducesACatalogue(t *testing.T) {
 		"kind": "kavita", "name": "Kavita", "base_url": kav.URL(), "api_key": importAuthKey,
 	}, &created)
 	waitForImport(t, env, created.ID)
+
+	// ── the Accept step ─────────────────────────────────────────────────────
+	//
+	// ⚠️ THE IMPORT ABOVE CREATED NO LIBRARY (ADR-0048), so the three rows this
+	// section asserts exist because a user ticked three pre-checked proposals.
+	// The ORDER is the specified one — import, then Accept — and it is what makes
+	// the item counts below the counts he was looking at when he ticked them.
+	// The kinds are still the ADAPTER's: the fixture accepts exactly what the
+	// proposals offered, which is Kavita's LibraryType mapped by the adapter and
+	// not anything a series payload said.
+	acceptLibraries(t, env, created.ID,
+		acceptSpec{ref: "1", name: "Library 1", kind: "comic"},
+		acceptSpec{ref: "2", name: "Library 2", kind: "comic"},
+		acceptSpec{ref: "3", name: "Library 3", kind: "book"},
+	)
 
 	// ── the catalogue ───────────────────────────────────────────────────────
 	//
@@ -610,5 +626,52 @@ func TestAFullImportOfANonCatalogueServiceIsRefusedByName(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "prowlarr") || !strings.Contains(err.Error(), "kavita") {
 		t.Errorf("the refusal must name both the kind it got and the kind it wants: %v", err)
+	}
+}
+
+// ── §17.8's Accept step, as an end-to-end fixture ───────────────────────────
+
+// acceptSpec is one proposal a user ticks: the container it stands over, and
+// the name and kind that ends up on the row.
+//
+// An EMPTY ref accepts a library with no source at all. That is a real state
+// rather than a test convenience — §17.8's merge key is what a LATER container
+// joins on, so a library can exist before anything feeds it, and it is the state
+// the join-on-a-later-connect path needs in order to have something to join.
+type acceptSpec struct{ ref, name, kind string }
+
+// acceptLibraries is §17.8's Accept step, reached THROUGH THE STORE because
+// there is no wire endpoint for it yet.
+//
+// ⚠️ EVERY TEST BELOW THAT WANTS A LIBRARY HAS TO CALL THIS NOW (ADR-0048). An
+// import creates none: it replicates the works, files them nowhere and leaves
+// one proposal per container. The amendment of 2026-08-21 makes that the
+// specified ORDER — import first, Accept second — so the fixture calls run in
+// that order too, and the item counts these tests assert are the counts a user
+// would have been looking at when he ticked the boxes.
+//
+// ⚠️ IT REACHES PAST THE HTTP SURFACE AND THAT IS A KNOWN GAP, not a shortcut
+// around one. `POST /api/v1/libraries/accept` does not exist; inventing one here
+// would prejudge a wire shape that is not this lane's to choose. When it lands,
+// this helper is the single site that changes, and the tests that use it do not.
+//
+// `managed_by` is 'auto' because nothing is edited, which is what §17.8's
+// pre-checked screen produces when the user just presses Accept.
+func acceptLibraries(t *testing.T, env *testEnv, instanceID int64, specs ...acceptSpec) {
+	t.Helper()
+	accepts := make([]store.LibraryAcceptance, 0, len(specs))
+	for _, sp := range specs {
+		a := store.LibraryAcceptance{Name: sp.name, Kind: sp.kind, ManagedBy: "auto"}
+		if sp.ref != "" {
+			a.Sources = []store.AcceptedSource{{
+				ServiceInstanceID: instanceID, ContainerKind: "remote_library",
+				ContainerRef: sp.ref, ContainerIdentity: sp.name,
+			}}
+		}
+		accepts = append(accepts, a)
+	}
+	if _, err := env.app.store.AcceptLibraries(t.Context(),
+		store.OwnerScope(store.SystemUserID), store.SystemUserID, accepts); err != nil {
+		t.Fatalf("accept libraries: %v", err)
 	}
 }

@@ -111,6 +111,11 @@ func TestABookOrbitContentFilterIsDetectedAndRecorded(t *testing.T) {
 	// LIBRARY. This is the join between them, and it is the half a store test
 	// with hand-written rows cannot prove: container_ref and remote_id have to
 	// be the same string, written by two different packages.
+	// The library exists because it was accepted (ADR-0048): completeness is a
+	// verdict ATTACHED to a library_source row, so there is nothing to attach it
+	// to until a proposal is ticked.
+	acceptLibraries(t, env, created.ID, acceptSpec{ref: "1", name: "Fiction", kind: "book"})
+
 	var libs struct {
 		Items []struct {
 			Name         string `json:"name"`

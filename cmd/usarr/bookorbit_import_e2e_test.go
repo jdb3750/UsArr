@@ -141,11 +141,18 @@ func TestAddingABookOrbitProducesACatalogue(t *testing.T) {
 	// container "becomes a `book` library and a `comic` library over the same
 	// `library_source` container ref".
 	//
-	// ⚠️ THE COMIC LIBRARY IS MINTED LAZILY, on the first comic the walk actually
-	// reaches, and library 2 proves it: it holds only an audiobook and gets NO
-	// comic sibling. A comic library minted at bind time for every container
-	// would be a permanently empty row on the Libraries screen — principle 3's
-	// "empty screen that looks broken" — and decision 5's word is MIXED.
+	// ⚠️ THE COMIC LIBRARY IS NO LONGER MINTED BY THE WALK (ADR-0048) — it is
+	// ACCEPTED, like every other library — and library 2 still proves the point
+	// the lazy mint was making: it holds only an audiobook, so nobody is offered
+	// a comic proposal for it and it gets no comic sibling. A comic library
+	// created at bind time for every container would be a permanently empty row
+	// on the Libraries screen — principle 3's "empty screen that looks broken" —
+	// and decision 5's word is still MIXED.
+	acceptLibraries(t, env, created.ID,
+		acceptSpec{ref: "1", name: "Fiction", kind: "book"},
+		acceptSpec{ref: "1", name: "Fiction (Comics)", kind: "comic"},
+		acceptSpec{ref: "2", name: "Audio", kind: "book"},
+	)
 	if n := countIn(t, env, `SELECT COUNT(*) FROM library WHERE id <> 0 AND managed_by = 'auto'`); n != 3 {
 		t.Errorf("auto libraries = %d, want 3", n)
 	}

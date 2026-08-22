@@ -47,6 +47,11 @@ func importedKavita(t *testing.T, env *testEnv, kav *fakeKavita) int64 {
 		"kind": "kavita", "name": "Kavita", "base_url": kav.URL(), "api_key": importAuthKey,
 	}, &created)
 	waitForImport(t, env, created.ID)
+	// ⚠️ AND THE LIBRARY IS ACCEPTED (ADR-0048), because an import creates none.
+	// Every caller of this helper is about what happens to a LIBRARY — orphaned,
+	// restored, swept — and none of those states exist without a library_source
+	// row, which only Accept writes.
+	acceptLibraries(t, env, created.ID, acceptSpec{ref: "1", name: "Library 1", kind: "comic"})
 	return created.ID
 }
 

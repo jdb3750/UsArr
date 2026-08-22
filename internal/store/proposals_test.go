@@ -609,6 +609,23 @@ func TestAcceptJoinsOnTheNameKey(t *testing.T) {
 		t.Errorf("the joined library was renamed to %q; a join must not reshape the row it "+
 			"joins (§17.8's one-way door runs in this direction)", got[0].Name)
 	}
+	// ⚠️ AND THE SLUG, WHICH IS THE HALF A NAME COMPARISON MISSES. This assertion
+	// came here from cmd/usarr's
+	// TestASecondKindInALaterImportDoesNotRenameWhatIsAlreadyThere when ADR-0048
+	// moved name derivation out of the import and into Accept: that test caught a
+	// library being re-slugged to make room for a kind that arrived later, and
+	// the slug is what every permalink the owner holds contains (slugify:
+	// "durable by design — a rename must not change the permalink"). Accept is
+	// now the only path that could rewrite one, so the guard belongs here too.
+	var joinedSlug string
+	if err := s.DB().Read().QueryRowContext(t.Context(),
+		`SELECT slug FROM library WHERE id = ?`, got[0].ID).Scan(&joinedSlug); err != nil {
+		t.Fatalf("read the joined library's slug: %v", err)
+	}
+	if joinedSlug != "existing-comics" || got[0].Slug != joinedSlug {
+		t.Errorf("the joined library's slug is %q (reported %q), want %q unchanged",
+			joinedSlug, got[0].Slug, "existing-comics")
+	}
 	if n := count(t, s, `SELECT COUNT(*) FROM library`); n != before {
 		t.Errorf("library rows went %d → %d; the join created a row", before, n)
 	}

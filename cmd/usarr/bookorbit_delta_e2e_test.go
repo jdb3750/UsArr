@@ -39,6 +39,22 @@ func TestADeltaThatEscalatesDoesNotDeadlockAgainstItsOwnImportGuard(t *testing.T
 	env.do(t, "GET", "/api/v1/services", nil, nil)
 	created.ID = boInstanceID(t, env)
 	waitForImport(t, env, created.ID)
+	// The first container's library is ACCEPTED (ADR-0048). The escalation under
+	// test fires on SourceAttached — an instance bound to a container it was not
+	// bound to before — and a container that resolves to no library attaches no
+	// source, so without an accepted library there is nothing for the second
+	// container to join and nothing to escalate on.
+	//
+	// "Audio" is accepted with NO source, which is the state the escalation is
+	// actually about: a library the user already has, that a container granted
+	// LATER joins on §17.8's name key. That join writes a brand-new
+	// library_source row with nothing created — the case a creation-keyed
+	// detector misses, and the one whose back catalogue an arrivals filter would
+	// skip entirely.
+	acceptLibraries(t, env, created.ID,
+		acceptSpec{ref: "1", name: "Fiction", kind: "book"},
+		acceptSpec{name: "Audio", kind: "book"},
+	)
 
 	// A library the credential was not granted before. A container UsArr has
 	// never imported is not a delta question — the arrivals filter would return
