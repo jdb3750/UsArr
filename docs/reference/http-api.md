@@ -1002,6 +1002,15 @@ class `DEVELOPMENT.md` §11 names. A client sending a kind outside
 it is worth making, is a single list the schema mirror is checked against — not a second one typed into
 this layer.
 
+⚠️ **A `service_instance_id` that does not exist is also a `500`, for a different reason worth stating
+separately.** The scope check is `admitsInstance`, and the owner's scope admits **every** id — that is
+what `AllInstances` means — so an id naming no row reaches the foreign key on `library_source` rather
+than the scope refusal above. A **non-owner** naming the same id gets the `404` in the table, because
+the scope refuses it before the write. Both are measured, not inferred. The clean fix is a scoped
+existence read ahead of the batch, which this endpoint deliberately does not do today: it would be a
+second derivation of the same admission question, one statement per source, on the layer that already
+delegates it.
+
 ### 2b.6 `library_name_taken` covers three conditions, and one action fixes all of them
 
 The store raises one sentinel for three cases, and the message says the true thing about all three:
