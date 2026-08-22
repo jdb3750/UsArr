@@ -101,8 +101,22 @@ type BoundLibrary struct {
 // ContainerProposal is one row of §17.8's Accept step: a container the connected
 // service itself reported, plus what UsArr already knows about it.
 //
-// The first five fields are the adapter's CatalogueContainer verbatim. What this
-// type adds is the two facts the screen cannot render without a database read.
+// ⚠️ IT HAS TWO CONSTRUCTORS AND THEY FILL DIFFERENT FIELDS, which is the one
+// thing to know before reading a value of this type:
+//
+//   - DescribeContainers is handed a container list and ONE instance id. It
+//     fills the adapter's own five fields, ItemCount, BoundTo and
+//     ServiceInstanceID, and it leaves every field below ServiceInstanceID at
+//     its zero value — it has no observation row to read them from, and no
+//     second statement is worth issuing to invent them.
+//   - ProposedContainers reads the container list off local state, across every
+//     instance in scope, and fills ALL of them. It is what §17.8's screen calls,
+//     and it composes with DescribeContainers rather than duplicating it.
+//
+// So a zero ObservedAt means "nobody asked", never "never observed". A caller
+// that needs the local-state fields calls the function that fills them; there is
+// deliberately no flag saying which constructor ran, because a reader that has
+// to branch on that is reading the wrong function's output.
 type ContainerProposal struct {
 	// RemoteID, Name, Kind, DeclineReason and KindProvisional are the adapter's
 	// answer, forwarded unchanged. See CatalogueContainer for what each means;
@@ -141,8 +155,91 @@ type ContainerProposal struct {
 	// `AND l.kind = ?` for exactly that reason, and a single-valued field here
 	// would make the Accept screen show whichever of the two SQLite returned
 	// first.
+	//
+	// ⚠️ A NON-EMPTY BoundTo DOES NOT MEAN "not a proposal". ProposedContainers
+	// drops a container that is bound AT THE OBSERVED KIND and keeps one that is
+	// bound only at another, for decision 5's reason above: the second kind over
+	// a mixed container is a genuine proposal, and the library it would sit
+	// beside is exactly what the screen needs to show.
 	BoundTo []BoundLibrary
+
+	// ─── Filled by ProposedContainers only. See the type's own comment. ───
+
+	// ServiceInstanceID is the instance that reported this container.
+	// DescribeContainers fills it too, from its argument.
+	ServiceInstanceID int64
+
+	// ServiceName and ServiceKind are `service_instance.name` and `.kind`.
+	//
+	// ⚠️ THESE TWO COLUMNS AND NO OTHERS CROSS THIS LAYER off that table, which
+	// is a §14 rule rather than a preference: `service_instance` carries
+	// `api_key_enc`, a full-admin *Arr credential, and `base_url`, an internal
+	// host the user typed. internal/httpapi/libraries.go's librarySourceResponse
+	// allowlists the same two onto the wire and states the rule for the whole
+	// screen — the name is the chip's label and the kind is its icon. A field
+	// added here is a field a wire struct can copy.
+	ServiceName string
+	ServiceKind string
+
+	// ObservedAt is when the container_observed row this proposal was read from
+	// was written, in the store's own timestamp layout.
+	//
+	// PER PROPOSAL, NEVER COLLAPSED TO ONE PER INSTANCE. Every observation row
+	// is written inside the bind transaction, so a run that fails partway leaves
+	// some of an instance's containers stamped by this run and the rest by an
+	// earlier one — and an instance-level stamp would date all of them by
+	// whichever run touched any of them. It is also the input to
+	// NotSeenByLastSync, which is a per-container question.
+	ObservedAt string
+
+	// InstanceLastFullSyncAt is `service_instance.last_full_sync_at`, empty when
+	// the instance has never completed a full sync. Empty is unambiguous — no
+	// timestamp renders as the empty string — so this is a plain string rather
+	// than a sql.NullString.
+	InstanceLastFullSyncAt string
+
+	// NotSeenByLastSync says the last COMPLETED full sync did not report this
+	// container. It is SERVER-SET, computed from the two timestamps above; see
+	// notSeenByLastSync for the comparison and for which way an equal timestamp
+	// falls.
+	//
+	// ⚠️ IT IS THE ONLY THING THAT CAN SAY A PROPOSAL WENT AWAY. A bound
+	// container has `library_source.missing_since`, maintained by the whole-list
+	// sweep and cleared on every rebind. An unbound one has no library_source
+	// row at all, so nothing else in the schema records that it stopped being
+	// reported — its sync_report row simply stops being replaced. See
+	// SyncReportContainerObserved.
+	NotSeenByLastSync bool
+
+	// SuggestedName is the name the Accept screen offers, pre-filled and
+	// editable. It is the derivation the bind path used to own; see
+	// suggestedLibraryName.
+	SuggestedName string
+
+	// JoinsLibraryID and JoinsLibraryName are the library that accepting this
+	// proposal AS SUGGESTED would join rather than create — zero and empty when
+	// it would create one.
+	//
+	// It is a PREDICTION, and it is computed by calling the same userLibraries
+	// the writer calls, on §17.8's same merge key, at the same kind — so the
+	// screen's "this will join Comics" and AcceptLibraries' actual join are one
+	// derivation rather than two that agree today. It predicts for the SUGGESTED
+	// name only: a user who edits the name in place moves the answer, and
+	// recomputing it while they type is the browser's job, not this read's.
+	JoinsLibraryID   int64
+	JoinsLibraryName string
 }
+
+// Declined reports whether the adapter refused this container.
+//
+// A METHOD RATHER THAN A FIELD, and that is the whole point: "declined" and "no
+// kind" are ONE fact — CatalogueContainer documents DeclineReason as *"set
+// exactly when Kind is ”"* — so a bool beside Kind would be a second copy of it
+// that compiles clean while disagreeing, which is DEVELOPMENT.md §11's defect
+// class exactly. The wire layer wants a `declined` field; it gets it by calling
+// this, so there is one derivation and no way to set one without setting the
+// other.
+func (p ContainerProposal) Declined() bool { return p.Kind == "" }
 
 // LibraryAcceptance is one accepted proposal, as the caller edited it.
 type LibraryAcceptance struct {
@@ -219,6 +316,390 @@ type AcceptedLibrary struct {
 	MembersFiled int64
 }
 
+// ProposedContainers is §17.8's Accept screen: every container UsArr has been
+// told about that is not already a library, across every instance in scope.
+//
+// # IT IS THE READ THAT MAKES /settings/libraries A SCREEN RATHER THAN A MOMENT
+//
+// ADR-0048 clause 1 computes the proposal set from *"what the connected instance
+// reports as its containers"*, and clause 5 excuses the connect probe's upstream
+// call as a setup action. Neither gives a screen the user NAVIGATES to anything
+// to render: a proposal that exists only inside a probe response is available
+// for a few seconds after adding a service and never again. This function reads
+// the replicated half — `container_observed` rows, written by the bind
+// transaction — so the screen renders from the local file on every visit, which
+// is what principle 1 requires of a user-facing read.
+//
+// ⚠️ NO UPSTREAM CALL, NO ADAPTER, NO PROBE. This file imports nothing from
+// internal/libsync and nothing from an adapter package, and it must stay that
+// way: the whole argument above collapses the moment a render path can block on
+// a Kavita that is off. The container list is reconstructed from
+// SyncReportContainerObserved's detail blob, which exists for exactly this.
+//
+// # STILL COMPOSED WITH DescribeContainers, NOT COPIED FROM IT
+//
+// The item count and the already-bound set are DescribeContainers' two
+// statements, argued there, and they are called here rather than re-rendered.
+// That costs one pair of statements per instance instead of one pair overall —
+// a homelab has single-digit instances, so it is single-digit statements against
+// a local file — and it buys the thing a fused statement would lose: the
+// membership derivation, the child-kind exclusion, the tombstone handling and
+// both scope predicates stay written once. A second copy of the count is a
+// second answer to *"how many items does this container have"*, and §17.8's
+// screen is the one place where two such answers are visible side by side.
+//
+// # WHAT IS DROPPED, AND WHAT IS DELIBERATELY NOT
+//
+// A container already bound AT THE OBSERVED KIND is not a proposal — accepting
+// it would be a no-op — and it is dropped. A container bound only at ANOTHER
+// kind is KEPT, because ADR-0066 decision 5 puts two libraries over one mixed
+// container and the second one is a real proposal; its BoundTo says what it
+// would sit beside. See boundAtKind.
+//
+// A DECLINED container is kept, with its reason. §17.8 requires it be *"declined
+// with a reason"* in the `Decision` column, and DescribeContainers keeps it for
+// the same requirement. It can never be dropped by the rule above: its Kind is
+// "" and `library.kind` is never "".
+//
+// A container the last completed sync did not report is ALSO kept, flagged
+// rather than hidden — see NotSeenByLastSync. Hiding it would make a container
+// that vanished upstream indistinguishable from one that was never there, on the
+// only screen that could say so.
+func (s *Store) ProposedContainers(ctx context.Context, scope Scope) ([]ContainerProposal, error) {
+	observed, err := s.observedContainers(ctx, scope)
+	if err != nil {
+		return nil, err
+	}
+	if len(observed) == 0 {
+		return nil, nil
+	}
+
+	// The user's libraries, read ONCE for the whole batch, by the same function
+	// resolveAcceptedLibrary calls. This is a read with no writer racing it, so
+	// unlike AcceptLibraries' deliberate re-read per acceptance there is nothing
+	// for a second read to see.
+	held, err := userLibraries(ctx, s.db.Read(), scope.UserID)
+	if err != nil {
+		return nil, err
+	}
+
+	var out []ContainerProposal
+	for _, inst := range observed {
+		cs := make([]CatalogueContainer, 0, len(inst.containers))
+		at := make(map[string]string, len(inst.containers))
+		for _, o := range inst.containers {
+			cs = append(cs, o.container)
+			at[o.container.RemoteID] = o.observedAt
+		}
+		described, err := s.DescribeContainers(ctx, scope, inst.id, cs)
+		if err != nil {
+			return nil, err
+		}
+		for _, p := range described {
+			if boundAtKind(p.BoundTo, p.Kind) {
+				continue
+			}
+			// KEYED BY REF, NOT BY POSITION. DescribeContainers does return one
+			// proposal per input in order, but that is its loop's business and
+			// not a promise in its signature; the newest-row-per-container pick
+			// below already guarantees one observation per ref per instance, so
+			// the map is exact and cannot be desynchronised by a reordering.
+			p.ObservedAt = at[p.RemoteID]
+			p.ServiceName = inst.name
+			p.ServiceKind = inst.kind
+			p.InstanceLastFullSyncAt = inst.lastFullSyncAt
+			p.NotSeenByLastSync = notSeenByLastSync(p.ObservedAt, inst.lastFullSyncAt)
+			p.SuggestedName = suggestedLibraryName(p.Name, p.RemoteID)
+			if joins, ok := held.joinable[libraryNameKey(p.SuggestedName)]; ok && joins.kind == p.Kind {
+				p.JoinsLibraryID = joins.id
+				p.JoinsLibraryName = joins.name
+			}
+			out = append(out, p)
+		}
+	}
+	return out, nil
+}
+
+// boundAtKind is the "this is not a proposal any more" test: is this container
+// already a source of a library OF THE KIND THE ADAPTER LAST REPORTED IT AT?
+//
+// ⚠️ THE KIND IS THE WHOLE PREDICATE AND A REF-ONLY TEST IS WRONG. It is the
+// same question bindOneContainer's step 1 asks with `AND l.kind = ?`, for
+// ADR-0066 decision 5's reason: `library_source`'s uniqueness is
+// (library_id, service_instance_id, container_kind, container_ref), so one
+// BookOrbit container legitimately feeds a `book` library and a `comic` library.
+// Dropping on the ref alone would make the second kind unproposable — the mixed
+// container's comics would have no way to become a library, on the one screen
+// that exists to create one.
+//
+// A DECLINED container (Kind "") can never match, and does not need a special
+// case to say so: `library.kind` is NOT NULL with a CHECK over real work kinds,
+// so no library is ever at kind "".
+func boundAtKind(bound []BoundLibrary, kind string) bool {
+	for _, b := range bound {
+		if b.Kind == kind {
+			return true
+		}
+	}
+	return false
+}
+
+// suggestedLibraryName is the name §17.8's Accept screen pre-fills, from what
+// upstream called the container.
+//
+// ⚠️ THIS DERIVATION USED TO LIVE IN bindOneContainer AND IT MOVED HERE WITH THE
+// DECISION IT SERVES. Before ADR-0048's Accept step the import derived a name
+// and created a library with it, unattended; now nothing creates a library
+// without a user, so the derivation's whole job is to fill a text box the user
+// can overwrite. It is deliberately the SAME derivation — trim, and fall back to
+// the ref — so a name accepted unchanged is the name the import would have
+// picked, and an install that predates Accept does not see its libraries
+// re-proposed under different names.
+//
+// ⚠️ AND IT DOES NOT DISAMBIGUATE, unlike the path it came from. That path
+// minted `Comics (Books)` and `Comics (2)` because a container that binds to
+// nothing is a library that never appears and there was nobody to ask. Here
+// there is somebody to ask: a suggested name that collides is a JOIN prediction
+// (JoinsLibraryID) or a refusal the user resolves by typing, and inventing a
+// qualifier they did not choose is the failure §17.8 records against the drawn
+// mockup — a rename that *"silently changed the shape of the data model"*.
+func suggestedLibraryName(name, ref string) string {
+	if n := strings.TrimSpace(name); n != "" {
+		return n
+	}
+	return "Library " + ref
+}
+
+// notSeenByLastSync reports whether the last COMPLETED full sync failed to
+// report this container.
+//
+// # THE COMPARISON, AND WHICH WAY AN EQUAL TIMESTAMP FALLS
+//
+// SEEN is `observedAt >= lastFullSyncAt`, NON-STRICT, so this function returns
+// `observedAt < lastFullSyncAt` and AN EQUAL TIMESTAMP COUNTS AS SEEN.
+//
+// It is the same window FileWalkFailuresByInstance applies to the same column
+// pair — `created_at >= i.last_full_sync_at` — and it is non-strict for the same
+// two reasons. First, `last_full_sync_at` holds the run's START time, not its
+// finish (StampFullSync), so every observation a completed run wrote is at or
+// after the stamp by construction. Second, both values are second-granular text
+// in the store's own layout, so an observation written in the same second the
+// next run started is INDISTINGUISHABLE from one written just after it.
+//
+// The equal case therefore has to fall one way or the other on no evidence, and
+// SEEN is the direction whose failure is smaller and self-correcting: claiming a
+// container is still there when it has just gone shows a proposal that fails on
+// accept and disappears at the next import, whereas claiming a container has
+// gone when it has not puts a "no longer reported" flag on a live library's
+// source on the settings screen, which is a fact the user cannot check.
+//
+// A LEXICOGRAPHIC COMPARISON IS A CHRONOLOGICAL ONE HERE, and only because both
+// operands are written through the same fixed-width zero-padded UTC layout —
+// `last_full_sync_at` through FormatTime, `sync_report.created_at` through
+// SQLite's `datetime('now')` default, which emits that same layout. store.go's
+// timeLayout comment states the property; libraries.go's completeness fold
+// already relies on it.
+//
+// AN INSTANCE THAT HAS NEVER COMPLETED A FULL SYNC returns false for every
+// container, because there is no completed run for one to have been missed by.
+// The rows it does have came from runs that really happened, which is
+// FileWalkFailuresByInstance's `IS NULL` arm reading the same way.
+//
+// 🔍 THAT BRANCH IS REDUNDANT, EXPLICIT ON PURPOSE, AND MEASURED TO BE BOTH —
+// migration 0011's trailing `id` column, the same argument in a different place.
+// The empty string sorts before every timestamp this layout produces, so
+// `observedAt < ""` is already false for every real observation and DELETING the
+// branch changes no answer. It is written out anyway because the property it
+// rests on is a fact about a string comparison, not about the domain: a reader
+// meeting a bare `observedAt < lastFullSyncAt` has to derive "never synced means
+// never flagged" from ASCII ordering, and a later rewrite that coalesced the
+// missing stamp to anything else — an epoch, a far-future sentinel, a zero
+// time.Time — would silently flag either nothing or everything.
+//
+// ⚠️ SO THE DRILL ON IT IS PARTIAL AND THE LIMIT IS RECORDED HERE: deleting the
+// branch does not turn TestProposedContainersFlagsNothingOnANeverSyncedInstance
+// red (measured, 2026-08-22), because there is no behaviour to lose. Making it
+// ANSWER `true` does. The test guards the answer; nothing can guard the branch,
+// and pretending otherwise would be a guard that has never been triggered.
+func notSeenByLastSync(observedAt, lastFullSyncAt string) bool {
+	if lastFullSyncAt == "" {
+		return false
+	}
+	return observedAt < lastFullSyncAt
+}
+
+// observedInstance is one service instance's container list as the local file
+// holds it.
+type observedInstance struct {
+	id             int64
+	name           string
+	kind           string
+	lastFullSyncAt string
+	containers     []observedContainer
+}
+
+// observedContainer is one container_observed row, decoded.
+type observedContainer struct {
+	container  CatalogueContainer
+	observedAt string
+}
+
+// observedContainersSQL renders the newest-observation-per-container statement.
+//
+// # THE SAME SHAPE AS containerReportSQL, AND ON PURPOSE
+//
+// The newest row per (instance, container) is picked by the same correlated
+// `r.id = (SELECT r2.id … ORDER BY r2.id DESC LIMIT 1)` the Libraries screen's
+// completeness read uses, with the same four equalities in the same order,
+// because that is what migration 0011's ix_sync_report_container_latest is
+// shaped for: (service_instance_id, kind, remote_kind, remote_id, id). `id`
+// rather than `created_at` is the ordering key for that read's reason too —
+// created_at is second-granular text and two runs inside one second would tie,
+// where `id` is insert order by construction.
+//
+// ⚠️ IT DRIVES FROM service_instance, WHICH containerReportSQL DOES NOT, and the
+// difference is the point. That read starts from a list of library ids the
+// caller already has; this one has no list, because a PROPOSAL is precisely a
+// container with no `library_source` row to be listed from. So the driving table
+// is the instance set the scope admits, and `sync_report` is joined on the
+// index's leading three columns.
+//
+// ⚠️ `CROSS JOIN` IS A JOIN-ORDER BARRIER AND IT IS LOAD-BEARING, NOT STYLE.
+// SQLite documents CROSS JOIN as suppressing the join reordering optimisation,
+// and that is the only reason it is written here — the semantics are an ordinary
+// inner join and the ON clause is doing the joining. MEASURED on this engine
+// (github.com/ncruces/go-sqlite3, SQLite 3.53.4), this schema, no ANALYZE, with
+// a plain JOIN and OWNER scope — where the instance predicate renders as `1=1`
+// and leaves the planner nothing to seek service_instance on:
+//
+//	SCAN r USING INDEX ix_sync_report_container_latest
+//	SEARCH si USING INTEGER PRIMARY KEY (rowid=?)
+//	CORRELATED SCALAR SUBQUERY 1
+//	  SEARCH r2 USING COVERING INDEX ix_sync_report_container_latest (…)
+//	USE TEMP B-TREE FOR ORDER BY
+//
+// — the whole index, EVERY kind of report in it, plus a sort. With the barrier:
+//
+//	SCAN si
+//	SEARCH r USING INDEX ix_sync_report_container_latest
+//	                (service_instance_id=? AND kind=? AND remote_kind=?)
+//	CORRELATED SCALAR SUBQUERY 1
+//	  SEARCH r2 USING COVERING INDEX ix_sync_report_container_latest
+//	                (service_instance_id=? AND kind=? AND remote_kind=? AND remote_id=?)
+//
+// and NO SORT AT ALL, in either scope. The scan is of `service_instance`, one row
+// per configured service, which is the set this read is about; both orderings
+// come off the index's own key order. TestProposedContainersPlanIsSeeksAndNoSort
+// pins it — EXPLAINing this function rather than a copy of its text — and
+// TestProposedContainersPlanGuardFires has an arm that removes the barrier and
+// watches the scan and the sort come back.
+//
+// ⚠️ THE KIND IS BOUND TWICE AND THE ARGUMENT ORDER IS NOT THE LOGICAL ORDER.
+// `?` is positional: the join's `r.kind = ?` comes first in the TEXT, the scope
+// predicate second, and the subquery's `r2.kind = ?` last. containerReportSQL
+// carries the same hazard and states it the same way — getting it wrong here
+// produces an empty result rather than an error.
+//
+// A ROW WITH A NULL remote_id CANNOT APPEAR, and does not need excluding: the
+// correlated `r2.remote_id = r.remote_id` is never true for NULL, so such a row
+// drops itself. It would be a container with no upstream id, which nothing could
+// bind or file anything from anyway.
+//
+// `si.deleted_at IS NULL` matches librarySourcesSQL and containerReportSQL: a
+// soft-deleted instance is not a service any more, and its containers are not
+// offers.
+func observedContainersSQL(scope Scope) (string, []any) {
+	args := make([]any, 0, len(scope.InstanceIDs)+2)
+	args = append(args, SyncReportContainerObserved)
+	instPred, instArgs := scope.instancePredicate("si.id")
+	args = append(args, instArgs...)
+	args = append(args, SyncReportContainerObserved)
+
+	// ⚠️ EXACTLY TWO service_instance COLUMNS BESIDES THE ID AND THE SYNC STAMP.
+	// That table carries `api_key_enc` and `base_url`; §14 and
+	// internal/httpapi/libraries.go's librarySourceResponse allow the NAME and
+	// the KIND across this layer and nothing else. `SELECT si.*` here would be a
+	// credential one struct-copy away from a browser.
+	return `
+		SELECT si.id, si.name, si.kind, si.last_full_sync_at,
+		       r.remote_id, r.detail, r.created_at
+		  FROM service_instance si
+		  CROSS JOIN sync_report r ON r.service_instance_id = si.id
+		                          AND r.kind = ?
+		                          AND r.remote_kind = 'library'
+		 WHERE si.deleted_at IS NULL
+		   AND ` + instPred + `
+		   AND r.id = (
+		         SELECT r2.id FROM sync_report r2
+		          WHERE r2.service_instance_id = si.id
+		            AND r2.kind = ?
+		            AND r2.remote_kind = 'library'
+		            AND r2.remote_id = r.remote_id
+		          ORDER BY r2.id DESC LIMIT 1)
+		 ORDER BY si.id, r.remote_id`, args
+}
+
+// observedContainers reads the newest observation of every container on every
+// instance in scope, grouped by instance in id order.
+//
+// A DETAIL BLOB THAT WILL NOT DECODE IS DROPPED, NOT DEFAULTED, on
+// attachLibraryCompleteness's terms. The alternative is worse than it looks: the
+// ref is on the row, so a defaulted proposal WOULD render — with no name and no
+// kind, which is exactly how this screen renders a DECLINED container. A row
+// UsArr cannot read would appear as a container upstream refused, with no reason
+// beside it, and that is a sentence about the upstream that nothing observed.
+// recordContainerObservation is the only writer of this kind and marshals a
+// struct that cannot fail, so a blob that will not decode came from somewhere
+// else.
+func (s *Store) observedContainers(ctx context.Context, scope Scope) ([]observedInstance, error) {
+	query, args := observedContainersSQL(scope)
+	rows, err := s.db.Read().QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("read observed containers: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+
+	var out []observedInstance
+	for rows.Next() {
+		var (
+			id             int64
+			name, kind     string
+			lastFullSync   sql.NullString
+			ref, createdAt string
+			detail         sql.NullString
+		)
+		if err := rows.Scan(&id, &name, &kind, &lastFullSync, &ref, &detail, &createdAt); err != nil {
+			return nil, fmt.Errorf("read observed containers: scan: %w", err)
+		}
+		var o containerObservation
+		if err := json.Unmarshal([]byte(detail.String), &o); err != nil {
+			continue
+		}
+		// The statement is ordered by si.id, so a new instance is always a new
+		// group and the grouping needs no map.
+		if len(out) == 0 || out[len(out)-1].id != id {
+			out = append(out, observedInstance{
+				id: id, name: name, kind: kind, lastFullSyncAt: lastFullSync.String,
+			})
+		}
+		g := &out[len(out)-1]
+		g.containers = append(g.containers, observedContainer{
+			container: CatalogueContainer{
+				RemoteID:        ref,
+				Name:            o.Name,
+				Kind:            o.Kind,
+				DeclineReason:   o.DeclineReason,
+				KindProvisional: o.KindProvisional,
+			},
+			observedAt: createdAt,
+		})
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("read observed containers: %w", err)
+	}
+	return out, nil
+}
+
 // DescribeContainers turns the containers an adapter reported into §17.8's
 // proposal rows, for one service instance.
 //
@@ -247,11 +728,12 @@ func (s *Store) DescribeContainers(
 	seen := make(map[string]bool, len(cs))
 	for _, c := range cs {
 		out = append(out, ContainerProposal{
-			RemoteID:        c.RemoteID,
-			Name:            c.Name,
-			Kind:            c.Kind,
-			DeclineReason:   c.DeclineReason,
-			KindProvisional: c.KindProvisional,
+			RemoteID:          c.RemoteID,
+			Name:              c.Name,
+			Kind:              c.Kind,
+			DeclineReason:     c.DeclineReason,
+			KindProvisional:   c.KindProvisional,
+			ServiceInstanceID: instanceID,
 		})
 		// One ref may be reported twice by a caller that is describing the same
 		// container under two proposals. The IN list is de-duplicated so the

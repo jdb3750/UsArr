@@ -1559,10 +1559,14 @@ func TestAProvisionalRetypeRefusesALibraryTWOCONTAINERSFEED(t *testing.T) {
 		[]LibraryAcceptance{{
 			Name: "Comics", Kind: "book", ManagedBy: "user",
 			Sources: []AcceptedSource{
-				{ServiceInstanceID: kav, ContainerKind: "remote_library",
-					ContainerRef: "7", ContainerIdentity: "Comics"},
-				{ServiceInstanceID: bo, ContainerKind: "remote_library",
-					ContainerRef: "7", ContainerIdentity: "Comics"},
+				{
+					ServiceInstanceID: kav, ContainerKind: "remote_library",
+					ContainerRef: "7", ContainerIdentity: "Comics",
+				},
+				{
+					ServiceInstanceID: bo, ContainerKind: "remote_library",
+					ContainerRef: "7", ContainerIdentity: "Comics",
+				},
 			},
 		}}); err != nil {
 		t.Fatalf("accept the shared library: %v", err)

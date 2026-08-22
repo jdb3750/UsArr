@@ -1127,6 +1127,14 @@ func noteKindChange(
 type libraryRow struct {
 	id   int64
 	kind string
+
+	// name is the row's name AS STORED, which is NOT recoverable from the
+	// libraryNameKey it is filed under: the key is lowered and trimmed. §17.8
+	// requires the screen to name the library a proposal would join — *"Joining
+	// Kavita Manga into Comics as a second source."* — and `Comics` there has to
+	// be the user's own capitalisation, not a key. ProposedContainers is the
+	// reader; the bind path ignores it.
+	name string
 }
 
 // userLibrarySet is what one user already holds, read ONCE and split into the
@@ -1161,14 +1169,14 @@ func userLibraries(ctx context.Context, q querier, userID int64) (userLibrarySet
 
 	for rows.Next() {
 		var r libraryRow
-		var name, slug string
-		if err := rows.Scan(&r.id, &name, &slug, &r.kind); err != nil {
+		var slug string
+		if err := rows.Scan(&r.id, &r.name, &slug, &r.kind); err != nil {
 			return out, fmt.Errorf("list libraries for user %d: scan: %w", userID, err)
 		}
-		out.names[libraryNameKey(name)] = true
+		out.names[libraryNameKey(r.name)] = true
 		out.slugs[slug] = true
 		if r.id != UnfiledLibraryID {
-			out.joinable[libraryNameKey(name)] = r
+			out.joinable[libraryNameKey(r.name)] = r
 		}
 	}
 	if err := rows.Err(); err != nil {
