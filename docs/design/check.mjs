@@ -2159,7 +2159,8 @@ head('1b. §13 copy bans, over rendered chrome text, cells included');
    *
    *   The rendering test cuts INSIDE `aria-hidden="true"`, which is gated on
    *   the text side: only the markings whose DECLARING ELEMENT draws a box are
-   *   counted, and on 2026-08-22 that was 5 of 1,123.
+   *   counted. Both sides of that split are counted on every run and printed
+   *   on the pass line, so no figure for it is written down here.
    *
    *   ⚠️ THAT IS NOT A TEST OF WHETHER THE WALK WOULD HAVE READ THE TEXT, and
    *   the pass line used to say it was -- "cut only text the rendered walk was
@@ -2167,31 +2168,37 @@ head('1b. §13 copy bans, over rendered chrome text, cells included');
    *   walk attributes a text node to its nearest BLOCKISH ancestor and tests
    *   that ancestor's visibility, never the node's own inline chain, which is
    *   the welding defect the run-cutting comment in the text collector
-   *   describes at length. FIRED 2026-08-22: lifting `aria-hidden` off the one
-   *   `.stacklabel` in requests.html's "What Prowlarr reports" cell took the
-   *   corpus from 13411 to 13413. Those 1,118 markings removed 4,464 strings
-   *   the walk would otherwise have read, and that figure is now measured and
-   *   printed beside THEM rather than folded into the counted elements' total,
-   *   where it made 1,206 read as 5,670.
+   *   describes at length. FIRED 2026-08-22: lifting `aria-hidden` off the
+   *   `.stacklabel` in the "What Prowlarr reports" cell OF THE TORRENTLEECH
+   *   ROW of requests.html's indexer table -- the four-column table headed
+   *   Indexer / State / What Prowlarr reports / Retry -- took the corpus from
+   *   13411 to 13413. The row is named because the column is not an address:
+   *   the cell repeats down the table, and "the one .stacklabel in the 'What
+   *   Prowlarr reports' cell", which is what stood here, resolves to nothing
+   *   a re-runner can act on. The strings those markings removed are totalled
+   *   on every run and printed beside THEM rather than folded into the
+   *   counted elements' total, where on 2026-08-22 it made 1,206 read as
+   *   5,670.
    *
-   *   THEY ARE STILL OUTSIDE THE CEILING, on the reason below rather than on
-   *   that one. All 1,118 are `.stacklabel` responsive-table duplicates --
-   *   measured, not assumed: every unseen marking recorded over the whole
-   *   sweep was a `span.stacklabel` -- every one `display: none` at the width
-   *   this sweep runs at, and 1,108 of them a label already read once from the
-   *   `<th>` it duplicates. ⚠️ NOT ALL 1,118: the other ten read "Accept" in a
-   *   table whose first column header reads "Decision", each beside a `.sr`
-   *   label the corpus does read. Putting that population under a ceiling
-   *   would be putting the mockup's TABLE-CELL COUNT under a ceiling -- the
-   *   1,118 spans are one apiece on 1,118 of the 1,148 cells in the 34 tables
-   *   that use them, so the count rises by one per cell added. FIRED
-   *   2026-08-22: duplicating one four-column row in requests.html took it from
-   *   1,118 to 1,122. The line would go red on ordinary authoring and the
-   *   number would get raised without thought, which is worse than not gating
-   *   it and is the practice the floor block above exists to end. On the ATTRIBUTE
-   *   side there is no such population and no such test: every marking that
-   *   took a string is counted, drawn or not, which is what makes the
-   *   `[placeholder]` drill above red.
+   *   THEY ARE STILL OUTSIDE THE CEILING, and NOTHING HERE DESCRIBES WHAT
+   *   THAT POPULATION IS MADE OF ANY MORE -- ON A RULE, not by omission.
+   *   Sentences saying what these markings sit on, what their labels
+   *   duplicate, and how many cells in how many tables carry them have each
+   *   stood in this comment, compiled, passed, and been read back false: a
+   *   standing composition frozen into prose has no way to go red. So the
+   *   pass line COUNTS this population's descriptors on every run and prints
+   *   them, and this comment states only what a drill fired.
+   *
+   *   WHAT KEEPS IT OUT OF THE CEILING IS A FIRED DRILL, and not a
+   *   description of it. FIRED 2026-08-22: duplicating that same TorrentLeech
+   *   row -- one four-column row, the sort of edit any authoring session makes
+   *   -- took the further-marking count from 1,118 to 1,122 and the strings
+   *   they removed from 4,464 to 4,472. A ceiling here would therefore go red
+   *   on ordinary authoring, the number would get raised without thought, and
+   *   that is worse than not gating it: it is the practice the floor block
+   *   above exists to end. On the ATTRIBUTE side there is no such population
+   *   and no such test: every marking that took a string is counted, drawn or
+   *   not, which is what makes the `[placeholder]` drill above red.
    *
    *   5. THE §17 FLOOR GUARDS A NET COUNT, so compensated removal is
    *   invisible to it: a commit deleting two specified strings and adding two
@@ -2203,7 +2210,10 @@ head('1b. §13 copy bans, over rendered chrome text, cells included');
    *   answers.
    *
    *   THE RULE, in full, so it replays. COMMITS: `git log --full-history
-   *   --format='%H %P' -- docs/ARCHITECTURE.md` from the branch tip -- 303
+   *   --format='%H %P' -- docs/ARCHITECTURE.md`, run at
+   *   `7fb330d28ab1b22861e0b5baecddd14b769ba5e8` -- that commit is the tree
+   *   these figures were measured on, and "the branch tip", which is what
+   *   stood here, is not a target anybody can re-run against -- 303
    *   commits, 118 with one parent and 185 merges with two, so 488
    *   commit/parent pairs. COMPARABLE PAIRS: 486. The two dropped have a parent
    *   with no §17 to compare against -- `7fe2060e6` <- `a632ae1e5`, whose
@@ -2428,12 +2438,20 @@ head('1b. §13 copy bans, over rendered chrome text, cells included');
   const MECHS = ['data', 'statebar', 'ariaHidden'];
   const optoutEls = { data: new Set(), statebar: new Set(), ariaHidden: new Set() };
   const optoutUnseen = { data: new Set(), statebar: new Set(), ariaHidden: new Set() };
+  /* WHAT THE UNSEEN POPULATION IS MADE OF, counted rather than described. The
+     pass line used to characterise it in prose -- "each sits on a .stacklabel
+     table duplicate" -- and that sentence went false the first time anybody
+     put a declared exclusion on something else, GREEN, because prose has no
+     way to go red. Keyed on the same path the set is keyed on, so one element
+     is one entry however many combinations render it, and the descriptor is
+     recomputed each time with last-write-wins rather than accumulated. */
+  const optoutUnseenDesc = { data: new Map(), statebar: new Map(), ariaHidden: new Map() };
   const optoutStrings = { data: 0, statebar: 0, ariaHidden: 0 };
   const optoutUnseenStrings = { data: 0, statebar: 0, ariaHidden: 0 };
   const absorb = (res) => {
     for (const m of MECHS) {
       for (const q of res.marks[m]) optoutEls[m].add(q);
-      for (const q of res.unseen[m]) optoutUnseen[m].add(q);
+      for (const [q, d] of res.unseen[m]) { optoutUnseen[m].add(q); optoutUnseenDesc[m].set(q, d); }
       optoutStrings[m] += res.skipped[m];
       optoutUnseenStrings[m] += res.skippedUnseen[m];
     }
@@ -2738,7 +2756,8 @@ head('1b. §13 copy bans, over rendered chrome text, cells included');
            [placeholder]` marking took 8 strings out (288 -> 280) and the
            ceiling stayed green at 12. `unseen` is kept -- the shape is shared
            with the text collector, where the test IS right -- and stays empty
-           on this side. */
+           on this side, so it never carries the [path, descriptor] pair the
+           text collector's unseen entries do. */
         const mark = (m, el) => { marks[m].push(path(el)); return true; };
         const root = document.querySelector('#pg-' + s);
         const chrome = [root, document.querySelector('.topbar'), document.querySelector('.sidebar')]
@@ -2850,7 +2869,13 @@ head('1b. §13 copy bans, over rendered chrome text, cells included');
            5670 beside 12 elements that removed 1206. */
         const mark = (m, el) => {
           const seen = el.getClientRects().length > 0;
-          (seen ? marks : unseen)[m].push(path(el));
+          if (seen) marks[m].push(path(el));
+          /* The unseen side carries a DESCRIPTOR as well as the path, because
+             what this population consists of is reported and must therefore be
+             measured. Tag name plus class list: enough to tell one authorial
+             habit from another, and derived from the element rather than from
+             a sentence somebody wrote once. */
+          else unseen[m].push([path(el), el.tagName.toLowerCase() + [...el.classList].map((c) => '.' + c).join('')]);
           return seen;
         };
         const root = document.querySelector('#pg-' + s);
@@ -2959,6 +2984,15 @@ head('1b. §13 copy bans, over rendered chrome text, cells included');
   const markedStrings = MECHS.reduce((a, m) => a + optoutStrings[m], 0);
   const unrenderedEls = MECHS.reduce((a, m) => a + optoutUnseen[m].size, 0);
   const unrenderedStrings = MECHS.reduce((a, m) => a + optoutUnseenStrings[m], 0);
+  /* Printed on the pass line instead of a sentence saying what these markings
+     sit on. Descending by count so the shape of the population reads off the
+     front of the list, then by name so two runs of the same tree print the
+     same string. */
+  const unrenderedShape = (() => {
+    const n = new Map();
+    for (const m of MECHS) for (const d of optoutUnseenDesc[m].values()) n.set(d, (n.get(d) || 0) + 1);
+    return [...n].sort((a, b) => b[1] - a[1] || (a[0] < b[0] ? -1 : 1)).map(([d, c]) => `${c} ${d}`).join(', ');
+  })();
   const uniq = [...new Set(bad)];
   if (uniq.length) {
     fail(`§13 copy: ${uniq.length} violation(s) in user-visible text`);
@@ -2996,7 +3030,8 @@ head('1b. §13 copy bans, over rendered chrome text, cells included');
     ok(`§13 copy opt-outs: ${markedEls} element(s) carry a declared exclusion that removed copy (ceiling ${OPTOUT_CEILING}, so one more fails) — ` +
       `${optoutN.data} data-copy="data", ${optoutN.statebar} .statebar, ${optoutN.ariaHidden} aria-hidden="true", removing ${markedStrings} string(s) between them; ` +
       `the cap is on the MARKING and not on the strings it took, so it holds at every granularity down to one combination ` +
-      `(${unrenderedEls} further marking(s) removed ${unrenderedStrings} string(s) more, kept out of the figure above; the walk WOULD have read that text — lift one marking and the corpus grows — but each sits on a .stacklabel table duplicate that draws no box, a population tracking the mockup's cell count, so a ceiling over it would go red on ordinary authoring; the block comment says why)`);
+      `(${unrenderedEls} further marking(s) removed ${unrenderedStrings} string(s) more, kept out of the figure above; counted on this run, not characterised, they are: ${unrenderedShape}. ` +
+      `The walk WOULD have read that text — lifting the one marking the block comment drills took the corpus up by 2 — and no ceiling sits over them; the block comment says why)`);
   }
   /* Reported separately from the line above because it is a separate corpus
      with a separate exemption, and one combined number would hide which of the
