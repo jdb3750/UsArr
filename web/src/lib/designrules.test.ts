@@ -2883,7 +2883,8 @@ describe('ARCHITECTURE §17.4 rule 7 — over web/src/routes/search', () => {
 		   reading of §17; §17.4 rule 7 in this tree quotes the standing wording and
 		   does NOT itself carry that sentence, so if you go looking for it and find
 		   nothing, the argument above is about the clause rather than about a span
-		   this file has verified. */
+		   this file has verified — and this marker comes out when that sentence
+		   lands in §17.4 rule 7 of `docs/ARCHITECTURE.md`. */
 		const head = norm(STANDING_WORDING).replace(/[.\s]+$/, '');
 		const carriers = SEARCH_COPY.filter((s) => norm(s.text).includes(head));
 		expect(
