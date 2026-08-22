@@ -1198,7 +1198,7 @@ nothing. **Read `internal/db/migrations` for whether they exist.** Full DDL, CHE
   library-scoped values. Otherwise a work in two libraries either renders under two names or its
   `library_id` is a lie, and nothing said which.
 
-**Five rules that are the whole value of the feature:**
+**Six rules that are the whole value of the feature:**
 
 1. **A correction is keyed to UsArr identity (`work_id` / `link_id` + `target_identity_hash`) and is
    never cleared by a sync, a reconciliation sweep, a tombstone expiry or an id resurrection.** This
@@ -1242,15 +1242,31 @@ nothing. **Read `internal/db/migrations` for whether they exist.** Full DDL, CHE
    carries a user's name, its access grants, and the `exclude`/`include` corrections scoped to it;
    auto-deleting owned data to tidy up replicated data is the wrong trade. A **manual** delete does
    discard those scoped corrections, and §17.8's confirmation copy says so with the count.
-6. **Every replicated work is a member of at least one library, and `make check` asserts it.** A work in no
-   library is visible through no scope and therefore vanishes from search for every user *including
-   the owner* — a failure state the previous `instance_scope` could not reach, because every
-   replicated row came from some instance. Two paths reach it by design: a `root_folder`-scoped
-   library covering part of an instance, and an `exclude` against a work's last remaining library.
-   Reserved `library.id = 0`, **Unfiled**, catches both. It is owner-scoped, never listed on the
+6. **A replicated work is a member of zero or more libraries, and membership is created only by
+   Accept.** ⚠️ **This rule previously read *"Every replicated work is a member of at least one
+   library, and `make check` asserts it"*, and both halves were wrong** — the first since
+   [ADR-0078](./DECISIONS.md#adr-0078) landed on 2026-08-22, the second before it. **The import
+   creates no membership for a container the user has not accepted a proposal for**: the work, its
+   editions, its external ids and its `service_item_link` are written in full and **no
+   `library_member` row is written at all**. Three paths now reach zero membership — a container with
+   no accepted library, a `root_folder`-scoped library covering part of an instance, and an `exclude`
+   against a work's last remaining library. **The worry the old rule had is real and is answered
+   somewhere else.** A work in no library must not vanish from search, and what keeps it findable is
+   `search_doc_library`, not `library_member`: [`reference/schema.md`](./reference/schema.md) §7
+   invariant 5 scopes a document no library covers to reserved `library.id = 0`, **Unfiled**.
+   ⚠️ **`Unfiled` is a SEARCH-SCOPE sentinel and never a membership one.** Nothing writes a
+   `library_member` row with `library_id = 0`, and nothing may: "no library" and "filed into Unfiled"
+   are opposite states, and conflating them files every unaccepted work into a library whose item
+   count then reads 0 for a container full of works. It stays owner-scoped, never listed on the
    Libraries screen, never offered in the scope chip and never proposed; its only job is to keep the
    row findable. **`exclude` removes a work from `library_member` for one library and never from
-   search** — those must not be the same mechanism, and now they are not.
+   search** — those must not be the same mechanism, and they are not. ⚠️ **And the gate named here was
+   the wrong one.** §13.5's assertion set carries *"Every search_doc row is visible through ≥1
+   library"* and has never carried a `library_member` coverage assertion; **the invariant that is
+   asserted is the search-document one**, and it is the one that matters, because it is what the old
+   rule was protecting all along. **Read `internal/store/catalogue.go`'s `CatalogueBinding.NoLibrary`
+   and `internal/store/proposals.go`'s `fileContainerMembers` for the two states and the one writer
+   that ends the first.**
 
 **What this is not.** A library is not a tag (tags are cross-kind labels) and not a saved filter
 (v1.0, a query). Cross-kind grouping — "Kids", "Christmas" — is a tag or a saved filter, never a
