@@ -2757,7 +2757,17 @@ head('1b. §13 copy bans, over rendered chrome text, cells included');
            ceiling stayed green at 12. `unseen` is kept -- the shape is shared
            with the text collector, where the test IS right -- and stays empty
            on this side, so it never carries the [path, descriptor] pair the
-           text collector's unseen entries do. */
+           text collector's unseen entries do.
+
+           ⚠️ IF THIS SIDE EVER STARTS FILLING `unseen`, PUSH A
+           [path, descriptor] PAIR AND NOTHING ELSE. `absorb` destructures
+           `for (const [q, d] of res.unseen[m])`, and destructuring a bare
+           path string does NOT throw -- it yields single characters, so the
+           run goes GREEN printing a one-character descriptor. FIRED
+           2026-08-22 rather than reasoned: pushing a bare string here
+           printed `1 t`. A bare string is the obvious shape for the
+           cross-collector seen/unseen split, which is why the pair is
+           written down as a requirement instead of left to be inferred. */
         const mark = (m, el) => { marks[m].push(path(el)); return true; };
         const root = document.querySelector('#pg-' + s);
         const chrome = [root, document.querySelector('.topbar'), document.querySelector('.sidebar')]
