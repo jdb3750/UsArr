@@ -64,9 +64,25 @@ import (
 // a state the other two never match.
 
 // ContainerCompleteness is one container's answer.
+//
+// ⚠️ ITS TWO STRINGS ARE DIFFERENT KINDS OF STRING. Name is the UPSTREAM's own
+// text; Reason is a closed set of UsArr's own sentences. The distinction is
+// per-field below rather than a claim about the struct, because a blanket
+// sentence here is what the author of the next field reads.
+//
+// ⚠️ AND THE ASYMMETRY IS SAFE FOR A STATABLE REASON RATHER THAN BY ACCIDENT:
+// the upstream-derived field is precisely the one that NEVER LEAVES THE PROCESS.
+// Reason is copied into sync_report.detail and lifted onto
+// GET /api/v1/libraries; Name reaches only sync_report, where an operator reads
+// it and a browser does not, and cmd/usarr redacts it at the write.
+// reference/security.md §5 is what both halves answer to.
 type ContainerCompleteness struct {
 	RemoteID string
-	Name     string
+
+	// Name is the UPSTREAM's own name for this container, carried so the
+	// sync_report row is readable by someone who has only the database. It does
+	// not travel to a browser.
+	Name string
 
 	State store.CompletenessState
 
@@ -94,6 +110,12 @@ type ContainerCompleteness struct {
 	// reference/security.md §5 keeps free of upstream response bodies, and it
 	// reaches a browser from there. The upstream's own error is in the process
 	// log, where the operator can read it and a browser cannot.
+	//
+	// The rule is enforced, not asserted: this file's test and cmd/usarr's
+	// completeness e2e each hold a HAND-COPIED closed set of the values this
+	// field may take, and each asserts membership on every arm that produces one.
+	// A new arm here fails both until someone admits its sentence by hand — do
+	// not "fix" that by making either set derive from completenessReason.
 	Reason string
 }
 

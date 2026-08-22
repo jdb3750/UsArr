@@ -759,7 +759,12 @@ func (s *Server) handleServicesHealth(w http.ResponseWriter, r *http.Request) er
 		return errStatus(http.StatusInternalServerError, CodeInternal,
 			"the configured services could not be read").wrapping(err)
 	}
-	// The second grouped read, on the same rule. sync_report's only reader.
+	// The second grouped read, on the same rule.
+	//
+	// ⚠️ THIS SAID `sync_report's only reader`. It is not one: a grep for
+	// `FROM sync_report` over non-test Go has three hits, in three files, and
+	// this handler reaches one of them. The claim is not restated with a fresher
+	// count, because the count is what went stale — run the grep.
 	walkFailures, err := s.store.FileWalkFailuresByInstance(r.Context(), storeScope(a))
 	if err != nil {
 		return errStatus(http.StatusInternalServerError, CodeInternal,

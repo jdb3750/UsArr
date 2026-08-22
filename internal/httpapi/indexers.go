@@ -17,10 +17,18 @@ import (
 //
 // REQUESTS, NOT SEARCH. This comment used to name Search, and that stopped
 // being true when the release-results table, the indexer picker and Grab moved
-// onto /requests — the free-text indexer path is §17.5's. /search is now the
-// deliberate not-built gap screen for §17.4's search over your own library,
-// which has no indexer picker to populate. A reader deciding where the picker
-// belongs should land on Requests.
+// onto /requests — the free-text indexer path is §17.5's. /search is §17.4's
+// search over the LOCAL REPLICA, which has no indexer to pick, so there is
+// nothing here for it to populate. A reader deciding where the picker belongs
+// should land on Requests.
+//
+// ⚠️ THAT SENTENCE READ `/search is now the deliberate not-built gap screen for
+// §17.4's…`, WHICH ASSERTED A BUILD STATUS ON THIS COMMENT'S OWN AUTHORITY —
+// §17.4 makes no such claim, and a comment is the wrong place for one either
+// way. The scope argument above is what the picker's placement actually rests
+// on and it does not depend on the answer. For the status itself:
+// `web/src/routes` and internal/httpapi/server.go's route table are
+// authoritative, and no sentence here is.
 //
 // ⚠️ AND NO CLIENT CALLS IT YET, as of this commit. The picker composed by
 // web/src/routes/requests/+page.svelte builds its catalogue in

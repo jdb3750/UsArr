@@ -219,9 +219,18 @@ type SkippedContainer struct {
 	RemoteID string
 	Name     string
 
-	// Reason is the underlying error's text. It names a constraint, so it is
-	// database detail rather than upstream text — the upstream's own NAME is
-	// carried in Name, on the same terms as DeclinedContainer.
+	// Reason is the underlying error's text, as `bindErr.Error()` produced it
+	// and after ssrf.RedactText — see the assignment in BindContainers, which
+	// carries the reasoning for redacting there rather than on the read.
+	//
+	// ⚠️ THIS SAID `It names a constraint, so it is database detail rather than
+	// upstream text`, AND THAT WAS TWO CLAIMS WEARING ONE SENTENCE. The half
+	// that holds is about the SENTINEL: isSkippableBindError admits only
+	// sqlite3.CONSTRAINT, so nothing else becomes a skip. The half that did not
+	// is about the STRING, which is not the sentinel — it is whatever
+	// bindOneContainer wrapped around it, and read that function rather than
+	// this comment for what that can be. The redaction is applied because the
+	// second half was never established, not because the first is in doubt.
 	Reason string
 }
 
@@ -521,20 +530,25 @@ func slugify(name string) string {
 //
 // # ONE UNBINDABLE CONTAINER DOES NOT TAKE DOWN THE IMPORT
 //
-// A container whose create violates ux_library_name or ux_library_slug is
-// SKIPPED — rolled back to its own savepoint, recorded in sync_report as
-// `container_bind_failed`, and returned in the []SkippedContainer — and every
-// other container in the list still binds. Before this it returned an error,
-// which aborted BindContainers, which aborted FullImport before a single item
-// was read: two Kavita libraries whose names reduce to the same slug meant NO
-// library synced at all. CLAUDE.md principle 3 is that a feature degrades
-// honestly rather than failing wholesale, and "honestly" is the reason the skip
-// is recorded rather than logged: a background import has no caller left to
-// read a return value by the time anyone asks why a library is missing.
+// A container whose bind violates a constraint is SKIPPED — rolled back to its
+// own savepoint, recorded in sync_report as `container_bind_failed`, and
+// returned in the []SkippedContainer — and every other container in the list
+// still binds. Before this it returned an error, which aborted BindContainers,
+// which aborted FullImport before a single item was read: two Kavita libraries
+// whose names reduce to the same slug meant NO library synced at all. CLAUDE.md
+// principle 3 is that a feature degrades honestly rather than failing
+// wholesale, and "honestly" is the reason the skip is recorded rather than
+// logged: a background import has no caller left to read a return value by the
+// time anyone asks why a library is missing.
 //
-// The disambiguation in step 3 should make a skip unreachable in practice. It
-// is kept anyway, because a uniqueness rule the schema owns and this file
-// re-derives is exactly the pair that drifts.
+// ⚠️ THIS NAMED ux_library_name, ux_library_slug AND `the disambiguation in step
+// 3`, AND ALL THREE DESCRIBED A CREATE THIS PATH NO LONGER PERFORMS. The
+// machinery is kept — savepoint, isSkippableBindError, the slice, the row —
+// because a uniqueness rule the schema owns and this file re-derives is exactly
+// the pair that drifts. What statement can still violate a constraint, and
+// therefore whether this arm is reachable at all, is bindOneContainer's numbered
+// steps to answer and not this comment's; the previous sentence here asserted an
+// answer and was wrong within one commit of the step going away.
 //
 // It is a replication write and takes no Scope. See the file header.
 func (s *Store) BindContainers(

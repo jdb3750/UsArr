@@ -103,12 +103,25 @@ func SkipStateOf(v string) (SkipState, bool) {
 // existed decode into it unchanged. Renaming one silently orphans that half of
 // the history.
 //
-// ⚠️ EVERY STRING IN IT IS USARR'S OWN PROSE. reference/security.md §5 keeps
-// upstream response bodies out of this column, and Reason reaches a browser from
-// here.
+// ⚠️ THE STRINGS IN IT ARE NOT ALL THE SAME KIND OF STRING, AND THE HEADER USED
+// TO SAY THEY WERE — `EVERY STRING IN IT IS USARR'S OWN PROSE`. Name is the
+// UPSTREAM's; Reason, Effect, Covers and DoesNotCover are UsArr's. Each field
+// below says which it is, because a blanket claim here is what a writer of the
+// next field reads before adding one.
+//
+// ⚠️ AND THE ASYMMETRY IS SAFE FOR A STATABLE REASON RATHER THAN BY LUCK: the
+// upstream-derived field is precisely the one that NEVER LEAVES THE PROCESS.
+// Reason is lifted onto GET /api/v1/libraries (internal/store/libraries.go →
+// internal/httpapi/libraries.go) and is a closed set of UsArr's own sentences,
+// pinned by a membership assertion in cmd/usarr's import e2e; Name is read only
+// by an operator with sync_report in front of them, and is redacted with
+// ssrf.RedactText where cmd/usarr assigns it. reference/security.md §5 is what
+// both halves answer to.
 type SkipNote struct {
-	// Name is the upstream's own name for the container at import time, so the
-	// row is readable by someone who has only sync_report in front of them.
+	// Name is the UPSTREAM's own name for the container at import time, so the
+	// row is readable by someone who has only sync_report in front of them. It
+	// does not travel to a browser. Redacted at the write — see cmd/usarr's
+	// recordSkippedItems, which states the limit of that redaction.
 	Name string `json:"name,omitempty"`
 
 	// Comics and Unknown are the per-reason tallies.
@@ -121,7 +134,11 @@ type SkipNote struct {
 	Comics  int64 `json:"skipped_comics"`
 	Unknown int64 `json:"skipped_unknown"`
 
-	// Reason is why, in UsArr's words, SHORT ENOUGH FOR A TABLE CELL. §9.1's
+	// Reason is why, in USARR'S OWN WORDS and never the upstream's, SHORT ENOUGH
+	// FOR A TABLE CELL. It is a closed set — one sentence today, `skipReason` in
+	// cmd/usarr/import.go, plus the empty string on a zero row — and the set is
+	// pinned by a hand-copied membership assertion in cmd/usarr's import e2e
+	// rather than by this comment. §9.1's
 	// overflow policy is a wrap and a three-line cell is a row nobody scans —
 	// the same constraint completenessReason is written against. The long form
 	// belongs in Effect and in the process log.

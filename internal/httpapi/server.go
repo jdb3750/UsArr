@@ -366,7 +366,11 @@ func (s *Server) routes(mux *http.ServeMux) {
 	// ── Search and grab ─────────────────────────────────────────────────────
 	//
 	// /indexers serves the REQUESTS screen's indexer and category picker
-	// (§17.5, not Search — /search is the not-built §17.4 gap screen). It
+	// (§17.5, not Search — /search is §17.4's search over the local replica and
+	// has no indexer to pick). ⚠️ The parenthesis read `/search is the not-built
+	// §17.4 gap screen`, asserting a build status on its own authority eleven
+	// lines above the route it calls unbuilt; `web/src/routes` and this table are
+	// authoritative for that, and the placement argument never needed it. It
 	// reads the local replica written by the background prober and makes NO
 	// upstream call, because the picker paints before the search runs. No
 	// client fetches it yet; handleListIndexers in indexers.go carries the
