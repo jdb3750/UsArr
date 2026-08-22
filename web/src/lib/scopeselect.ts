@@ -32,7 +32,7 @@
  * directly, and the templates keep only the markup.
  */
 
-import type { LibraryNames } from './librarygrid';
+import { libraryNamesAnswered, type LibraryNames, type LibraryNamesAnswer } from './librarygrid';
 
 /** One entry in the select. `value` is the `?lib=` the entry writes; `''` is the
  * unscoped view, which is the parameter's ABSENCE and never its empty spelling —
@@ -100,9 +100,13 @@ export function scopeSelectValue(current: readonly string[]): string {
  *
  *   - A SLUG THE LIST DOES NOT HAVE. `?lib=ghost` after the library was renamed
  *     or deleted, or a scope read from an address before `GET /api/v1/libraries`
- *     has answered. `libraryScopeLine` already falls back to the slug for this,
- *     and so does this: the entry is labelled with the slug it could not resolve.
- *     Dropping it would make the control state a scope the screen is not in.
+ *     has answered. The entry is labelled with the slug it could not resolve;
+ *     dropping it would make the control state a scope the screen is not in.
+ *     ⚠️ `libraryScopeLine` NO LONGER MATCHES THIS UNCONDITIONALLY. It keeps an
+ *     unresolved slug beside a resolved one, but prints NO LINE when an ANSWERED
+ *     read resolves none of the scope's slugs. This control has the opposite
+ *     duty — it must represent the address it is sitting on or the `<select>`
+ *     misstates the scope — so the two diverge on purpose rather than by drift.
  *
  *   - TWO OR MORE LIBRARIES. `?lib=a,b` is expressible in the URL although no
  *     control writes one, and this control is single-select and cannot express
@@ -113,11 +117,14 @@ export function scopeSelectValue(current: readonly string[]): string {
  *
  * ⚠️ AND `names` IS ALLOWED TO BE EMPTY OR LATE. It is a `ReadonlyMap` in
  * `GET /api/v1/libraries`'s own order (`libraryNames` builds it by insertion
- * from `fetchLibraries`, which does not re-sort), and a read that failed is
- * indistinguishable from an install with no libraries — deliberately so
- * (`readLibraryNames` cannot reject). An empty map yields no library entries,
- * which is what `scopeSelectWorthShowing` reads to keep a control that can do
- * nothing off the screen entirely.
+ * from `fetchLibraries`, which does not re-sort). A read that FAILED no longer
+ * reaches here as an empty map — `readLibraryNames` answers "has not answered"
+ * for that, and the screens spell it `names ?? NO_LIBRARY_NAMES` on the way in
+ * — so this function still sees one value for all three and still owes them one
+ * answer: no library entries, which is what `scopeSelectWorthShowing` reads to
+ * keep a control that can do nothing off the screen entirely. THE DISTINCTION
+ * IS `libraryScopeLine`'s AND NOT THIS CONTROL'S, which is absent in all three
+ * cases either way.
  */
 export function scopeSelectOptions(names: LibraryNames, current: readonly string[]): ScopeOption[] {
 	const scope = distinctSlugs(current);
@@ -157,8 +164,8 @@ export function scopeSelectOptions(names: LibraryNames, current: readonly string
  * libraries read that is slow, empty or dead costs this one control and never a
  * row (ARCHITECTURE §17.7).
  */
-export function scopeSelectWorthShowing(names: LibraryNames | undefined): boolean {
-	return names !== undefined && names.size > 0;
+export function scopeSelectWorthShowing(names: LibraryNamesAnswer): boolean {
+	return libraryNamesAnswered(names) && names.size > 0;
 }
 
 /**

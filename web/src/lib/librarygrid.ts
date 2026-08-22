@@ -488,17 +488,28 @@ export function scopeSlug(slug: string): string | undefined {
  * stated in the words the user gave the library, and nothing here reconstructs
  * a name from a slug.
  *
- * ⚠️ A SLUG MISSING FROM THIS MAP IS NOT AN ERROR. It means the read has not
- * answered yet, or it failed, or the address names a library this install does
- * not have. All three fall back to the slug, which is the URL identity migration
- * 0005 keeps across a rename and is therefore true even when it is unfriendly.
+ * ⚠️ A SLUG MISSING FROM THIS MAP IS NOT AN ERROR, BUT IT NO LONGER MEANS THREE
+ * THINGS AT ONCE. A value of this type is what an ANSWERED read holds, so a slug
+ * missing from one means exactly one thing: the address names a library this
+ * install does not have. "Has not answered yet" and "the read failed" are both
+ * `undefined` beside a value of this type and never an empty map — see
+ * `readLibraryNames`. The slug itself stays true regardless: it is the URL
+ * identity migration 0005 keeps across a rename, which is why it is still what
+ * gets printed wherever a name is not yet knowable.
  */
 export type LibraryNames = ReadonlyMap<string, string>;
 
 /**
- * No names at all — what a scoped view holds before the read answers, and what
- * it keeps for ever if the read fails. Shared rather than allocated per render;
- * nothing in this module writes to it.
+ * AN ANSWERED READ THAT FOUND NO LIBRARIES — and no longer what a scoped view
+ * holds before the read answers, nor what a failed read yields. Both of those
+ * are `undefined`.
+ *
+ * ⚠️ IT STOOD FOR ALL THREE, AND THAT WAS THE DEFECT. A screen holding this map
+ * could not tell an install with zero libraries from a read still in flight, so
+ * `?lib=ghost` on an install with no libraries printed `Scoped to ghost` — a raw
+ * slug ARCHITECTURE §17.8 renders nowhere — beside no control to change it,
+ * because the scope select is absent at zero libraries. Shared rather than
+ * allocated per render; nothing in this module writes to it.
  */
 export const NO_LIBRARY_NAMES: LibraryNames = new Map<string, string>();
 
@@ -506,10 +517,49 @@ export const NO_LIBRARY_NAMES: LibraryNames = new Map<string, string>();
  * The map, from the rows `GET /api/v1/libraries` served.
  *
  * A row whose name is blank or whitespace is DROPPED rather than stored, so the
- * line falls back to the slug instead of rendering an empty label. Stating a
- * scope as nothing at all is the one outcome a line whose whole job is to name
- * the scope may not have.
+ * scope line falls back to the slug instead of rendering an EMPTY LABEL between
+ * two commas — a name that renders as nothing is worse than an identifier.
+ *
+ * ⚠️ AND THAT IS NOW A NARROWER CLAIM THAN THE ONE THAT USED TO SIT HERE, which
+ * was *"Stating a scope as nothing at all is the one outcome a line whose whole
+ * job is to name the scope may not have."* `libraryScopeLine` states a scope as
+ * nothing at all on purpose in its third state, so the sentence is false as
+ * written. What survives is the part about this function: dropping the row keeps
+ * the blank out of a line that renders, and a scope whose ONLY library was
+ * dropped here resolves nothing, which is a case that state handles rather than
+ * a hole.
  */
+/**
+ * THE NAMES, OR THE FACT THAT THE READ HAS NOT ANSWERED.
+ *
+ * ⚠️ `undefined` IS NAMED FOR WHAT THE TWO CAUSES SHARE, NOT FOR EITHER CAUSE.
+ * A read still in flight and a read that failed are two ways to arrive at ONE
+ * state — HAS NOT ANSWERED — and everything downstream cares only about the
+ * state. Naming it after "pending" would leave the failure looking like an
+ * oversight sitting in the wrong bucket, and the tidy-up is obvious and wrong:
+ * move the failure in beside "the read answered and knows none of these", and
+ * `libraryScopeLine` drops the scope line on every transient error — a scoped
+ * view that stops saying it is scoped because one local read blipped.
+ *
+ * The distinction lives in the TYPE rather than in a convention each caller
+ * remembers, which is the whole point: an empty map from a dead read and an
+ * empty map from an install with no libraries were the same value, so being
+ * right depended on every call site knowing which case it was in. They are
+ * different values now and the three-state rule falls out of the type.
+ */
+export type LibraryNamesAnswer = LibraryNames | undefined;
+
+/**
+ * WHETHER THE READ HAS ANSWERED — the one question the state is for.
+ *
+ * A type predicate rather than an inline `!== undefined`, so the two modules
+ * that ask it ask it in the same words, and so the answer is greppable by the
+ * name of the state rather than by a comparison against a sentinel.
+ */
+export function libraryNamesAnswered(names: LibraryNamesAnswer): names is LibraryNames {
+	return names !== undefined;
+}
+
 export function libraryNames(libraries: readonly { slug: string; name: string }[]): LibraryNames {
 	const names = new Map<string, string>();
 	for (const library of libraries) {
@@ -527,48 +577,86 @@ export function libraryNames(libraries: readonly { slug: string; name: string }[
  * must render whether or not this answers (ARCHITECTURE §17.7: the table does
  * not grey out on a read that is not its own). A promise that rejects invites a
  * caller to await it on the render path, or to raise a banner over a failure the
- * screen has no reason to report, so the failure is absorbed here and the answer
- * is "no names" — which the line already knows how to render.
+ * screen has no reason to report, so the failure is absorbed here.
+ *
+ * ⚠️ IT IS ABSORBED AS `undefined` — THE SAME "HAS NOT ANSWERED" A SCREEN HOLDS
+ * FROM ITS FIRST FRAME — AND NOT AS AN EMPTY MAP. It answered `NO_LIBRARY_NAMES`
+ * once, which made a dead read indistinguishable from an install with zero
+ * libraries. `libraryScopeLine` now DROPS the line when an answered read
+ * resolves none of the scope's slugs, so an empty map here would silently delete
+ * a scoped view's only statement of its own scope every time the read failed —
+ * turning a cosmetic failure into a lost sentence. A read that died has not
+ * answered, and says so.
  *
  * It is a local SQLite read with no upstream call behind it
  * (`reference/http-api.md` §2), so it is cheap. It is still never waited on.
  */
-export async function readLibraryNames(): Promise<LibraryNames> {
+export async function readLibraryNames(): Promise<LibraryNamesAnswer> {
 	try {
 		return libraryNames(await fetchLibraries());
 	} catch {
-		return NO_LIBRARY_NAMES;
+		return undefined;
 	}
 }
 
 /**
  * WHAT A SCOPED VIEW CALLS ITS OWN SCOPE, IN WORDS THE USER HAS SEEN BEFORE.
  *
- * `undefined` on an unscoped view, and that is the only nothing this returns: a
- * scoped view always gets a sentence, because a view that cannot name its scope
- * must still say that it is scoped.
+ * ⚠️ THREE STATES, NOT TWO, AND COLLAPSING THE LAST TWO WAS THE DEFECT. On an
+ * install with ZERO libraries, `?lib=ghost` printed `Scoped to ghost` — the raw
+ * slug — and `scopeSelectWorthShowing` hides the scope select at zero libraries,
+ * so the screen named its scope in a vocabulary §17.8 shows nowhere and offered
+ * nothing on screen to change it with. The slug fallback below was never the
+ * bug; the bug was ONE VALUE standing for both "no answer yet" and "answered,
+ * and it knows none of these":
  *
- * ⚠️ IT USED TO PRINT THE SLUG, AND THE SLUG IS A VALUE THE UI NEVER SHOWS.
+ *   - `names === undefined` — THE READ HAS NOT ANSWERED, or it failed. Every
+ *     slug prints as itself. Nothing better is known yet and the line is due
+ *     now, not once the read lands.
+ *   - ANSWERED, AND AT LEAST ONE SLUG RESOLVES — the line renders, per the two
+ *     paragraphs below.
+ *   - ANSWERED, AND NOT ONE SLUG RESOLVES — `undefined`, and the toolbar prints
+ *     no scope line at all. The read has spoken and does not know this scope, so
+ *     a sentence built entirely of slugs would be the UI teaching the user an
+ *     identifier in place of a name it is never getting.
+ *
+ * ⚠️ `names` IS REQUIRED AND DELIBERATELY NOT DEFAULTED. It carried
+ * `= NO_LIBRARY_NAMES`, which is precisely why the last two states were one: an
+ * omitted argument and an answered-empty read arrived as the same map, so the
+ * signature could not express the difference the rule turns on. A caller must
+ * now say which of the two it means, and `LibraryNamesAnswer` is how it says it.
+ *
+ * `undefined` ALSO ON AN UNSCOPED VIEW, which is the older and simpler of the
+ * two nothings: there is no scope to state.
+ *
+ * ⚠️ IT USED TO PRINT THE SLUG UNCONDITIONALLY, AND THE SLUG IS A VALUE THE UI
+ * NEVER SHOWS.
  * ARCHITECTURE §17.8 is emphatic that the Libraries screen does not render the
  * identifier — *"The row's identifier is not rendered as a path … Drop the slash
  * and the mono face"* — so a user could arrive here scoped by a string that
- * appears nowhere they have been. The name closes that. The slug stays as the
- * fallback because it is at least TRUE, and a name guessed by un-slugifying a
- * slug is worse than an unfriendly fact.
+ * appears nowhere they have been. The name closes that. The slug still stands
+ * wherever a name is not YET knowable, because it is at least TRUE, and a name
+ * guessed by un-slugifying a slug is worse than an unfriendly fact.
  *
  * TWO OR MORE LIBRARIES ARE ALL NAMED, comma-separated, in the address's order.
  * `?lib=a,b` is expressible in the URL although no control writes one, and the
  * honest reading of a two-library scope is both libraries: a count would say
  * less than the list does, and the list is bounded by `MAX_LIBRARY_SLUGS`.
  * Resolution is per slug, so a scope where one name is known and another is not
- * renders the name it has beside the slug it does not.
+ * renders the name it has BESIDE THE SLUG IT DOES NOT — the unresolved companion
+ * keeps its slug rather than being dropped. Dropping it would tell the user they
+ * are scoped by one library while they are scoped by two, and understating a
+ * scope is a worse lie than an unfriendly string. That is also why the third
+ * state above is NOT ONE slug resolving and never merely some: as long as one
+ * name has landed, the line is worth printing and its companions come with it.
  */
 export function libraryScopeLine(
 	slugs: readonly string[],
-	names: LibraryNames = NO_LIBRARY_NAMES
+	names: LibraryNamesAnswer
 ): string | undefined {
 	if (slugs.length === 0) return undefined;
-	return `Scoped to ${slugs.map((slug) => names.get(slug) ?? slug).join(', ')}`;
+	if (libraryNamesAnswered(names) && !slugs.some((slug) => names.has(slug))) return undefined;
+	return `Scoped to ${slugs.map((slug) => names?.get(slug) ?? slug).join(', ')}`;
 }
 
 /* ── 3. one query, and the route that produces it ─────────────────────────── */

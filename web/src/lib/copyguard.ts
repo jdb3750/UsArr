@@ -117,3 +117,58 @@ export function snippetMarkup(markup: string, name: string): string {
 	if (close < 0) throw new Error(`the snippet ${name} has no closing tag`);
 	return markup.slice(open, close);
 }
+
+/**
+ * ONE ARM OF AN `{#if}` CHAIN ON A STRIPPED TEMPLATE, SLICED TO ITS OWN SIBLING
+ * BOUNDARY — the next `{:else if}`, the next `{:else}`, or the chain's `{/if}`,
+ * whichever the nesting reaches first.
+ *
+ * ⚠️ AN ARM HAS NO CLOSING TOKEN OF ITS OWN, WHICH IS THE WHOLE REASON THIS IS
+ * NOT `snippetMarkup`. A snippet and a section each end at a literal a slicer
+ * can `indexOf`; an arm ends where its SIBLING opens, and a `{:else}` belonging
+ * to an `{#if}` nested inside the arm is not that sibling. So the end is walked
+ * — every `{#…}` deepens, every `{/…}` unwinds, and the first `{:…}` or `{/…}`
+ * seen at depth zero is the boundary.
+ *
+ * ⚠️ AND IT IS EMPHATICALLY NOT A FIXED WIDTH, WHICH IS THE DEFECT THAT PUT THIS
+ * FUNCTION IN THE FILE. `libraryscreen.test.ts` sliced the Libraries screen's
+ * Library cell from `column.id === 'library'` to the end of the file and
+ * asserted over the first 1600 characters of that. The arm is 1279 characters
+ * long, so the window overran it by 321 characters into the `kind` and `items`
+ * arms and the head of `sources`: either assertion could have been satisfied by
+ * an arm it was not testing, under a failure message naming the Library cell.
+ * Nothing about a character count knows where a branch stops, and the two
+ * numbers drift apart every time the markup is edited.
+ *
+ * A MISSING MARKER THROWS, and so does a missing boundary rather than running on
+ * to the end of the markup, for `sectionsMarkup`'s reason: an empty or
+ * over-long corpus is exactly what a text guard fails silently on, so the one
+ * place that can tell is the place that fails.
+ *
+ * THE FIRST MATCH WINS, AND A WRONG FIRST MATCH FAILS RED. Pass a marker
+ * specific enough to name the arm — the opening tag itself where two arms would
+ * otherwise share a prefix. If a duplicate ever shadows the intended arm, the
+ * slice is the wrong arm and the assertion over it goes red, which is the
+ * direction an ambiguity has to fail in.
+ */
+export function branchMarkup(markup: string, marker: string): string {
+	const open = markup.indexOf(marker);
+	if (open < 0) throw new Error(`the branch carrying ${marker} is not in the markup any more`);
+	const token = /\{[#/:][a-z]+/g;
+	token.lastIndex = open + marker.length;
+	let depth = 0;
+	for (let hit = token.exec(markup); hit !== null; hit = token.exec(markup)) {
+		const sigil = hit[0][1];
+		if (sigil === '#') {
+			depth += 1;
+		} else if (sigil === '/') {
+			if (depth === 0) return markup.slice(open, hit.index);
+			depth -= 1;
+		} else if (depth === 0) {
+			return markup.slice(open, hit.index);
+		}
+	}
+	throw new Error(
+		`the branch carrying ${marker} has no sibling boundary, so a slice would run to the end of the markup`
+	);
+}
