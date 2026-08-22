@@ -41,12 +41,16 @@ import (
 //     render in v0.1, and it returns with the first service that can be a
 //     destination."* The four `sink_*` columns are written by nothing in the
 //     tree, so reading them would publish four nulls per row.
-//   - `managed_by`. ADR-0048 Fact 1 and §17.8 both measure that `'user'` has
-//     never been written by any code path, so the column is `'auto'` on every
-//     row by construction. §17.4 rule 5 — a column whose value is identical for
-//     every row is not data — applies to a wire field as much as to a table
-//     cell, and shipping it would let a client build the one-way-door indicator
-//     out of a constant.
+//   - `managed_by`. ⚠️ THE REASON THIS USED TO GIVE HAS EXPIRED. It cited
+//     ADR-0048 Fact 1 and §17.8 measuring that `'user'` had never been written
+//     by any code path, so the column was `'auto'` on every row and §17.4 rule 5
+//     — a column whose value is identical for every row is not data — carried
+//     the omission. AcceptLibraries writes whatever the caller decides, and
+//     internal/httpapi's POST /api/v1/libraries/accept now calls it with `'user'`
+//     for an edited proposal, so the column varies. It stays off this read
+//     because nothing READS it: what a later connect may offer against a
+//     user-managed library is ADR-0048's open question 2, and a screen that
+//     wanted the one-way-door indicator would be the thing that adds it.
 //   - `icon` and `default_sort`. §17.8's DETAIL view's Identity and Visibility
 //     groups, not its row view. The detail read is its own commit and its own
 //     screen. `formats` is the exception among the three and travels — see

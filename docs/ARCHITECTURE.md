@@ -4530,8 +4530,16 @@ asserted:
   involved.** Building a Kavita client stack fires `bootstrapImport` once per instance per database,
   gated on `last_full_sync_at` being unset (`cmd/usarr/services.go`, `cmd/usarr/import.go`); that runs
   the full import, which calls `store.BindContainers` → `bindOneContainer`, which joins an existing
-  library on the name key or creates one (`internal/store/catalogue.go`). **The Accept step below does
-  not gate it, because the Accept step does not exist.** Rows appear; nothing asked.
+  library on the name key or creates one (`internal/store/catalogue.go`). Rows appear; nothing asked.
+  ⚠️ **This bullet ended `The Accept step below does not gate it, because the Accept step does not
+  exist`, and the reason has moved while the fact has not.** Parts of the Accept step DO exist —
+  read the tree, not this line: `internal/store/proposals.go` is its storage and
+  `internal/httpapi/proposals.go` its two routes, `GET /api/v1/libraries/proposals` and
+  `POST /api/v1/libraries/accept` (`docs/reference/http-api.md` §2a, §2b), with `web/src/routes`
+  authoritative for whether a screen calls either. What is unchanged is the **gating**: the bootstrap
+  path above still creates libraries unconditionally, and removing that creation is still this
+  section's thread's to perform ([ADR-0048](./DECISIONS.md#adr-0048)'s Fact 2 and Consequences both
+  assign it there).
 - **That is not the only trigger; the second one is a button.** ⚠️ This bullet used to read
   *"`FullImport` is a Go method with no HTTP route and no CLI subcommand: `internal/httpapi/server.go`'s
   route table registers nothing that reaches it. So on the shipped binary an import happens on a
@@ -4575,16 +4583,22 @@ asserted:
   field by field, rather than here. `web/src/routes` is authoritative for whether anything renders
   it, and `GET /api/v1/library/recent` remains Home's Block C over a different corpus (§17.2,
   ADR-0028) rather than this section's binding.
-- **The one-way door below is specified and unimplemented.** `library.managed_by` is
-  `CHECK (managed_by IN ('auto','user'))` and **`'user'` has never been written by any code path**:
-  the column has exactly one writer in Go, an `INSERT` with the literal `'auto'`, no `UPDATE library`
-  statement exists in non-test Go, and the column has zero non-test readers. ⚠️ **The claim is about
-  writes, not about occurrences** — an earlier draft said `'user'` occurred in the tree in exactly
-  one place, the `CHECK` that permits it, and that is false: it also occurs in the migration's own
-  adjoining comment and twice in the generated schema mirror `internal/db/testdata/schema.sql`,
-  besides `docs/reference/`. None of those is a writer, which is why "never written" is the claim that
-  carries the point and a count of occurrences is not. Nothing marks a library user-managed and
-  nothing consults the mark.
+- **The one-way door below now has a writer, and still has no reader.** ⚠️ This bullet used to read
+  `specified and unimplemented`, on the measurement that `'user'` **had never been written by any
+  code path** — one Go writer, an `INSERT` with the literal `'auto'`, no `UPDATE library` in non-test
+  Go, and zero non-test readers. **The first half is falsified; the second half holds.** Read it off
+  the tree rather than off this line: `internal/store/proposals.go`'s `AcceptLibraries` writes
+  whatever the caller decides, and `internal/httpapi/proposals.go` reaches it from
+  `POST /api/v1/libraries/accept`, sending `'user'` for a proposal the user edited — so a library CAN
+  be marked user-managed now, from the wire, with no screen in front of it
+  (`web/src/routes` is authoritative for that half). **Nothing consults the mark**: the column still
+  has zero non-test readers, so what a later connect may offer against a user-managed library is
+  [ADR-0048](./DECISIONS.md#adr-0048)'s open question 2 and remains untested design. ⚠️ **The
+  surviving claim is about writes, not about occurrences** — an earlier draft said `'user'` occurred
+  in the tree in exactly one place, the `CHECK` that permits it, and that was false: it also occurs
+  in the migration's own adjoining comment and twice in the generated schema mirror
+  `internal/db/testdata/schema.sql`, besides `docs/reference/`. None of those was ever a writer,
+  which is why a count of occurrences was never the claim that carried the point.
 
 **And the Accept step is a removal, not an addition.** Because the import already creates rows
 unconditionally, implementing Accept means taking creation out of the bootstrap path — a change to

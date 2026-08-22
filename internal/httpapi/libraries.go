@@ -19,9 +19,14 @@ import (
 //
 // IT IS A LOCAL READ (principle 1). Two SQLite statements, no *Arr, no metadata
 // provider, no capability probe, no image fetch. In particular it is NOT the
-// connect probe: ADR-0048 puts the proposal set in the probe's response and says
-// a `library` row exists only once the user has accepted one, so this endpoint
-// serves accepted libraries and cannot serve a proposal.
+// connect probe: ADR-0048 says a `library` row exists only once the user has
+// accepted one, so this endpoint serves accepted libraries and cannot serve a
+// proposal. ⚠️ THAT CLAUSE USED TO READ that ADR-0048 puts the proposal set in
+// the PROBE'S RESPONSE, full stop, which is where the FIRST one comes from and
+// is no longer where the screen gets it: GET /api/v1/libraries/proposals
+// recomputes the set from `container_observed` rows in the local file, because a
+// settings screen the user navigates to is not the setup action clause 5
+// excuses. See proposals.go.
 //
 // THE WIRE CONTRACT IS WRITTEN DOWN WHERE A CONSUMER WILL FIND IT:
 // docs/reference/http-api.md §2. A doc comment is not reachable from a browser
@@ -38,8 +43,9 @@ import (
 //
 // so "once no row exists before Accept, every row is an accepted row by
 // construction". Every library this endpoint returns has therefore been acted
-// on; a proposal has no row to return. ⚠️ ADR-0048 is equally explicit that the
-// removal is not done — §17.8: *"Libraries come into existence, on a first
+// on; a proposal has no row to return, and the sibling endpoint serves the
+// proposal set without one. ⚠️ ADR-0048 is equally explicit that the removal is
+// not done — §17.8: *"Libraries come into existence, on a first
 // successful connect to a Kavita, with no screen involved … The Accept step
 // below does not gate it, because the Accept step does not exist"* — and
 // ADR-0048 clause 4 answers exactly that case: existing `managed_by = 'auto'`
@@ -47,11 +53,18 @@ import (
 // invariant holds by declaration today and by construction once Accept lands,
 // and either way the wire field would be a constant.
 //
-// `managed_by` is not on the wire for the same reason, stated separately because
-// it is a different argument: ADR-0048 Fact 1 and §17.8 both MEASURE that
-// `'user'` has never been written by any code path, so the column is `'auto'` on
-// every row. §17.4 rule 5 — a column whose value is identical for every row is
-// not data — applies to a wire field as much as to a table cell.
+// `managed_by` is not on the wire either, and the reason it used to give has
+// EXPIRED rather than merely weakened. This said ADR-0048 Fact 1 and §17.8 both
+// MEASURE that `'user'` has never been written by any code path, so the column
+// is `'auto'` on every row and §17.4 rule 5 — a column whose value is identical
+// for every row is not data — carried the omission. POST /api/v1/libraries/accept
+// is now that writer: an acceptance marked `edited` stores `'user'`
+// (proposals.go's managedBy), so the column can vary and rule 5 no longer
+// applies to it. What has not changed is that NOTHING READS IT — what a later
+// connect may offer against a user-managed library is ADR-0048's open question 2
+// and is answered by nothing shipping — so the field stays off this response
+// until a screen asks for it, which is a decision for whoever adds one rather
+// than a fact about the column.
 
 // librarySourceResponse is one source chip as it crosses to a browser.
 //

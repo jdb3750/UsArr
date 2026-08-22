@@ -312,8 +312,9 @@ where do requests go?'"* — and this endpoint answers the first two thirds. The
 
 It is a local read (principle 1) — two SQLite statements, no \*Arr call, no metadata provider, no
 capability probe. **In particular it is not the connect probe.**
-[ADR-0048](../DECISIONS.md#adr-0048) puts the *proposal* set in the probe's response and never in a
-table, so this endpoint serves accepted libraries only; see §2.5. Requires an authenticated session;
+[ADR-0048](../DECISIONS.md#adr-0048) keeps a *proposal* out of `library` entirely, so this endpoint
+serves accepted libraries only; see §2.5. **The proposal set has its own endpoint — §2a** — and it is
+a local read too: it is recomputed from `container_observed` rows rather than read from the probe. Requires an authenticated session;
 without one it is `401 unauthorized`.
 
 ### 2.1 Query parameters
@@ -504,11 +505,18 @@ than this endpoint declining to serve it:
 > is created only when the user accepts one.**
 
 — from which *"once no row exists before Accept, every row is an accepted row by construction, and a
-column that cannot express 'proposed' is not being asked to."* `library.managed_by` is therefore not
-on this wire either: ADR-0048 Fact 1 and §17.8 both measure that its second value `'user'` **has
-never been written by any code path**, so the column is `'auto'` on every row and §17.4 rule 5 — *a
-column whose value is identical for every row is not data* — applies to a wire field as much as to a
-table cell.
+column that cannot express 'proposed' is not being asked to."* That much is unchanged, and §2a is
+consistent with it: the proposal set is served from `container_observed` rows, not from `library`.
+
+⚠️ **`library.managed_by` is not on this wire either, and the reason this section used to give has
+EXPIRED.** It read: ADR-0048 Fact 1 and §17.8 both measure that its second value `'user'` *"has never
+been written by any code path"*, so the column is `'auto'` on every row and §17.4 rule 5 — *a column
+whose value is identical for every row is not data* — applies to a wire field as much as to a table
+cell. **§2b is now that writer**: an acceptance marked `edited` stores `'user'`, so the column can
+vary and rule 5 no longer carries the omission. What has **not** changed is that nothing reads it —
+what a later connect may offer against a user-managed library is ADR-0048's open question 2 and is
+answered by nothing shipping — so the field stays off this response until a screen asks for it, which
+is a decision for whoever adds one rather than a fact about the column.
 
 ⚠️ **ADR-0048 is equally explicit that the removal it implies is not built.** §17.8: *"Libraries
 come into existence, on a first successful connect to a Kavita, with no screen involved … The Accept
@@ -681,6 +689,330 @@ count and `item_count` differ, so do not subtract one from the other to derive t
 There is no `400`: the endpoint takes no input. A caller whose access scope admits no service
 instances receives `200 OK` with `{"items": []}` — the scope **fails closed**, so an empty visible
 set means no libraries rather than every library.
+
+---
+
+## 2a · `GET /api/v1/libraries/proposals` — the Accept step
+
+The containers UsArr has been told about that are **not already a library**: ARCHITECTURE §17.8's
+Accept step, *"one proposal per container the connected service itself reports"*, each editable
+inline. §2 serves the libraries that exist; this serves the ones that could. Requires an
+authenticated session; without one it is `401 unauthorized`.
+
+**It is a local read (principle 1), and that is the part that had to be argued.**
+[ADR-0048](../DECISIONS.md#adr-0048) clause 1 computes the proposal set from *"what the connected
+instance reports as its containers"*, and its clause 5 excuses **the connect probe's** upstream call
+as a setup action. That excuse does not reach here: `/settings/libraries` is a screen the user
+navigates to, and a proposal that lived only inside a probe response would be available for a few
+seconds after adding a service and never again. So the set is recomputed from `container_observed`
+rows in the local file — no \*Arr call, no media-server call, no probe — and a Kavita that is off
+cannot slow this endpoint down. `internal/store`'s `ProposedContainers` and this package's
+`TestLibraryProposalHandlersReachNothingOutbound` are the two halves of that guarantee.
+
+**A proposal is never persisted, so it has no id.** Its identity on the wire is the pair
+`(service_instance_id, container_ref)`, which is what an acceptance sends back (§2b). ADR-0048
+clause 1 is why: a proposal is a value recomputed from local state on every read, and an id would be
+a handle on a row that does not exist.
+
+### 2a.1 Query parameters
+
+**None, and there is no paging** — §2.1's reasoning, applied to the same screen. There is nothing to
+clamp, so there is no `400` path at all.
+
+### 2a.2 Response
+
+```jsonc
+{
+  "items": [
+    {
+      "service_instance_id": 1,
+      "container_ref": "c-a",
+      "service_name": "Kavita One",
+      "service_kind": "kavita",
+      "container_name": "Alpha",
+      "kind": "comic",
+      "kind_provisional": false,
+      "declined": false,
+      "item_count": 2,
+      "suggested_name": "Alpha",
+      "bound_to": [{"id": 300, "name": "Alpha prose", "kind": "book"}],
+      "observed_at": "2026-08-22T02:23:47Z",
+      "not_seen_by_last_sync": false
+    },
+    {
+      "service_instance_id": 1,
+      "container_ref": "c-x",
+      "service_name": "Kavita One",
+      "service_kind": "kavita",
+      "container_name": "Podcasts",
+      "kind_provisional": false,
+      "declined": true,
+      "decline_reason": "no work.kind for a podcast",
+      "item_count": 0,
+      "suggested_name": "Podcasts",
+      "bound_to": [],
+      "observed_at": "2026-01-01T00:00:00Z",
+      "not_seen_by_last_sync": true
+    }
+  ]
+}
+```
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `service_instance_id` | integer | The instance that reported this container. Half of the proposal's identity, and what an acceptance sends back. |
+| `container_ref` | string | The upstream's own id for the container, verbatim. The other half. |
+| `service_name` | string | The instance's configured name — §17.8's source-chip label. |
+| `service_kind` | string | Its service kind, e.g. `kavita` — the chip's icon. |
+| `container_name` | string | What the **upstream** called the container. §17.8 renders it beneath the editable name, *"greyed and non-editable"*. |
+| `kind` | string | The `work.kind` UsArr decided this container holds. **Absent on a declined container** (§2a.3). |
+| `kind_provisional` | boolean | The kind is the adapter's **guess** rather than something the upstream stated. |
+| `declined` | boolean | UsArr has no `work.kind` for this container and will not offer to build a library from it. |
+| `decline_reason` | string | UsArr's own short sentence, present only with `declined`. **Never upstream text** — reference/security.md §5. |
+| `item_count` | integer | Top-level works from this container that are **already in the replica** (§2a.4). |
+| `suggested_name` | string | The name the screen pre-fills, editable in place. |
+| `joins` | object | The library accepting this proposal **as suggested** would join rather than create (§2a.5). Absent when it would create one. |
+| `bound_to` | array | Libraries this container **already** feeds. Always present; `[]` is the common case (§2a.6). |
+| `observed_at` | string | RFC 3339 UTC. When UsArr last recorded this container being reported. Absent when the stored stamp will not parse. |
+| `not_seen_by_last_sync` | boolean | The last **completed** full sync did not report it (§2a.7). |
+
+**Field by field, allowlisted.** A proposal names a service instance, and that row holds an encrypted
+full-admin \*Arr credential and a base URL the user typed. Two of its columns cross this boundary —
+the name and the kind — and the response is not built by spreading anything.
+
+**Three fields are deliberately absent**, each for its own reason:
+
+* **`instance_last_full_sync_at`.** It is the *input* to `not_seen_by_last_sync`, which this response
+  already carries as a decided answer, and the timestamp itself is §3's field on
+  `GET /api/v1/services/health`. Two derivations of one fact behind one screen is how they come to
+  disagree.
+* **`container_kind`.** Every proposal this endpoint can serve is a `remote_library`, and §6.5 rule
+  3's other container kinds have no membership derivation in the tree. §17.4 rule 5 — *a column whose
+  value is identical for every row is not data* — applies to a wire field too. It arrives with the
+  second kind that can be filed, in the same commit.
+* **`managed_by`.** ADR-0048 closes off any proposed state on `library`, and §2.5 states the rest.
+
+### 2a.3 `declined` and `kind` are one fact, published as two keys
+
+A declined container is **kept, with its reason** — §17.8 requires it be *"declined with a reason"* in
+the `Decision` column — rather than dropped, because a container silently missing from this screen is
+indistinguishable from one the service never reported. `declined` is true exactly when `kind` is
+absent; they are two keys because a renderer branches on the boolean and prints the string, and one
+derivation feeds both.
+
+`kind_provisional` is a **separate** question from `declined`: whether the kind UsArr took is a guess.
+A provisional kind is still a kind, and the proposal is still offered.
+
+### 2a.4 `item_count` counts what is ALREADY replicated — it is not a claim about the upstream
+
+These are works UsArr has imported and that are **sitting unfiled** until an acceptance files them.
+The number exists because [ADR-0048's 2026-08-21 amendment](../DECISIONS.md#adr-0048) runs the first
+import **before** Accept, precisely so a user is *"ticking proposals with real item counts beside
+them"* rather than *"deciding blind"*.
+
+Two things it is not:
+
+* **Not the upstream's count.** What the service says it holds is `completeness` on §2, measured
+  differently and capable of disagreeing for reasons that are not a bug.
+* **Not edition-grained, and child kinds are excluded.** A comic library counting its issues would
+  report a number `/library/comics` disagrees with.
+
+⚠️ **Two callers at different access scopes legitimately get different numbers**, exactly as §2's
+`item_count` does. The count is over the works the caller can see.
+
+### 2a.5 `joins` is a prediction about `suggested_name`, and nothing else
+
+It is computed by the same lookup the writer calls, on §17.8's same merge key — case-insensitive,
+whitespace-trimmed, per user — at the same kind, so the screen's *"Joining Kavita Manga into Comics as
+a second source."* and the acceptance's actual join are **one** derivation rather than two that agree
+today.
+
+⚠️ **It describes `suggested_name`, not whatever is in the name box now.** A user who edits the name
+moves the answer, and recomputing it while they type is the browser's job. A client must not re-send
+`joins` as an assertion: §2b decides the join server-side, from the name it is given.
+
+### 2a.6 A non-empty `bound_to` does not mean "this is not a proposal"
+
+The store drops a container already bound **at the kind it was observed at** — accepting it would be a
+no-op — and **keeps** one bound only at another kind, because
+[ADR-0066](../DECISIONS.md#adr-0066) decision 5 puts two libraries over one mixed container: a
+BookOrbit library holding prose and comics becomes a `book` library and a `comic` library, sourced on
+the same container. What `bound_to` then says is which library the new one would sit beside. It is an
+array for that reason and cannot be one id.
+
+### 2a.7 `not_seen_by_last_sync` is the only thing that can say a proposal went away
+
+A **bound** container's disappearance is recorded on `library_source.missing_since`. An unbound one has
+no `library_source` row at all, so nothing else in the schema records that it stopped being reported —
+its observation simply stops being replaced. Such a container is **flagged rather than hidden**, because
+hiding it would make a container that vanished upstream indistinguishable from one that was never
+there, on the only screen that could say so.
+
+⚠️ **It is `false` on an instance that has never completed a full sync**, because there is no completed
+run for a container to have been missed by — not because the container was seen. An equal timestamp
+counts as **seen**.
+
+### 2a.8 Errors
+
+| Status | `error` | When |
+| --- | --- | --- |
+| `401` | `unauthorized` | no session. |
+| `500` | `internal` | the local read failed. |
+
+There is no `400`: the endpoint takes no input. A caller whose access scope admits no service
+instances receives `200 OK` with `{"items": []}` — the scope **fails closed**, and such a caller is not
+told that an instance it cannot see has containers.
+
+---
+
+## 2b · `POST /api/v1/libraries/accept` — turn proposals into libraries
+
+§17.8's Accept button. One request carries every ticked proposal, as the user edited it, and each one
+either **creates** a library or **joins** an existing one.
+
+**Why this path and not `POST /api/v1/libraries`.** The route table's convention is a resource path
+plus an action segment for an operation that is not a plain create — `/services/test`,
+`/services/{id}/sync`, `/releases/{id}/grab` — and Accept is that shape: a batch whose per-item
+outcome may be a join. `POST /api/v1/libraries` is left unclaimed for §17.8's **Add library**, the
+one-at-a-time create.
+
+**Gated with `Content-Type: application/json`, the double-submit CSRF token and an authenticated
+session — and deliberately NOT with sudo.** Sudo gates the writes that touch a stored \*Arr
+credential (§12.1). This writes `library`, `library_source`, `library_member` and
+`search_doc_library`, and reads a service instance's id only to check the caller may name it; §17.8 is
+explicit that *"No credential field ever appears on this screen"*.
+
+### 2b.1 Request
+
+```jsonc
+{
+  "accept": [
+    {
+      "name": "Ebooks",
+      "kind": "book",
+      "formats": ["ebook"],
+      "edited": true,
+      "sources": [
+        {"service_instance_id": 1, "container_ref": "c-b", "container_name": "Beta"}
+      ]
+    }
+  ]
+}
+```
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `accept` | array | The ticked proposals. **At least one**; an empty batch is a `400`. |
+| `accept[].name` | string | What the user is accepting, after any inline edit. Matched on §17.8's merge key (§2b.3). Required, and bounded at 200 bytes on the wire. |
+| `accept[].kind` | string | `library.kind`: exactly one value, required (§6.5 rule 4). |
+| `accept[].formats` | array | The format filter over `edition.format`. Absent or empty means **any**, stored as NULL — the column §17.8's Ebooks/Audiobooks split lands on. |
+| `accept[].edited` | boolean | §17.8's one-way door: *"Editing any proposal marks that library user-managed."* (§2b.2) |
+| `accept[].sources` | array | The containers this library binds. **At least one.** Two proposals merged by §17.8's rename rule arrive as **one** acceptance carrying both. |
+| `sources[].service_instance_id` | integer | From the proposal, unchanged. |
+| `sources[].container_ref` | string | From the proposal, unchanged. |
+| `sources[].container_name` | string | The container's own upstream name, recorded so an upstream that reuses ids cannot silently rebind the library to a different container. |
+
+**Unknown fields are refused with a `400`**, unlike an unknown *query parameter* (see this file's
+header). The two rules point in opposite directions on purpose: a request body on a configuration API
+that silently ignores a misspelled field means the user saves a setting that does nothing.
+
+**There is no `container_kind` field.** `remote_library` is the only container kind this endpoint's own
+proposals can offer and the only one with a membership derivation in the tree, so the field would have
+exactly one legal value; it arrives with the second kind that can be filed.
+
+### 2b.2 `edited`, not `managed_by`
+
+The stored column's vocabulary is `auto`/`user`. The wire's is a boolean saying whether the user
+touched the row, which is the fact **the screen** actually has — and `DEVELOPMENT.md` §11 is explicit
+that a wire vocabulary and a storage vocabulary never share a term, because two vocabularies that match
+today are free to diverge tomorrow. The translation is one function in `internal/httpapi/proposals.go`
+and it is the only place the two meet.
+
+⚠️ **Nothing reads the column yet.** ADR-0048 Fact 1 measured that `'user'` had never been written by
+any code path; this endpoint is the first writer. What a later connect may offer against a
+user-managed library is ADR-0048's open question 2 and is not answered by anything shipping.
+
+### 2b.3 The merge rule, and what a join does NOT do
+
+An acceptance whose name matches an existing library of **this user at the same kind** — on §17.8's
+case-insensitive, whitespace-trimmed key — **joins** it. `  beta ` joins `Beta`.
+
+**A join adds sources and files their members. It rewrites nothing about the existing row** — not its
+name, not its slug, not its formats, not its managed-by. §17.8's one-way door runs in this direction:
+*"a later connect can only offer to add sources. It can never reshape the library."* So the `name` in
+the response is the **row's**, which may differ from the one that was sent.
+
+A name that matches at a **different** kind cannot join, and is refused rather than disambiguated
+(§2b.5). The unattended import path invents `Comics (2)` because it has nobody to ask; here a person
+typed the name, and storing something other than what they typed is the failure §17.8 records against
+the drawn mockup.
+
+### 2b.4 Response — `200 OK`
+
+```jsonc
+{
+  "items": [
+    {"id": 301, "name": "Ebooks", "slug": "ebooks", "kind": "book",
+     "outcome": "created", "members_filed": 1}
+  ]
+}
+```
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `id` | integer | The library that now exists — created or joined. |
+| `name` | string | Its name. On a join this is the **existing row's**, not the request's (§2b.3). |
+| `slug` | string | Its URL identity. §17.8: it is the value behind `?lib=ebooks`, **not** a path — do not render it with a leading slash. |
+| `kind` | string | Its `library.kind`. |
+| `outcome` | string | `created` or `joined`. There is no third value. |
+| `members_filed` | integer | How many works **moved** from unfiled into this library. |
+
+**`outcome` is one field rather than two booleans on purpose.** The store's own result carries an
+exclusive `Created`/`Joined` pair; collapsing them at the boundary means a body claiming both or
+neither cannot be marshalled. §17.8 requires the screen to *say* which happened —
+*"Joining Kavita Manga into Comics as a second source."*
+
+⚠️ **`members_filed` is a count of what MOVED, not of the library's size.** Accepting the same
+container twice is idempotent and the second call reports `0`; that is the honest number, not a
+failure. For the library's size, read §2's `item_count`.
+
+### 2b.5 Errors — and a refusal means **nothing** was written
+
+**The whole batch is one transaction.** A name that collides, a source outside the scope: nothing is
+written, not even the acceptances that had already succeeded. That is affordable precisely because
+ADR-0048 keeps a proposal out of storage — the rows that were not created are still proposals, §2a
+recomputes the same set, and the cost of a refusal is the user fixing one name and pressing again.
+
+| Status | `error` | Meaning | `action` |
+| --- | --- | --- | --- |
+| `200` | — | Every acceptance was created or joined. | — |
+| `400` | `bad_request` | A fact about the request document: an empty batch, an acceptance with no name, no kind or no source, a source naming no service or no container, a name past the wire bound, an unknown field, or a body that is not one JSON object. The message names which acceptance, by index. | (varies) |
+| `409` | `library_name_taken` | The name is not available to this user (§2b.6). | `Choose a different name` |
+| `404` | `not_found` | A source names a service instance the caller's access scope does not admit. **Two conditions, one code**, on §4.4's reasoning: "no such instance" and "not yours" are deliberately indistinguishable, because the difference is an existence oracle. | — |
+| `403` | `csrf` | Stale page token. | (its own) |
+| `401` | `unauthorized` | No session, or one that has expired. | — |
+| `415` | `unsupported_media_type` | Not sent as `Content-Type: application/json`. Checked **first**, ahead of the CSRF token, because the header requirement is itself half the CSRF defence. | — |
+| `500` | `internal` | The acceptance could not be written. **The store's own sentence is not forwarded**: it names an internal row id and a database-layer prefix, and the caller can act on none of it. The cause is in the process log. | — |
+
+⚠️ **A `kind` the schema refuses is a `500`, not a `400`, and that is a known rough edge rather than a
+decision.** `library.kind` is a `CHECK` in migration `00005_library_sync.sql` and there is no Go-side
+copy of the list; writing one here would be two derivations of one membership rule, which is the defect
+class `DEVELOPMENT.md` §11 names. A client sending a kind outside
+`movie · series · artist · album · book · comic · game` therefore reaches the constraint. The fix, when
+it is worth making, is a single list the schema mirror is checked against — not a second one typed into
+this layer.
+
+### 2b.6 `library_name_taken` covers three conditions, and one action fixes all of them
+
+The store raises one sentinel for three cases, and the message says the true thing about all three:
+
+1. **The name is held at a different kind.** `library.kind` is exactly one value, so this cannot join.
+2. **The name is held by the reserved `Unfiled` library**, which nothing may join (§2.3).
+3. **The name is free and its slug is not.** `Sci-Fi` and `Sci Fi` reduce to one permalink, and a user
+   who typed the second and silently got `sci-fi-2` would have a URL nobody chose.
+
+All three are fixed by typing a different name, which is why one code is honest here — and why the
+message names neither the conflicting library's id nor the store's own wording.
 
 ---
 

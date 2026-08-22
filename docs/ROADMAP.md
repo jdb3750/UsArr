@@ -981,6 +981,17 @@ re-sectioned on the strength of this note**, and none of the three is thereby pl
       *Authority:* §17.8, [ADR-0026](./DECISIONS.md#adr-0026), [ADR-0048](./DECISIONS.md#adr-0048).
       *Done when:* an Accept path exists that creates a `library` row, and the proposal has a home
       that is not that table.
+      ⚠️ **THE WRITTEN CRITERION IS MET AND THE BOX STAYS OPEN, WHICH IS A GAP IN THE CRITERION
+      RATHER THAN A JUDGEMENT ABOUT THE WORK.** Both clauses closed: `internal/store/proposals.go`
+      is the Accept path (`AcceptLibraries` creates or joins a `library` row) and the proposal's home
+      is `container_observed` rows in `sync_report`, recomputed by `ProposedContainers`;
+      `internal/httpapi/proposals.go` puts both on the wire as
+      `GET /api/v1/libraries/proposals` and `POST /api/v1/libraries/accept`
+      (`docs/reference/http-api.md` §2a, §2b). What the criterion never named is the half the
+      heading does — **the FLOW**: no screen calls either route (`web/src/routes` is authoritative),
+      and the bootstrap import still creates libraries unconditionally, which is the removal §17.8
+      and ADR-0048 both assign to this thread. Ticking on the clause as written would claim a flow
+      that does not exist, so the box waits for those two.
 
 - [ ] **The per-series volume and chapter walk, and the rows it writes.** Phase A is served; the walk
       that fills `work_comic_issue` and `media_file` is not fetched and is not faked.

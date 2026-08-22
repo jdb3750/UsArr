@@ -769,9 +769,11 @@ func TestAcceptValidatesWhatTheCallerDecides(t *testing.T) {
 	}
 }
 
-// managed_by = 'user' has never been written by any code path (ADR-0048 Fact 1),
-// and this is the path that can. The column has no reader yet, so the assertion
-// is on the row.
+// managed_by = 'user' had never been written by any code path when ADR-0048
+// measured it (Fact 1), and this is the path that writes it — reached in
+// production by internal/httpapi's POST /api/v1/libraries/accept, which sends
+// 'user' for a proposal the user edited. The column still has no reader, so the
+// assertion is on the row.
 func TestAcceptWritesTheCallersManagedByAndFormats(t *testing.T) {
 	s := newTestStore(t)
 	seedProposalsCorpus(t, s)

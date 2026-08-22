@@ -749,22 +749,22 @@ func TestLibraryProposalRoutesAreRegisteredAndGated(t *testing.T) {
 
 	// The write is CSRF-gated ahead of the session, and the media-type check is
 	// ahead of both — imports_test.go's ordering, asserted here so this route
-	// cannot be the one that is gated more weakly than its neighbours.
-	res, err := http.Post(srv.URL+"/api/v1/libraries/accept", "text/plain", strings.NewReader("{}"))
+	// cannot be the one that is gated more weakly than its neighbours. Through
+	// that file's cookieClient, so the two routes are measured by one harness.
+	path := srv.URL + "/api/v1/libraries/accept"
+	c := &cookieClient{t: t, jar: map[string]string{}}
+
+	req, err := http.NewRequestWithContext(t.Context(), http.MethodPost, path, strings.NewReader("{}"))
 	if err != nil {
-		t.Fatalf("POST: %v", err)
+		t.Fatalf("request: %v", err)
 	}
-	defer func() { _ = res.Body.Close() }()
-	if res.StatusCode != http.StatusUnsupportedMediaType {
-		t.Errorf("POST /api/v1/libraries/accept as text/plain = %d, want 415", res.StatusCode)
+	req.Header.Set("Content-Type", "text/plain")
+	if code, body := c.do(req); code != http.StatusUnsupportedMediaType {
+		t.Errorf("POST %s as text/plain = %d %s, want 415", path, code, body)
 	}
 
-	res2, err := http.Post(srv.URL+"/api/v1/libraries/accept", "application/json", strings.NewReader("{}"))
-	if err != nil {
-		t.Fatalf("POST: %v", err)
-	}
-	defer func() { _ = res2.Body.Close() }()
-	if res2.StatusCode != http.StatusForbidden {
-		t.Errorf("POST /api/v1/libraries/accept with no CSRF token = %d, want 403", res2.StatusCode)
+	if code, body := c.post(path, false); code != http.StatusForbidden ||
+		!strings.Contains(body, `"error":"csrf"`) {
+		t.Errorf("POST %s with no CSRF token = %d %s, want 403 csrf", path, code, body)
 	}
 }
