@@ -499,11 +499,35 @@ func slugify(name string) string {
 //
 //   - ONE LIBRARY PER UPSTREAM CONTAINER. §17.8: "one per upstream library for
 //     Audiobookshelf / Kavita / Navidrome".
+//
 //   - A SECOND SOURCE JOINS AN EXISTING LIBRARY RATHER THAN CREATING A NEW ONE,
-//     on the stated merge key — case-insensitive, whitespace-trimmed, per user —
-//     PROVIDED THE KIND AGREES. library.kind is exactly one value, so a name
-//     collision across kinds cannot join; that container gets a disambiguated
-//     name instead of silently landing in a library of the wrong kind.
+//     on the stated merge key — case-insensitive, whitespace-trimmed — PROVIDED
+//     THE KIND AGREES. library.kind is exactly one value, so a name collision
+//     across kinds cannot join.
+//
+//     ⚠️ THE POPULATION IS THIS CALL'S userID, NOT "per user". §17.8 states the
+//     key as per-user and that is right for the SCREEN; this path is the import,
+//     which cmd/usarr builds at store.SystemUserID. Step 2 resolves through
+//     userLibraries(Scope{UserID: userID}) — `user_id IN (0, :uid)` — so at the
+//     importer's 0 it sees the user_id 0 rows and nothing else. A library ACCEPT
+//     created belongs to the accepting session's user, always >= 1, and step 2
+//     cannot see it.
+//
+//     ⚠️ THAT GAP IS STEP 2's, AND THE NAME MATCH'S, ALONE — NOT "the import's".
+//     Step 1 carries no user predicate at all: it joins library_source on
+//     (service_instance_id, container_kind, container_ref) and library on kind,
+//     and AcceptLibraries writes library_source. So a container Accept has bound
+//     IS found by a later import at ANY user id, and its items ARE filed into the
+//     accepted library. Only a container that is not yet a source of that library
+//     reaches step 2 and matches by NAME, and only that case is blind.
+//     docs/REVIEW-LOG.md LS-399.4.
+//
+//     ⚠️ AND NOTHING GETS "A DISAMBIGUATED NAME" ANY MORE. This bullet used to end
+//     by saying a cross-kind collision lands under a disambiguated name; that
+//     described step 3's create, which ADR-0078 removed. The container now gets NO
+//     LIBRARY — CatalogueBinding.NoLibrary — and becomes a proposal. The block
+//     below already records that about ux_library_name and ux_library_slug, and
+//     this bullet contradicted it.
 //
 // container_kind IS 'remote_library', NOT 'instance', AND THAT IS A DECISION.
 // 'instance' means "everything this service reports", and it is expressible only
@@ -977,11 +1001,27 @@ func bindOneContainer(
 	//
 	// ⚠️ STEPS 1 AND 2 ARE UNTOUCHED, AND THAT IS WHAT KEEPS AN EXISTING INSTALL
 	// WORKING. A container already bound at this kind still resolves at step 1; a
-	// container whose name matches a library the user already has still JOINS it
-	// at step 2. ADR-0048 clause 4 declares the rows an earlier build auto-created
-	// to be accepted, so those installs keep matching before any create path could
-	// have run. What changes is only the case where nothing matched: that used to
-	// mint a library nobody asked for, and now it yields a proposal.
+	// container whose name matches a library VISIBLE AT THIS CALL'S userID still
+	// JOINS it at step 2. ADR-0048 clause 4 declares the rows an earlier build
+	// auto-created to be accepted, so those installs keep matching before any
+	// create path could have run. What changes is only the case where nothing
+	// matched: that used to mint a library nobody asked for, and now it yields a
+	// proposal.
+	//
+	// ⚠️ "A LIBRARY THE USER ALREADY HAS" WAS THE WRONG POPULATION, and the
+	// boundary here is the one ADR-0078's own sentence took as a dated rider. The
+	// upgrade rows this paragraph is about sit at user_id 0, and cmd/usarr runs
+	// the import at SystemUserID, so step 2 matches them. A library ACCEPT created
+	// sits at the accepting session's user id, always >= 1, and step 2 — reading
+	// `user_id IN (0, :uid)` at the importer's 0 — CANNOT see it.
+	//
+	// ⚠️ THE GAP IS STEP 2's, AND THE NAME MATCH'S, ALONE. Step 1 above carries NO
+	// user predicate — it joins library_source on (service_instance_id,
+	// container_kind, container_ref) and library on kind — so a container Accept
+	// has already bound still resolves there at ANY user id, and its items still
+	// file into the accepted library. Only a container that is not yet a source of
+	// that library, falling through to match by NAME, is blind to it. Measured
+	// rather than reasoned; docs/REVIEW-LOG.md LS-399.4.
 	//
 	// ⚠️ AND THE ITEMS STILL LAND. ADR-0048's 2026-08-21 amendment runs the first
 	// import BEFORE Accept, so this is the ordinary path on a first connect and it
