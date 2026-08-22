@@ -807,7 +807,6 @@ func (g *registry) bootstrapImport(ctx context.Context, instanceID int64) {
 	}
 	g.log.Info("first full import complete",
 		"instance_id", instanceID,
-		"libraries_created", rep.LibrariesCreated,
 		"libraries_joined", rep.LibrariesJoined,
 		"declined_containers", len(rep.DeclinedContainers),
 		"items", rep.ItemsApplied,

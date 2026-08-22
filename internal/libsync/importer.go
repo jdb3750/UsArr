@@ -171,8 +171,18 @@ type Report struct {
 	// (docs/reference/http-api.md §3.5).
 	FinishedAt time.Time
 
-	ContainersSeen     int
-	LibrariesCreated   int
+	ContainersSeen int
+
+	// LibrariesJoined is how many of the containers this import reported
+	// resolved to a library — one already bound at this kind, or one joined on
+	// §17.8's name key. It is NOT how many libraries exist.
+	//
+	// ⚠️ ITS SIBLING `LibrariesCreated` WAS REMOVED WITH ADR-0048's LANDING, and
+	// the removal is the honest half of that change. An import creates no
+	// library, so the counter was structurally 0; a report field that can only
+	// ever be zero says "nothing happened" in a place a reader looks for what
+	// happened. What replaced the information it used to carry is the Accept
+	// step, which is a user action and not an import statistic.
 	LibrariesJoined    int
 	DeclinedContainers []DeclinedContainer
 
@@ -693,24 +703,20 @@ func (im *Importer) bindPhase(
 			"instance_id", instanceID, "remote_id", sk.RemoteID,
 			"name", sk.Name, "reason", sk.Reason)
 	}
-	// ⚠️ NEITHER COUNTER COUNTS A CONTAINER WITH NO LIBRARY, and since ADR-0048
-	// that is most of them on a first connect: the import creates no library at
-	// all, so nothing was created and nothing was joined. Counting an unaccepted
+	// ⚠️ A CONTAINER WITH NO LIBRARY IS NOT COUNTED, and since ADR-0048 that is
+	// most of them on a first connect: the import creates no library at all, so
+	// nothing was created and nothing was joined. Counting an unaccepted
 	// container as JOINED would report a library that does not exist, which is
 	// the "number that is wrong" ADR-0048 is written against.
 	//
-	// ⚠️ LibrariesCreated IS THEREFORE 0 ON EVERY IMPORT. store.bindOneContainer
-	// has no create path any more — AcceptLibraries is the only writer of a
-	// `library` row — so the branch below is unreachable. It is left standing
-	// rather than deleted because removing the counter is a change to this
-	// report's shape and to its readers, and it is recorded here so the zero is
-	// read as a fact rather than as a bug.
+	// ⚠️ THERE IS NO LibrariesCreated COUNTER ANY MORE, and it was removed rather
+	// than left at zero. store.bindOneContainer has no create path — Accept is
+	// the only writer of a `library` row — so the counter was 0 on every import
+	// BY CONSTRUCTION, and a status figure that cannot be anything but zero is a
+	// false surface rather than a measurement. Every reader of it was internal (a
+	// log line and this package's tests) and went with it.
 	for _, b := range bindings {
-		switch {
-		case b.NoLibrary:
-		case b.Created:
-			rep.LibrariesCreated++
-		default:
+		if !b.NoLibrary {
 			rep.LibrariesJoined++
 		}
 	}

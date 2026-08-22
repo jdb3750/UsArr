@@ -251,9 +251,6 @@ func TestBindContainersCreatesNoLibrary(t *testing.T) {
 		if !binds[ref].NoLibrary {
 			t.Errorf("container %s reports a library: %+v", ref, binds[ref])
 		}
-		if binds[ref].Created {
-			t.Errorf("container %s reports Created; nothing on this path creates a library", ref)
-		}
 	}
 	if binds["1"].Kind != "comic" || binds["2"].Kind != "book" {
 		t.Errorf("kinds came out wrong: %+v", binds)
@@ -295,8 +292,11 @@ func TestBindContainersIsIdempotentAndJoinsBySameNameAndKind(t *testing.T) {
 	if err != nil {
 		t.Fatalf("BindContainers a again: %v", err)
 	}
-	if again["1"].LibraryID != first["1"].LibraryID || again["1"].Created {
-		t.Errorf("a re-import created a second library: %+v then %+v", first["1"], again["1"])
+	if again["1"].LibraryID != first["1"].LibraryID {
+		t.Errorf("a re-import bound the container elsewhere: %+v then %+v", first["1"], again["1"])
+	}
+	if n := count(t, s, `SELECT COUNT(*) FROM library WHERE id <> ?`, UnfiledLibraryID); n != 1 {
+		t.Errorf("%d libraries exist after a re-import, want the 1 that was accepted", n)
 	}
 
 	// §17.8: a SECOND INSTANCE of the same kind JOINS the existing library
@@ -311,7 +311,7 @@ func TestBindContainersIsIdempotentAndJoinsBySameNameAndKind(t *testing.T) {
 			"default is join, and getting it wrong destroys the two-source badge",
 			joined["7"].LibraryID, first["1"].LibraryID)
 	}
-	if joined["7"].Created || joined["7"].NoLibrary {
+	if joined["7"].NoLibrary {
 		t.Errorf("a join reported %+v", joined["7"])
 	}
 	if n := count(t, s, `SELECT COUNT(*) FROM library_source WHERE library_id = ?`, first["1"].LibraryID); n != 2 {
@@ -440,6 +440,28 @@ func TestTheBindPathNoLongerDerivesALibraryName(t *testing.T) {
 // KEPT — a constraint the schema owns and this path re-derives is exactly the
 // pair that drifts, and the machinery costs nothing standing — but nothing in
 // this test can fire them any more.
+//
+// # WHAT WOULD FALSIFY THAT ABSENCE, named so a later reader can check it
+//
+// The claim is exactly: no statement reachable from BindContainers' loop can
+// violate a constraint. It stops being true the moment one can, and these are
+// the ways in:
+//
+//   - bindOneContainer regains a write to `library`. Any auto-create, rename or
+//     re-slug on this path puts ux_library_name, ux_library_slug and
+//     library.kind's CHECK back in reach — which is precisely what used to make
+//     this test's container skippable.
+//   - insertLibrarySource loses its `ON CONFLICT … DO UPDATE`, or
+//     library_source gains a CHECK on container_kind. Step 2's join writes that
+//     row on every new binding.
+//   - bindProvisional's retype becomes reachable from the container list. Its
+//     `UPDATE library SET kind = ?` CAN violate library.kind's CHECK today, but
+//     only under bindSiblingKind — which comes from resolveBinding on the ITEM
+//     pass, never from this loop, whose branch adopts rather than retypes.
+//   - recordSyncReport or noteKindChange gains a constraint on sync_report.
+//
+// If any of those lands, `len(skipped) != 0` below is the assertion that starts
+// failing, and the machinery to catch it is already standing.
 //
 // CLAUDE.md principle 3 is what the old test was really about and it still
 // holds: one container UsArr cannot use does not take down the import.

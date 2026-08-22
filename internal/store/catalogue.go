@@ -137,38 +137,25 @@ type CatalogueBinding struct {
 	// they are only unfiled.
 	NoLibrary bool
 
-	// Created reports whether this call created the library rather than joining
-	// an existing one.
-	//
-	// ⚠️ NOTHING SETS IT ANY MORE, AND IT IS LEFT HERE RATHER THAN CUT BECAUSE
-	// CUTTING IT IS A CHANGE TO libsync's REPORT AND NOT TO THIS FILE. Since
-	// ADR-0048 the import path creates no library at all: step 1 finds one, step 2
-	// joins one, step 3 yields none, and AcceptLibraries is the only creator. So
-	// this is false on every binding bindOneContainer returns, and
-	// libsync.Report.LibrariesCreated is 0 on every import. It is a measured
-	// residual, recorded rather than hidden, and removing the field together with
-	// that counter is a follow-on. §17.8's second-instance rule makes joining the default,
-	// so a caller that wants to report "joined X as a second source" needs to be
-	// able to tell them apart.
-	//
-	// ⚠️ IT IS NOT "A BINDING WAS CREATED", AND THE TWO ARE ROUTINELY CONFUSED.
-	// See SourceAttached, which is that fact and is a different one.
-	Created bool
-
 	// SourceAttached reports whether this call bound THIS INSTANCE to a
 	// container it was not bound to before — a new `library_source` row, whether
 	// or not a `library` row came with it.
 	//
-	// 🚩 IT EXISTS BECAUSE `Created` IS THE WRONG SIGNAL FOR THAT QUESTION, AND
-	// THE FALSE NEGATIVE IS THE ORDINARY HOMELAB CASE RATHER THAN A CORNER.
-	// bindOneContainer has three exits. Step 1 finds the container already bound
-	// at this kind and creates nothing — Created false, correct. Step 3 creates a
-	// library — Created true. STEP 2 is the one: the container is NEW TO UsArr,
-	// its trimmed name matches an existing library of the same kind, so it JOINS
-	// that library and writes a brand-new binding row into it — and Created is
-	// the zero value, FALSE. A Kavita `Ebooks` library already bound and a
-	// BookOrbit `Ebooks` library granted to the credential afterwards takes
-	// exactly that path.
+	// 🚩 IT EXISTS BECAUSE A `Created` FLAG WAS THE WRONG SIGNAL FOR THAT
+	// QUESTION, AND THE FALSE NEGATIVE WAS THE ORDINARY HOMELAB CASE RATHER THAN
+	// A CORNER. This type used to carry one — "this call created the library" —
+	// and it missed STEP 2: a container NEW TO UsArr whose trimmed name matches
+	// an existing library of the same kind JOINS that library and writes a
+	// brand-new binding row into it, with nothing created. A Kavita `Ebooks`
+	// library already bound and a BookOrbit `Ebooks` library granted to the
+	// credential afterwards takes exactly that path.
+	//
+	// ⚠️ THAT FLAG IS GONE (ADR-0048) AND THIS ONE IS NOT, which is the sharpest
+	// statement of the difference between them. With no create in the bind path
+	// `Created` was false on every binding by construction — a counter that is
+	// always zero is a false status surface — while SourceAttached still fires
+	// on every step-2 join, because binding an instance to a container it was not
+	// bound to before is a thing that still happens.
 	//
 	// The reader that needs it is channel 3b: a container UsArr has never
 	// imported is full of items whose arrival stamps are far behind the cursor,

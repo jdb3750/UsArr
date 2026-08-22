@@ -759,11 +759,12 @@ func TestBookOrbitFullImportFromCassettes(t *testing.T) {
 	if !rep.Completed {
 		t.Fatal("the import did not complete")
 	}
-	// LibrariesCreated is 0 and LibrariesJoined is 2: the import creates none and
-	// resolves the two the fixture accepted for the containers it reported.
-	if rep.ContainersSeen != 2 || rep.LibrariesCreated != 0 {
-		t.Errorf("containers = %d, libraries created = %d, want 2 and 0",
-			rep.ContainersSeen, rep.LibrariesCreated)
+	// Two containers seen, and both resolve to a library the fixture accepted.
+	// There is no LibrariesCreated to assert: the import creates none, so the
+	// counter was removed rather than left reading zero for ever.
+	if rep.ContainersSeen != 2 || rep.LibrariesJoined != 2 {
+		t.Errorf("containers = %d, libraries joined = %d, want 2 and 2",
+			rep.ContainersSeen, rep.LibrariesJoined)
 	}
 	// THREE READ, TWO APPLIED. The pair is the assertion: either number alone
 	// passes for a build that dropped the comic silently or for one that

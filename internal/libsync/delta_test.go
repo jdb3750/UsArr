@@ -551,11 +551,18 @@ func TestAnInstanceThatWasEmptyAndHasFilledUpEscalates(t *testing.T) {
 	}
 }
 
-// 🚩 THE ESCALATION `CatalogueBinding.Created` MISSES. A container new to UsArr
-// whose trimmed name matches an existing library of the same kind JOINS it and
-// writes a brand-new binding row — Created is false there. An arrivals filter
-// would return none of that container's back catalogue, and a whole library
-// would be silently missing content.
+// 🚩 THE ESCALATION A `Created` FLAG WOULD MISS. A container new to UsArr whose
+// trimmed name matches an existing library of the same kind JOINS it and writes
+// a brand-new binding row — nothing is created there. An arrivals filter would
+// return none of that container's back catalogue, and a whole library would be
+// silently missing content. store.CatalogueBinding.SourceAttached is what the
+// detector reads instead.
+//
+// ⚠️ THE FLAG ITSELF NO LONGER EXISTS (ADR-0048 removed the create and the
+// counter with it), so the case below is now the ONLY case rather than the
+// overlooked one — which makes the escalation more load-bearing, not less. The
+// assertion that used to read `LibrariesCreated == 0` is now read off the table:
+// no library row appeared during the delta.
 func TestADeltaEscalatesWhenAContainerIsBoundIntoAnExistingLibrary(t *testing.T) {
 	// Instance A's library "Fiction" exists because it was ACCEPTED — since
 	// ADR-0048 an import creates none, and the join this test is about needs a
@@ -603,12 +610,13 @@ func TestADeltaEscalatesWhenAContainerIsBoundIntoAnExistingLibrary(t *testing.T)
 	if !strings.Contains(rep.EscalationReason, "bound to this service for the first time") {
 		t.Errorf("reason = %q", rep.EscalationReason)
 	}
-	// ⚠️ THE PROOF THAT `Created` WOULD HAVE MISSED IT: no library was created on
-	// this run. Every binding joined, so a detector keyed on Created sees nothing.
-	if rep.LibrariesCreated != 0 {
-		t.Errorf("LibrariesCreated = %d, want 0 — if a library WAS created then this test is not "+
-			"exercising the case Created misses, and the escalation is proving nothing new",
-			rep.LibrariesCreated)
+	// ⚠️ THE PROOF THAT A `Created` DETECTOR WOULD HAVE MISSED IT, read off the
+	// table rather than off a counter: no library row appeared on this run. Every
+	// binding joined, so a detector keyed on creation sees nothing at all.
+	if n := countRows(t, b.st, `SELECT COUNT(*) FROM library WHERE id <> 0`); n != 2 {
+		t.Errorf("%d libraries exist, want the 2 the fixture accepted — if the delta CREATED "+
+			"one then this test is not exercising the case a creation detector misses, and "+
+			"the escalation is proving nothing new", n)
 	}
 	if rep.LibrariesJoined != 2 {
 		t.Errorf("LibrariesJoined = %d, want 2", rep.LibrariesJoined)

@@ -103,15 +103,17 @@ func TestFullImportFromTheCassettesEndToEnd(t *testing.T) {
 	if !rep.Completed {
 		t.Fatal("the import did not report itself complete")
 	}
-	// ⚠️ LibrariesCreated IS 0 AND THAT IS THE ASSERTION NOW (ADR-0048). This
-	// read `!= 2` and measured the behaviour §17.8 calls "rows appear; nothing
-	// asked". An import creates no library at all: the containers are seen, their
-	// items are applied, and the libraries wait on Accept.
-	if rep.ContainersSeen != 2 || rep.LibrariesCreated != 0 || rep.LibrariesJoined != 0 ||
-		len(rep.DeclinedContainers) != 0 {
-		t.Errorf("containers: seen %d created %d joined %d declined %d",
-			rep.ContainersSeen, rep.LibrariesCreated, rep.LibrariesJoined,
-			len(rep.DeclinedContainers))
+	// ⚠️ THIS READ `LibrariesCreated != 2` AND MEASURED THE BEHAVIOUR §17.8 CALLS
+	// "rows appear; nothing asked". An import creates no library at all and the
+	// counter was removed with the create, so what is asserted now is the effect:
+	// the containers are seen, nothing resolves to a library, and the rows on the
+	// table are the proof rather than a field that can only be zero.
+	if rep.ContainersSeen != 2 || rep.LibrariesJoined != 0 || len(rep.DeclinedContainers) != 0 {
+		t.Errorf("containers: seen %d joined %d declined %d",
+			rep.ContainersSeen, rep.LibrariesJoined, len(rep.DeclinedContainers))
+	}
+	if n := countRows(t, s, `SELECT COUNT(*) FROM library WHERE id <> 0`); n != 0 {
+		t.Errorf("%d libraries exist after the import, want 0", n)
 	}
 	if rep.ItemsRead != 3 || rep.ItemsApplied != 3 || rep.WorksCreated != 3 {
 		t.Errorf("items: read %d applied %d created %d, want 3/3/3",
@@ -321,12 +323,10 @@ func TestFullImportDeclinesTheImageLibraryAndSaysWhy(t *testing.T) {
 	if rep.DeclinedContainers[0].Reason == "" {
 		t.Error("§17.8 requires a declined container to carry its reason")
 	}
-	// ⚠️ THIS ASSERTED 5 — one library per non-declined container — and ADR-0048
-	// removed the create. Six containers are still seen and one is still
-	// declined; what does not happen is any of them becoming a library.
-	if rep.LibrariesCreated != 0 {
-		t.Errorf("LibrariesCreated = %d, want 0: an import creates no library", rep.LibrariesCreated)
-	}
+	// ⚠️ THIS ASSERTED `LibrariesCreated == 5` — one library per non-declined
+	// container — and ADR-0048 removed the create along with the counter. Six
+	// containers are still seen and one is still declined; what does not happen
+	// is any of them becoming a library.
 	if n := countRows(t, s, `SELECT COUNT(*) FROM library WHERE id <> 0`); n != 0 {
 		t.Errorf("%d libraries exist after the import, want 0", n)
 	}
@@ -719,8 +719,8 @@ func TestFullImportSurvivesAContainerThatCannotBeBound(t *testing.T) {
 	if !rep.Completed {
 		t.Error("the import did not report itself complete; the skipped container is not a failure")
 	}
-	if rep.LibrariesCreated != 0 {
-		t.Errorf("LibrariesCreated = %d, want 0: an import creates no library", rep.LibrariesCreated)
+	if n := countRows(t, s, `SELECT COUNT(*) FROM library WHERE id <> 0`); n != 0 {
+		t.Errorf("%d libraries exist, want 0: an import creates no library", n)
 	}
 	if len(rep.SkippedContainers) != 0 {
 		t.Fatalf("SkippedContainers = %+v, want none: with no create there is no constraint "+
