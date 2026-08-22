@@ -56,13 +56,13 @@ func nullStr(t *testing.T, s *Store, q string, args ...any) sql.NullString {
 func sweepFixture(t *testing.T, s *Store) (inst int64, binds map[string]CatalogueBinding) {
 	t.Helper()
 	inst = fixtureInstance(t, s, "kavita")
-	binds, _, err := s.BindContainers(t.Context(), inst, SystemUserID, []CatalogueContainer{
+	// THE LIBRARIES EXIST BECAUSE SOMEBODY ACCEPTED THEM (ADR-0048): the bind
+	// path creates none, and the sweep's whole subject — missing_since on a
+	// source, orphaned_at on a library — needs sources to exist.
+	binds = acceptedBind(t, s, inst,
 		comicContainer("1", "Manga"),
-		{RemoteID: "2", Name: "Ebooks", Kind: "book"},
-	})
-	if err != nil {
-		t.Fatalf("BindContainers: %v", err)
-	}
+		CatalogueContainer{RemoteID: "2", Name: "Ebooks", Kind: "book"},
+	)
 	items := []CatalogueItem{
 		item("41", "1", "comic", "Frieren"),
 		item("42", "1", "comic", "Berserk"),

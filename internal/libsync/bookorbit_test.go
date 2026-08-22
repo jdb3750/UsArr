@@ -738,6 +738,18 @@ func TestBookOrbitFullImportFromCassettes(t *testing.T) {
 
 	st := newTestStore(t)
 	instanceID := fixtureBookOrbitInstance(t, st)
+	// ⚠️ BOTH LIBRARIES ARE ACCEPTED FIRST, AND THE COMIC ONE TOO (ADR-0048).
+	// This assertion set is ADR-0066 decision 5's — one container ref, a `book`
+	// library and a `comic` library — and the comic half used to be MINTED by the
+	// walk on the first comic it reached. The bind path creates nothing now, so
+	// the split exists because it was accepted. What is under test is unchanged:
+	// which library each kind is filed into.
+	acceptContainers(t, st, instanceID,
+		store.CatalogueContainer{RemoteID: "1", Name: "Fiction", Kind: "book"},
+		store.CatalogueContainer{RemoteID: "1", Name: "Fiction (Comics)", Kind: "comic"},
+		store.CatalogueContainer{RemoteID: "2", Name: "Non-fiction", Kind: "book"},
+	)
+
 	im := &Importer{Store: st, Source: src, UserID: store.SystemUserID, Now: func() time.Time { return testNow }}
 
 	rep, err := im.FullImport(t.Context(), instanceID)
@@ -747,8 +759,10 @@ func TestBookOrbitFullImportFromCassettes(t *testing.T) {
 	if !rep.Completed {
 		t.Fatal("the import did not complete")
 	}
-	if rep.ContainersSeen != 2 || rep.LibrariesCreated != 2 {
-		t.Errorf("containers = %d, libraries created = %d, want 2 and 2",
+	// LibrariesCreated is 0 and LibrariesJoined is 2: the import creates none and
+	// resolves the two the fixture accepted for the containers it reported.
+	if rep.ContainersSeen != 2 || rep.LibrariesCreated != 0 {
+		t.Errorf("containers = %d, libraries created = %d, want 2 and 0",
 			rep.ContainersSeen, rep.LibrariesCreated)
 	}
 	// THREE READ, TWO APPLIED. The pair is the assertion: either number alone

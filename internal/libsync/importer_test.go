@@ -103,9 +103,15 @@ func TestFullImportFromTheCassettesEndToEnd(t *testing.T) {
 	if !rep.Completed {
 		t.Fatal("the import did not report itself complete")
 	}
-	if rep.ContainersSeen != 2 || rep.LibrariesCreated != 2 || len(rep.DeclinedContainers) != 0 {
-		t.Errorf("containers: seen %d created %d declined %d",
-			rep.ContainersSeen, rep.LibrariesCreated, len(rep.DeclinedContainers))
+	// ⚠️ LibrariesCreated IS 0 AND THAT IS THE ASSERTION NOW (ADR-0048). This
+	// read `!= 2` and measured the behaviour §17.8 calls "rows appear; nothing
+	// asked". An import creates no library at all: the containers are seen, their
+	// items are applied, and the libraries wait on Accept.
+	if rep.ContainersSeen != 2 || rep.LibrariesCreated != 0 || rep.LibrariesJoined != 0 ||
+		len(rep.DeclinedContainers) != 0 {
+		t.Errorf("containers: seen %d created %d joined %d declined %d",
+			rep.ContainersSeen, rep.LibrariesCreated, rep.LibrariesJoined,
+			len(rep.DeclinedContainers))
 	}
 	if rep.ItemsRead != 3 || rep.ItemsApplied != 3 || rep.WorksCreated != 3 {
 		t.Errorf("items: read %d applied %d created %d, want 3/3/3",
@@ -315,8 +321,14 @@ func TestFullImportDeclinesTheImageLibraryAndSaysWhy(t *testing.T) {
 	if rep.DeclinedContainers[0].Reason == "" {
 		t.Error("§17.8 requires a declined container to carry its reason")
 	}
-	if rep.LibrariesCreated != 5 {
-		t.Errorf("LibrariesCreated = %d, want 5 (six containers, one declined)", rep.LibrariesCreated)
+	// ⚠️ THIS ASSERTED 5 — one library per non-declined container — and ADR-0048
+	// removed the create. Six containers are still seen and one is still
+	// declined; what does not happen is any of them becoming a library.
+	if rep.LibrariesCreated != 0 {
+		t.Errorf("LibrariesCreated = %d, want 0: an import creates no library", rep.LibrariesCreated)
+	}
+	if n := countRows(t, s, `SELECT COUNT(*) FROM library WHERE id <> 0`); n != 0 {
+		t.Errorf("%d libraries exist after the import, want 0", n)
 	}
 	// The decline is REPORTED to the operator, not only returned: an import
 	// started by a background connect has no caller left to read the Report.
@@ -505,6 +517,13 @@ func TestReImportIsIdempotentAcrossTheWholePath(t *testing.T) {
 		containers: []store.CatalogueContainer{{RemoteID: "1", Name: "Manga", Kind: "comic"}},
 		items:      genItems(40, "1", "comic"),
 	}
+	// THE LIBRARY IS ACCEPTED FIRST, so the three imports resolve it at step 1
+	// and the membership counts below mean what they always meant. Accepting
+	// BEFORE the first import is the one ordering this test cannot use to hide a
+	// defect: every run then takes the same path, which is exactly what
+	// idempotency is about.
+	acceptContainers(t, s, inst, src.containers...)
+
 	im := newImporter(t, s, src)
 	for run := 1; run <= 3; run++ {
 		if _, err := im.FullImport(t.Context(), inst); err != nil {
@@ -671,6 +690,16 @@ func TestFullImportSurvivesAContainerThatCannotBeBound(t *testing.T) {
 	// returned it at once, and NOTHING was imported — no item was even read.
 	// CLAUDE.md principle 3: one unusable container degrades to one missing
 	// library, with the reason recorded, not to an empty database.
+	//
+	// ⚠️ THE MECHANISM UNDER IT CHANGED WITH ADR-0048 AND THE PRINCIPLE DID NOT.
+	// The container below is a kind library.kind's CHECK does not know, and that
+	// used to fail the CREATE — the only statement in the bind path that could
+	// violate a constraint — which is what produced the skip, the
+	// `container_bind_failed` row and the SkippedContainers entry. With no create
+	// there is nothing to violate: the container simply gets no library, like
+	// every container nobody has accepted, and the import carries on reading its
+	// neighbour's items exactly as this test always demanded. See
+	// store.TestAnUnknownKindNoLongerSkipsAContainer for the unit-level half.
 	s := newTestStore(t)
 	inst := fixtureInstance(t, s)
 	src := &fakeSource{
@@ -690,14 +719,12 @@ func TestFullImportSurvivesAContainerThatCannotBeBound(t *testing.T) {
 	if !rep.Completed {
 		t.Error("the import did not report itself complete; the skipped container is not a failure")
 	}
-	if rep.LibrariesCreated != 1 {
-		t.Errorf("LibrariesCreated = %d, want 1", rep.LibrariesCreated)
+	if rep.LibrariesCreated != 0 {
+		t.Errorf("LibrariesCreated = %d, want 0: an import creates no library", rep.LibrariesCreated)
 	}
-	if len(rep.SkippedContainers) != 1 || rep.SkippedContainers[0].RemoteID != "2" {
-		t.Fatalf("SkippedContainers = %+v, want exactly the Sheet Music container", rep.SkippedContainers)
-	}
-	if rep.SkippedContainers[0].Reason == "" {
-		t.Error("a skip with no reason is a silent skip")
+	if len(rep.SkippedContainers) != 0 {
+		t.Fatalf("SkippedContainers = %+v, want none: with no create there is no constraint "+
+			"left for an unknown kind to violate", rep.SkippedContainers)
 	}
 	if len(rep.DeclinedContainers) != 0 {
 		t.Errorf("a skip was reported as a DECLINE: %+v — they are different operator problems",
@@ -708,15 +735,24 @@ func TestFullImportSurvivesAContainerThatCannotBeBound(t *testing.T) {
 		t.Errorf("items: read %d applied %d created %d, want 3/3/3",
 			rep.ItemsRead, rep.ItemsApplied, rep.WorksCreated)
 	}
-	// And the skip is durable, written by the bind transaction itself.
-	var remoteID, detail string
-	if err := s.DB().Read().QueryRowContext(t.Context(),
-		`SELECT remote_id, detail FROM sync_report WHERE kind = 'container_bind_failed'`).
-		Scan(&remoteID, &detail); err != nil {
-		t.Fatalf("read sync_report: %v", err)
+	// ⚠️ AND THE DURABLE RECORD MOVED WITH THE MECHANISM. There is no
+	// `container_bind_failed` row because no bind failed; what IS durable, and
+	// what the Libraries screen reads, is the OBSERVATION — the container was
+	// reported, with the kind that makes it unacceptable.
+	if n := countRows(t, s,
+		`SELECT COUNT(*) FROM sync_report WHERE kind = 'container_bind_failed'`); n != 0 {
+		t.Errorf("%d container_bind_failed rows, want 0", n)
 	}
-	if remoteID != "2" || detail == "" {
-		t.Errorf("sync_report row = (%q, %q)", remoteID, detail)
+	var detail string
+	if err := s.DB().Read().QueryRowContext(t.Context(),
+		`SELECT detail FROM sync_report
+		  WHERE kind = ? AND remote_kind = 'library' AND remote_id = '2'`,
+		store.SyncReportContainerObserved).Scan(&detail); err != nil {
+		t.Fatalf("read the observation of the unbindable container: %v", err)
+	}
+	if !strings.Contains(detail, "Sheet Music") || !strings.Contains(detail, "score") {
+		t.Errorf("the observation is %q, want the container's name and the kind that makes "+
+			"it unacceptable", detail)
 	}
 }
 
@@ -1155,5 +1191,43 @@ func TestLastFullSyncAtIsTheRunStartNotItsFinishOrTheRowWrite(t *testing.T) {
 	if got.Equal(rowWrite) {
 		t.Error("last_full_sync_at equals service_item_link.synced_at; the wire field is " +
 			"the RUN's start, never the row's local write instant")
+	}
+}
+
+// acceptContainers is §17.8's Accept step, used as a FIXTURE by the tests below
+// that are about what an import DOES with a library rather than about whether
+// one exists.
+//
+// ⚠️ IT EXISTS BECAUSE AN IMPORT NO LONGER CREATES LIBRARIES (ADR-0048). Before
+// this, a first connect created one per container with no screen involved, so
+// every test that needed a library got one for free from FullImport. The
+// amendment of 2026-08-21 runs the import BEFORE Accept, so a test that wants
+// the post-Accept state has to say who accepted it. Nothing is edited, which is
+// the pre-checked default §17.8 specifies.
+func acceptContainers(t *testing.T, s *store.Store, instanceID int64, cs ...store.CatalogueContainer) {
+	t.Helper()
+	var accepts []store.LibraryAcceptance
+	for _, c := range cs {
+		if c.Kind == "" {
+			continue
+		}
+		name := strings.TrimSpace(c.Name)
+		if name == "" {
+			name = "Library " + c.RemoteID
+		}
+		accepts = append(accepts, store.LibraryAcceptance{
+			Name: name, Kind: c.Kind, ManagedBy: "auto",
+			Sources: []store.AcceptedSource{{
+				ServiceInstanceID: instanceID, ContainerKind: "remote_library",
+				ContainerRef: c.RemoteID, ContainerIdentity: c.Name,
+			}},
+		})
+	}
+	if len(accepts) == 0 {
+		return
+	}
+	if _, err := s.AcceptLibraries(t.Context(), store.OwnerScope(store.SystemUserID),
+		store.SystemUserID, accepts); err != nil {
+		t.Fatalf("accept libraries for the fixture: %v", err)
 	}
 }

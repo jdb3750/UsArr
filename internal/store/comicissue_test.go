@@ -36,12 +36,16 @@ func issue(remoteID, container, title, seriesRef, seriesTitle string) CatalogueI
 func TestIssuesAreMintedUnderOneSeriesAndTheSeriesIsNotPerRow(t *testing.T) {
 	s := newTestStore(t)
 	inst := fixtureInstance(t, s, "bookorbit")
-	binds, _, err := s.BindContainers(t.Context(), inst, SystemUserID, []CatalogueContainer{
-		{RemoteID: "1", Name: "Shelf", Kind: "book"},
-	})
-	if err != nil {
-		t.Fatalf("BindContainers: %v", err)
-	}
+	// ⚠️ BOTH LIBRARIES ARE ACCEPTED UP FRONT, and that is ADR-0048 rather than a
+	// change to ADR-0066 decision 5. The comic sibling used to be MINTED by the
+	// walk on the first comic it reached; the bind path creates nothing now, so
+	// the split this test is about exists because a user accepted both halves of
+	// it. What is under test — one series per container, filed into the comic
+	// library and never per issue — is untouched.
+	binds := acceptedBind(t, s, inst,
+		CatalogueContainer{RemoteID: "1", Name: "Shelf", Kind: "book"},
+		CatalogueContainer{RemoteID: "1", Name: "Shelf (Comics)", Kind: "comic"},
+	)
 
 	items := []CatalogueItem{
 		issue("101", "1", "Saga #1", "5", "Saga"),
@@ -154,6 +158,10 @@ func TestReimportingIssuesDoesNotMintASecondSeries(t *testing.T) {
 	oneshot.Parent.Synthesized = true
 	oneshot.IsOneshot = true
 
+	acceptContainers(t, s, inst, SystemUserID,
+		CatalogueContainer{RemoteID: "1", Name: "Shelf", Kind: "book"},
+		CatalogueContainer{RemoteID: "1", Name: "Shelf (Comics)", Kind: "comic"})
+
 	for range 3 {
 		// REBOUND EVERY ROUND, exactly as a second import does. The bind pass is
 		// where the kind-aware library_source lookup earns its keep: without it
@@ -238,13 +246,18 @@ func TestTheCorpusGuardStillRefusesAComicIssue(t *testing.T) {
 func TestOneSeriesSpanningTwoContainersIsFiledInBoth(t *testing.T) {
 	s := newTestStore(t)
 	inst := fixtureInstance(t, s, "bookorbit")
-	binds, _, err := s.BindContainers(t.Context(), inst, SystemUserID, []CatalogueContainer{
-		{RemoteID: "1", Name: "Shelf One", Kind: "book"},
-		{RemoteID: "2", Name: "Shelf Two", Kind: "book"},
-	})
-	if err != nil {
-		t.Fatalf("BindContainers: %v", err)
-	}
+	// ⚠️ BOTH LIBRARIES ARE ACCEPTED UP FRONT, and that is ADR-0048 rather than a
+	// change to ADR-0066 decision 5. The comic sibling used to be MINTED by the
+	// walk on the first comic it reached; the bind path creates nothing now, so
+	// the split this test is about exists because a user accepted both halves of
+	// it. What is under test — one series per container, filed into the comic
+	// library and never per issue — is untouched.
+	binds := acceptedBind(t, s, inst,
+		CatalogueContainer{RemoteID: "1", Name: "Shelf One", Kind: "book"},
+		CatalogueContainer{RemoteID: "2", Name: "Shelf Two", Kind: "book"},
+		CatalogueContainer{RemoteID: "1", Name: "Shelf One (Comics)", Kind: "comic"},
+		CatalogueContainer{RemoteID: "2", Name: "Shelf Two (Comics)", Kind: "comic"},
+	)
 
 	// ONE BATCH, on purpose: across two batches the cache is empty the second
 	// time and the defect cannot appear. The batch is where it lives.

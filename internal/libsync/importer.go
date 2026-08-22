@@ -693,10 +693,24 @@ func (im *Importer) bindPhase(
 			"instance_id", instanceID, "remote_id", sk.RemoteID,
 			"name", sk.Name, "reason", sk.Reason)
 	}
+	// ⚠️ NEITHER COUNTER COUNTS A CONTAINER WITH NO LIBRARY, and since ADR-0048
+	// that is most of them on a first connect: the import creates no library at
+	// all, so nothing was created and nothing was joined. Counting an unaccepted
+	// container as JOINED would report a library that does not exist, which is
+	// the "number that is wrong" ADR-0048 is written against.
+	//
+	// ⚠️ LibrariesCreated IS THEREFORE 0 ON EVERY IMPORT. store.bindOneContainer
+	// has no create path any more — AcceptLibraries is the only writer of a
+	// `library` row — so the branch below is unreachable. It is left standing
+	// rather than deleted because removing the counter is a change to this
+	// report's shape and to its readers, and it is recorded here so the zero is
+	// read as a fact rather than as a bug.
 	for _, b := range bindings {
-		if b.Created {
+		switch {
+		case b.NoLibrary:
+		case b.Created:
 			rep.LibrariesCreated++
-		} else {
+		default:
 			rep.LibrariesJoined++
 		}
 	}

@@ -15,11 +15,7 @@ import (
 func fileFixture(t *testing.T, s *Store) (inst, workID int64) {
 	t.Helper()
 	inst = fixtureInstance(t, s, "kavita-files")
-	binds, _, err := s.BindContainers(t.Context(), inst, SystemUserID,
-		[]CatalogueContainer{{RemoteID: "1", Name: "Manga", Kind: "comic"}})
-	if err != nil {
-		t.Fatalf("BindContainers: %v", err)
-	}
+	binds := acceptedBind(t, s, inst, comicContainer("1", "Manga"))
 	workID = importOne(t, s, inst, binds, item("41", "1", "comic", "Frieren"))
 	return inst, workID
 }

@@ -470,6 +470,9 @@ func TestADeclinedContainerReachesTheSweepAsReported(t *testing.T) {
 	inst := fixtureInstance(t, s)
 
 	bound := []store.CatalogueContainer{{RemoteID: "1", Name: "Comics", Kind: "comic"}}
+	// ACCEPTED, because the library_source row is the thing the sweep could
+	// wrongly stamp and since ADR-0048 an import writes none.
+	acceptContainers(t, s, inst, bound...)
 	items := genItems(2, "1", "comic")
 	if _, err := newImporter(t, s, &fakeSource{containers: bound, items: items}).
 		FullImport(t.Context(), inst); err != nil {

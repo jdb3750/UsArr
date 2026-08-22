@@ -105,8 +105,49 @@ type CatalogueBinding struct {
 	LibraryID int64
 	Kind      string
 
+	// NoLibrary says this container has NO LIBRARY AT ALL, so LibraryID names
+	// nothing and must not be read.
+	//
+	// It is the state ADR-0048 creates: a container nobody has accepted a
+	// proposal for. Its items are still replicated in full — work row, editions,
+	// external ids, service_item_link — and simply get no library_member row,
+	// which is what facets.go already means by UNFILED.
+	//
+	// 🚩 IT IS A FIELD RATHER THAN `LibraryID == 0`, AND THAT IS THE WHOLE POINT
+	// OF IT. 0 is UnfiledLibraryID, a REAL SEEDED ROW (migration 00005) with a
+	// BEFORE DELETE trigger protecting it, and the two states are opposites:
+	// "filed into the reserved Unfiled library" is a membership row nothing may
+	// create, and "no library" is no membership row at all. Spelling the second
+	// as the first would file every unaccepted item into library 0, where §7
+	// invariant 5's fallback ALREADY puts the search document — so search would
+	// look right, the item count on the Accept screen would read 0 for a
+	// container full of works, and nothing would throw. This project has caught
+	// that conflation before; a bool cannot be confused with an id.
+	//
+	// ⚠️ THE ZERO VALUE IS "THIS BINDING HAS A LIBRARY", deliberately. Every
+	// hand-built binding in the tree carries a LibraryID and no opinion about
+	// this field, and it must keep filing into that library. The new state is the
+	// one that has to be stated.
+	//
+	// ⚠️ IT IS NOT A DECLINE, AND THE DIFFERENCE IS WHETHER THE ITEMS ARE READ AT
+	// ALL. A DECLINED container (Kind == "") never reaches bindOneContainer,
+	// never enters BindContainers' returned map, and its items are skipped by
+	// ApplyCatalogueBatch — UsArr has no work.kind for them, so there is nothing
+	// to write. An unfiled container's items are fetched, applied and searchable;
+	// they are only unfiled.
+	NoLibrary bool
+
 	// Created reports whether this call created the library rather than joining
-	// an existing one. §17.8's second-instance rule makes joining the default,
+	// an existing one.
+	//
+	// ⚠️ NOTHING SETS IT ANY MORE, AND IT IS LEFT HERE RATHER THAN CUT BECAUSE
+	// CUTTING IT IS A CHANGE TO libsync's REPORT AND NOT TO THIS FILE. Since
+	// ADR-0048 the import path creates no library at all: step 1 finds one, step 2
+	// joins one, step 3 yields none, and AcceptLibraries is the only creator. So
+	// this is false on every binding bindOneContainer returns, and
+	// libsync.Report.LibrariesCreated is 0 on every import. It is a measured
+	// residual, recorded rather than hidden, and removing the field together with
+	// that counter is a follow-on. §17.8's second-instance rule makes joining the default,
 	// so a caller that wants to report "joined X as a second source" needs to be
 	// able to tell them apart.
 	//
@@ -533,7 +574,7 @@ func (s *Store) BindContainers(
 			if _, err := tx.ExecContext(ctx, "SAVEPOINT "+sp); err != nil {
 				return fmt.Errorf("savepoint %s: %w", sp, err)
 			}
-			b, bindErr := bindOneContainer(ctx, tx, instanceID, userID, c, bindFromContainerList, runMint{})
+			b, bindErr := bindOneContainer(ctx, tx, instanceID, userID, c, bindFromContainerList)
 			if bindErr == nil {
 				if _, err := tx.ExecContext(ctx, "RELEASE SAVEPOINT "+sp); err != nil {
 					return fmt.Errorf("release savepoint %s: %w", sp, err)
@@ -784,99 +825,9 @@ const (
 	bindSiblingKind
 )
 
-// runMint is the library THIS IMPORT RUN's eager bind pass CREATED over the
-// container now being bound, or the zero value when it created none.
-//
-// ⚠️ IT IS THE WHOLE OF THE LINE BETWEEN "SPLIT NOW" AND "SPLIT LATER", and that
-// line decides which of a mixed container's two libraries keeps the plain
-// container name. A BookOrbit container holding prose AND comics becomes two
-// libraries (ADR-0066 decision 5), and only one of them can be called `Fiction`:
-//
-//   - BOTH KINDS SEEN IN THE SAME WALK — the prose library takes `Fiction` and
-//     the comic one takes `Fiction (Comics)`, whichever kind the walk reached
-//     first. A name that came out `Fiction` (comic) walking comics-first and
-//     `Fiction` (book) walking prose-first would encode TRAVERSAL ORDER, which is
-//     an implementation fact no reader can interpret — the same defect that got
-//     the ordinal `Fiction (2)` refused (see kindQualifier).
-//   - A SECOND KIND ARRIVING IN A LATER IMPORT — the library that is already
-//     there keeps its name, WHATEVER ITS KIND, and the newcomer takes the
-//     qualifier. So a comics-first container imported before its first prose book
-//     lands at `Fiction` (comic) + `Fiction (Books)`, and that is the correct
-//     answer rather than a residue of this one.
-//
-// ⚠️ THE ASYMMETRY IS DELIBERATE AND IT IS NOT A NAMING PREFERENCE. UsArr NEVER
-// RENAMES A LIBRARY THAT ALREADY EXISTED: renaming a row the owner may have been
-// reading for weeks — and re-slugging every permalink to it — costs more than the
-// mild inconsistency of the second case does. Inconsistent-but-stable is untidy;
-// a library that renames itself under him reads as a bug. What this type licenses
-// is renaming a row THIS RUN minted minutes ago and nobody has seen.
-//
-// ⚠️ AND IT DEFERS NOTHING. `kind` is the only field the eager bind can still
-// have wrong at this point, exactly as before; the row itself is created up front
-// for every walked container (ADR-0066 decision 1,
-// cmd/usarr.TestAWhollySkippedBookOrbitContainerIsSTILLBOUND). Deciding the name
-// by waiting for the walk to finish would delete that row, so the run-minted
-// FACT is carried forward instead of the DECISION being held back.
-//
-// It is zero for every non-provisional adapter in practice rather than by a
-// guard: a library minted by this run's eager pass can only have been retyped
-// under it by bindProvisional, which runs for no other adapter, and without a
-// retype step 1 would have matched it and returned long before the naming code.
-type runMint struct {
-	libraryID int64
-
-	// kind is the kind the eager pass BOUND at — for a provisional container the
-	// adapter's fallback, which is the container's own declared answer and the
-	// one this type hands the plain name back to.
-	kind string
-}
-
-// kindQualifier is the parenthetical a SIBLING library carries so its name says
-// what it holds rather than when it was made.
-//
-// ⚠️ NEVER AN ORDINAL. `Fiction (2)` encodes creation order, which is an
-// implementation fact no reader can interpret: it says a second library exists
-// and not one word about why. `Fiction (Comics)` says which of the two this is,
-// and the qualifier's PRESENCE is itself the signal that a container was split.
-//
-// ⚠️ PARENTHESES RATHER THAN A SEPARATOR GLYPH. The name travels through a
-// terminal, a CSV and a URL, and `(` `)` survive all three unescaped; a middot
-// does not survive the first.
-//
-// ⚠️ ONLY THE NEW SIBLING IS QUALIFIED. The library that was already there keeps
-// its name — renaming it to `Fiction (Books)` for symmetry would rewrite a name
-// the user has already seen, and library.slug is durable by design, so the pair
-// would agree in the list and disagree in every permalink.
-//
-// An unknown kind returns "", and the caller then falls through to the ordinal
-// loop rather than inventing a word for it. library.kind is CHECK-constrained to
-// exactly these seven (migration 00005), so "" is unreachable today and is
-// handled anyway: the CHECK is the schema's list and this is a second copy of
-// it, which is the pair that drifts.
-func kindQualifier(kind string) string {
-	switch kind {
-	case "movie":
-		return "Movies"
-	case "series":
-		return "Series"
-	case "artist":
-		return "Artists"
-	case "album":
-		return "Albums"
-	case "book":
-		return "Books"
-	case "comic":
-		return "Comics"
-	case "game":
-		return "Games"
-	default:
-		return ""
-	}
-}
-
 func bindOneContainer(
 	ctx context.Context, tx *sql.Tx, instanceID, userID int64, c CatalogueContainer,
-	why bindReason, mint runMint,
+	why bindReason,
 ) (CatalogueBinding, error) {
 	// Step 1: is this exact container already bound AT THIS KIND? If so nothing
 	// about the library changes — a rename upstream must not re-propose or
@@ -986,172 +937,36 @@ func bindOneContainer(
 		}, nil
 	}
 
-	// Step 3: create, under a name and slug that are BOTH free.
+	// Step 3: THERE IS NO STEP 3 ANY MORE — this container gets NO LIBRARY.
 	//
-	// TWO UNIQUE INDEXES, NOT ONE, and that is the whole of the bug this loop
-	// used to have. Migration 0005 declares ux_library_name(user_id, name) AND
-	// ux_library_slug(user_id, slug); the loop tested only the first. slugify
-	// is lossy — every run of non-alphanumerics collapses to one dash — so
-	// "Sci-Fi" and "Sci Fi" are two DIFFERENT names (the join key never
-	// matches, the name index never fires) that reduce to the one slug
-	// "sci-fi", and the create aborted on ux_library_slug. Measured, not
-	// reasoned: TestBindContainersDisambiguatesASlugCollision.
+	// ADR-0048: *"A library proposal lives in the connect probe's response. It is
+	// never persisted. A `library` row is created only when the user accepts
+	// one."* §17.8 calls this half of it a REMOVAL rather than an addition, and
+	// this is the removal: the create that used to stand here, with the name and
+	// slug derivation that fed it, is gone. AcceptLibraries (proposals.go) is the
+	// only writer of a `library` row that answers to a user, and the only one
+	// there is.
 	//
-	// AND THE TAKEN SET INCLUDES THE RESERVED "Unfiled" ROW. It is excluded
-	// from `joinable` on purpose — nothing may ever join library 0 — but it is
-	// still a row in ux_library_name and ux_library_slug, so an upstream
-	// library actually named "Unfiled" collided with it. Reserving a name
-	// against joining is not the same as pretending it is free.
-	// AND THE FIRST CANDIDATE IS A KIND QUALIFIER, NOT AN ORDINAL, WHENEVER THE
-	// NAME IS HELD BY A LIBRARY OF A DIFFERENT KIND. That is precisely the
-	// collision step 2 just refused to join across, and it is the shape ADR-0066
-	// decision 5 makes ordinary: one BookOrbit container becomes a `book` library
-	// and a `comic` library, and the second of them used to be called
-	// `Fiction (2)`. `Fiction (Comics)` says which one it is; `Fiction (2)` says
-	// only that it was made second. See kindQualifier for the rest of the reasons.
+	// ⚠️ STEPS 1 AND 2 ARE UNTOUCHED, AND THAT IS WHAT KEEPS AN EXISTING INSTALL
+	// WORKING. A container already bound at this kind still resolves at step 1; a
+	// container whose name matches a library the user already has still JOINS it
+	// at step 2. ADR-0048 clause 4 declares the rows an earlier build auto-created
+	// to be accepted, so those installs keep matching before any create path could
+	// have run. What changes is only the case where nothing matched: that used to
+	// mint a library nobody asked for, and now it yields a proposal.
 	//
-	// ⚠️ THE ORDINAL LOOP BELOW IS NOT REPLACED, AND ITS SURVIVING JOB IS A
-	// DIFFERENT COLLISION. `Sci-Fi` and `Sci Fi` are two book libraries that
-	// reduce to one slug; a kind qualifier there would read `Sci Fi (Books)`
-	// beside a `Sci-Fi` that is also books, which states a difference that does
-	// not exist. The qualifier answers a KIND collision; the ordinal answers
-	// everything else.
-	//
-	// ⚠️ AND THE QUALIFIED NAME CAN ITSELF BE TAKEN — library names are UNIQUE
-	// per user (ux_library_name, migration 00005), so an upstream container
-	// genuinely named `Fiction (Comics)` collides with the derived one. Nothing
-	// here invents a rule for that: the candidate is simply not free, and the
-	// pre-existing ordinal loop runs from `base` exactly as it did before this
-	// change. What that case SHOULD do is an open design question and is recorded
-	// as one rather than settled by whichever branch happened to reach it.
-	//
-	// ⚠️ AND THE QUALIFIER CAN GO THE OTHER WAY, on the ONE library it is safe to
-	// rename: the row THIS RUN's eager pass minted and a comic then retyped under
-	// it (runMint). Without that, `Fiction` would name the comic library when the
-	// walk reached a comic first and the book library when it reached prose first
-	// — the name would encode traversal order. See runMint for why renaming that
-	// row is not the renaming this file otherwise refuses.
-	base := name
-	slug := slugify(name)
-	if held, ok := existing.joinable[libraryNameKey(name)]; ok && held.kind != c.Kind {
-		reclaimed, err := reclaimMintedName(ctx, tx, held, mint, c.Kind, existing)
-		if err != nil {
-			return CatalogueBinding{}, err
-		}
-		if !reclaimed {
-			if q := kindQualifier(c.Kind); q != "" {
-				cand := fmt.Sprintf("%s (%s)", base, q)
-				if candSlug := slugify(cand); !existing.names[libraryNameKey(cand)] && !existing.slugs[candSlug] {
-					name, slug = cand, candSlug
-				}
-			}
-		}
-	}
-	for n := 2; existing.names[libraryNameKey(name)] || existing.slugs[slug]; n++ {
-		name = fmt.Sprintf("%s (%d)", base, n)
-		slug = slugify(name)
-	}
-
-	res, err := tx.ExecContext(ctx, `
-		INSERT INTO library (user_id, name, slug, kind, managed_by, enabled, include_in_search)
-		VALUES (?,?,?,?, 'auto', 1, 1)`, userID, name, slug, c.Kind)
-	if err != nil {
-		return CatalogueBinding{}, fmt.Errorf("create library %q: %w", name, err)
-	}
-	id, err := res.LastInsertId()
-	if err != nil {
-		return CatalogueBinding{}, fmt.Errorf("create library %q: id: %w", name, err)
-	}
-	// The library was created one statement ago, so its binding is necessarily
-	// new — the existence SELECT inside insertLibrarySource says so rather than
-	// this comment asserting it, which is the point of computing it there.
-	attached, err := insertLibrarySource(ctx, tx, id, instanceID, c)
-	if err != nil {
-		return CatalogueBinding{}, err
-	}
-	if err := noteKindChange(ctx, tx, instanceID, c, why, prior, id); err != nil {
-		return CatalogueBinding{}, err
-	}
+	// ⚠️ AND THE ITEMS STILL LAND. ADR-0048's 2026-08-21 amendment runs the first
+	// import BEFORE Accept, so this is the ordinary path on a first connect and it
+	// must not be a skip: applyOneItem writes the work, its editions, its external
+	// ids and its service_item_link exactly as it always did, and writes NO
+	// library_member row. §7 invariant 5 then files the search document under
+	// library 0, so the catalogue is searchable before a single proposal is
+	// ticked. See CatalogueBinding.NoLibrary for why that state is a field and not
+	// a library id of 0.
 	return CatalogueBinding{
-		LibraryID: id, Kind: c.Kind, Created: true, UserID: userID, ContainerName: c.Name,
-		Provisional: c.KindProvisional, SourceAttached: attached,
+		NoLibrary: true, Kind: c.Kind, UserID: userID, ContainerName: c.Name,
+		Provisional: c.KindProvisional,
 	}, nil
-}
-
-// reclaimMintedName hands the container's PLAIN name back to the kind the
-// container itself declared, by qualifying the name of the library this run
-// minted and a later item retyped. It reports whether it did.
-//
-// It fires on exactly one shape — a mixed provisional container walked
-// comics-first, inside the run that first saw it — and false is the ordinary
-// answer everywhere else, at which point the caller qualifies the NEW library
-// exactly as it always did. Every `return false` below is a case where the plain
-// name stays where it is:
-//
-//   - NOTHING WAS MINTED THIS RUN, or the library holding the plain name is not
-//     the one that was. Then it pre-existed this import and ADR-0066's rule that
-//     UsArr does not rename a library the owner has already seen governs; the
-//     newcomer takes the qualifier even when the newcomer is the prose.
-//   - THE KIND ASKING IS NOT THE KIND THE EAGER PASS BOUND AT. The plain name was
-//     reserved for the container's own declared kind, and a THIRD kind arriving
-//     has no claim on it over the second.
-//   - `managed_by` IS NOT 'auto'. §6.5 rule 4 makes a library the user's to name;
-//     a row that has been adopted by hand between the mint and here is not this
-//     code's to rewrite. Unreachable through the import path and checked in SQL
-//     rather than assumed, because it is one predicate on a read already made.
-//   - THE QUALIFIED NAME IS TAKEN. `Fiction (Comics)` can be an upstream
-//     container's own name (ux_library_name, ux_library_slug, migration 00005).
-//     Nothing is invented for that: the swap simply does not happen and the
-//     pre-existing arm runs, which is the same answer bindOneContainer's step 3
-//     already records for the mirror case.
-//
-// THE SLUG MOVES WITH THE NAME, which slugify's "durable by design — a rename
-// must not change the permalink" otherwise forbids. It is allowed here for the
-// same reason the rename is: this row was created minutes ago by the very import
-// still running, so there is no permalink to anyone's bookmark to break, and
-// leaving `fiction` on the comic library would then collide with the prose
-// library that is about to take that name (ux_library_slug is UNIQUE per user).
-func reclaimMintedName(
-	ctx context.Context, tx *sql.Tx, held libraryRow, mint runMint, kind string,
-	existing userLibrarySet,
-) (bool, error) {
-	if mint.libraryID == 0 || held.id != mint.libraryID || kind != mint.kind {
-		return false, nil
-	}
-	q := kindQualifier(held.kind)
-	if q == "" {
-		return false, nil
-	}
-	var oldName, oldSlug string
-	err := tx.QueryRowContext(ctx,
-		`SELECT name, slug FROM library WHERE id = ? AND managed_by = 'auto'`,
-		held.id).Scan(&oldName, &oldSlug)
-	switch {
-	case errors.Is(err, sql.ErrNoRows):
-		return false, nil
-	case err != nil:
-		return false, fmt.Errorf("read library %d before qualifying its name: %w", held.id, err)
-	}
-	cand := fmt.Sprintf("%s (%s)", oldName, q)
-	candSlug := slugify(cand)
-	if existing.names[libraryNameKey(cand)] || existing.slugs[candSlug] {
-		return false, nil
-	}
-	if _, err := tx.ExecContext(ctx,
-		`UPDATE library SET name = ?, slug = ? WHERE id = ?`, cand, candSlug, held.id); err != nil {
-		return false, fmt.Errorf("qualify library %d as %q: %w", held.id, cand, err)
-	}
-	// The caller's `existing` is the state of THIS user's libraries and the swap
-	// just changed it. Both the freed name and the freed slug matter: the plain
-	// name is about to be inserted and the ordinal loop right below reads both
-	// maps, so a stale entry here would name the prose library `Fiction (2)`.
-	delete(existing.names, libraryNameKey(oldName))
-	delete(existing.slugs, oldSlug)
-	delete(existing.joinable, libraryNameKey(oldName))
-	existing.names[libraryNameKey(cand)] = true
-	existing.slugs[candSlug] = true
-	existing.joinable[libraryNameKey(cand)] = held
-	return true, nil
 }
 
 // bindProvisional is the whole of what CatalogueContainer.KindProvisional buys,
@@ -1520,10 +1335,17 @@ func (s *Store) ApplyCatalogueBatch(
 			b, ok := bindings[it.ContainerID]
 			if !ok {
 				// A container with no binding was DECLINED (no work.kind) or
-				// SKIPPED (its library could not be created). Either way the
-				// reason is already recorded upstream of here. Skipping rather
+				// SKIPPED (its bind hit a constraint and rolled back). Either way
+				// the reason is already recorded upstream of here. Skipping rather
 				// than erroring keeps one unusable Kavita library from failing
 				// the whole import.
+				//
+				// ⚠️ "NO ACCEPTED LIBRARY" IS NOT THIS BRANCH, and the two must
+				// not be collapsed. Since ADR-0048 a container nobody has accepted
+				// a proposal for still gets a binding — one carrying NoLibrary —
+				// precisely so its items ARE applied and can be counted beside the
+				// proposal. Skipping it here would make the pre-Accept import
+				// write nothing, and the amendment's ordering deliver nothing.
 				continue
 			}
 			_, one, err := applyOneItem(ctx, tx, instanceID, b, it, now, parents, binds)
@@ -1982,17 +1804,35 @@ func applyOneItem(
 	// ── 8. Membership. Rewritten for this (library, work) pair, because
 	// sort_title leads the primary key and a retitle would otherwise leave a
 	// second member row under the old key.
-	if _, err := tx.ExecContext(ctx,
-		`DELETE FROM library_member WHERE library_id = ? AND work_id = ?`,
-		b.LibraryID, workID); err != nil {
-		return workID, res, fmt.Errorf("clear membership of work %d in library %d: %w", workID, b.LibraryID, err)
+	//
+	// ⚠️ UNLESS THERE IS NO LIBRARY, which since ADR-0048 is the ordinary state
+	// of a first import: the amendment runs it BEFORE Accept, so until the user
+	// ticks a proposal this container has no library and this work is filed into
+	// none. THE BRANCH IS ON THE NAMED STATE, NEVER ON `b.LibraryID == 0` — 0 is
+	// UnfiledLibraryID, a real seeded row, and filing here would write a
+	// membership row into the one library nothing may be a member of. See
+	// CatalogueBinding.NoLibrary.
+	//
+	// EVERYTHING ELSE ABOUT THE ITEM IS STILL WRITTEN. Steps 1-7 have already run
+	// — the work, its subtype row, its alternate titles, its external ids and its
+	// service_item_link, `remote_library_id` and all — which is what lets §17.8's
+	// Accept screen show a real item count beside a proposal, and what lets
+	// AcceptLibraries file those works the moment one is ticked. Step 9 below runs
+	// too, and §7 invariant 5 files the document under library 0 for want of a
+	// membership row, so an unaccepted catalogue is searchable with no new rule.
+	if !b.NoLibrary {
+		if _, err := tx.ExecContext(ctx,
+			`DELETE FROM library_member WHERE library_id = ? AND work_id = ?`,
+			b.LibraryID, workID); err != nil {
+			return workID, res, fmt.Errorf("clear membership of work %d in library %d: %w", workID, b.LibraryID, err)
+		}
+		if _, err := tx.ExecContext(ctx, `
+			INSERT INTO library_member (library_id, sort_title, work_id, edition_id, added_at)
+			VALUES (?,?,?,0,?)`, b.LibraryID, it.SortTitle, workID, nowStr); err != nil {
+			return workID, res, fmt.Errorf("file work %d into library %d: %w", workID, b.LibraryID, err)
+		}
+		res.Members++
 	}
-	if _, err := tx.ExecContext(ctx, `
-		INSERT INTO library_member (library_id, sort_title, work_id, edition_id, added_at)
-		VALUES (?,?,?,0,?)`, b.LibraryID, it.SortTitle, workID, nowStr); err != nil {
-		return workID, res, fmt.Errorf("file work %d into library %d: %w", workID, b.LibraryID, err)
-	}
-	res.Members++
 
 	// ── 9. The search document. THIS IS THE INVARIANT-OWNING BLOCK.
 	//
@@ -2120,35 +1960,35 @@ type bindKey struct{ containerRef, kind string }
 type bindCache map[bindKey]CatalogueBinding
 
 // resolveBinding is the library one container's items of ONE kind are filed
-// into, minted if it is not there yet.
+// into, re-asked per kind rather than taken from the container's binding.
 //
 // # ADR-0066 decision 5, activated by ADR-0068
 //
 // One upstream container may hold prose and comics. `library.kind` is exactly
 // one value, so such a container "becomes a `book` library and a `comic` library
-// over the same `library_source` container ref" — and this is where the second
-// one comes from. It needs no migration: 'comic' is already a permitted
-// `library.kind`, and `library_source`'s uniqueness is (library_id,
-// service_instance_id, container_kind, container_ref), so two libraries may name
-// the same container.
+// over the same `library_source` container ref". `library_source`'s uniqueness
+// is (library_id, service_instance_id, container_kind, container_ref), so two
+// libraries may name the same container and no migration is needed.
 //
-// # It is LAZY, and that is the difference between decision 5 and an empty screen
+// ⚠️ IT NO LONGER MINTS ANYTHING, AND THAT IS ADR-0048 RATHER THAN A CHANGE OF
+// MIND ABOUT DECISION 5. This function used to reach bindOneContainer's step 3
+// and get a library created on the first comic actually seen. Step 3 creates
+// nothing now — AcceptLibraries does — so what this returns for a kind nobody
+// has accepted a library for is a NoLibrary binding, and the comics land unfiled
+// beside the prose. Decision 5's shape survives intact where the libraries
+// EXIST: step 1 and step 2 still resolve each kind to its own library, which is
+// exactly what stops a comic being filed into the book library. What changed is
+// who makes the second library, not that there can be one.
 //
-// The bind pass runs BEFORE the walk, and no upstream tells UsArr what is inside
-// a container — BookOrbit's `libraries` table has no kind column at all. Minting
-// the comic library at bind time would therefore give EVERY prose-only library a
-// permanently empty comic sibling on the Libraries screen, which is the "empty
-// screen that looks broken" principle 3 exists to prevent. Minting it on the
-// first comic actually seen is what makes decision 5's word MIXED true.
+// ⚠️ IT CAN STILL RETYPE, and that is bindProvisional's job rather than this
+// one's: a container that turns out to hold ONLY comics, standing under a `book`
+// library an EXISTING install has, becomes that one library at the proven kind.
+// Nothing here creates a row for it to retype; a fresh install has none and gets
+// proposals instead.
 //
-// ⚠️ IT CAN ALSO RETYPE RATHER THAN MINT, and that is bindProvisional's job
-// rather than this one's. A container that turns out to hold ONLY comics has an
-// empty `book` library standing over it from the eager pass, and the answer there
-// is that one library at the proven kind — one row, named for the container, with
-// no qualifier — not a second row beside a first that will stay empty for ever.
-//
-// ⚠️ NO SERIES WORK IS EVER MINTED INTO NO LIBRARY AT ALL (ADR-0068 decision 5).
-// Every failure below is an error rather than a fallback to library 0.
+// ⚠️ A FAILURE BELOW IS STILL AN ERROR RATHER THAN A FALLBACK TO LIBRARY 0
+// (ADR-0068 decision 5). "No library" and "library 0" stay opposite states —
+// see CatalogueBinding.NoLibrary.
 func resolveBinding(
 	ctx context.Context, tx *sql.Tx, instanceID int64,
 	b CatalogueBinding, containerRef, kind string, binds bindCache,
@@ -2167,18 +2007,6 @@ func resolveBinding(
 				"(store.BindContainers stamps CatalogueBinding.UserID; a hand-built binding must too)",
 			containerRef, kind, b.Kind)
 	}
-	// WHAT THIS RUN MINTED, carried in so the naming step can tell a library it
-	// created minutes ago from one the owner has been reading for weeks — see
-	// runMint. `Created` is stamped by BindContainers ONCE PER IMPORT and the same
-	// binding map is handed to every batch of that import, so it stays true for
-	// the whole run and false on every re-import, which is exactly the line the
-	// rule needs. A run that dies mid-walk therefore leaves a library that
-	// PRE-EXISTS the next run, and the next run treats it as one; that is the
-	// second half of the rule doing its job, not an edge it misses.
-	var mint runMint
-	if b.Created {
-		mint = runMint{libraryID: b.LibraryID, kind: b.Kind}
-	}
 	rb, err := bindOneContainer(ctx, tx, instanceID, b.UserID, CatalogueContainer{
 		// THE CONTAINER REF IS THE ISSUE'S OWN, verbatim — "the `comic` library
 		// minted over the `library_source` container ref the issue's book was
@@ -2196,7 +2024,7 @@ func resolveBinding(
 		// report must not fire here — it would fire on every mixed library, on
 		// the first comic reached, and say a change happened where the design
 		// says two kinds coexist.
-	}, bindSiblingKind, mint)
+	}, bindSiblingKind)
 	if err != nil {
 		return CatalogueBinding{}, err
 	}

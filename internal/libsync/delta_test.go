@@ -557,10 +557,14 @@ func TestAnInstanceThatWasEmptyAndHasFilledUpEscalates(t *testing.T) {
 // would return none of that container's back catalogue, and a whole library
 // would be silently missing content.
 func TestADeltaEscalatesWhenAContainerIsBoundIntoAnExistingLibrary(t *testing.T) {
-	// Instance A creates the library "Fiction".
+	// Instance A's library "Fiction" exists because it was ACCEPTED — since
+	// ADR-0048 an import creates none, and the join this test is about needs a
+	// library to join.
 	other := newDeltaFixture(t,
 		[]bookorbit.Library{{ID: 9, Name: "Fiction", BookCount: 1}},
 		map[int64][]bookorbit.Book{9: {bookAt(91, "A book", at(0))}})
+	acceptContainers(t, other.st, other.instance,
+		store.CatalogueContainer{RemoteID: "9", Name: "Fiction", Kind: "book"})
 	if _, err := other.importer().FullImport(t.Context(), other.instance); err != nil {
 		t.Fatalf("first instance FullImport: %v", err)
 	}
@@ -581,6 +585,8 @@ func TestADeltaEscalatesWhenAContainerIsBoundIntoAnExistingLibrary(t *testing.T)
 		t.Fatalf("CreateServiceInstance: %v", err)
 	}
 	b.instance = secondID
+	acceptContainers(t, b.st, b.instance,
+		store.CatalogueContainer{RemoteID: "1", Name: "Audio", Kind: "book"})
 	if _, err := b.importer().FullImport(t.Context(), b.instance); err != nil {
 		t.Fatalf("second instance FullImport: %v", err)
 	}
@@ -620,6 +626,10 @@ func TestADeltaWritesNoPerContainerSkipVerdict(t *testing.T) {
 	f := newDeltaFixture(t,
 		[]bookorbit.Library{{ID: 1, Name: "Fiction", BookCount: 1}},
 		map[int64][]bookorbit.Book{1: {bookAt(1, "One", at(0))}})
+	// The library exists because it was accepted (ADR-0048): this test reads the
+	// Libraries screen, and there is no library row without an Accept.
+	acceptContainers(t, f.st, f.instance,
+		store.CatalogueContainer{RemoteID: "1", Name: "Fiction", Kind: "book"})
 	if _, err := f.importer().FullImport(t.Context(), f.instance); err != nil {
 		t.Fatalf("FullImport: %v", err)
 	}

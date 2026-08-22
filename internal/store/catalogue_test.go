@@ -36,6 +36,86 @@ func comicContainer(id, name string) CatalogueContainer {
 	return CatalogueContainer{RemoteID: id, Name: name, Kind: "comic"}
 }
 
+// acceptContainers is §17.8's Accept step, used as a FIXTURE.
+//
+// ⚠️ IT EXISTS BECAUSE THE BIND PATH STOPPED CREATING LIBRARIES (ADR-0048).
+// Every test whose SUBJECT is something else — membership, the sweep, search
+// scope, the item pass — used to get its libraries from BindContainers as a side
+// effect, and now has to say who accepted them. This is a user ticking the
+// pre-checked proposals with NOTHING EDITED, which is §17.8's default, so the
+// state it leaves is the state the product leaves: `managed_by = 'auto'`, one
+// library per container, named for the container.
+//
+// A DECLINED container is skipped rather than refused: there is no proposal to
+// tick for a container UsArr has no work.kind for.
+//
+// The name derivation is bindOneContainer's step 2 join key — trimmed, with the
+// same "Library <ref>" fallback for an unnamed container — because the whole
+// point of the fixture is that the bind that follows RESOLVES what this
+// accepted, and it resolves by that key.
+func acceptContainers(t *testing.T, s *Store, instanceID, userID int64, cs ...CatalogueContainer) {
+	t.Helper()
+	var accepts []LibraryAcceptance
+	for _, c := range cs {
+		if c.Kind == "" {
+			continue
+		}
+		name := strings.TrimSpace(c.Name)
+		if name == "" {
+			name = "Library " + c.RemoteID
+		}
+		accepts = append(accepts, LibraryAcceptance{
+			Name: name, Kind: c.Kind, ManagedBy: "auto",
+			Sources: []AcceptedSource{{
+				ServiceInstanceID: instanceID, ContainerKind: "remote_library",
+				ContainerRef: c.RemoteID, ContainerIdentity: c.Name,
+			}},
+		})
+	}
+	if len(accepts) == 0 {
+		return
+	}
+	if _, err := s.AcceptLibraries(t.Context(), OwnerScope(userID), userID, accepts); err != nil {
+		t.Fatalf("accept libraries for the fixture: %v", err)
+	}
+}
+
+// acceptedBind is the ordinary fixture since ADR-0048: accept a proposal per
+// container, then bind. It is BindContainers as every test that needs libraries
+// to exist has to spell it now — the bind resolves what Accept created, and
+// creates nothing itself.
+func acceptedBind(t *testing.T, s *Store, instanceID int64, cs ...CatalogueContainer) map[string]CatalogueBinding {
+	t.Helper()
+	acceptContainers(t, s, instanceID, SystemUserID, cs...)
+	binds, skipped, err := s.BindContainers(t.Context(), instanceID, SystemUserID, cs)
+	if err != nil {
+		t.Fatalf("BindContainers: %v", err)
+	}
+	if len(skipped) != 0 {
+		t.Fatalf("BindContainers skipped %+v", skipped)
+	}
+	for _, c := range cs {
+		if c.Kind == "" {
+			continue
+		}
+		if b := binds[c.RemoteID]; b.NoLibrary || b.LibraryID == 0 {
+			t.Fatalf("container %q did not resolve to the library the fixture accepted: %+v",
+				c.RemoteID, b)
+		}
+	}
+	return binds
+}
+
+func libraryNameSlug(t *testing.T, s *Store, id int64) (string, string) {
+	t.Helper()
+	var name, slug string
+	if err := s.db.Read().QueryRowContext(t.Context(),
+		`SELECT name, slug FROM library WHERE id = ?`, id).Scan(&name, &slug); err != nil {
+		t.Fatalf("read library %d: %v", id, err)
+	}
+	return name, slug
+}
+
 func item(remoteID, container, kind, title string, ids ...ExternalIdentifier) CatalogueItem {
 	return CatalogueItem{
 		RemoteID: remoteID, RemoteKind: "series", ContainerID: container, Kind: kind,
@@ -130,11 +210,19 @@ func assertCorpusInvariants(t *testing.T, s *Store, wantDocs int) {
 	}
 }
 
-func TestBindContainersCreatesOneLibraryPerContainer(t *testing.T) {
+// TestBindContainersCreatesNoLibrary is the headline of ADR-0048's removal, and
+// it is what TestBindContainersCreatesOneLibraryPerContainer became.
+//
+// That test asserted the opposite — two containers, two libraries, both
+// reporting Created — because until now a first connect created a library per
+// container with no screen involved (§17.8 measures that path). ADR-0048 makes a
+// `library` row conditional on Accept, so the fact under test inverts: the bind
+// path resolves what already exists and creates nothing.
+func TestBindContainersCreatesNoLibrary(t *testing.T) {
 	s := newTestStore(t)
 	inst := fixtureInstance(t, s, "kavita-1")
 
-	binds, _, err := s.BindContainers(t.Context(), inst, SystemUserID, []CatalogueContainer{
+	binds, skipped, err := s.BindContainers(t.Context(), inst, SystemUserID, []CatalogueContainer{
 		comicContainer("1", "Manga"),
 		{RemoteID: "2", Name: "Ebooks", Kind: "book"},
 		{RemoteID: "4", Name: "Wallpapers", DeclineReason: "no UsArr kind"},
@@ -142,29 +230,45 @@ func TestBindContainersCreatesOneLibraryPerContainer(t *testing.T) {
 	if err != nil {
 		t.Fatalf("BindContainers: %v", err)
 	}
+	if len(skipped) != 0 {
+		t.Fatalf("skipped %+v; nothing is created, so nothing can violate a constraint", skipped)
+	}
+
+	// ⚠️ THE TWO NON-DECLINED CONTAINERS STILL GET A BINDING, and that is not a
+	// detail. ApplyCatalogueBatch skips an item whose container has NO ENTRY in
+	// this map, so a container that vanished from it would have its items applied
+	// nowhere — and ADR-0048's amendment runs the first import BEFORE Accept
+	// precisely so the proposals carry real item counts. The binding is what says
+	// "apply this, file it nowhere".
 	if len(binds) != 2 {
-		t.Fatalf("bound %d containers, want 2 (the declined one must get no library)", len(binds))
+		t.Fatalf("bound %d containers, want 2 (the declined one must get no binding)", len(binds))
 	}
 	if _, ok := binds["4"]; ok {
-		t.Error("a declined container was bound to a library")
+		t.Error("a DECLINED container got a binding; its items would then be applied, and " +
+			"UsArr has no work.kind to apply them as")
+	}
+	for _, ref := range []string{"1", "2"} {
+		if !binds[ref].NoLibrary {
+			t.Errorf("container %s reports a library: %+v", ref, binds[ref])
+		}
+		if binds[ref].Created {
+			t.Errorf("container %s reports Created; nothing on this path creates a library", ref)
+		}
 	}
 	if binds["1"].Kind != "comic" || binds["2"].Kind != "book" {
 		t.Errorf("kinds came out wrong: %+v", binds)
 	}
-	if !binds["1"].Created || !binds["2"].Created {
-		t.Error("both libraries were new, so both should report Created")
-	}
 
-	// The source rows are container_kind='remote_library' with the upstream's
-	// own id as the ref — the predicate ix_sil_container serves.
-	var kind, ref, identity string
-	if err := s.db.Read().QueryRowContext(t.Context(),
-		`SELECT container_kind, container_ref, container_identity FROM library_source
-		  WHERE library_id = ?`, binds["1"].LibraryID).Scan(&kind, &ref, &identity); err != nil {
-		t.Fatalf("read library_source: %v", err)
+	// THE EFFECT, READ OFF THE TABLES rather than off the returned struct: no
+	// library beyond the reserved row, and no source binding one.
+	if n := count(t, s, `SELECT COUNT(*) FROM library WHERE id <> ?`, UnfiledLibraryID); n != 0 {
+		t.Errorf("%d libraries exist after a bind, want 0 — AcceptLibraries is the only "+
+			"writer of a library row", n)
 	}
-	if kind != "remote_library" || ref != "1" || identity != "Manga" {
-		t.Errorf("library_source = (%q,%q,%q), want (remote_library, 1, Manga)", kind, ref, identity)
+	if n := count(t, s, `SELECT COUNT(*) FROM library_source`); n != 0 {
+		t.Errorf("%d library_source rows exist, want 0: a container nobody accepted is bound "+
+			"to nothing, which is what makes ProposedContainers' exclusion of bound "+
+			"containers mean anything", n)
 	}
 }
 
@@ -173,9 +277,18 @@ func TestBindContainersIsIdempotentAndJoinsBySameNameAndKind(t *testing.T) {
 	a := fixtureInstance(t, s, "kavita-a")
 	b := fixtureInstance(t, s, "kavita-b")
 
+	// THE LIBRARY EXISTS BECAUSE SOMEBODY ACCEPTED IT. This test used to get it
+	// from the bind path itself; since ADR-0048 that path creates nothing, so the
+	// Accept step is the fixture. What is under test is unchanged and is step 1
+	// and step 2 of bindOneContainer, both of which ADR-0048 leaves alone.
+	acceptContainers(t, s, a, SystemUserID, comicContainer("1", "Manga"))
+
 	first, _, err := s.BindContainers(t.Context(), a, SystemUserID, []CatalogueContainer{comicContainer("1", "Manga")})
 	if err != nil {
 		t.Fatalf("BindContainers a: %v", err)
+	}
+	if first["1"].NoLibrary || first["1"].LibraryID == 0 {
+		t.Fatalf("the accepted library was not resolved: %+v", first["1"])
 	}
 	// Re-running the same instance must not create a second library.
 	again, _, err := s.BindContainers(t.Context(), a, SystemUserID, []CatalogueContainer{comicContainer("1", "Manga")})
@@ -194,15 +307,18 @@ func TestBindContainersIsIdempotentAndJoinsBySameNameAndKind(t *testing.T) {
 		t.Fatalf("BindContainers b: %v", err)
 	}
 	if joined["7"].LibraryID != first["1"].LibraryID {
-		t.Errorf("second instance created library %d instead of joining %d — §17.8's "+
+		t.Errorf("second instance bound container 7 to library %d instead of joining %d — §17.8's "+
 			"default is join, and getting it wrong destroys the two-source badge",
 			joined["7"].LibraryID, first["1"].LibraryID)
 	}
-	if joined["7"].Created {
-		t.Error("a join reported Created")
+	if joined["7"].Created || joined["7"].NoLibrary {
+		t.Errorf("a join reported %+v", joined["7"])
 	}
 	if n := count(t, s, `SELECT COUNT(*) FROM library_source WHERE library_id = ?`, first["1"].LibraryID); n != 2 {
 		t.Errorf("the joined library has %d sources, want 2", n)
+	}
+	if n := count(t, s, `SELECT COUNT(*) FROM library WHERE id <> ?`, UnfiledLibraryID); n != 1 {
+		t.Errorf("%d libraries exist, want the 1 that was accepted", n)
 	}
 }
 
@@ -210,8 +326,15 @@ func TestBindContainersWillNotJoinAcrossKinds(t *testing.T) {
 	// library.kind is exactly one value, so a name collision between a comic
 	// container and a book container must NOT join: the books would render in a
 	// comics library and no format filter could rescue them.
+	//
+	// ⚠️ WHAT THE BOOK CONTAINER GETS INSTEAD HAS CHANGED, and that is the whole
+	// of ADR-0048 at this site. It used to get a library of its own under a
+	// disambiguated name; it now gets NO library, and the user is offered a
+	// proposal for it. The refusal to join is what is under test and it is
+	// untouched.
 	s := newTestStore(t)
 	inst := fixtureInstance(t, s, "kavita")
+	acceptContainers(t, s, inst, SystemUserID, comicContainer("1", "Library"))
 
 	binds, _, err := s.BindContainers(t.Context(), inst, SystemUserID, []CatalogueContainer{
 		comicContainer("1", "Library"),
@@ -220,129 +343,75 @@ func TestBindContainersWillNotJoinAcrossKinds(t *testing.T) {
 	if err != nil {
 		t.Fatalf("BindContainers: %v", err)
 	}
-	if binds["1"].LibraryID == binds["2"].LibraryID {
-		t.Fatal("a comic container and a book container were joined into one library")
+	if binds["1"].NoLibrary {
+		t.Fatalf("the accepted comic library was not resolved: %+v", binds["1"])
 	}
-	var name, kind string
-	if err := s.db.Read().QueryRowContext(t.Context(),
-		`SELECT name, kind FROM library WHERE id = ?`, binds["2"].LibraryID).Scan(&name, &kind); err != nil {
-		t.Fatalf("read library: %v", err)
+	if !binds["2"].NoLibrary {
+		t.Fatalf("a book container was joined into a comic library: %+v", binds["2"])
 	}
-	if name == "Library" || kind != "book" {
-		t.Errorf("disambiguated library = (%q, %q), want a distinct name and kind book", name, kind)
+	if n := count(t, s, `SELECT COUNT(*) FROM library WHERE kind = 'book'`); n != 0 {
+		t.Errorf("%d book libraries were created; the create path is gone and the book "+
+			"container is a proposal", n)
 	}
 }
 
-// ── The two library-uniqueness indexes, and the reserved row ────────────────
+// TestTheBindPathNoLongerDerivesALibraryName is what THREE tests became, and
+// they are folded rather than dropped because they asserted three cases of ONE
+// derivation that no longer exists:
 //
-// Migration 0005 declares TWO unique indexes over library — ux_library_name
-// (user_id, name) and ux_library_slug (user_id, slug) — and seeds one reserved
-// row, library 0 "Unfiled", which participates in both. The bind path derives
-// the name and the slug independently, so it has to satisfy all three, and it
-// used to satisfy only the first. The three tests below were written FAILING
-// against the old code and each names the constraint it is standing in for.
-
-func libraryNameSlug(t *testing.T, s *Store, id int64) (string, string) {
-	t.Helper()
-	var name, slug string
-	if err := s.db.Read().QueryRowContext(t.Context(),
-		`SELECT name, slug FROM library WHERE id = ?`, id).Scan(&name, &slug); err != nil {
-		t.Fatalf("read library %d: %v", id, err)
-	}
-	return name, slug
-}
-
-func TestBindContainersDisambiguatesASlugCollisionNotJustANameCollision(t *testing.T) {
-	// MEASURED FAILING BEFORE THE FIX:
-	//   bind container "Sci Fi" (2) on service_instance 1: create library
-	//   "Sci Fi": sqlite3: constraint failed: UNIQUE constraint failed:
-	//   library.user_id, library.slug
-	//
-	// slugify collapses every run of non-alphanumerics to one dash, so "Sci-Fi"
-	// and "Sci Fi" are two distinct NAMES — the join key does not match them and
-	// ux_library_name is content — that reduce to the one slug "sci-fi". The old
-	// disambiguation loop tested the name only, so it never fired, and the
-	// create died on ux_library_slug. It died inside BindContainers' single
-	// transaction, so "Manga" below never landed either: two libraries with
-	// awkward names cost the operator the ENTIRE import.
+//   - TestBindContainersDisambiguatesASlugCollisionNotJustANameCollision — two
+//     names that reduce to one slug, `Sci-Fi` and `Sci Fi`, where the create
+//     died on ux_library_slug and the ordinal loop rescued it.
+//   - TestBindContainersDoesNotCollideWithTheReservedUnfiledLibrary — a
+//     container genuinely named `Unfiled`, which collided with library 0's own
+//     row in both unique indexes.
+//   - TestBindContainersRebindsToTheSameDisambiguatedLibraryEveryTime — that the
+//     ordinal did not walk `(2)`, `(3)`, `(4)` across four imports.
+//
+// Every one of them was a fact about bindOneContainer's step 3, which created a
+// library under a name and slug it derived. ADR-0048 removes the create, so the
+// derivation went with it: there is no name to collide, no slug to disambiguate
+// and no ordinal to re-run. What replaces the three assertions is one, and it is
+// stronger — the collisions they were written against cannot arise, because
+// nothing is written.
+//
+// ⚠️ THE UNIQUENESS RULES THEY DEFENDED ARE NOT UNDEFENDED. They moved with the
+// create: AcceptLibraries refuses a name held at another kind, refuses the
+// reserved name, and refuses a free name whose SLUG is taken — deliberately,
+// because a user typed the name and this path can ask rather than invent.
+// proposals_test.go holds those.
+func TestTheBindPathNoLongerDerivesALibraryName(t *testing.T) {
 	s := newTestStore(t)
 	inst := fixtureInstance(t, s, "kavita")
 
-	binds, skipped, err := s.BindContainers(t.Context(), inst, SystemUserID, []CatalogueContainer{
+	// Each of these is one of the three collisions, and the reserved row is real
+	// rather than seeded here: migration 00005 seeds library 0 as `Unfiled`,
+	// kind 'movie', owned by user 0 — which is the acting user of a v0.1 import.
+	cs := []CatalogueContainer{
 		comicContainer("1", "Sci-Fi"),
 		comicContainer("2", "Sci Fi"),
-		comicContainer("3", "Manga"),
-	})
-	if err != nil {
-		t.Fatalf("BindContainers: %v", err)
+		{RemoteID: "3", Name: "Unfiled", Kind: "movie"},
 	}
-	if len(skipped) != 0 {
-		t.Fatalf("a slug collision is disambiguable, so nothing should be skipped: %+v", skipped)
+	for run := 1; run <= 3; run++ {
+		binds, skipped, err := s.BindContainers(t.Context(), inst, SystemUserID, cs)
+		if err != nil {
+			t.Fatalf("run %d: BindContainers: %v", run, err)
+		}
+		if len(skipped) != 0 {
+			t.Fatalf("run %d skipped %+v; nothing is created, so no unique index can be "+
+				"violated", run, skipped)
+		}
+		for _, ref := range []string{"1", "2", "3"} {
+			if !binds[ref].NoLibrary {
+				t.Errorf("run %d: container %s got library %d", run, ref, binds[ref].LibraryID)
+			}
+		}
 	}
-	if len(binds) != 3 {
-		t.Fatalf("bound %d containers, want 3: %+v", len(binds), binds)
+	if n := count(t, s, `SELECT COUNT(*) FROM library WHERE id <> ?`, UnfiledLibraryID); n != 0 {
+		t.Errorf("%d libraries exist after three imports of three colliding names, want 0", n)
 	}
-	if binds["1"].LibraryID == binds["2"].LibraryID {
-		t.Fatal("two differently-named containers were fused into one library")
-	}
-	n1, s1 := libraryNameSlug(t, s, binds["1"].LibraryID)
-	n2, s2 := libraryNameSlug(t, s, binds["2"].LibraryID)
-	if s1 == s2 {
-		t.Errorf("both libraries got slug %q; ux_library_slug is per user and this cannot commit", s1)
-	}
-	if n1 != "Sci-Fi" {
-		t.Errorf("the FIRST container was renamed to %q; only the loser of a collision moves", n1)
-	}
-	if n2 != "Sci Fi (2)" || s2 != "sci-fi-2" {
-		t.Errorf("disambiguated library = (%q, %q), want (\"Sci Fi (2)\", \"sci-fi-2\") — "+
-			"the suffix is deterministic so a re-import lands on the same one", n2, s2)
-	}
-	// The rest of the import is the point: nothing else was lost to it.
-	if binds["3"].LibraryID == 0 || !binds["3"].Created {
-		t.Errorf("Manga did not bind: %+v — one awkward container must not take down the import", binds["3"])
-	}
-}
-
-func TestBindContainersDoesNotCollideWithTheReservedUnfiledLibrary(t *testing.T) {
-	// MEASURED FAILING BEFORE THE FIX:
-	//   bind container "Unfiled" (1) on service_instance 1: create library
-	//   "Unfiled": sqlite3: constraint failed: UNIQUE constraint failed:
-	//   library.user_id, library.name
-	//
-	// Library 0 is user 0's, and v0.1 imports as SystemUserID, so it is in
-	// ux_library_name and ux_library_slug alongside every library the bind path
-	// creates. The taken-set the disambiguation reads excludes it — correctly,
-	// because nothing may JOIN library 0 — and the old code used that same set
-	// for uniqueness, which made a reserved name look free.
-	s := newTestStore(t)
-	inst := fixtureInstance(t, s, "kavita")
-
-	// KIND 'movie' ON PURPOSE, and it is the difference between this test
-	// asserting something and asserting nothing. Library 0's kind is 'movie',
-	// and the join rule requires the kinds to agree — so a COMIC container named
-	// "Unfiled" can never join library 0 whatever the taken-set says, and a test
-	// written with one measures the kind check rather than the exclusion. A
-	// movie library named "Unfiled" is the reachable case and the sharp one.
-	binds, skipped, err := s.BindContainers(t.Context(), inst, SystemUserID, []CatalogueContainer{
-		{RemoteID: "1", Name: "Unfiled", Kind: "movie"},
-		comicContainer("2", "Manga"),
-	})
-	if err != nil {
-		t.Fatalf("BindContainers: %v", err)
-	}
-	if len(skipped) != 0 {
-		t.Fatalf("the reserved name is disambiguable, so nothing should be skipped: %+v", skipped)
-	}
-	if binds["1"].LibraryID == UnfiledLibraryID {
-		t.Fatal("an upstream container was bound INTO the reserved Unfiled library — every " +
-			"work that belongs to no other library would then share a scope with it")
-	}
-	name, slug := libraryNameSlug(t, s, binds["1"].LibraryID)
-	if name != "Unfiled (2)" || slug != "unfiled-2" {
-		t.Errorf("the container landed as (%q, %q), want (\"Unfiled (2)\", \"unfiled-2\")", name, slug)
-	}
-	// The reserved row is untouched: it still holds its own name and slug, and
-	// it is still the row internal/db's TestUnfiledLibraryIsProtected defends.
+	// The reserved row is untouched, which is the one assertion of the three that
+	// is about a row rather than about a derivation.
 	rn, rs := libraryNameSlug(t, s, UnfiledLibraryID)
 	if rn != "Unfiled" || rs != "unfiled" {
 		t.Errorf("library 0 is now (%q, %q); the reserved row must not be renamed or re-slugged", rn, rs)
@@ -350,66 +419,31 @@ func TestBindContainersDoesNotCollideWithTheReservedUnfiledLibrary(t *testing.T)
 	if _, err := s.db.Writer().ExecContext(t.Context(), `DELETE FROM library WHERE id = 0`); err == nil {
 		t.Error("library 0 became deletable; trg_library_unfiled_no_delete must still fire")
 	}
-	if binds["2"].LibraryID == 0 || !binds["2"].Created {
-		t.Errorf("Manga did not bind: %+v", binds["2"])
-	}
 }
 
-func TestBindContainersRebindsToTheSameDisambiguatedLibraryEveryTime(t *testing.T) {
-	// IDEMPOTENCY IS THE PROPERTY MOST LIKELY TO BREAK when a name grows a
-	// counter: a disambiguation that re-runs on every import walks "Sci Fi (2)",
-	// "Sci Fi (3)", "Sci Fi (4)" and leaves a library per sync. It must not,
-	// and one repetition does not prove it — the second run is the one where
-	// "(2)" is taken, the third is where "(3)" would be.
-	s := newTestStore(t)
-	inst := fixtureInstance(t, s, "kavita")
-	cs := []CatalogueContainer{
-		comicContainer("1", "Sci-Fi"),
-		comicContainer("2", "Sci Fi"),
-		{RemoteID: "3", Name: "Unfiled", Kind: "movie"},
-	}
-
-	first, _, err := s.BindContainers(t.Context(), inst, SystemUserID, cs)
-	if err != nil {
-		t.Fatalf("BindContainers: %v", err)
-	}
-	want := count(t, s, `SELECT COUNT(*) FROM library`)
-	for run := 2; run <= 4; run++ {
-		again, skipped, err := s.BindContainers(t.Context(), inst, SystemUserID, cs)
-		if err != nil {
-			t.Fatalf("BindContainers run %d: %v", run, err)
-		}
-		if len(skipped) != 0 {
-			t.Fatalf("run %d skipped %+v; a re-import binds what it bound before", run, skipped)
-		}
-		for _, ref := range []string{"1", "2", "3"} {
-			if again[ref].LibraryID != first[ref].LibraryID {
-				t.Errorf("run %d bound container %s to library %d, want %d",
-					run, ref, again[ref].LibraryID, first[ref].LibraryID)
-			}
-			if again[ref].Created {
-				t.Errorf("run %d reported container %s as newly Created", run, ref)
-			}
-		}
-		if n := count(t, s, `SELECT COUNT(*) FROM library`); n != want {
-			t.Fatalf("run %d left %d libraries, want %d — the counter suffix is growing per import", run, n, want)
-		}
-	}
-	// The names did not drift either: a stable id under a renamed library would
-	// still break every permalink.
-	if n, sl := libraryNameSlug(t, s, first["2"].LibraryID); n != "Sci Fi (2)" || sl != "sci-fi-2" {
-		t.Errorf("after four imports the disambiguated library is (%q, %q), want (\"Sci Fi (2)\", \"sci-fi-2\")", n, sl)
-	}
-}
-
-func TestBindContainersSkipsAnUnbindableContainerAndRecordsWhy(t *testing.T) {
-	// The disambiguation above should make a uniqueness skip unreachable, so
-	// this exercises the fallback with the OTHER constraint on library: kind's
-	// CHECK. An adapter that reports a kind the schema does not know is exactly
-	// the drift the fallback exists for.
-	//
-	// The property under test is CLAUDE.md principle 3: the import degrades to
-	// "one library is missing, and here is why", not to nothing.
+// TestAnUnknownKindNoLongerSkipsAContainer is what
+// TestBindContainersSkipsAnUnbindableContainerAndRecordsWhy became, and the
+// change is a MEASUREMENT rather than a preference.
+//
+// That test bound a container whose adapter reported kind 'score', which
+// library.kind's CHECK does not permit, and asserted the whole degradation
+// story: the container is rolled back to its savepoint, recorded as
+// `container_bind_failed`, returned in []SkippedContainer, and every other
+// container still binds. The mechanism was the CREATE — it was the only
+// statement in the bind path that could violate a constraint.
+//
+// ⚠️ SO `container_bind_failed` IS NOW UNREACHABLE THROUGH THE CONTAINER LIST,
+// and that is stated here rather than left for someone to find. With no create,
+// an unknown kind is not a constraint violation at all: it is a container nobody
+// can accept, which lands in the same place as every other unaccepted container.
+// The savepoint, isSkippableBindError and the `container_bind_failed` row are
+// KEPT — a constraint the schema owns and this path re-derives is exactly the
+// pair that drifts, and the machinery costs nothing standing — but nothing in
+// this test can fire them any more.
+//
+// CLAUDE.md principle 3 is what the old test was really about and it still
+// holds: one container UsArr cannot use does not take down the import.
+func TestAnUnknownKindNoLongerSkipsAContainer(t *testing.T) {
 	s := newTestStore(t)
 	inst := fixtureInstance(t, s, "kavita")
 
@@ -419,55 +453,39 @@ func TestBindContainersSkipsAnUnbindableContainerAndRecordsWhy(t *testing.T) {
 		{RemoteID: "3", Name: "Ebooks", Kind: "book"},
 	})
 	if err != nil {
-		t.Fatalf("BindContainers returned an error rather than skipping one container: %v", err)
+		t.Fatalf("BindContainers: %v", err)
 	}
-	if len(binds) != 2 || binds["1"].LibraryID == 0 || binds["3"].LibraryID == 0 {
-		t.Fatalf("bound %+v, want the two valid containers", binds)
+	if len(skipped) != 0 {
+		t.Fatalf("skipped = %+v; with no create there is no constraint left to violate", skipped)
 	}
-	if _, ok := binds["2"]; ok {
-		t.Error("the unbindable container was returned as bound")
+	if len(binds) != 3 {
+		t.Fatalf("bound %+v, want a binding for all three: a container UsArr cannot type is "+
+			"still a container whose items are read", binds)
 	}
-	if len(skipped) != 1 || skipped[0].RemoteID != "2" || skipped[0].Name != "Sheet Music" {
-		t.Fatalf("skipped = %+v, want exactly the Sheet Music container", skipped)
+	for _, ref := range []string{"1", "2", "3"} {
+		if !binds[ref].NoLibrary {
+			t.Errorf("container %s got library %d", ref, binds[ref].LibraryID)
+		}
 	}
-	if skipped[0].Reason == "" {
-		t.Error("a skip with no reason is a silent skip")
+	if n := count(t, s, `SELECT COUNT(*) FROM sync_report WHERE kind = 'container_bind_failed'`); n != 0 {
+		t.Errorf("%d container_bind_failed rows were written; no bind failed", n)
 	}
-	// The two good libraries COMMITTED. Read them back off the pool rather than
-	// trusting the returned map: the savepoint rollback is the thing that could
-	// have taken them with it.
-	if n := count(t, s, `SELECT COUNT(*) FROM library WHERE id <> ?`, UnfiledLibraryID); n != 2 {
-		t.Errorf("%d libraries committed, want 2", n)
-	}
-	if n := count(t, s, `SELECT COUNT(*) FROM library WHERE name = 'Sheet Music'`); n != 0 {
-		t.Error("the failed container left a partial library row behind")
-	}
-	// RECORDED, not just returned. A background import has no caller left to
-	// read a Report by the time the operator asks where the library went.
-	var remoteKind, remoteID, detail string
-	if err := s.db.Read().QueryRowContext(t.Context(),
-		`SELECT remote_kind, remote_id, detail FROM sync_report WHERE kind = 'container_bind_failed'`).
-		Scan(&remoteKind, &remoteID, &detail); err != nil {
-		t.Fatalf("read sync_report: %v", err)
-	}
-	if remoteKind != "library" || remoteID != "2" {
-		t.Errorf("sync_report row = (%q, %q), want (library, 2)", remoteKind, remoteID)
-	}
-	if !strings.Contains(detail, "Sheet Music") || !strings.Contains(detail, "reason") {
-		t.Errorf("sync_report detail = %q, want the container's name and a reason", detail)
+	// ⚠️ AND THE UNKNOWN KIND IS STILL OBSERVED. The proposal it produces is
+	// unacceptable — library.kind's CHECK refuses 'score' — but §17.8 renders it
+	// with a reason rather than hiding it, and the observation row is where that
+	// reason comes from.
+	if got := observations(t, s, inst); len(got["2"]) != 1 {
+		t.Errorf("the unbindable container has %d observations, want 1", len(got["2"]))
 	}
 }
 
 func TestApplyCatalogueBatchWritesTheWholeShape(t *testing.T) {
 	s := newTestStore(t)
 	inst := fixtureInstance(t, s, "kavita")
-	binds, _, err := s.BindContainers(t.Context(), inst, SystemUserID, []CatalogueContainer{
+	binds := acceptedBind(t, s, inst,
 		comicContainer("1", "Manga"),
-		{RemoteID: "2", Name: "Ebooks", Kind: "book"},
-	})
-	if err != nil {
-		t.Fatalf("BindContainers: %v", err)
-	}
+		CatalogueContainer{RemoteID: "2", Name: "Ebooks", Kind: "book"},
+	)
 
 	comic := item("41", "1", "comic", "Frieren")
 	comic.ReadingDirection = sql.NullString{String: "rtl", Valid: true}
@@ -620,10 +638,7 @@ func TestApplyCatalogueBatchIsIdempotent(t *testing.T) {
 	// removed this now reports search_fts = 3 against search_doc = 2.
 	s := newTestStore(t)
 	inst := fixtureInstance(t, s, "kavita")
-	binds, _, err := s.BindContainers(t.Context(), inst, SystemUserID, []CatalogueContainer{comicContainer("1", "Manga")})
-	if err != nil {
-		t.Fatalf("BindContainers: %v", err)
-	}
+	binds := acceptedBind(t, s, inst, comicContainer("1", "Manga"))
 	it := item("41", "1", "comic", "Frieren")
 	other := item("42", "1", "comic", "Vagabond")
 
@@ -767,14 +782,8 @@ func TestTierOneReusesTheWorkThatAlreadyHoldsTheIdentifier(t *testing.T) {
 	b := fixtureInstance(t, s, "kavita-b")
 
 	id := ExternalIdentifier{Source: "anilist", Value: "30013", Confidence: 1.0}
-	bindsA, _, err := s.BindContainers(t.Context(), a, SystemUserID, []CatalogueContainer{comicContainer("1", "A")})
-	if err != nil {
-		t.Fatalf("bind a: %v", err)
-	}
-	bindsB, _, err := s.BindContainers(t.Context(), b, SystemUserID, []CatalogueContainer{comicContainer("1", "B")})
-	if err != nil {
-		t.Fatalf("bind b: %v", err)
-	}
+	bindsA := acceptedBind(t, s, a, comicContainer("1", "A"))
+	bindsB := acceptedBind(t, s, b, comicContainer("1", "B"))
 	if _, err := s.ApplyCatalogueBatch(t.Context(), a, bindsA,
 		[]CatalogueItem{item("1", "1", "comic", "Berserk", id)}, testNow); err != nil {
 		t.Fatalf("apply a: %v", err)
@@ -1268,130 +1277,86 @@ func TestOnlyAConstraintViolationSkipsAContainer(t *testing.T) {
 	}
 }
 
-/* ── the sibling library's name, and the kind-change report ─────────────────
+/* ── the second kind over one container, and the kind-change report ─────────
  *
  * Two behaviours that meet in bindOneContainer and are asserted together
  * because they are the same shape from opposite sides: a container bound at a
  * kind it was not bound at before. When that is DELIBERATE (ADR-0066 decision
- * 5's mixed container) the second library needs a NAME; when it is a CHANGE
- * upstream, it needs a RECORD.
+ * 5's mixed container) the second library is now a PROPOSAL; when it is a
+ * CHANGE upstream, and both libraries exist, it needs a RECORD.
  */
 
-// TestASiblingLibraryIsNamedForItsKindAndNeverForItsOrder pins the qualifier.
-func TestASiblingLibraryIsNamedForItsKindAndNeverForItsOrder(t *testing.T) {
+// TestASecondKindOverOneContainerIsNowAProposal is what THREE naming tests
+// became, and they are folded rather than dropped because all three asserted
+// cases of one derivation ADR-0048 removed:
+//
+//   - TestASiblingLibraryIsNamedForItsKindAndNeverForItsOrder — that a mixed
+//     container's second library is `Fiction (Comics)` and never `Fiction (2)`.
+//   - TestAKindCollisionQualifiesButANameCollisionStillTakesAnOrdinal — that a
+//     SAME-kind slug collision still took the ordinal, which was the boundary
+//     between the two disambiguations.
+//   - TestAQualifiedNameThatIsItselfTakenFallsBackRatherThanInventingARule —
+//     the stop condition, where the qualified name was itself taken.
+//
+// Each of those named a library that bindOneContainer's step 3 CREATED. Step 3
+// creates nothing now, so there is no second library to name: a container bound
+// at a second kind, whether by an adapter that retyped it or by the mixed-walk
+// mint, yields a proposal and its items land unfiled until somebody accepts one.
+//
+// ⚠️ ADR-0066 DECISION 5 IS NOT REVERSED BY THIS, and the distinction matters
+// because the decision is what stops a comic being filed into a book library.
+// Two libraries may still stand over one container ref, they are still resolved
+// per kind by steps 1 and 2, and this test's second half proves the kind
+// separation survives — what changed is only who creates the second row.
+func TestASecondKindOverOneContainerIsNowAProposal(t *testing.T) {
 	s := newTestStore(t)
 	inst := fixtureInstance(t, s, "kavita")
 
-	// One container, bound twice at two kinds — the shape parentBinding produces
-	// on a mixed BookOrbit library, driven here through the public bind path so
-	// the assertion is about the name and not about the caller.
-	first, _, err := s.BindContainers(t.Context(), inst, SystemUserID, []CatalogueContainer{
-		{RemoteID: "1", Name: "Fiction", Kind: "book"},
-	})
-	if err != nil {
-		t.Fatalf("BindContainers (book): %v", err)
-	}
+	// The `book` library exists because somebody accepted it.
+	first := acceptedBind(t, s, inst, CatalogueContainer{RemoteID: "1", Name: "Fiction", Kind: "book"})
+
 	second, _, err := s.BindContainers(t.Context(), inst, SystemUserID, []CatalogueContainer{
 		{RemoteID: "1", Name: "Fiction", Kind: "comic"},
 	})
 	if err != nil {
 		t.Fatalf("BindContainers (comic): %v", err)
 	}
-
-	bookName, bookSlug := libraryNameSlug(t, s, first["1"].LibraryID)
-	comicName, comicSlug := libraryNameSlug(t, s, second["1"].LibraryID)
-
-	if comicName != "Fiction (Comics)" || comicSlug != "fiction-comics" {
-		t.Errorf("the sibling is (%q, %q), want (%q, %q). The qualifier names what the "+
-			"library HOLDS; an ordinal names when it was MADE, which no reader can interpret",
-			comicName, comicSlug, "Fiction (Comics)", "fiction-comics")
+	if !second["1"].NoLibrary {
+		t.Fatalf("the second kind got library %d; nothing on this path creates one",
+			second["1"].LibraryID)
 	}
-	// ⚠️ THE ORIGINAL IS NOT RENAMED, and this half is a decision rather than an
-	// omission. `Fiction (Books)` beside `Fiction (Comics)` is prettier and it
-	// rewrites a name the user has already seen, while library.slug is DURABLE by
-	// design — so the pair would agree in the list and disagree in the permalink.
-	// The qualifier's PRESENCE is the signal that a split happened; symmetry is
-	// not needed to carry it.
-	if bookName != "Fiction" || bookSlug != "fiction" {
-		t.Errorf("the ORIGINAL library is (%q, %q), want (%q, %q) — only the sibling the split "+
-			"creates is qualified", bookName, bookSlug, "Fiction", "fiction")
+	if n := count(t, s, `SELECT COUNT(*) FROM library WHERE kind = 'comic'`); n != 0 {
+		t.Errorf("%d comic libraries were created; the qualifier and the ordinal both went "+
+			"with the create they named", n)
 	}
-}
+	// The original is untouched — it was never this path's to rename, and now
+	// there is not even a name being derived beside it.
+	if n, sl := libraryNameSlug(t, s, first["1"].LibraryID); n != "Fiction" || sl != "fiction" {
+		t.Errorf("the accepted library is (%q, %q), want (\"Fiction\", \"fiction\")", n, sl)
+	}
 
-// TestAKindCollisionQualifiesButANameCollisionStillTakesAnOrdinal is the
-// boundary between the two disambiguations, and it is the reason the ordinal
-// loop survives.
-func TestAKindCollisionQualifiesButANameCollisionStillTakesAnOrdinal(t *testing.T) {
-	s := newTestStore(t)
-	inst := fixtureInstance(t, s, "kavita")
-
-	binds, skipped, err := s.BindContainers(t.Context(), inst, SystemUserID, []CatalogueContainer{
-		comicContainer("1", "Sci-Fi"),
-		// Same KIND, different name, one slug. A qualifier here would read
-		// `Sci Fi (Comics)` beside a `Sci-Fi` that is also comics — a stated
-		// difference that does not exist — so this one still takes the ordinal.
-		comicContainer("2", "Sci Fi"),
-	})
-	if err != nil {
-		t.Fatalf("BindContainers: %v", err)
+	// AND THE KIND SEPARATION STILL WORKS ONCE BOTH ARE ACCEPTED. This is
+	// ADR-0066 decision 5's actual content: one container ref, two libraries, and
+	// each kind resolving to its own.
+	if _, err := s.AcceptLibraries(t.Context(), OwnerScope(SystemUserID), SystemUserID,
+		[]LibraryAcceptance{{
+			Name: "Fiction (Comics)", Kind: "comic", ManagedBy: "user",
+			Sources: []AcceptedSource{{
+				ServiceInstanceID: inst, ContainerKind: "remote_library",
+				ContainerRef: "1", ContainerIdentity: "Fiction",
+			}},
+		}}); err != nil {
+		t.Fatalf("accept the comic sibling: %v", err)
 	}
-	if len(skipped) != 0 {
-		t.Fatalf("nothing should be skipped: %+v", skipped)
-	}
-	if n, _ := libraryNameSlug(t, s, binds["2"].LibraryID); n != "Sci Fi (2)" {
-		t.Errorf("a same-kind slug collision produced %q, want \"Sci Fi (2)\" — the kind "+
-			"qualifier answers a KIND collision only", n)
-	}
-}
-
-// TestAQualifiedNameThatIsItselfTakenFallsBackRatherThanInventingARule is the
-// STOP CONDITION, pinned as behaviour rather than argued in prose.
-//
-// ⚠️ ux_library_name IS A REAL UNIQUE INDEX (migration 00005), so a container
-// genuinely named "Fiction (Comics)" upstream collides with the derived sibling
-// name. THE RULE THAT DECIDES WHAT HAPPENS THEN, and it is decided: AN ORDINAL
-// IS WRONG WHEN A MEANINGFUL QUALIFIER EXISTS, AND ACCEPTABLE WHEN NONE DOES.
-//
-// Both halves of that rule are pinned by the two tests above, so what follows is
-// the reasoning they share rather than a third rule. For a KIND SPLIT there IS a
-// meaningful qualifier — one library is the comics and one is not — so
-// `Fiction (2)` discards information the reader wants, which is what
-// TestASiblingLibraryIsNamedForItsKindAndNeverForItsOrder asserts. For a
-// SAME-KIND COLLISION the two containers differ in nothing the user can see
-// except identity, so the ordinal is the HONEST answer: it says "these are two
-// different things and there is nothing true we can tell you about the
-// difference." A distinguisher invented there would be WORSE than the number,
-// because it would state a difference that does not exist — which is what
-// TestAKindCollisionQualifiesButANameCollisionStillTakesAnOrdinal asserts.
-//
-// This case is the two meeting. The qualifier is meaningful AND it is taken, so
-// there is no qualifier left to reach for and the case falls to the arm where
-// none exists: the PRE-EXISTING ordinal loop runs from `base`, exactly as it did
-// before the qualifier existed, and the import still completes. Ugly, rare,
-// honest — and the only alternative is a distinguisher the code would have to
-// invent, which the rule above refuses.
-func TestAQualifiedNameThatIsItselfTakenFallsBackRatherThanInventingARule(t *testing.T) {
-	s := newTestStore(t)
-	inst := fixtureInstance(t, s, "kavita")
-
-	if _, _, err := s.BindContainers(t.Context(), inst, SystemUserID, []CatalogueContainer{
-		{RemoteID: "1", Name: "Fiction", Kind: "book"},
-		{RemoteID: "9", Name: "Fiction (Comics)", Kind: "book"},
-	}); err != nil {
-		t.Fatalf("BindContainers (books): %v", err)
-	}
-	sib, skipped, err := s.BindContainers(t.Context(), inst, SystemUserID, []CatalogueContainer{
+	both, _, err := s.BindContainers(t.Context(), inst, SystemUserID, []CatalogueContainer{
 		{RemoteID: "1", Name: "Fiction", Kind: "comic"},
 	})
 	if err != nil {
-		t.Fatalf("BindContainers (comic): %v", err)
+		t.Fatalf("BindContainers (comic, accepted): %v", err)
 	}
-	if len(skipped) != 0 {
-		t.Fatalf("the fallback must still bind, not skip: %+v", skipped)
-	}
-	if n, _ := libraryNameSlug(t, s, sib["1"].LibraryID); n != "Fiction (2)" {
-		t.Errorf("the taken qualifier fell back to %q, want \"Fiction (2)\" — the qualifier "+
-			"is itself taken, so none is left to be meaningful and the ordinal is correct here", n)
+	if both["1"].NoLibrary || both["1"].LibraryID == first["1"].LibraryID {
+		t.Errorf("the comic container resolved to %+v, want the comic library and not the "+
+			"book one — `AND l.kind = ?` on step 1 is what keeps the two apart", both["1"])
 	}
 }
 
@@ -1404,10 +1369,37 @@ func TestAQualifiedNameThatIsItselfTakenFallsBackRatherThanInventingARule(t *tes
 // land in a library of the right kind — and from the Libraries screen that looks
 // like one library emptying and another appearing, with nothing saying why. The
 // row is the why.
+//
+// ⚠️ THE FIXTURE IS NARROWER THAN IT WAS, and the narrowing is a fact about
+// ADR-0048 rather than about this row. noteKindChange is reached from step 2 —
+// the container JOINS a library of the new kind — and step 2 can only join a
+// library that EXISTS. Before ADR-0048 the retype created one, so every retype
+// wrote a row; now a retype with no library at the new kind simply leaves the
+// items unfiled, and there is no destination to report them moving to. So this
+// test builds the state the row still fires on: a library of the new kind that
+// somebody accepted, whose name the container matches.
 func TestAContainerWhoseKindChangedIsRecorded(t *testing.T) {
 	s := newTestStore(t)
 	inst := fixtureInstance(t, s, "kavita")
 
+	// The container is bound at `comic`, into a library whose name is NOT the
+	// container's — so the join at the new kind is decided by the container name
+	// alone, which is what step 2 reads.
+	if _, err := s.AcceptLibraries(t.Context(), OwnerScope(SystemUserID), SystemUserID,
+		[]LibraryAcceptance{
+			{
+				Name: "Old Comics", Kind: "comic", ManagedBy: "user",
+				Sources: []AcceptedSource{{
+					ServiceInstanceID: inst, ContainerKind: "remote_library",
+					ContainerRef: "1", ContainerIdentity: "Graphic Novels",
+				}},
+			},
+			// The destination: a `book` library the user has, named for the
+			// container, with no source of its own yet.
+			{Name: "Graphic Novels", Kind: "book", ManagedBy: "user"},
+		}); err != nil {
+		t.Fatalf("accept the fixture libraries: %v", err)
+	}
 	first, _, err := s.BindContainers(t.Context(), inst, SystemUserID, []CatalogueContainer{
 		comicContainer("1", "Graphic Novels"),
 	})
@@ -1416,8 +1408,7 @@ func TestAContainerWhoseKindChangedIsRecorded(t *testing.T) {
 	}
 	if n := count(t, s, `SELECT COUNT(*) FROM sync_report WHERE kind = ?`,
 		SyncReportContainerKindChanged); n != 0 {
-		t.Fatalf("a FIRST import wrote %d kind-change rows; a container nobody bound before "+
-			"has not changed kind", n)
+		t.Fatalf("a bind at the kind it was already bound at wrote %d kind-change rows", n)
 	}
 
 	// The retype: same container, the adapter now decides `book`.
@@ -1480,20 +1471,24 @@ func TestAContainerWhoseKindChangedIsRecorded(t *testing.T) {
 // difference is entirely in WHO ASKED, which is why bindReason exists. A row
 // here would report a design as an incident, on the first comic of every mixed
 // library, forever.
+//
+// ⚠️ THE SIBLING IS NO LONGER MINTED AT ALL (ADR-0048) — the comic gets a
+// proposal instead — so this test now asserts the same silence over a path that
+// creates nothing. That is not redundant: bindReason still routes this call, and
+// a future step 2 join at the sibling kind would fire the row through exactly
+// this path.
 func TestTheSiblingMintIsNotReportedAsAKindChange(t *testing.T) {
 	s := newTestStore(t)
 	inst := fixtureInstance(t, s, "kavita")
 
-	binds, _, err := s.BindContainers(t.Context(), inst, SystemUserID, []CatalogueContainer{
-		{RemoteID: "1", Name: "Fiction", Kind: "book"},
-	})
-	if err != nil {
-		t.Fatalf("BindContainers: %v", err)
-	}
-	// The lazy mint, through the path that actually performs it: one comic issue
-	// whose parent series is a `comic` under a `book` container's binding.
+	binds := acceptedBind(t, s, inst, CatalogueContainer{RemoteID: "1", Name: "Fiction", Kind: "book"})
+
+	// The lazy resolve, through the path that used to perform the mint: one comic
+	// issue whose parent series is a `comic` under a `book` container's binding.
+	var sib CatalogueBinding
 	if err := s.db.Write(t.Context(), func(ctx context.Context, tx *sql.Tx) error {
-		_, err := parentBinding(ctx, tx, inst, binds["1"], "1", CatalogueParent{
+		var err error
+		sib, err = parentBinding(ctx, tx, inst, binds["1"], "1", CatalogueParent{
 			RemoteID: "s1", Kind: "comic", Title: "A Series",
 		}, bindCache{})
 		return err
@@ -1502,12 +1497,15 @@ func TestTheSiblingMintIsNotReportedAsAKindChange(t *testing.T) {
 	}
 	if n := count(t, s, `SELECT COUNT(*) FROM sync_report WHERE kind = ?`,
 		SyncReportContainerKindChanged); n != 0 {
-		t.Errorf("the sibling mint wrote %d kind-change rows; a mixed container holding two "+
+		t.Errorf("the sibling resolve wrote %d kind-change rows; a mixed container holding two "+
 			"kinds is ADR-0066 decision 5's design, not a change", n)
 	}
-	if n := count(t, s,
-		`SELECT COUNT(*) FROM library WHERE kind = 'comic' AND name = 'Fiction (Comics)'`); n != 1 {
-		t.Errorf("the mint produced %d 'Fiction (Comics)' libraries, want 1", n)
+	if !sib.NoLibrary {
+		t.Errorf("the comic series resolved to library %d; the sibling is a proposal now",
+			sib.LibraryID)
+	}
+	if n := count(t, s, `SELECT COUNT(*) FROM library WHERE kind = 'comic'`); n != 0 {
+		t.Errorf("the resolve produced %d comic libraries, want 0", n)
 	}
 }
 
@@ -1517,28 +1515,36 @@ func TestTheSiblingMintIsNotReportedAsAKindChange(t *testing.T) {
 //
 // A provisional container's empty library is retyped in place rather than
 // getting a sibling (bindProvisional) — that is what makes a comics-only
-// BookOrbit container ONE library named for the container instead of an empty
-// `Comics` beside a `Comics (Comics)`. But `library` is joined by NAME and KIND
-// (bindOneContainer step 2), so a Kavita container and a BookOrbit container
-// that agree on both are ONE library with TWO `library_source` rows — and
-// retyping it on one container's evidence would change the kind out from under
-// the other, silently, on a library the other service is still filling.
+// BookOrbit container ONE library named for the container. But `library` is
+// joined by NAME and KIND (bindOneContainer step 2), so a Kavita container and a
+// BookOrbit container that agree on both are ONE library with TWO
+// `library_source` rows — and retyping it on one container's evidence would
+// change the kind out from under the other, silently, on a library the other
+// service is still filling.
 //
-// The refusal is the ordinary path, not an error: the sibling is minted instead,
-// which is exactly what the code did before provisional kinds existed.
+// The refusal is the ordinary path, not an error. ⚠️ WHAT IT FALLS BACK TO HAS
+// CHANGED: it used to mint the sibling, and since ADR-0048 it falls through to a
+// proposal. The refusal itself — the shared library keeps its kind — is what
+// this test is for, and it is untouched.
 func TestAProvisionalRetypeRefusesALibraryTWOCONTAINERSFEED(t *testing.T) {
 	s := newTestStore(t)
 	kav := fixtureInstance(t, s, "kavita")
 	bo := fixtureInstance(t, s, "bookorbit")
 
-	// Kavita names the kind, so its container is NOT provisional.
-	if _, _, err := s.BindContainers(t.Context(), kav, SystemUserID, []CatalogueContainer{
-		{RemoteID: "7", Name: "Comics", Kind: "book"},
-	}); err != nil {
-		t.Fatalf("BindContainers(kavita): %v", err)
+	// ONE accepted library fed by BOTH containers — §17.8's merge, which is what
+	// the bind path used to reach by joining on the name key.
+	if _, err := s.AcceptLibraries(t.Context(), OwnerScope(SystemUserID), SystemUserID,
+		[]LibraryAcceptance{{
+			Name: "Comics", Kind: "book", ManagedBy: "user",
+			Sources: []AcceptedSource{
+				{ServiceInstanceID: kav, ContainerKind: "remote_library",
+					ContainerRef: "7", ContainerIdentity: "Comics"},
+				{ServiceInstanceID: bo, ContainerKind: "remote_library",
+					ContainerRef: "7", ContainerIdentity: "Comics"},
+			},
+		}}); err != nil {
+		t.Fatalf("accept the shared library: %v", err)
 	}
-	// BookOrbit's container has the same name and the fallback kind, so it JOINS
-	// that library rather than creating a second one. Both now feed it.
 	binds, _, err := s.BindContainers(t.Context(), bo, SystemUserID, []CatalogueContainer{
 		{RemoteID: "7", Name: "Comics", Kind: "book", KindProvisional: true},
 	})
@@ -1546,14 +1552,19 @@ func TestAProvisionalRetypeRefusesALibraryTWOCONTAINERSFEED(t *testing.T) {
 		t.Fatalf("BindContainers(bookorbit): %v", err)
 	}
 	shared := binds["7"].LibraryID
+	if binds["7"].NoLibrary || shared == 0 {
+		t.Fatalf("the shared library was not resolved: %+v", binds["7"])
+	}
 	if n := count(t, s, `SELECT COUNT(*) FROM library_source WHERE library_id = ?`, shared); n != 2 {
 		t.Fatalf("library %d has %d source rows, want the 2 this fixture is about", shared, n)
 	}
 
 	// A comic is now reached in the BookOrbit walk. The library is empty and
 	// auto-managed — every retype guard but the source count is satisfied.
+	var sib CatalogueBinding
 	if err := s.db.Write(t.Context(), func(ctx context.Context, tx *sql.Tx) error {
-		_, err := parentBinding(ctx, tx, bo, binds["7"], "7", CatalogueParent{
+		var err error
+		sib, err = parentBinding(ctx, tx, bo, binds["7"], "7", CatalogueParent{
 			RemoteID: "s1", Kind: "comic", Title: "A Series",
 		}, bindCache{})
 		return err
@@ -1571,11 +1582,12 @@ func TestAProvisionalRetypeRefusesALibraryTWOCONTAINERSFEED(t *testing.T) {
 			"container too, and one container's evidence must not retype a library the "+
 			"other is still filling", kind)
 	}
-	if n := count(t, s,
-		`SELECT COUNT(*) FROM library WHERE kind = 'comic' AND name = 'Comics (Comics)'`); n != 1 {
-		t.Errorf("the refusal produced %d 'Comics (Comics)' libraries, want 1 — refusing to "+
-			"retype falls back to the sibling mint, which is what the code did before "+
-			"provisional kinds existed", n)
+	if !sib.NoLibrary {
+		t.Errorf("the refusal produced library %d; falling through now yields a proposal",
+			sib.LibraryID)
+	}
+	if n := count(t, s, `SELECT COUNT(*) FROM library WHERE kind = 'comic'`); n != 0 {
+		t.Errorf("the refusal produced %d comic libraries, want 0", n)
 	}
 }
 
@@ -1628,9 +1640,17 @@ func observations(t *testing.T, s *Store, instanceID int64) map[string][]contain
 //   - DECLINED (Kind == "") — skipped by the bind loop's `continue`, so an
 //     observation written after it would be missing exactly the containers
 //     §17.8's `Decision` column has to render.
-//   - UNBINDABLE — rolled back to its savepoint, so an observation written
-//     inside it would go with the rollback and the container would read as
-//     never reported.
+//   - UNTYPABLE — a kind library.kind's CHECK does not permit, so no proposal
+//     for it can ever be accepted. It is still a container the upstream reported
+//     and §17.8 still renders it, with a reason.
+//
+// ⚠️ THE THIRD FATE USED TO BE "ROLLED BACK TO ITS SAVEPOINT", and it is not any
+// more: with no create in the bind path, an unknown kind violates no constraint
+// (see TestAnUnknownKindNoLongerSkipsAContainer). The observation is still
+// written BEFORE the savepoint, deliberately, so that a bind which does roll
+// back cannot take the record of what upstream said with it — but no reachable
+// error produces that rollback today, so this test cannot exercise the position
+// and does not claim to.
 func TestBindContainersObservesEveryContainerItSaw(t *testing.T) {
 	s := newTestStore(t)
 	inst := fixtureInstance(t, s, "kavita")
@@ -1641,11 +1661,8 @@ func TestBindContainersObservesEveryContainerItSaw(t *testing.T) {
 		{RemoteID: "3", Name: "Sheet Music", Kind: "score"},
 		{RemoteID: "4", Name: "Ebooks", Kind: "book", KindProvisional: true},
 	}
-	if _, skipped, err := s.BindContainers(t.Context(), inst, SystemUserID, cs); err != nil {
+	if _, _, err := s.BindContainers(t.Context(), inst, SystemUserID, cs); err != nil {
 		t.Fatalf("BindContainers: %v", err)
-	} else if len(skipped) != 1 || skipped[0].RemoteID != "3" {
-		t.Fatalf("skipped = %+v, want exactly the unbindable container — without it this "+
-			"test never exercises the savepoint rollback it exists for", skipped)
 	}
 
 	got := observations(t, s, inst)

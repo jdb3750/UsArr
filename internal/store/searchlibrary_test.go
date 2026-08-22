@@ -34,13 +34,13 @@ func newSearchFixture(t *testing.T) *searchFixture {
 	s := newTestStore(t)
 	inst := fixtureInstance(t, s, "kavita")
 
-	binds, _, err := s.BindContainers(t.Context(), inst, SystemUserID, []CatalogueContainer{
-		{RemoteID: "1", Name: "Manga", Kind: "comic"},
-		{RemoteID: "2", Name: "Novels", Kind: "book"},
-	})
-	if err != nil {
-		t.Fatalf("BindContainers: %v", err)
-	}
+	// ACCEPTED, not created by the bind (ADR-0048). This corpus is about library
+	// SCOPE — enabled, include_in_search, the visibility predicate — so its
+	// libraries have to exist, and Accept is the only path that makes one.
+	binds := acceptedBind(t, s, inst,
+		CatalogueContainer{RemoteID: "1", Name: "Manga", Kind: "comic"},
+		CatalogueContainer{RemoteID: "2", Name: "Novels", Kind: "book"},
+	)
 
 	f := &searchFixture{store: s, instance: inst, libraries: map[string]int64{}}
 	for remote, b := range binds {
@@ -72,6 +72,13 @@ func (f *searchFixture) apply(t *testing.T, items ...CatalogueItem) {
 		})
 	if err != nil {
 		t.Fatalf("BindContainers: %v", err)
+	}
+	// The libraries were accepted by newSearchFixture, so this bind RESOLVES
+	// them at step 1 rather than creating anything.
+	for ref, b := range binds {
+		if b.NoLibrary {
+			t.Fatalf("container %q lost its accepted library: %+v", ref, b)
+		}
 	}
 	if _, err := f.store.ApplyCatalogueBatch(t.Context(), f.instance, binds, items, testNow); err != nil {
 		t.Fatalf("ApplyCatalogueBatch: %v", err)
