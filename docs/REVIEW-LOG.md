@@ -28281,3 +28281,138 @@ closure **verified, not assumed**. Every entry above closes on a **push-fact**: 
 carries the corrected comment, on `origin/main`, named. ⚠️ **A landing that opens one of these files
 and does not carry the correction has fired the trigger without discharging it**, and the entry stays
 open with that recorded against it rather than being re-triggered later as if nothing had happened.
+
+---
+
+## LS-401 — ADR-0048 clause 4's three supporting measurements read against the tree: all three are defective, and they are defective in three different ways
+
+**Target:** [ADR-0048](./DECISIONS.md#adr-0048) clause 4, *"Existing `managed_by = 'auto'` rows
+are DECLARED accepted on upgrade"* — `docs/DECISIONS.md`, numbered item 4 of that ADR's Decision,
+whose text is not edited by this pass. **Measured against the tree at `09ef0c0b`**
+(2026-08-22T06:44:58Z), the base this landing sits on. **Authority:** `docs/ARCHITECTURE.md` §6,
+§17.8, [ADR-0048](./DECISIONS.md#adr-0048), [ADR-0078](./DECISIONS.md#adr-0078).
+
+**The pass in one sentence.** Clause 4 is a decision resting on three assertions of fact; the
+decision is untouched and each assertion fails, one by a commit that landed after it, one by having
+been false before the clause's own earliest readable tree, and one by a counterexample the
+repository itself ships — **so each takes a dated rider and none of the three is rewritten**.
+
+⚠️ **The DECISION is not disturbed by any of this, and every rider says so in its own words.**
+Existing `managed_by = 'auto'` rows are still declared accepted on upgrade; there is still no
+migration file, no `UPDATE` and no backfill; the honest cost in the clause's last sentence stands.
+What moved is the evidence, not the ruling.
+
+### LS-401.1 🚩 The writer claim — *"the sole Go writer is one `INSERT` with the literal `'auto'`"* (`internal/store/catalogue.go:487-489`) — **applied as a dated rider; the QUANTIFIER survives and the SENTENCE does not**
+
+**The quantifier half holds.** `grep -rnE 'INSERT INTO library\b' --include='*.go' internal/ cmd/`,
+filtered to non-test files, returns exactly one statement — `resolveAcceptedLibrary`'s insert at
+`internal/store/proposals.go:1230-1235`, reached from `AcceptLibraries`. The only other non-test
+match is prose: a transcription of the migration's seed in a comment at
+`internal/store/searchlibrary.go:353`, which is not a statement.
+
+🚩 **The sentence half is wrong, and it is the SENTENCE rather than its quantifier.** That insert
+binds a caller-supplied `a.ManagedBy` (`internal/store/proposals.go:1235`), which `acceptOne` has
+already narrowed to `'auto'` or `'user'`, so the column's value is a parameter and `'user'` is
+reachable. **There is no literal left to name.** A quantifier cannot be weakened into that: the
+clause named a constant and the tree has none.
+
+**Falsified by `a83ff9c`** — *"feat: the import stops creating libraries; an unaccepted container
+files nothing"*, 2026-08-22T01:12:57Z — which removed the bind-path `INSERT INTO library …
+VALUES (?,?,?,?, 'auto', 1, 1)` the clause was reading. It is present at
+`09ef0c0b:internal/store/catalogue.go` before that removal and absent after it.
+
+🚩 **And the citation is now a DEAD POINTER, which is the worse of the two failures.** `a83ff9c`
+rewrote that file; `internal/store/catalogue.go:487-489` now lands inside `slugify`, which opens at
+`internal/store/catalogue.go:473` and touches `managed_by` nowhere. A reader following the citation
+arrives at unrelated code rather than at a removal. **The live pointer is
+`internal/store/proposals.go:1230-1235`**, and the rider tells the reader to re-derive it with the
+grep rather than trust the line numbers.
+
+### LS-401.2 🚩 The UPDATE claim — *"there is no `UPDATE library` anywhere in non-test Go"* — **applied as a dated rider; the SENTENCE was already false BEFORE this landing, and this landing made it less false**
+
+It is stated as a universal, so there is no quantifier to weaken. **What is measured is that this
+landing is not its falsifier.**
+
+* **At `7accaf92eeff` (2026-08-20T07:23:41Z) the tree already carried two**:
+  `UPDATE library SET name = ?, slug = ?` at `7accaf92eeff:internal/store/catalogue.go:924` and
+  `UPDATE library SET kind = ?` at `7accaf92eeff:internal/store/catalogue.go:1027`. **That commit is
+  a merge and is cited purely as a tree state**, never as a commit that did anything to these
+  statements.
+* **At this landing's base `09ef0c0b` there were four** — those two, plus
+  `internal/store/reconcile.go:709` and `internal/store/reconcile.go:730`, both introduced by
+  `0adfe1fa` (2026-08-21T04:21:44Z, *"feat: channel 4's deletion pass…"*), an **ancestor of that
+  base** and so not this landing's.
+* **Three remain, and they are these three**: `internal/store/catalogue.go:1136`
+  (`bindProvisional`'s retype, `SET kind`), `internal/store/reconcile.go:709` (`sweepOrphans`
+  setting `orphaned_at`) and `internal/store/reconcile.go:730` (`sweepOrphans` clearing it).
+  Re-derive rather than trust the list: `grep -rnE 'UPDATE library\b' --include='*.go' internal/
+  cmd/`, filtered to non-test files, returns those three plus the explanatory comment at
+  `internal/store/libraries.go:99-107`. **This landing removed one and added none** — `a83ff9c` took
+  the `name`/`slug` statement out with the rest of import-time creation, four to three.
+
+⚠️ **WHEN THE FIRST OF THEM WAS INTRODUCED IS NOT DATED, AND THAT LIMIT IS THE MEASUREMENT'S RATHER
+THAN THE REPOSITORY'S.** This clone is shallow: `git rev-parse --is-shallow-repository` is `true`,
+its oldest reachable commit is `7accaf92eeff`, and `git log -S'UPDATE library SET kind' --
+internal/store/catalogue.go` bottoms out at that same merge because the earliest readable state
+already carried both statements. **So whether the sentence was true on 2026-08-17, this ADR's own
+date, is not claimed either way** — a reader with full history can settle it and this entry cannot.
+
+**The claim had propagated into code, which is the honest reason this site was missed.** At
+`7accaf92eeff:internal/store/libraries.go:96` the same false sentence sat as a code comment in a
+tree that already falsified it. `89e7fcc` (2026-08-22T04:54:30Z) corrected the comment — now at
+`internal/store/libraries.go:99-107`, where it also records that an earlier version miscounted four
+— **but it corrected the comment only**, which is why the rider is still owed against the ADR after
+the code was fixed.
+
+✅ **The conclusion this sentence carries survives its own falsity, which is why the clause is
+annotated rather than rewritten.** *"No row has ever left the state it was inserted in"* is a claim
+about `managed_by`, and **none of the three statements writes `managed_by`**: `catalogue.go:1136`
+sets `kind`, the two in `reconcile.go` set `orphaned_at` and `updated_at`, and the one this landing
+removed set `name` and `slug`.
+
+### LS-401.3 🚩 The first-connect claim — *"every one of them was created by the binding on a first connect"* — **applied as a dated rider; the QUANTIFIER was wrong WHEN WRITTEN, and NO commit is cited as its falsifier because there is none**
+
+🚩 **The counterexample is one the repository itself creates.** Migration 0005 seeds `library.id 0`,
+`'Unfiled'`, with `managed_by 'auto'` —
+`internal/db/migrations/00005_library_sync.sql:597-598`, `INSERT INTO library (id, user_id, name,
+slug, kind, managed_by, enabled, include_in_search) VALUES (0, 0, 'Unfiled', 'unfiled', 'movie',
+'auto', 1, 1)`. So at least one `'auto'` row in **every** install was written by a merged migration
+and not by the binding on a first connect.
+
+**That the counterexample predates the clause is established from the ADR itself rather than from
+git history**, this clone being shallow: clause 3 cites
+`internal/db/migrations/00005_library_sync.sql:565` for the `managed_by` column, so the migration
+existed on 2026-08-17, the clause's own date. A merged migration is never edited. **This is a
+quantifier that was wrong when written, not one a later landing ended** — which is why the rider
+names no falsifying commit and says so in terms.
+
+✅ **What the clause DECIDES is unharmed.** Declaring library 0 accepted changes nothing: it is a
+search-scope sentinel the listing reads exclude in SQL — `listLibrariesSQL` binds `l.id <> ?`
+(`internal/store/libraries.go:558`) from `UnfiledLibraryID` (`internal/store/libraries.go:542`).
+
+⚠️ **The remainder is UNMEASURABLE HERE, and saying so is the answer rather than a verdict
+withheld.** For every `managed_by = 'auto'` row other than the seed, the claim is about rows in
+deployed databases on other people's machines. No state in this repository can falsify it — there is
+no such database in the tree, and the code that would have created those rows has been removed, so
+even the code path is no longer evidence of what a given install did. **It is left standing as
+unverifiable rather than marked wrong**, on the precedent `LS-399.8` set for a neighbouring claim.
+
+### What this entry IS, and why the riders carry no Status mark
+
+**This entry is the licensing record the three riders cite.** Each opens
+`RIDER, 2026-08-22 (docs/REVIEW-LOG.md, LS-401, which records the measurement licensing this note)`.
+⚠️ **The address is plain text and not a markdown anchor, deliberately**: an anchor into another
+file is renderer-dependent and fails silently, whereas the `LS-401` id is grep-able from any tree.
+Do not convert it to a link.
+
+⚠️ **No Status-line mark was added to ADR-0048, and that is the rule rather than an omission.** A
+Status mark records a **superseding decision**; nothing here supersedes ADR-0048 — its five clauses
+are unchanged and clause 4's ruling is intact. **A factual correction rides as a dated rider**, per
+this file's convention and the precedent `LS-399.8` states for ADR-0078.
+
+📌 **This was reported before it was authorised, and the report is the reason the riders exist.** The
+2026-08-22 landing pass filed under LS-399 recorded that ADR-0048 clause 4 *"cites
+`catalogue.go:487-489` as the sole Go writer"* and that the reading *"was right about its own date
+and is now stale"*, but ruled it **reported rather than applied**, ADR-0078's header not naming it —
+per the no-unauthorised-rider rule. **LS-401 is the authorisation that finding was waiting on**, and
+the three riders discharge it.

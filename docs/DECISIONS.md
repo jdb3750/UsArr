@@ -6942,6 +6942,108 @@ Five clauses, each with what it rests on:
    **No migration file, no `UPDATE`, no backfill.** The honest cost is stated rather than hidden: an
    install that auto-created a library the owner would have declined keeps it, and the remedy is the
    Libraries screen's own delete once §17.8 ships.
+   > ⚠️ **RIDER, 2026-08-22 (docs/REVIEW-LOG.md, LS-401, which records the measurement licensing
+   > this note). THE FIRST CITED MEASUREMENT WAS TRUE WHEN WRITTEN; PART OF IT IS NOW WRONG AS A
+   > SENTENCE, AND ITS POINTER NO LONGER LANDS ON CODE.** Taken per half, because the two halves
+   > failed differently. **The quantifier half — *"the sole Go writer is one `INSERT`"* —
+   > SURVIVES.** Measured 2026-08-22, `grep -rnE 'INSERT INTO library\b' --include='*.go'
+   > internal/ cmd/` filtered to non-test files returns exactly one statement, and it is still
+   > one: `AcceptLibraries`' insert at `internal/store/proposals.go:1230-1235`, reached through
+   > `resolveAcceptedLibrary`. ⚠️ **The other half — *"with the literal `'auto'`"* — is the
+   > SENTENCE being wrong, not its quantifier.** There is no literal left to name: that insert
+   > binds a caller-supplied `a.ManagedBy` (`internal/store/proposals.go:1235`), which `acceptOne`
+   > has already narrowed to `'auto'` or `'user'` (`internal/store/proposals.go:1093-1099`), so
+   > the column's value is now a parameter and `'user'` is reachable. **A quantifier cannot be
+   > weakened into that**; the clause named a constant and the tree no longer has one.
+   >
+   > ⚠️ **What ended it, by measurement rather than by prediction.** `a83ff9c` — *"feat: the import
+   > stops creating libraries; an unaccepted container files nothing"*, 2026-08-22T01:12:57Z, part of
+   > the §17.8 Accept step work — removed exactly the two lines this clause was reading, then
+   > `INSERT INTO library (user_id, name, slug, kind, managed_by, enabled, include_in_search)` /
+   > `VALUES (?,?,?,?, 'auto', 1, 1)` in `internal/store/catalogue.go`. They are present at
+   > `09ef0c0b:internal/store/catalogue.go:916-917` and gone at `a83ff9c`. **The falsifier is that
+   > commit, deliberately named as a commit rather than as a span of work**: a span whose end is a
+   > branch tip stops being a true citation the moment anything further lands.
+   >
+   > ⚠️ **AND THE CITATION `internal/store/catalogue.go:487-489` IS NOW A DEAD POINTER — the same
+   > commit is what moved it.** `a83ff9c` rewrote that file (131 insertions, 303 deletions), and as
+   > measured 2026-08-22 lines 487-489 land **inside `slugify`**, which begins at
+   > `internal/store/catalogue.go:473` and has nothing to do with `managed_by`. A reader following
+   > the citation arrives at unrelated code rather than at a removal, which is the worse of the two
+   > failures. **The live pointer is `internal/store/proposals.go:1230-1235`** — and read it off the
+   > tree rather than off this line, with the grep above.
+   >
+   > **What clause 4 DECIDES is untouched by all of this.** Existing `managed_by = 'auto'` rows are
+   > still **declared** accepted on upgrade; there is still **no migration file, no `UPDATE`, no
+   > backfill**; and the honest cost stated in the clause's last sentence stands unchanged. What
+   > moved is one of the three supporting measurements, not the decision it supports.
+
+   > ⚠️ **RIDER, 2026-08-22 (docs/REVIEW-LOG.md, LS-401, which records the measurement licensing
+   > this note). THIS SENTENCE WAS ALREADY FALSE BEFORE THE LANDING THAT PROMPTED THE NOTE ABOVE,
+   > AND THAT LANDING MADE IT LESS FALSE RATHER THAN MORE.** It is stated as a universal — *"there
+   > is no … anywhere"* — so there is no quantifier to weaken: **the SENTENCE is wrong**, and the
+   > only open question is its date. Measured:
+   >
+   > - **At commit `7accaf92eeff` (2026-08-20T07:23:41Z) the tree already carried two**:
+   >   `UPDATE library SET name = ?, slug = ?` at `internal/store/catalogue.go:924` and
+   >   `UPDATE library SET kind = ?` at `internal/store/catalogue.go:1027`. That commit is a
+   >   **merge**, and it is cited here purely as a **tree read** — a state anyone can check out and
+   >   confirm, in any clone — never as a commit that did something to these statements.
+   > - At this landing's base `09ef0c0b` (2026-08-22T06:44:58Z) there were four — those two, plus
+   >   `internal/store/reconcile.go:709` and `:730`, both introduced by `0adfe1fa`
+   >   (2026-08-21T04:21:44Z, *"feat: channel 4's deletion pass…"*), which is an **ancestor of that
+   >   base** and so predates this landing.
+   > - **Measured 2026-08-22, three remain**: `internal/store/catalogue.go:1136`
+   >   (`bindProvisional`'s retype), `internal/store/reconcile.go:709` and
+   >   `internal/store/reconcile.go:730` (`sweepOrphans` setting and clearing `orphaned_at`).
+   >   Re-derive rather than trust the list:
+   >   `grep -rnE 'UPDATE library\b' --include='*.go' internal/ cmd/`, filtered to non-test files,
+   >   returns those three statements plus the explanatory comment at
+   >   `internal/store/libraries.go:99-107`. **This landing removed one and added none** —
+   >   `a83ff9c` took the `name`/`slug` statement out with the rest of import-time creation.
+   >
+   > ⚠️ **WHEN THE FIRST OF THEM WAS INTRODUCED IS NOT DATED HERE, AND THAT LIMIT BELONGS TO THE
+   > MEASUREMENT, NOT TO THE REPOSITORY.** The clone this was measured in is shallow: no commit
+   > introducing either `catalogue.go` statement was reachable from it, because the earliest state it
+   > could read already carried both. So whether the sentence was true on 2026-08-17, this ADR's own
+   > date, is **not claimed either way** — a reader with full history can settle it, and this note
+   > cannot.
+   >
+   > **The claim had propagated into code, which is the honest reason this site was missed.** At
+   > `7accaf92eeff` the same false sentence sat as a code comment at
+   > `internal/store/libraries.go:96`, in a tree that already falsified it; `89e7fcc`
+   > (2026-08-22T04:54:30Z) corrected that comment — now at `internal/store/libraries.go:99-107`,
+   > where it also records that an earlier version miscounted four — but it corrected the comment
+   > only, which is why this rider is still owed against the ADR after the code was already fixed.
+   >
+   > **The conclusion this sentence was carrying survives its own falsity, which is why the clause is
+   > annotated rather than rewritten.** *"No row has ever left the state it was inserted in"* is a
+   > claim about `managed_by`, and **none of the three statements writes `managed_by`**: the one at
+   > `catalogue.go:1136` sets `kind`, the two in `reconcile.go` set `orphaned_at` and `updated_at`,
+   > and the one this landing removed set `name` and `slug`.
+
+   > ⚠️ **RIDER, 2026-08-22 (docs/REVIEW-LOG.md, LS-401, which records the measurement licensing
+   > this note). ITS QUANTIFIER WAS WRONG WHEN WRITTEN, AND NO LANDING IS CITED AS ITS FALSIFIER
+   > BECAUSE THERE IS NONE; THE REMAINDER IS NOT SOMETHING THIS REPOSITORY CAN SETTLE.** Two
+   > parts, and only the first is measurable here.
+   >
+   > ⚠️ **The QUANTIFIER, not the sentence.** *"Every one of them"* has a counterexample the
+   > repository itself creates: migration 0005 seeds `library.id = 0`, `'Unfiled'`, with
+   > `managed_by = 'auto'` — `internal/db/migrations/00005_library_sync.sql:597-598` — so at least
+   > one `'auto'` row in **every** install was written by a merged migration and not by the binding
+   > on a first connect. That migration is older than the clause and a merged migration is never
+   > edited, so the counterexample was already in place on the day the clause was written: this is a
+   > quantifier that was **wrong when written**, not one a later landing ended. What the clause
+   > DECIDES is unharmed by it: declaring library 0 accepted changes nothing, because it is a
+   > search-scope sentinel that the listing reads exclude in SQL — `listLibrariesSQL` binds
+   > `l.id <> ?` from `UnfiledLibraryID` at `internal/store/libraries.go:542,558`.
+   >
+   > **The remainder is UNMEASURABLE HERE, and saying so is the honest answer rather than a verdict
+   > withheld.** For every `managed_by = 'auto'` row other than the seed, the claim is about rows in
+   > deployed databases on other people's machines. **No state in this repository can falsify it** —
+   > there is no such database in the tree, and the code that would have created those rows has since
+   > been removed, so even the code path is no longer evidence of what a given install did. It is
+   > left standing as unverifiable rather than marked wrong.
 
 5. **The connect probe may call upstream, and that is not an exception to replica-not-proxy. This is
    stated here so nobody flags it later.** `CLAUDE.md` principle 1 and `ARCHITECTURE.md` §2 bind
