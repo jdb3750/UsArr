@@ -1786,12 +1786,29 @@ head('9. The webfont actually resolves');
 }
 
 /* --- 1b. the copy bans, over rendered chrome text ------------------------ */
-head('1b. §13 copy bans, over rendered chrome text (a <td> is data, not copy)');
-/* Structural exclusion #3. The copy rules govern the product's own voice.
- * `<td>` content is data — sample data here, database rows in the product —
- * and "BOOM! Studios" is a publisher, not a string UsArr wrote. That exemption
- * is only safe because prose is kept out of cells, which is check 5 above; the
- * two rules hold each other up. */
+head('1b. §13 copy bans, over rendered chrome text, cells included');
+/* Structural exclusion #3, AND THE ONE THAT USED TO BE A HOLE. The copy rules
+ * govern the product's own voice, and some rendered strings are a substituted
+ * value rather than something UsArr wrote — "BOOM! Studios" is a publisher.
+ *
+ * This used to be spelt `<td>`: every string in every cell, text and attribute
+ * alike, was outside the corpus. The comment that stood here said the blanket
+ * exemption "is only safe because prose is kept out of cells, which is check 5
+ * above; the two rules hold each other up." That was false as measured. Check 5
+ * is a ROW-HEIGHT ceiling, it is deliberately loose on three of the five screens
+ * (CEILING_COMPACT: 60/80/80 on home/search/requests against 49 on services and
+ * libraries), and it skips Services' `annex` state outright — none of which is a
+ * ban on prose in a cell. Prose was in the cells: dropping the exclusion took the
+ * corpus from 6,908 strings to 13,411, and the 6,503 that appeared are what §13
+ * had never once been applied to, since 1b was written.
+ *
+ * IT IS DECLARED PER SITE NOW: `data-copy="data"` on the element holding a
+ * substituted value, honoured by both corpora, and COUNTED — the number is
+ * printed beside the corpus total, so an opt-out is a thing this check has SEEN
+ * and dismissed rather than a thing it never found. That is check 7's argument
+ * for collecting `[data-roving-optout]`, applied to the same shape of problem.
+ * The exemption now rests on the markup saying which value is data, and on
+ * nothing else: no other check holds it up, and none is asked to. */
 {
   const BANNED_WORDS = ['seamlessly', 'effortlessly', 'powerful', 'simply', 'unlock', 'empower',
     'elevate', 'streamline', 'supercharge', 'robust', 'leverage', 'intuitive', 'blazing',
@@ -1860,10 +1877,12 @@ head('1b. §13 copy bans, over rendered chrome text (a <td> is data, not copy)')
    * nothing — which is precisely the failure that let the title drift.
    *
    * The structural exclusions are the SAME ones the rendered walk uses, and
-   * for the same reason: an attribute inside a <td> is data (a release name,
-   * a timestamp), and .statebar is the mockup's own scaffolding. Applying a
+   * for the same reason: `data-copy="data"` marks a substituted value wherever
+   * it is declared, and .statebar is the mockup's own scaffolding. Applying a
    * different exclusion set to attributes would make the two halves of one
-   * rule disagree about what counts as the product's voice.
+   * rule disagree about what counts as the product's voice — which is what the
+   * old `<td>` spelling did in reverse, exempting a `title=` on a cell and
+   * checking the identical `title=` one element outside it.
    * ------------------------------------------------------------------- */
   const ATTRS = ['aria-label', 'title', 'placeholder', 'alt', 'aria-description',
     'aria-roledescription', 'aria-valuetext', 'aria-placeholder'];
@@ -1894,25 +1913,49 @@ head('1b. §13 copy bans, over rendered chrome text (a <td> is data, not copy)')
   const seenBySource = {};
   const countSource = (src, n) => { seenBySource[src] = (seenBySource[src] || 0) + n; };
 
-  let strings = 0, exempted = 0, glyphs = 0; const bad = [];
+  let strings = 0, exempted = 0, glyphs = 0, dataOptouts = 0; const bad = [];
   /* §17's copy is counted apart from `strings` on purpose. STRING_FLOOR's
-     margin below is DERIVED from the rendered corpus — 6978 − 6750 = 228,
+     margin below is DERIVED from the rendered corpus — 13,411 − 13,200 = 211,
      argued against a 293-string regression — and folding documentation strings
      into that total would move the number the derivation is about while
      claiming the derivation still held. */
   let s17Strings = 0, s17Exempted = 0, s17Bad = 0, s17Glyphs = 0;
-  /* 2000 against 4203 while no panel was ever opened; 5800 against 6685 once
-     the traversal landed; 6750 against 6978 now the unit is a run of inline
-     content rather than a childless block element.
-     THE MARGIN IS DERIVED, NOT ROUNDED. Restoring the old element-based unit
-     costs 293 strings — that is what PG-03's fix is worth, measured on this
-     tree — so a floor with more than 293 of slack is a floor that would sit
-     green through exactly the regression it was moved for. 6978 − 6750 = 228,
-     which is under that and still leaves room for a dozen paragraphs of
-     ordinary editing, since one authored string is counted once per combo it
-     renders in. Both previous figures failed this test: 5800 against 6685 had
+  /* Four floors, each against the corpus MEASURED WHEN IT WAS SET, which is the
+     only tense any of these numbers can be read in: 2000 against 4203 while no
+     panel was ever opened; 5800 against 6685 once the traversal landed; 6750
+     against 6978 when the unit became a run of inline content rather than a
+     childless block element; and 13200 now that a <td> is in the corpus like
+     anything else.
+
+     THE MARGIN IS DERIVED, NOT ROUNDED, and the criterion is this file's own:
+     restoring the pre-PG-03 element-based unit costs 293 strings, so a floor
+     with more than 293 of SLACK — corpus minus floor — would sit green through
+     exactly the regression it was moved for. The working, measured 2026-08-22
+     on the tree that put cells into the corpus:
+
+         13,411   strings read, both installs, every state, every panel pass
+       − 13,200   floor
+       ────────
+            211   slack, against a ceiling of 293, and 82 under it
+
+     SLACK IS DELETION TOLERANCE. The floor fires when strings go missing, so
+     211 is how many can be removed before it does — it is not a budget for
+     additions, which move the count the other way, and one authored string is
+     counted once per combination it renders in.
+
+     293 is carried unchanged from the pre-cells corpus rather than rescaled to
+     the new one. The same regression over a corpus twice the size would cost
+     MORE than 293, so holding the ceiling where it is reads the criterion
+     strictly rather than staling it.
+
+     THE 13,411 IS DATED, NOT LIVE, and it is the only figure here that is a
+     measurement at all. The pass line prints the real count on every run, so
+     restating it in this comment would be a second copy with no way to stay
+     true — which is what happened to the last one: it read "6978" against a
+     tree that had drifted to 6908 by the time anyone counted again. Both
+     earlier margins also failed the criterion outright: 5800 against 6685 had
      885 of slack, enough to lose every group heading twice over. */
-  const STRING_FLOOR = 6750;
+  const STRING_FLOOR = 13200;
 
   /* ---------------------------------------------------------------------
    * §17's own shipping copy, and the laundering channel that was in this rule.
@@ -2059,11 +2102,11 @@ head('1b. §13 copy bans, over rendered chrome text (a <td> is data, not copy)')
 
        Deliberately NOT floored. Every count in this file has a floor because a
        check that matches nothing reads like a check that passed — but that
-       argument is about RULES, not about exemptions of shape. The mockups keep
-       their bare dashes inside `<td>`, which the corpus already excludes as
-       data, so this fires zero times today and firing zero times is the honest
-       answer rather than a stale one. The number is printed regardless, so the
-       day it stops being zero is visible. */
+       argument is about RULES, not about exemptions of shape. The number is
+       printed regardless, which is what makes it readable: it was zero for as
+       long as `<td>` was excluded wholesale, because a bare dash is the mockups'
+       own cell filler and every one of them was in a cell. Cells are in the
+       corpus now, so it counts them. */
     if (t.trim() === '—') { if (isS17) s17Glyphs++; else glyphs++; return; }
     /* ⚠️ The fifteen-word floor is a PROXY for "is this a UI string", and it
        earns its keep only where the corpus MIXES microcopy with prose — the
@@ -2125,32 +2168,37 @@ head('1b. §13 copy bans, over rendered chrome text (a <td> is data, not copy)')
        * structural exclusions the rendered walk uses. `<option>` is collected
        * from a closed menu on purpose: that is the only state it is ever in
        * during this sweep, and it is why the walk could not see it. */
-      const attrs = await page.evaluate(({ s, ATTRS }) => {
+      const attrsRead = await page.evaluate(({ s, ATTRS }) => {
         const out = [];
+        let skipped = 0;
         const root = document.querySelector('#pg-' + s);
         const chrome = [root, document.querySelector('.topbar'), document.querySelector('.sidebar')]
           .filter(Boolean);
         for (const scope of chrome) {
           scope.querySelectorAll('*').forEach((el) => {
             if (el.closest('[hidden]')) return;
-            if (el.closest('td')) return;            /* data, not copy */
             if (el.closest('.statebar')) return;     /* the mockup's own scaffolding */
+            /* The declared opt-out, read once per element and applied to every
+               string the element contributes. Counted, never silent. */
+            const isData = !!el.closest('[data-copy="data"]');
             for (const a of ATTRS) {
               const v = el.getAttribute(a);
               if (v == null) continue;
               const t = v.replace(/\s+/g, ' ').trim();
-              if (t) out.push({ src: a, text: t });
+              if (!t) continue;
+              if (isData) skipped++; else out.push({ src: a, text: t });
             }
             if (el.tagName === 'OPTION' || el.tagName === 'OPTGROUP') {
               const t = (el.tagName === 'OPTION' ? el.textContent : el.label || '')
                 .replace(/\s+/g, ' ').trim();
-              if (t) out.push({ src: 'option', text: t });
+              if (t) { if (isData) skipped++; else out.push({ src: 'option', text: t }); }
             }
           });
         }
-        return out;
+        return { attrs: out, skipped };
       }, { s: screen, ATTRS });
-      for (const a of attrs) {
+      dataOptouts += attrsRead.skipped;
+      for (const a of attrsRead.attrs) {
         countSource(a.src, 1);
         checkCopy(`${where} [${a.src}]`, a.text);
       }
@@ -2203,6 +2251,7 @@ head('1b. §13 copy bans, over rendered chrome text (a <td> is data, not copy)')
          * was the 8 and the 2 of two hidden alternatives run together. A text
          * walk tests each node's own ancestry, so the variants stay apart. */
         const out = [];
+        let skipped = 0;
         const root = document.querySelector('#pg-' + s);
         const BLOCKISH = /^(block|flex|grid|list-item|table-caption)$/;
         const blockOf = (n) => {
@@ -2212,34 +2261,58 @@ head('1b. §13 copy bans, over rendered chrome text (a <td> is data, not copy)')
           return null;
         };
         const w = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
-        let cur = null, run = '';
+        let cur = null, run = '', isData = false;
+        /* One buffer, two destinations. A run that lies inside a declared
+           `data-copy="data"` is COUNTED rather than checked, in exactly the unit
+           the corpus itself uses — a run of inline content, not a text node — so
+           the printed opt-out figure and the printed corpus figure are the same
+           kind of number and can be read against each other. */
         const flush = () => {
           const t = run.replace(/\s+/g, ' ').trim();
-          if (t) out.push(t);
+          if (t) { if (isData) skipped++; else out.push(t); }
           run = '';
         };
         for (let n = w.nextNode(); n; n = w.nextNode()) {
           const p = n.parentElement;
           if (!p) continue;
           /* The SAME structural exclusions as before, applied to the text
-             node's own ancestry. `closest` reaches through inline wrappers, so
-             a word inside `<td><b>…</b></td>` is still data and still exempt. */
+             node's own ancestry. `closest` reaches through inline wrappers, so a
+             word inside `<td><b>…</b></td>` is judged by the cell's own
+             declaration and not by the <b>. */
           if (p.closest('[hidden]')) continue;
-          if (p.closest('td')) continue;              /* data, not copy */
           if (p.closest('.statebar')) continue;       /* the mockup's own scaffolding */
+          /* CUT THE RUN AT A DECORATIVE DUPLICATE, and do not merely drop it.
+             The responsive table layout puts `<span class="stacklabel"
+             aria-hidden="true">Publisher</span>` in front of the cell's value; at
+             1440 that span is `display: none`, but the walk attributes a text
+             node to its nearest BLOCKISH ancestor — the cell — and tests that
+             ancestor's visibility, never the node's own inline chain, so the
+             hidden label was read anyway and welded to what follows it. That is
+             where "PublisherBOOM! Studios", "Items—" and "Sent to—" came from:
+             99 of the 140 violations this rule reported the moment cells entered
+             the corpus were a label and a value run together, and not one of
+             them was a string any user or any screen reader ever gets. The label
+             is already read once from the <th> it duplicates. flush() rather than
+             `continue` so the sides do not weld to each other either. */
+          if (p.closest('[aria-hidden="true"]')) { flush(); continue; }
+          /* The declared opt-out. It cuts the run for the same reason: a
+             substituted value sitting mid-sentence must not take the authored
+             words around it out of the corpus with it. */
+          const nowData = !!p.closest('[data-copy="data"]');
           const b = blockOf(n);
           if (!b || (!b.offsetParent && b.tagName !== 'BODY')) continue;
           /* Whitespace-only nodes are the spaces BETWEEN inline elements. They
              carry no string of their own, but dropping them would weld "and"
              to "<a>the row</a>". They join the current run and are trimmed off
              at the ends by flush(). */
-          if (b !== cur) { flush(); cur = b; }
+          if (b !== cur || nowData !== isData) { flush(); cur = b; isData = nowData; }
           run += n.nodeValue;
         }
         flush();
-        return out;
+        return { text: out, skipped };
       }, screen);
-      for (const t of r) checkCopy(where, t);
+      dataOptouts += r.skipped;
+      for (const t of r.text) checkCopy(where, t);
       }
     }
     await page.selectOption('#pg-' + screen + ' [data-act="state"]', states[0]);
@@ -2248,11 +2321,24 @@ head('1b. §13 copy bans, over rendered chrome text (a <td> is data, not copy)')
   }
   await setInstall(page, 'full');
   const uniq = [...new Set(bad)];
-  if (uniq.length) { fail(`§13 copy: ${uniq.length} violation(s) in user-visible text`); uniq.slice(0, 10).forEach((b) => note(b)); }
+  if (uniq.length) {
+    fail(`§13 copy: ${uniq.length} violation(s) in user-visible text`);
+    /* THE REMEDY TRAVELS WITH THE FAILURE. This rule reads cells as well as
+       chrome, so the author it fires on is often somebody who has just typed a
+       sample value into a mockup and has never read a line of this file. A
+       finding they cannot act on without institutional memory is a finding that
+       gets worked around. Printed above the violations, not below them: ten
+       notes is exactly enough to bury it. */
+    note('remedy: rewrite the string if UsArr wrote it — drop the em dash rather than padding the sentence past fifteen words, and pick a plainer word than the banned one.');
+    note('remedy: if it is a SUBSTITUTED VALUE and not copy — a publisher, a release name, a title from a database — put data-copy="data" on the element that holds it, and only that element. Text and attributes inside it leave the corpus.');
+    note(`remedy: that opt-out is counted, not silent — every skip is printed beside the corpus total on the pass line (${dataOptouts} skipped on this run), so it is a thing this check has seen and dismissed rather than a thing it never found.`);
+    uniq.slice(0, 10).forEach((b) => note(b));
+  }
   else if (floorOk('§13 copy', strings, STRING_FLOOR, 'user-visible string(s)')) {
     ok(`§13 copy: ${strings} user-visible strings clean of banned words, "!" and short-string em dashes ` +
       `(floor ${STRING_FLOOR} over both installs; ${exempted} short em-dash string(s) exempt because ARCHITECTURE §17 fixes their wording verbatim; ` +
-      `${glyphs} bare "—" string(s) read as a glyph rather than prose, a structural exemption no sentence can hide in)`);
+      `${glyphs} bare "—" string(s) read as a glyph rather than prose, a structural exemption no sentence can hide in; ` +
+      `${dataOptouts} string(s) skipped at a declared data-copy="data", counted here rather than passed over in silence)`);
   }
   /* Reported separately from the line above because it is a separate corpus
      with a separate exemption, and one combined number would hide which of the
