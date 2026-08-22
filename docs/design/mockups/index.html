@@ -293,27 +293,6 @@
     <button type="button" class="btn btn--sm" data-scope-act="all">Clear the scope</button>
   </p>
 
-  <!-- Non-modal, per ARCHITECTURE.md 17.7. The catalogue below stays live:
-       it does not grey out and there is no spinner over it.
-       The timestamp is this instance's own last successful sync (Services
-       gives Radarr delta 11:47), never the global delta time. 17.7's example
-       string carries 14:02 because it is written about a different instance;
-       copying the literal across gave a banner that overstated freshness by
-       2h 15m, which is the exact failure the replica principle's honesty
-       rules exist to prevent.
-
-       The instance named is the one this install has. On v0.1 that is Kavita,
-       and the sentence below it is the same sentence: what a replica can and
-       cannot go stale about does not depend on which service went away. -->
-  <div class="banner banner--warn" data-when="stale" role="status" hidden>
-    <svg class="i" aria-hidden="true"><use href="#i-alert"/></svg>
-    <div class="banner__body">
-      <div class="banner__title"><span data-inst="full">Radarr</span><span data-inst="v01" hidden>Kavita</span> is unreachable — showing cached data from 11:47, 2 hours ago</div>
-      <div class="banner__text">Browse, search, sort and filter keep working from the replica. <span data-inst="full">Writes to Radarr are queued until it answers.</span><span data-inst="v01" hidden>Kavita takes no writes from UsArr, so nothing is queued behind it.</span></div>
-    </div>
-    <div class="banner__actions"><a href="services.html">Open Services</a></div>
-  </div>
-
   <div class="banner" data-when="partial" role="status" hidden>
     <svg class="i" aria-hidden="true"><use href="#i-refresh"/></svg>
     <div class="banner__body">
