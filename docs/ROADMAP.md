@@ -594,6 +594,14 @@ re-sectioned on the strength of this note**, and none of the three is thereby pl
          **walks straight past** `FileWalkFailuresByInstance` in the same file, whose read spells
          `SELECT` on one line and `i.last_full_sync_at` four lines down. The replacement shape
          returns that read. **So the old form misses real readers and the new one does not.**
+         ⚠️ **RESIDUAL RISK, STATED HERE RATHER THAN LEFT FOR THE NEXT READER — this leg's hit list
+         is PERMANENTLY NON-EMPTY and that is by design.** `internal/store/reconcile.go` and
+         `internal/libsync/doc.go` both carry comments naming `remote_hash` as the drift step that
+         is missing, so **the check can never come back empty and was never meant to**: the reader
+         classifies the hits. **A leg whose verdict is read rather than counted cannot be falsely
+         closed by a comment**, which is why this one is worded as a read and not as an emptiness.
+         **`--include=*.go` keeps this file's own prose structurally out of it**, per the Self-match
+         rule's first move.
       2. **Guard 2** — ⚠️ **THIS LEG WAS PROSE UNTIL 2026-08-22, AND EVERY LITERAL MECHANISATION
          OF IT SELF-MATCHED AGAINST A FOREIGN FILE.** It read *"~~a reader of
          `identity_fingerprint` or `max_remote_id_seen`~~"*, and
@@ -812,6 +820,24 @@ re-sectioned on the strength of this note**, and none of the three is thereby pl
       *Authority:* §17.8, [ADR-0026](./DECISIONS.md#adr-0026), [ADR-0048](./DECISIONS.md#adr-0048).
       *Done when:* an Accept path exists that creates a `library` row, and the proposal has a home
       that is not that table.
+      📌 **THIS ITEM CARRIES NO COMMAND, DELIBERATELY, AND SAYING SO IS CHEAPER THAN LEAVING A
+      READER TO WONDER — RECORDED 2026-08-22.** The preamble's claim is that **most** items carry
+      one, not every item, and a pointer is a legitimate form. **The reason this one stays a
+      pointer is that the obvious mechanisation is already green without the obligation being met:**
+      `INSERT INTO library` has a non-test writer today —
+      `internal/store/catalogue.go`'s `bindOneContainer`, which writes `managed_by = 'auto'` on the
+      **import bind path** — so a grep for it would report an Accept step that does not exist.
+      *A check that cannot fail reads exactly like a passing one*, and minting one here would add an
+      instance of the defect this pass exists to remove.
+      **What a discriminating check would have to assert, written down so the next pass does not
+      re-derive it:** a `library` row created with `managed_by` set to something other than `auto`,
+      by a handler reachable from `internal/httpapi`, on a request carrying a proposal the probe
+      emitted. **The second half is not greppable at all** —
+      [ADR-0048](./DECISIONS.md#adr-0048) puts the proposal set in the connect probe's **response**
+      and says in terms that a proposal is never a row, so *"has a home that is not that table"* is
+      a claim about a shape rather than about text in a file. **Both halves are presence claims
+      besides, which this file's own Done-when rule refuses on their own**; the item is open and
+      nothing is ticked against either.
 
 - [ ] **The per-series volume and chapter walk, and the rows it writes.** Phase A is served; the walk
       that fills `work_comic_issue` and `media_file` is not fetched and is not faked.
@@ -944,9 +970,21 @@ re-sectioned on the strength of this note**, and none of the three is thereby pl
       read *"~~off a state a read path publishes~~"* and *"~~a work with **no `external_id` row**~~"*
       — **a design answer, written into a criterion, against this box's own cited authority and with
       no ADR behind it.** §6.4 says *"the nullable column belongs on `work` from the migration that
-      creates it"*; the `external_id`-derived shape exists only in a **code comment**
-      (`internal/store/catalogue.go`), and the rider at the foot of this box says in terms that **no
-      ADR decides the derived shape**. **A criterion that picks the winner of an open design
+      creates it"*; the `external_id`-derived shape had no home outside a **code comment**
+      (`internal/store/catalogue.go`) when this paragraph was written, and the rider at the foot of
+      this box says in terms that **no ADR decides the derived shape**.
+      ⚠️ **DATED RIDER 2026-08-22 — *"~~exists only in a code comment~~"* IS FALSE NOW, AND §6.4 IS
+      WHERE IT STOPPED BEING TRUE.** §6.4 states the derivation outright, in the badge paragraph
+      that also fixes the chip's wording: *"the not-identified state is derived from
+      `EXISTS(external_id)` (`internal/store`)"* — **located by that sentence rather than by a line
+      number**, per the citation policy. ⚠️ **THE OTHER HALF STILL HOLDS AND WAS RE-MEASURED, NOT
+      ASSUMED: no ADR decides it.** `docs/DECISIONS.md` names neither `EXISTS(external_id)` nor the
+      derivation in any form. ⚠️ **AND §6.4 HAS NOT BEEN CORRECTED — IT NOW SAYS BOTH THINGS**, the
+      derivation and *"the nullable column belongs on `work`"*, some twenty lines apart in one
+      section. **So the criterion above is untouched here**: it points at *"whatever derivation §6.4
+      names once §6.4 is corrected"*, and a section that states two answers is not a corrected one.
+      **Nothing is re-scoped, re-decided or ticked on the strength of this rider; a false claim
+      about where the derivation lives is replaced by a true one.** **A criterion that picks the winner of an open design
       question makes this file the specification**, which the header forbids — *"NOT authoritative
       for scope"* — and `CLAUDE.md` answers the same way: *"Status is read off the tree, not off a
       document … write the pointer."* **This follows the model this same pass set in the closed
@@ -1004,6 +1042,12 @@ re-sectioned on the strength of this note**, and none of the three is thereby pl
       in a code comment. §16 is scope authority and the tree is status authority, so this rider
       records the divergence, **allocates no ADR number and guesses none** —
       [`DECISIONS.md`](./DECISIONS.md) is authoritative for the next free one.
+      ⚠️ **AND *"~~the tree took it in a code comment~~"* IS SUPERSEDED 2026-08-22 IN ITS SECOND
+      HALF ONLY:** §6.4 now states the derivation in prose as well (see the dated rider above), so
+      the design document has caught up with the tree while **keeping the sentence the tree
+      contradicts**. **The no-ADR half is unchanged and was re-measured**, and the divergence this
+      paragraph records is now *inside §6.4* rather than between §6.4 and the tree — **which is a
+      sharper divergence, not a closed one, and still not this file's to close.**
 
 - [ ] **The image pipeline's FETCH HALF — NARROWER AGAIN. The writer, the renderer and the import
       call site all landed; what is left is §4.4.1's cold-start plan and a first run against a real
@@ -2175,6 +2219,32 @@ re-sectioned on the strength of this note**, and none of the three is thereby pl
       provenance join.**
       *Authority:* §10, §16 v0.1 entry.
       *Done when:* a tag vocabulary has a writer and a filter path in `internal/`.
+      ⚠️ **THAT CRITERION IS ALREADY TRUE ON A LITERAL READING, AND THE THING THAT MAKES IT TRUE IS
+      A BENCHMARK FIXTURE — MECHANISED 2026-08-22 SO IT CANNOT BE READ AS GREEN.** *A check that
+      cannot fail reads exactly like a passing one.* Both halves are satisfied inside
+      `internal/db/spike/`, the RSS-spike command: `fixture.go` writes the vocabulary
+      (`INSERT INTO tag (id, namespace, value, is_system)`) and the assignments, and `workload.go`
+      reads them back (`SELECT work_id FROM tag_assignment WHERE tag_id = ?`) — **a writer and a
+      filter path, both in `internal/`, and neither of them shipped.** The package is
+      `//go:build bench`, so it is **not in the default build**: `go list ./...` does not name it
+      and `go list -tags bench ./...` does.
+      **The check, and both legs exclude the fixture STRUCTURALLY rather than by luck** — the
+      criterion's own words, mechanised, with `--include=*.go` keeping this file's prose out of it:
+      `grep -rn 'INSERT INTO tag' --include=*.go . | grep -v _test.go | grep -v '/spike/'` must be
+      **NON-EMPTY** for the writer, and
+      `grep -rn 'FROM tag_assignment' --include=*.go . | grep -v _test.go | grep -v '/spike/'`
+      **NON-EMPTY** for the filter path. **What a reader is looking for is a tag write and a tag
+      read that a shipped binary can reach.** Both are **empty** today, which is the honest state of
+      this box.
+      ⚠️ **NEGATIVE CONTROLS FIRED RATHER THAN ASSUMED, 2026-08-22, one per leg, because a shape
+      that excludes a directory has to be shown it can still find a positive:** the writer shape
+      over `work_comic_issue` returns `internal/store/catalogue.go`'s
+      `INSERT INTO work_comic_issue`, and the read shape over `external_id` returns
+      `internal/store/catalogue.go`'s `SELECT … FROM external_id` reads. **So the emptiness is the
+      vocabulary's absence and not a filter that cannot see one.**
+      ⚠️ **THE OBLIGATION IS UNCHANGED AND NOTHING IS TICKED HERE.** §10's vocabulary and the
+      `downloadId` provenance join are owed exactly as before; what changed is that the box can now
+      go red.
 
 - [x] **`usarr key rotate`, working, on top of key versioning and AAD.**
       **Landed.** 🗓️ **Met at `5ff882c5b100`, 2026-08-22.** Re-fire it with the replacement check on
