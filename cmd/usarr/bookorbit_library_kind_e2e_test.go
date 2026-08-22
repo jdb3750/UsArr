@@ -3,6 +3,8 @@ package main
 import (
 	"net/http"
 	"testing"
+
+	"github.com/jdb3750/UsArr/internal/store"
 )
 
 // A BookOrbit container's LIBRARIES FOLLOW WHAT THE WALK ACTUALLY FOUND, and
@@ -521,19 +523,50 @@ func boImport(t *testing.T, bo *fakeBookOrbit) (*testEnv, int64) {
 }
 
 // boReimport runs the SAME instance's import a second time, through the same
-// endpoint the owner's "sync now" uses.
+// endpoint the owner's "sync now" uses, and returns when that import has
+// FINISHED.
 //
-// It waits on the container-list read rather than on a timestamp:
-// last_full_sync_at is second-resolution, so two fixture imports inside one
-// second write the identical string and a wait on it returns before the second
-// import has done anything.
+// It does not wait on a timestamp: last_full_sync_at is second-resolution, so
+// two fixture imports inside one second write the identical string and a wait
+// on it returns before the second import has done anything.
+//
+// ⚠️ IT USED TO WAIT ON `SELECT COUNT(*) FROM sync_report` GOING UP, AND THAT
+// STOPPED MEANING "FINISHED" ON 2026-08-22. It was never a completion signal —
+// it was a proxy that happened to hold, because until then the FIRST report row
+// a clean BookOrbit run wrote was `content_completeness`, recorded after
+// FullImport returned. `container_observed` is now written at the TOP of the
+// bind phase, one row per container, before a single item is applied, so the
+// old condition fired within milliseconds of the POST. Two things then broke,
+// and only one of them was visible: the caller's next boReimport hit the guard
+// this run was still holding and got a 409 (the failure `make check` caught
+// under -race and -shuffle), and — silently — every assertion between two
+// reimports could read a half-applied catalogue.
+//
+// So this waits on `content_completeness` instead, which cmd/usarr writes AFTER
+// FullImport returns. And it retries the POST through a 409 rather than failing
+// on one, because the guard is exactly what the caller is waiting to be free:
+// polling the thing that must be true beats polling a proxy for it, which is the
+// mistake being fixed here.
 func boReimport(t *testing.T, env *testEnv, instanceID int64) {
 	t.Helper()
-	before := countIn(t, env, `SELECT COUNT(*) FROM sync_report`)
-	if code, body := syncNow(t, env, instanceID); code != http.StatusAccepted {
-		t.Fatalf("POST sync = %d, want 202: %s", code, body)
-	}
-	waitFor(t, "the second import to write its own sync_report rows", func() bool {
-		return countIn(t, env, `SELECT COUNT(*) FROM sync_report`) > before
+	const completed = `SELECT COUNT(*) FROM sync_report WHERE kind = '` +
+		store.SyncReportContentCompleteness + `'`
+	before := countIn(t, env, completed)
+
+	waitFor(t, "the previous import to release the mutual-exclusion guard", func() bool {
+		code, body := syncNow(t, env, instanceID)
+		switch code {
+		case http.StatusAccepted:
+			return true
+		case http.StatusConflict:
+			return false
+		default:
+			t.Fatalf("POST sync = %d, want 202 or 409: %s", code, body)
+			return false
+		}
+	})
+	waitFor(t, "the second import to record its completeness verdict, which is written "+
+		"after FullImport returns and is therefore the run being OVER", func() bool {
+		return countIn(t, env, completed) > before
 	})
 }
