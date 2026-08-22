@@ -342,6 +342,27 @@ func (s *Server) routes(mux *http.ServeMux) {
 	// there rather than in the table this serves. See libraries.go.
 	mux.Handle("GET /api/v1/libraries", s.authenticated(s.wrap(s.handleListLibraries)))
 
+	// §17.8's Accept step, read and write. The read is the proposal set — the
+	// containers UsArr has been told about that are not already a library — and
+	// it is served from `container_observed` rows in the local file, NOT from a
+	// connect probe: ADR-0048 clause 5 excuses the probe's upstream call as a
+	// setup action, and a settings screen the user navigates to is not one. So
+	// neither of these blocks on an *Arr or a media server. See proposals.go.
+	//
+	// ⚠️ ACCEPT IS `/libraries/accept` RATHER THAN `POST /api/v1/libraries`, and
+	// the second path is left unclaimed on purpose — it belongs to §17.8's
+	// **Add library**, which creates one named library, where this is a batch
+	// whose per-item outcome may be a JOIN into a library that already exists.
+	// proposals.go's header carries the argument.
+	//
+	// CSRF plus a session, and NO sudo: sudo gates the writes that touch a
+	// stored *Arr credential (§12.1), and this writes libraries and their
+	// membership. §17.8 puts no credential on this screen at all.
+	mux.Handle("GET /api/v1/libraries/proposals",
+		s.authenticated(s.wrap(s.handleListLibraryProposals)))
+	mux.Handle("POST /api/v1/libraries/accept",
+		s.csrfProtected(s.authenticated(s.wrap(s.handleAcceptLibraries))))
+
 	// ── Search and grab ─────────────────────────────────────────────────────
 	//
 	// /indexers serves the REQUESTS screen's indexer and category picker

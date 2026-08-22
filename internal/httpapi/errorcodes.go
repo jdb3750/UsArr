@@ -105,6 +105,18 @@ const (
 	CodeServiceDisabled    ErrorCode = "service_disabled"
 	CodeServiceUnavailable ErrorCode = "service_unavailable"
 
+	// Libraries.
+	//
+	// CodeLibraryNameTaken refuses an Accept whose name this user cannot have,
+	// with 409. It is its own code rather than the generic `conflict` for the
+	// reason the two sync 409s are two codes: the fix is specific and typeable
+	// — pick another name — and a client switching on `conflict` alone would
+	// have to guess which sentence to show. ⚠️ It covers THREE store conditions
+	// whose fix is the same one: the name is held at another kind, it is held by
+	// the reserved `Unfiled` library that nothing may join, or the name is free
+	// and the slug it reduces to is not. See acceptLibrariesError.
+	CodeLibraryNameTaken ErrorCode = "library_name_taken"
+
 	// Search and grab.
 	CodeExpired ErrorCode = "expired"
 	// CodeGrabFailed asserts that the release did NOT reach the download
@@ -157,6 +169,7 @@ var errorCodes = map[ErrorCode]struct{}{
 	CodeInternal:                  {},
 	CodeImportInProgress:          {},
 	CodeInvalidURLBase:            {},
+	CodeLibraryNameTaken:          {},
 	CodeNoDownloadClient:          {},
 	CodeNoIndexerService:          {},
 	CodeNoIndexers:                {},
