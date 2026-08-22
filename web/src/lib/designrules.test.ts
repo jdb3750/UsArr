@@ -1247,6 +1247,37 @@ const reportEnumeration = (s: CopyString, types: readonly MediaType[]): string =
 const SEARCH_ROUTE = 'web/src/routes/search/';
 const SEARCH_COPY: readonly CopyString[] = COPY.filter((s) => s.file.startsWith(SEARCH_ROUTE));
 
+/**
+ * THE HALF OF THE SHIPPED LINE §17 DID NOT WRITE, named here because an
+ * unnamed half is an unguarded one.
+ *
+ * The screen does not ship `STANDING_WORDING` alone: it continues §17's second
+ * sentence with a clause of its own about where the rows come from. Until
+ * 2026-08-22 that clause was nowhere in this file, and the drift check was a
+ * `String.includes` with terminal punctuation trimmed — which by construction
+ * cannot see anything APPENDED to the standard. Any number of further sentences
+ * could have been glued on and the rule would have stayed green.
+ *
+ * So the local clause is written down, the composed string is built from the two
+ * halves, and the assertion below is EQUALITY. That way §17's half still drifts
+ * loudly, and the local half can only change by editing this constant — which is
+ * the review this rule was supposed to force.
+ */
+const SEARCH_LOCAL_TAIL = ', and it renders from SQLite, so it never waits on one of them.';
+
+/**
+ * §17's two sentences with the local clause spliced onto the second — the exact
+ * string the screen is required to carry, assembled rather than retyped so
+ * §17's half is still read live.
+ *
+ * The splice drops §17's full stop because the local clause continues that
+ * sentence rather than starting a new one. Nothing else is trimmed: `norm`
+ * strips backticks, asterisks, quotes and whitespace, and leaves `.` and `,`
+ * alone, so the comparison stays sensitive to exactly the punctuation that tells
+ * a continuation apart from an appendix.
+ */
+const SEARCH_STANDING_LINE = STANDING_WORDING.replace(/\.\s*$/, '') + SEARCH_LOCAL_TAIL;
+
 /* =============================================================================
  * RULE 2'S MACHINERY — §13's colour ban, BY VALUE
  *
@@ -2824,22 +2855,63 @@ describe('ARCHITECTURE §17.4 rule 7 — over web/src/routes/search', () => {
 
 	it('§17.4 rule 7: Search names the corpus as "your services"', () => {
 		/* CLAUSE 2, AND IT IS A DRIFT CHECK RATHER THAN A BAN. §17 fixes the wording;
-		   this asserts the screen still carries it. Compared with the terminal
-		   punctuation trimmed, because §17 quotes two whole sentences and the screen
-		   continues the second one ("…and nothing else, and it renders from SQLite"),
-		   which is the shipped string agreeing with the standard rather than drifting
-		   from it. Everything else — every word, in order — must match. */
-		const wanted = norm(STANDING_WORDING).replace(/[.\s]+$/, '');
-		const haystack = SEARCH_COPY.map((s) => norm(s.text)).join('\n');
+		   this asserts the screen still carries it, AND NOTHING MORE.
+
+		   ⚠️ THIS WAS A CONTAINMENT TEST UNTIL 2026-08-22 and containment is the
+		   wrong shape for the job: with the standard's terminal punctuation trimmed,
+		   `haystack.includes(wanted)` is satisfied by the standard plus any amount of
+		   appended text, so the one drift the rule most plausibly suffers — a
+		   sentence glued on the end — was invisible to it by construction.
+
+		   It is now an EQUALITY against `SEARCH_STANDING_LINE`, which is §17's half
+		   read live plus the local clause named at `SEARCH_LOCAL_TAIL`. The locator
+		   below still uses containment, because a run has to be FOUND before it can
+		   be compared; the comparison itself does not.
+
+		   `norm` leaves `.` and `,` in place, so the equality is punctuation
+		   sensitive, which is what makes "continues the sentence" and "appends a new
+		   one" two different results rather than one.
+
+		   ⚠️ AND THAT SAFETY IS CONDITIONAL ON THE ASSERTION STAYING AN IDENTITY
+		   ONE. §17 carries a sentence about what the shipped Search screen says —
+		   that it continues the standing wording with a clause about the replica
+		   read — and this equality is the only thing keeping that claim true.
+		   Relaxed back to containment, the screen may drift while the guard stays
+		   green, and §17's sentence quietly becomes an unmaintained status claim.
+		   Whoever relaxes it should meet that consequence HERE rather than
+		   discovering it there. ⚠️ Recorded 2026-08-22 on the library-sync lane's
+		   reading of §17; §17.4 rule 7 in this tree quotes the standing wording and
+		   does NOT itself carry that sentence, so if you go looking for it and find
+		   nothing, the argument above is about the clause rather than about a span
+		   this file has verified — and this marker comes out when that sentence
+		   lands in §17.4 rule 7 of `docs/ARCHITECTURE.md`. */
+		const head = norm(STANDING_WORDING).replace(/[.\s]+$/, '');
+		const carriers = SEARCH_COPY.filter((s) => norm(s.text).includes(head));
 		expect(
-			haystack.includes(wanted),
-			`§17.4 rule 7: the Search screen no longer carries §17's standing wording for ` +
-				`its corpus. §17 fixes it as:\n\n    ${STANDING_WORDING}\n\n` +
-				`Nothing under ${SEARCH_ROUTE} contains it. Either the copy has drifted and ` +
-				`should be put back, or §17 has been amended and this file is reading the ` +
-				`amendment — check which, because only one of those is a bug. Do not soften ` +
-				`the comparison to make this green.`
-		).toBe(true);
+			carriers.length,
+			`§17.4 rule 7: expected exactly one string under ${SEARCH_ROUTE} to carry §17's ` +
+				`standing wording, found ${carriers.length}. §17 fixes it as:\n\n` +
+				`    ${STANDING_WORDING}\n\n` +
+				`At zero, either the copy has drifted and should be put back, or §17 has been ` +
+				`amended and this file is reading the amendment — check which, because only ` +
+				`one of those is a bug. Above one, a second copy exists: two places to edit ` +
+				`means one of them drifts, and the equality below would be checking whichever ` +
+				`came first. Do not soften the comparison to make this green.\n\n` +
+				carriers.map((s) => `${s.file}:${s.line}  "${s.text}"`).join('\n')
+		).toBe(1);
+		expect(
+			norm(carriers[0].text),
+			`§17.4 rule 7: the Search screen's standing line is not the composed string.\n\n` +
+				`  §17's half (read live from ARCHITECTURE):\n    ${STANDING_WORDING}\n` +
+				`  the local clause (SEARCH_LOCAL_TAIL in this file):\n    ${SEARCH_LOCAL_TAIL}\n` +
+				`  required, the two spliced:\n    ${SEARCH_STANDING_LINE}\n` +
+				`  shipped (${carriers[0].file}:${carriers[0].line}):\n    ${carriers[0].text}\n\n` +
+				`If §17's half moved, that is §17's amendment and this reads it. If the local ` +
+				`clause moved, edit SEARCH_LOCAL_TAIL deliberately — it is named so the change ` +
+				`is reviewed rather than absorbed. If text was APPENDED, that is the defect ` +
+				`this assertion exists to catch: the old containment form could not see it. Do ` +
+				`not weaken this back to a substring test.`
+		).toBe(norm(SEARCH_STANDING_LINE));
 	});
 
 	it('§17.4 rule 7: Search enumerates no media types', () => {

@@ -1117,7 +1117,14 @@ this mockup differed, §17 won:
   mid-luminance fills land at 4.77, 5.23, 5.24, 5.53 and 5.70:1 unmoved. The result is identical in
   both themes, which is the point: the rule reads the fill, not the theme.
 - **A degraded backend gets a small non-modal banner and the catalogue never greys out** (§17.7).
-  The stale states on home and search keep every row live and interactive behind the banner.
+  §17.7 names the surfaces that draw it — the Library screen and every per-type grid — and
+  **neither is mocked here**: the Libraries screen is the library *management* screen and shows
+  instance health in a row-level State cell instead. Home and search drew the banner until
+  2026-08-22; those are two screens §17.7 does not name, and the banner was removed from them on
+  that ground alone. **So no mockup in this set draws it, and that is a gap in the mockup set
+  rather than a change to §17.7** — the banner is specified, and the screens that draw it are not
+  drawn here. Whether search should have one on the merits is an open question and is not what
+  the removal decided. The rule about greying out is unchanged.
 - **Every screen works in a phone browser through responsive layout, not a separate mobile
   design** (§17.1).
 - **Availability renders exactly as §6.3 defines it**: a tick when `have == total && total > 0`, a
@@ -1210,9 +1217,9 @@ the dialog the button opens and were the empty state doing the dialog's job.
    is "all in the **Ebooks** library" now, everywhere the two meet. On Services the relationship is
    spelled in full — "catalogue source, request destination" — on the screen where a user first
    meets both terms, rather than the bare "source and destination" that dropped both nouns.
-4. **The em-dash lint rule** (§13, no U+2014 in a string under 15 words) is respected everywhere
-   except the two degraded-instance banners, which are the wording §17.7 fixes verbatim and which
-   the rule already carries an exception for. Data separators that would otherwise use an em dash —
+4. **The em-dash lint rule** (§13, no U+2014 in a string under 15 words) is respected, with no
+   exception claimed: the strings that had one were the degraded-instance banners, and those
+   screens no longer draw a banner. Data separators that would otherwise use an em dash —
    `Album · Artist`, `Book · Author` — use the middle dot the rest of these tables use.
 
 ## What is deliberately not shown

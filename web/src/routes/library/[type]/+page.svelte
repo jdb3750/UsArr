@@ -143,7 +143,7 @@
 		sameBrowseQuery,
 		type BrowseFeed,
 		type BrowseQuery,
-		type LibraryNames,
+		type LibraryNamesAnswer,
 		type LibraryView
 	} from '$lib/librarygrid';
 	import { createLibraryView } from '$lib/libraryview.svelte';
@@ -436,19 +436,28 @@
 	/**
 	 * THE LIBRARY NAMES, AND THE GRID IS NEVER GATED ON THEM.
 	 *
-	 * ⚠️ THE SCOPE LINE RENDERS BEFORE THIS ANSWERS AND RENDERS WHETHER OR NOT IT
-	 * EVER DOES. `undefined` here is "no names yet", which `libraryScopeLine`
-	 * spells as the slug — so the line states a true scope from the first frame and
-	 * is REPLACED by a friendlier one, rather than waiting to be correct. Nothing
-	 * else on this screen reads this value: the table, its empty state and its
-	 * failure banner are all driven by the browse read alone, so a libraries read
-	 * that is slow or dead costs one word and never a row (ARCHITECTURE §17.7).
+	 * ⚠️ THE SCOPE LINE RENDERS BEFORE THIS ANSWERS. `undefined` here is HAS NOT
+	 * ANSWERED, which `libraryScopeLine` spells as the slug — so the line states a
+	 * true scope from the first frame and is REPLACED by a friendlier one, rather
+	 * than waiting to be correct. Nothing else on this screen reads this value: the
+	 * table, its empty state and its failure banner are all driven by the browse
+	 * read alone, so a libraries read that is slow or dead costs one word and never
+	 * a row (ARCHITECTURE §17.7).
 	 *
-	 * `readLibraryNames` cannot reject, so there is no catch here and nothing to
-	 * report: a failure is indistinguishable from an install with no libraries, and
-	 * neither is news the catalogue screen owes the user.
+	 * ⚠️ IT DOES NOT RENDER WHETHER OR NOT THE READ EVER ANSWERS, AND THAT CLAIM
+	 * USED TO SIT IN THIS PARAGRAPH. Once the read HAS answered and resolves none
+	 * of the scope's slugs, the line is dropped: on an install with zero libraries,
+	 * `?lib=ghost` printed `Scoped to ghost` — a raw slug §17.8 renders nowhere —
+	 * beside no control to change it, because the scope select is absent at zero
+	 * libraries.
+	 *
+	 * `readLibraryNames` still cannot reject, so there is no catch here and nothing
+	 * to report: a catalogue screen does not owe the user news about a read that is
+	 * not its own. It resolves to HAS NOT ANSWERED on a failure — this variable's
+	 * own starting value — because a read that died and a read still in flight are
+	 * one state, and neither of them is an install with no libraries.
 	 */
-	let names = $state<LibraryNames | undefined>(undefined);
+	let names = $state<LibraryNamesAnswer>(undefined);
 	/** One read per visit. Plain, not `$state`: it guards the read and must never
 	 * be a reason to re-render. */
 	let namesAsked = false;
@@ -763,9 +772,24 @@
 				user arriving here on a `?lib=` link would otherwise be scoped by a
 				string the UI has never shown them. The name comes from
 				`GET /api/v1/libraries`, which publishes `name` and `slug` together
-				(`reference/http-api.md` §2.2), and the slug is the fallback whenever it
-				has not answered: a scoped view that cannot name its scope still says it
-				is scoped.
+				(`reference/http-api.md` §2.2), and the slug is the fallback while that
+				read HAS NOT ANSWERED — in flight or dead, which are one state here: a
+				scoped view that cannot YET name its scope still says it is scoped.
+
+				⚠️ THE `{#if}` IS WHY THAT IS THREE STATES AND NOT TWO. Once the read HAS
+				answered and resolves none of these slugs, `libraryScopeLine` returns
+				nothing and no line is printed. It used to print the slug regardless: on
+				an install with ZERO libraries, `?lib=ghost` rendered `Scoped to ghost` —
+				an identifier §17.8 shows nowhere — with no control beside it to change
+				the scope, because the select is absent at zero libraries. A scope stated
+				in a vocabulary the user has never been shown is worse than a scope the
+				toolbar leaves unstated. A scope only PARTLY resolved keeps its
+				unresolved slugs, because dropping them would understate the scope.
+
+				⚠️ AND THE CLEAR-SCOPE LINK IS OUTSIDE THAT `{#if}` DELIBERATELY. Dropping
+				the line must not drop the way out of the scope — zero libraries is the
+				state with the fewest ways out, and it is the state the defect was found
+				in.
 
 				⚠️ THIS IS THE VIEW DESCRIBING ITSELF, NOT §8.1's ScopeChip. It states one
 				scope and clears it; it does not select, does not multi-select and claims
@@ -773,7 +797,9 @@
 				precondition (DESIGN-DIRECTION §9.7), and the address is honoured whether
 				or not the control that writes it exists.
 			-->
-			<span class="toolbar__label">{scopeLine}</span>
+			{#if scopeLine}
+				<span class="toolbar__label">{scopeLine}</span>
+			{/if}
 			<!-- eslint-disable-next-line svelte/no-navigation-without-resolve -- a ResolvedPathname cannot carry a query string; page.url.pathname is already resolved -->
 			<a class="btn btn--sm" href={clearScopeHref}>Show every library</a>
 		{/if}

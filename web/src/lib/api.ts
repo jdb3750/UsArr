@@ -1525,9 +1525,9 @@ export interface ImportStarted {
  * means no import started FOR THIS CALL. That is not the same as "nothing is
  * running": `import_in_progress` means another one is, and says so in its code.
  *
- * It goes through sendJson like the five other writes on that screen, so it
- * carries the double-submit CSRF token and meets the five-minute sudo window in
- * the same way (§17.3.3). A `403 sudo_required` is the caller's to retry.
+ * It goes through sendJson like the screen's other writes, so it carries the
+ * double-submit CSRF token and meets the five-minute sudo window in the same
+ * way (§17.3.3). A `403 sudo_required` is the caller's to retry.
  */
 export async function syncService(id: number): Promise<ImportStarted> {
 	const url = `${SERVICES_URL}/${encodeURIComponent(String(id))}/sync`;

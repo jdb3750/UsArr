@@ -23,7 +23,7 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import { userFacingMarkup } from './copyguard';
+import { branchMarkup, userFacingMarkup } from './copyguard';
 import { findContentSizedTracks } from './list';
 import {
 	BROWSE_AZ_UNAVAILABLE,
@@ -513,6 +513,22 @@ describe('A to Z is stated as unavailable, in UsArr own words', () => {
 describe('a Libraries row leads to its own scoped view', () => {
 	const LIBRARIES_ROUTE = 'routes/libraries/+page.svelte';
 
+	/*
+	 * ⚠️ TWO CORPORA OFF ONE FILE, BECAUSE THE RULES BELOW ARE ABOUT DIFFERENT
+	 * HALVES OF IT. `resolve('/library')` and `libraryScopeHref` live in the
+	 * `<script>`, which `userFacingMarkup` deletes, so those read the raw source;
+	 * the Library cell is markup, and reading it raw would hand the guard the
+	 * cell's own explanatory comment as if it were rendered text.
+	 */
+	const LIBRARIES_MARKUP = userFacingMarkup(LIBRARIES_SOURCE);
+
+	/**
+	 * The Library cell's arm of `{#snippet cell}`, bounded to where the `kind` arm
+	 * opens rather than to a character count. See `branchMarkup`: the count this
+	 * replaces overran the arm by 321 characters into three of its siblings.
+	 */
+	const cellMarkup = () => branchMarkup(LIBRARIES_MARKUP, "column.id === 'library'");
+
 	/** The `libraryScopeHref` body, which is where the whole decision sits. */
 	const SCOPE_HREF = (() => {
 		const open = LIBRARIES_SOURCE.indexOf('function libraryScopeHref');
@@ -569,13 +585,14 @@ describe('a Libraries row leads to its own scoped view', () => {
 			`${LIBRARIES_ROUTE} builds a ?lib= link for a library with no slug. An empty lib ` +
 				'is a 400, so that row would link to a refusal.'
 		).toContain("if (slug === '') return undefined");
-		const cell = LIBRARIES_SOURCE.slice(LIBRARIES_SOURCE.indexOf("column.id === 'library'"));
+		const cell = cellMarkup();
 		expect(
 			cell.length,
-			'the Library cell was not found, so this guard is reading nothing'
-		).toBeGreaterThan(200);
+			`${LIBRARIES_ROUTE}'s Library cell arm is down to a stub, so the rule below is ` +
+				'being asserted over a branch that no longer draws anything'
+		).toBeGreaterThan(120);
 		expect(
-			cell.slice(0, 1600),
+			cell,
 			`${LIBRARIES_ROUTE} renders the Library cell without the undefined-href branch, so ` +
 				'a slugless row either links to a 400 or renders a broken anchor'
 		).toContain('href === undefined');
@@ -587,11 +604,15 @@ describe('a Libraries row leads to its own scoped view', () => {
 	 * identical on screen and break all three.
 	 */
 	it('is a real anchor rather than a click handler', () => {
-		const cell = LIBRARIES_SOURCE.slice(LIBRARIES_SOURCE.indexOf("column.id === 'library'"));
+		const cell = cellMarkup();
 		expect(
-			cell.slice(0, 1600),
-			`${LIBRARIES_ROUTE}'s Library cell is no longer an <a> carrying the href`
-		).toMatch(/<a class="trunc" \{href\}/);
+			cell.length,
+			`${LIBRARIES_ROUTE}'s Library cell arm is down to a stub, so the rule below is ` +
+				'being asserted over a branch that no longer draws anything'
+		).toBeGreaterThan(120);
+		expect(cell, `${LIBRARIES_ROUTE}'s Library cell is no longer an <a> carrying the href`).toMatch(
+			/<a class="trunc" \{href\}/
+		);
 	});
 });
 

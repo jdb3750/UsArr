@@ -275,14 +275,21 @@
 
 <div class="pagehead">
 	<!--
-		§17.4 rule 7's STANDING WORDING, and it is quoted from §17 rather than
-		written here. The rule exists because this line used to enumerate media
+		§17.4 rule 7's STANDING WORDING PLUS A CLAUSE OF THIS SCREEN'S OWN, and the
+		split is named here because this comment used to call the whole line
+		quoted, which it is not. §17 fixes the first two sentences, ending at "and
+		nothing else"; everything from ", and it renders from SQLite" to the end
+		continues that second sentence and was written here.
+
+		The rule exists because this line used to enumerate media
 		types, on an install where nothing could supply four of the ones it named.
 		The set behind "your services" is whatever is connected, which is a
 		different set on a Prowlarr-only install than on a full stack, so any fixed
-		list is a promise the install may not keep. `designrules.test.ts` rule 9
-		reads the sentence live out of ARCHITECTURE §17.4 and fails if this drifts
-		from it.
+		list is a promise the install may not keep. `designrules.test.ts` reads
+		§17's half live out of ARCHITECTURE §17.4, holds the local clause as
+		`SEARCH_LOCAL_TAIL`, and asserts this paragraph EQUALS the two spliced. It
+		was a containment test until 2026-08-22, which could not see text appended
+		here at all; adding a sentence to this paragraph now fails it.
 
 		AND THERE IS NO SENTENCE HERE EXPLAINING THE SILENCE for a type no service
 		supplies. §17.4 rule 7 refuses one: nothing in the schema or on the wire
