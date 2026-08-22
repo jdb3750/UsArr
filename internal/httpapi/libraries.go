@@ -122,11 +122,18 @@ type librarySourceResponse struct {
 	// MissingSince is §17.8's per-source health, absent when the source is
 	// healthy.
 	//
-	// ⚠️ NOTHING SETS IT — see store.LibrarySource.MissingSince for the
-	// measurement. The two statements that touch the column both CLEAR it, so
-	// "no source is missing" is currently a statement about the writer rather
-	// than about the upstream. A renderer must not present the absence of this
-	// field as a positive health check.
+	// ⚠️ THIS COMMENT READ *"NOTHING SETS IT … The two statements that touch the
+	// column both CLEAR it, so 'no source is missing' is currently a statement
+	// about the writer rather than about the upstream"*, AND IT IS FALSE. The
+	// column has a writer: internal/store/reconcile.go's sweepContainers stamps
+	// it for a container the read no longer reported, and the comment this one
+	// cited as its measurement — store.LibrarySource.MissingSince — now says so
+	// itself and records the correction. reference/http-api.md §2's field table
+	// was corrected on 2026-08-21 and this was missed.
+	//
+	// IT IS FIRST-OBSERVED-ABSENT, never last: the sweep stamps only a row whose
+	// missing_since is NULL, so a container missing for a week reads a week old
+	// rather than one sweep old.
 	MissingSince *time.Time `json:"missing_since,omitempty"`
 }
 
