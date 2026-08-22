@@ -323,6 +323,10 @@ func TestFullImportDeclinesTheImageLibraryAndSaysWhy(t *testing.T) {
 	if rep.DeclinedContainers[0].Reason == "" {
 		t.Error("§17.8 requires a declined container to carry its reason")
 	}
+	// The same closed set at the far end of the pipe: kindDecision.Reason →
+	// CatalogueContainer.DeclineReason → here. kavita_test.go asserts on the
+	// producer; this asserts that nothing between the two rewrites it.
+	assertDeclineReasonIsUsArrsOwnWords(t, rep.DeclinedContainers[0].Reason)
 	// ⚠️ THIS ASSERTED `LibrariesCreated == 5` — one library per non-declined
 	// container — and ADR-0048 removed the create along with the counter. Six
 	// containers are still seen and one is still declined; what does not happen

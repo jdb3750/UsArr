@@ -33,6 +33,48 @@ func boLibrary(id int, name string, bookCount int) map[string]any {
 	}
 }
 
+// skipReasonsOnTheWire is EVERY value SkipNote.Reason is allowed to hold.
+// HAND-COPIED from cmd/usarr/import.go's `skipReason` const rather than
+// referring to it.
+//
+// ⚠️ THE DUPLICATION IS THE POINT. This file is in the same package as the
+// const, so `skipReason` is one identifier away — and a set spelled that way
+// asserts nothing at all: it would admit whatever the const is changed to,
+// including an interpolated upstream string. Written out, a second reason has to
+// be admitted here by hand, by someone who has read it. That failure is the
+// feature; do not tidy it into a reference.
+//
+// "" is a member and is the ZERO-ROW case: recordSkippedItems leaves Reason
+// unset when nothing was skipped (cmd/usarr/import.go), because on such a row it
+// would assert a cause for a non-event. Where an empty reason would itself be
+// the defect, Reason != "" is asserted separately.
+//
+// ⚠️ WHY THIS FIELD IS GUARDED AT ALL: it is JSON-encoded into
+// sync_report.detail and lifted onto the wire by GET /api/v1/libraries, on the
+// same terms as CompletenessNote.Reason. Guarding one and leaving its sibling
+// bare is the asymmetry someone later tidies the wrong way.
+var skipReasonsOnTheWire = map[string]bool{
+	"": true,
+	"a file BookOrbit itself cannot classify has no row": true,
+}
+
+func assertSkipReasonIsUsArrsOwnWords(t *testing.T, reason string) {
+	t.Helper()
+	if skipReasonsOnTheWire[reason] {
+		return
+	}
+	t.Errorf("sync_report.detail carries a skip reason that is not one of UsArr's own "+
+		"sentences.\n"+
+		"  got: %q\n"+
+		"This value reaches a browser through GET /api/v1/libraries, and "+
+		"reference/security.md §5 keeps upstream response bodies out of this column. "+
+		"Either upstream or adapter text leaked in — fix the producer in "+
+		"cmd/usarr/import.go — or a second reason was added there, in which case add "+
+		"its literal to skipReasonsOnTheWire in this file, by hand. Do NOT spell the "+
+		"set as `skipReason`: this file is in that const's own package, so a set built "+
+		"from it admits whatever the const becomes.", reason)
+}
+
 func TestAddingABookOrbitProducesACatalogue(t *testing.T) {
 	bo := newFakeBookOrbit(t, boMagicLink)
 	bo.libraries = []map[string]any{
@@ -490,6 +532,7 @@ func TestAddingABookOrbitProducesACatalogue(t *testing.T) {
 	if note.Name != "Fiction" || note.Reason == "" {
 		t.Errorf("the note names no library or gives no reason: %+v", note)
 	}
+	assertSkipReasonIsUsArrsOwnWords(t, note.Reason)
 	// ⚠️ THE INVARIANT, AND THIS ASSERTION IS INVERTED RATHER THAN DELETED.
 	//
 	// It used to read *"library 2 skipped nothing and still got %d notes"*, on
@@ -525,6 +568,7 @@ func TestAddingABookOrbitProducesACatalogue(t *testing.T) {
 	if zero.Reason != "" {
 		t.Errorf("the zero row explains a skip that did not happen: reason = %q", zero.Reason)
 	}
+	assertSkipReasonIsUsArrsOwnWords(t, zero.Reason)
 	if zero.DoesNotCover == "" {
 		t.Error("the zero row carries no scope, so an operator reading it out of the " +
 			"database cannot tell it apart from a completeness claim")

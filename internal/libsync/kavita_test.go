@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"testing"
 
@@ -26,6 +27,53 @@ func readKavitaSpec(t *testing.T, file string) []byte {
 		t.Fatalf("read the vendored spec %s (see api/specs/SOURCES.md): %v", file, err)
 	}
 	return raw
+}
+
+// declineReasonPatterns is EVERY shape kindDecision.Reason — and therefore
+// DeclinedContainer.Reason, which is a straight copy of it — is allowed to take.
+// HAND-COPIED from kavita.go rather than derived from mapLibraryType.
+//
+// ⚠️ IT IS PATTERNS RATHER THAN LITERALS ONLY BECAUSE ONE PRODUCER IS GENUINELY
+// DYNAMIC, AND THAT IS THE WHOLE OF THE LICENCE. The default arm interpolates
+// the unmapped LibraryType with %d, so the only variable part of any reason in
+// this field is an integer UsArr itself printed. `-?\d+` is what %d over an
+// int32 can emit — the sign is included because a hostile or garbled upstream
+// enum value is still formatted by the same verb, and a guard that went red on a
+// legitimate `-1` would be a false alarm rather than a finding. Everything else
+// is anchored and exact. THIS IS A CLOSED SET, NOT A BLACKLIST: a third arm
+// matches neither pattern and goes red until someone admits it here by hand.
+//
+// ⚠️ DO NOT REBUILD THIS FROM mapLibraryType'S OWN RETURNS. A set derived from
+// the function it checks is satisfied by whatever that function returns,
+// including a future arm that formats an upstream error into the string — the
+// leak this guard exists to catch, wearing the guard's clothes.
+//
+// "" is a member: Reason is empty on every arm that resolves a kind.
+var declineReasonPatterns = []*regexp.Regexp{
+	regexp.MustCompile(`^$`),
+	regexp.MustCompile(`^Kavita's Image library type has no UsArr kind: a library of loose ` +
+		`images is neither a book nor a comic, and library\.kind offers no member for it$`),
+	regexp.MustCompile(`^Kavita reported LibraryType -?\d+, which is not a member of the ` +
+		`vendored api/specs/kavita-develop\.json enum \(0-5\)\. UsArr declines a container ` +
+		`whose kind it cannot derive rather than guessing one$`),
+}
+
+func assertDeclineReasonIsUsArrsOwnWords(t *testing.T, reason string) {
+	t.Helper()
+	for _, re := range declineReasonPatterns {
+		if re.MatchString(reason) {
+			return
+		}
+	}
+	t.Errorf("a decline reason is not one of UsArr's own sentences.\n"+
+		"  got: %q\n"+
+		"kindDecision.Reason is copied to CatalogueContainer.DeclineReason and to "+
+		"libsync.DeclinedContainer.Reason, and reference/security.md §5 keeps upstream "+
+		"response text out of the fields that travel from there. Either an upstream "+
+		"string leaked in — fix mapLibraryType in kavita.go — or a new decline arm was "+
+		"added, in which case add its pattern to declineReasonPatterns in this file, by "+
+		"hand. Do NOT derive the set from mapLibraryType: a derived set passes for every "+
+		"future arm automatically.", reason)
 }
 
 // TestEveryLibraryTypeMemberIsMapped reads BOTH VENDORED SPECS and requires a
@@ -96,6 +144,8 @@ func everyLibraryTypeMemberIsMapped(t *testing.T, file string) {
 		if got.Kind != "" && got.Reason != "" {
 			t.Errorf("LibraryType %d maps to %q AND carries a decline reason", m, got.Kind)
 		}
+		// The Image arm, and the empty Reason every mapped arm carries.
+		assertDeclineReasonIsUsArrsOwnWords(t, got.Reason)
 	}
 }
 
@@ -111,6 +161,8 @@ func TestUnknownLibraryTypeIsDeclinedNotDefaulted(t *testing.T) {
 	if got.Reason == "" {
 		t.Error("an unknown LibraryType was declined with no reason")
 	}
+	// The DEFAULT arm — the one producer of this field that interpolates.
+	assertDeclineReasonIsUsArrsOwnWords(t, got.Reason)
 }
 
 func TestReadingDirectionComesFromTheLibraryType(t *testing.T) {

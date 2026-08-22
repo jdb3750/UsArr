@@ -3,7 +3,6 @@ package main
 import (
 	"encoding/json"
 	"net/http"
-	"strings"
 	"testing"
 
 	"github.com/jdb3750/UsArr/internal/store"
@@ -35,6 +34,49 @@ func boCompletenessNote(t *testing.T, env *testEnv, remoteID string) store.Compl
 		t.Fatalf("decode the completeness detail %q: %v", detail, err)
 	}
 	return note
+}
+
+// completenessReasonsOnTheWire is EVERY value CompletenessNote.Reason is allowed
+// to hold once it has landed in sync_report.detail. HAND-COPIED from
+// internal/libsync/bookorbitcompleteness.go.
+//
+// ⚠️ HAND-COPIED ON PURPOSE, AND THE DUPLICATION WITH internal/libsync's OWN
+// COPY IS ALSO ON PURPOSE. A set derived from the production constants — or
+// shared with that test through an exported helper — is satisfied by whatever
+// the producer produces, which is precisely the leak this guard is here to
+// catch. Two independent hardcoded copies mean a new arm has to be admitted
+// twice, by hand, by someone who has read it. Do not tidy either into the other.
+//
+// ⚠️ IT REPLACED A SUBSTRING BLACKLIST over "Forbidden resource" and "403",
+// which ran on the 403 scenario and named only the tokens that scenario
+// produces. Appending err.Error() to completenessReason's default arm left it
+// green — measured, not supposed.
+//
+// "" is a member: Reason is unset under `complete` and `shortfall`. Where an
+// empty reason would itself be the defect, Reason != "" is asserted separately.
+var completenessReasonsOnTheWire = map[string]bool{
+	"": true,
+	"BookOrbit refused UsArr the statistics this check compares against":     true,
+	"BookOrbit has no statistics route for this library":                     true,
+	"the statistics this check compares against could not be read":           true,
+	"the two counts disagreed in the direction only a moving table explains": true,
+}
+
+func assertNoteReasonIsUsArrsOwnWords(t *testing.T, reason string) {
+	t.Helper()
+	if completenessReasonsOnTheWire[reason] {
+		return
+	}
+	t.Errorf("sync_report.detail carries a completeness reason that is not one of "+
+		"UsArr's own sentences.\n"+
+		"  got: %q\n"+
+		"This value reaches a browser through GET /api/v1/libraries, and "+
+		"reference/security.md §5 keeps upstream response bodies out of this column. "+
+		"Either an upstream error string leaked in — fix the producer in "+
+		"internal/libsync/bookorbitcompleteness.go — or a new arm was added there, in "+
+		"which case add its literal to completenessReasonsOnTheWire in this file, by "+
+		"hand. Do NOT derive this set from the production constants: a derived set "+
+		"passes for every future arm automatically.", reason)
 }
 
 // TestABookOrbitContentFilterIsDetectedAndRecorded is the feature: BookOrbit's
@@ -98,6 +140,9 @@ func TestABookOrbitContentFilterIsDetectedAndRecorded(t *testing.T) {
 	if clean.Hidden != 0 {
 		t.Errorf("a complete library claims %d hidden", clean.Hidden)
 	}
+	// The `shortfall` and `complete` arms, which leave Reason unset.
+	assertNoteReasonIsUsArrsOwnWords(t, note.Reason)
+	assertNoteReasonIsUsArrsOwnWords(t, clean.Reason)
 
 	// AND THE IMPORT STILL RAN. A shortfall is a report, never a refusal: the
 	// books the credential COULD see are in the catalogue.
@@ -187,11 +232,53 @@ func TestAGuardedStatsRouteRecordsUnverifiedRatherThanComplete(t *testing.T) {
 	}
 	// The refusal is the upstream's; its words are not. reference/security.md §5
 	// keeps upstream response text out of this column, and it reaches a browser.
-	if strings.Contains(note.Reason, "Forbidden resource") || strings.Contains(note.Reason, "403") {
-		t.Errorf("upstream error text reached sync_report.detail: %q", note.Reason)
-	}
+	assertNoteReasonIsUsArrsOwnWords(t, note.Reason)
 
 	// And the catalogue is untouched by the refusal.
+	if n := countIn(t, env, `SELECT COUNT(*) FROM work`); n != 2 {
+		t.Errorf("works = %d, want 2 — a failed completeness probe must not cost an import", n)
+	}
+}
+
+// TestAFailedStatsProbeRecordsUsArrsOwnWordsAndNotTheUpstreamsBody drives
+// completenessReason's DEFAULT arm through the binary.
+//
+// ⚠️ IT EXISTS BECAUSE THAT ARM IS THE ONE THAT LEAKS THE MOST AND WAS THE ONE
+// NOTHING WATCHED. The 403 arm is reached from a sentinel comparison; the
+// default arm is reached from an *bookorbit.APIError whose Error() concatenates
+// the upstream's Message and its flattened Validation array (truncated at 512
+// bytes), so a producer that appended err.Error() there would put up to that
+// much of somebody else's response body into a column a browser renders. The
+// internal/libsync sibling of this test drives the same arm from a bare
+// errors.New, which cannot show that; only the real client can.
+func TestAFailedStatsProbeRecordsUsArrsOwnWordsAndNotTheUpstreamsBody(t *testing.T) {
+	bo := newFakeBookOrbit(t, boMagicLink)
+	bo.libraries = []map[string]any{boLibrary(1, "Fiction", 2)}
+	bo.statsStatus = map[int]int{1: http.StatusInternalServerError}
+	bo.books = map[int][]map[string]any{
+		1: {boBook(101, "The Hobbit", nil), boBook(102, "Dune", nil)},
+	}
+
+	env := boSetUp(t)
+	armBootstrapImport(t, env)
+
+	var created serviceBody
+	env.do(t, "POST", "/api/v1/services", map[string]any{
+		"kind": "bookorbit", "name": "BookOrbit", "base_url": bo.URL(), "api_key": boMagicLink,
+	}, &created)
+	waitForImport(t, env, created.ID)
+
+	note := boCompletenessNote(t, env, "1")
+	if note.State != string(store.CompletenessUnverified) {
+		t.Fatalf("state = %q, want unverified — an unreadable probe must never read as complete", note.State)
+	}
+	if note.Reason == "" {
+		t.Error("an unverified verdict carries no reason, so no screen can say why")
+	}
+	assertNoteReasonIsUsArrsOwnWords(t, note.Reason)
+
+	// And the import still ran: a probe that could not be read is a report, not
+	// a refusal.
 	if n := countIn(t, env, `SELECT COUNT(*) FROM work`); n != 2 {
 		t.Errorf("works = %d, want 2 — a failed completeness probe must not cost an import", n)
 	}

@@ -26,6 +26,51 @@ func completenessByRef(t *testing.T, src *BookOrbitSource) map[string]ContainerC
 	return out
 }
 
+// completenessReasonsUsArrCanWrite is EVERY value ContainerCompleteness.Reason
+// is allowed to hold, HAND-COPIED from bookorbitcompleteness.go rather than
+// imported from it.
+//
+// ⚠️ THE DUPLICATION IS THE POINT AND IT MUST NOT BE REFACTORED AWAY. A set
+// derived from completenessReason's own returns is satisfied by whatever that
+// function returns — including a future arm that returns err.Error(), which is
+// exactly the leak this guard exists to catch, wearing the guard's clothes.
+// Hardcoded, a sixth arm goes RED and a person has to look at it before
+// admitting its sentence here by hand. That failure is the feature.
+//
+// ⚠️ IT REPLACED A SUBSTRING BLACKLIST over "403" and "bookorbit:", which spoke
+// only about the tokens it happened to name, only on the one arm it happened to
+// run on. Appending err.Error() to completenessReason's default arm left that
+// blacklist green — measured, not supposed. Membership speaks about the WHOLE
+// value, on every arm the assertion is placed on, and the placement is half the
+// guard: see the call sites below.
+//
+// "" is a member. Reason is unset under `complete` and `shortfall`, and the
+// arms where an empty reason would itself be the defect assert Reason != ""
+// separately.
+var completenessReasonsUsArrCanWrite = map[string]bool{
+	"": true,
+	"BookOrbit refused UsArr the statistics this check compares against":     true,
+	"BookOrbit has no statistics route for this library":                     true,
+	"the statistics this check compares against could not be read":           true,
+	"the two counts disagreed in the direction only a moving table explains": true,
+}
+
+func assertReasonIsUsArrsOwnWords(t *testing.T, reason string) {
+	t.Helper()
+	if completenessReasonsUsArrCanWrite[reason] {
+		return
+	}
+	t.Errorf("ContainerCompleteness.Reason is not one of UsArr's own sentences.\n"+
+		"  got: %q\n"+
+		"This value is copied into sync_report.detail and rendered in a browser, and "+
+		"reference/security.md §5 keeps upstream response text out of it. Either an "+
+		"upstream error leaked in — fix the producer in bookorbitcompleteness.go — or a "+
+		"new arm was added there with a new UsArr-authored sentence, in which case add "+
+		"that literal to completenessReasonsUsArrCanWrite in this file, by hand. Do NOT "+
+		"make the set derive from completenessReason: a derived set passes for every "+
+		"future arm automatically.", reason)
+}
+
 // TestAContentFilterShortfallIsMeasuredNotGuessed is the headline: BookOrbit's
 // library listing says 389 and its own unfiltered stats say 412, and UsArr
 // records the 23 rather than never noticing.
@@ -71,6 +116,11 @@ func TestAContentFilterShortfallIsMeasuredNotGuessed(t *testing.T) {
 	if audio.Hidden() != 0 {
 		t.Errorf("a complete library reports %d hidden", audio.Hidden())
 	}
+	// The `shortfall` and `complete` arms, which leave Reason unset. They are
+	// asserted on because a producer that started explaining a shortfall with the
+	// upstream's words would leak through a path no unverified test visits.
+	assertReasonIsUsArrsOwnWords(t, fiction.Reason)
+	assertReasonIsUsArrsOwnWords(t, audio.Reason)
 
 	// The operator has to be able to find this in the log too, with the fix in
 	// it: the filter is on the BookOrbit account, not on anything in UsArr.
@@ -116,9 +166,7 @@ func TestAGuardedStatsRouteReadsAsUnverifiedAndNeverAsComplete(t *testing.T) {
 	if got.Reason == "" {
 		t.Error("an unverified verdict carries no reason, so no screen can say why")
 	}
-	if strings.Contains(got.Reason, "403") || strings.Contains(got.Reason, "bookorbit:") {
-		t.Errorf("the upstream's own error text reached a field that renders in a browser: %q", got.Reason)
-	}
+	assertReasonIsUsArrsOwnWords(t, got.Reason)
 	if !strings.Contains(buf.String(), "unverified, never as complete") {
 		t.Errorf("the degradation was not reported:\n%s", buf.String())
 	}
@@ -151,9 +199,14 @@ func TestACompletenessProbeNeverFailsAnImport(t *testing.T) {
 	if n != 2 || read != 2 {
 		t.Errorf("the walk delivered %d of 2 books; a reporting probe must not cost the catalogue", read)
 	}
-	if got := completenessByRef(t, src)["1"].State; got != store.CompletenessUnverified {
-		t.Errorf("state = %q, want unverified", got)
+	got := completenessByRef(t, src)["1"]
+	if got.State != store.CompletenessUnverified {
+		t.Errorf("state = %q, want unverified", got.State)
 	}
+	// completenessReason's DEFAULT arm, which is what `boom` reaches. This test
+	// read State and nothing else, and that is how a blacklist on the 403 test
+	// alone came to be the only thing standing between err.Error() and a browser.
+	assertReasonIsUsArrsOwnWords(t, got.Reason)
 }
 
 // TestAnImpossibleCountDisagreementIsUnverifiedRatherThanComplete covers the
@@ -179,6 +232,33 @@ func TestAnImpossibleCountDisagreementIsUnverifiedRatherThanComplete(t *testing.
 	if got.Total != -1 {
 		t.Errorf("Total = %d, want -1", got.Total)
 	}
+	// The one unverified reason that is NOT completenessReason's: it is assigned
+	// at the impossible-disagreement branch instead, so it is a fifth arm of the
+	// same field and belongs in the same set.
+	assertReasonIsUsArrsOwnWords(t, got.Reason)
+}
+
+// TestANotFoundStatsRouteIsDeclinedInUsArrsOwnWords covers completenessReason's
+// remaining arm, which no test reached until the membership assertion made the
+// gap visible: a 404 says the route has moved, which is a different operator
+// action from a 403 and gets a different sentence.
+func TestANotFoundStatsRouteIsDeclinedInUsArrsOwnWords(t *testing.T) {
+	r := &fakeBookOrbitReader{
+		libs:     []bookorbit.Library{{ID: 1, Name: "Fiction", BookCount: 7}},
+		statsErr: map[int64]error{1: fmt.Errorf("stats: %w", bookorbit.ErrNotFound)},
+	}
+	src := NewBookOrbitSource(r)
+	if _, err := src.Containers(t.Context()); err != nil {
+		t.Fatalf("a 404 stats probe failed the container read: %v", err)
+	}
+	got := completenessByRef(t, src)["1"]
+	if got.State != store.CompletenessUnverified {
+		t.Fatalf("state = %q, want unverified — a missing stats route is not a clean bill", got.State)
+	}
+	if got.Reason == "" {
+		t.Error("an unverified verdict carries no reason, so no screen can say why")
+	}
+	assertReasonIsUsArrsOwnWords(t, got.Reason)
 }
 
 // TestCompletenessIsEmptyBeforeAnythingIsChecked pins the third absence: no
