@@ -27477,20 +27477,21 @@ evidence.** The sweep's regex also catches `ls-tree` subtree entries and at leas
 the hits are not all root trees; and the corpus is one that measuring it mutates — running the sweep
 writes its own results back into the transcripts, so a later lane will get a larger total. **The
 classification is what should be re-run, not the number.** The blob and diffstat figures above are
-per-file and per-diff, which is a weaker statement than tree equality. **This is why the rebuilt tip tree
+per-file and per-diff, which is a weaker statement than tree equality. **This is why the tree that ships
 was re-gated from scratch rather than carrying a transferred green:** a green earned on a tree whose
 identity to the reviewed tree cannot be shown is not evidence about the new tree.
 
-📌 **The re-gate, named rather than alluded to.** Of the five rebuilt trees, **none** was gated. What
-was gated is the tree of the commit this rider lands in — the tip's content plus this rider and the
-re-pointed pin, which is a sixth tree and not any of the five. `make design` — the §13 pass this
-entry is about — was run there under node v22.22.2 and **exited 0**, and `make check` was run on the
-same tree and **exited 0** (gofumpt v0.11.0, golangci-lint 2.12.2, gitleaks v8.30.1, govulncheck
-v1.7.0, each asserted against its pin). **A commit cannot name its own hash**, so this paragraph does
-not: `docs/design/check.mjs` prints the commit it ran on and whether the working tree was clean as
-the **first line of its own output** — the second line of `make design`'s, because make echoes the
-recipe first — and that is where a run is pinned to a tree. ⚠️ **No tree of any of the five rebuilt
-commits has been gated**, and nothing here is evidence about them.
+📌 **The re-gate, named rather than alluded to.** Of the five rebuilt trees, **none** was gated. What was
+gated is a later tree that contains this rider, and not any of the five. Which commit that was, and
+whether its working tree was clean, is recorded at the head of the design checker's own output rather than
+here — **a document cannot name the tree it is part of without going stale the next time anything is added
+to it**. `make design` — the §13 pass this entry is about — was run there under node v22.22.2 and **exited
+0**, and `make check` was run on the same tree and **exited 0** (gofumpt v0.11.0, golangci-lint 2.12.2,
+gitleaks v8.30.1, govulncheck v1.7.0, each asserted against its pin). **A commit cannot name its own
+hash**, so this paragraph does not: `docs/design/check.mjs` prints the commit it ran on and whether the
+working tree was clean as the **first line of its own output** — the second line of `make design`'s,
+because make echoes the recipe first — and that is where a run is pinned to a tree. ⚠️ **No tree of any of
+the five rebuilt commits has been gated**, and nothing here is evidence about them.
 
 📌 **One of the five is corroborated by no per-commit oracle, and what does constrain it is a range.** For
 `9c4a12f` → `0403354e5546d1727d7cc53123876dbf0e8b6b06`, **both per-commit oracles are absent before the
