@@ -17,7 +17,7 @@ This file records the instruction text only. The design detail lives in `CLAUDE.
 
 | Version | Date | State | Size (characters) |
 | --- | --- | --- | --- |
-| v1.8 | 2026-08-22 | **Drafted — NOT applied.** Awaiting application by Joe or the project coordinator | 7638 (7650 bytes), md5 `2909dc2433ec2e3f9d7bed8376aef362` |
+| v1.8 | 2026-08-22 | **Applied to project settings** — 2026-08-23 | 7638 (7650 bytes), md5 `2909dc2433ec2e3f9d7bed8376aef362` |
 | v1.7 | 2026-08-19 | **Applied to project settings** — 2026-08-19 | 7914 (7926 bytes) |
 | v1.6 | 2026-08-18 | Applied 2026-08-18, superseded by v1.7 on 2026-08-19 | 7729 (7739 bytes) |
 | v1.5 | 2026-08-17 | Applied 2026-08-17 05:05 UTC, superseded by v1.6 | 8112 (8124 bytes) |
@@ -27,11 +27,11 @@ This file records the instruction text only. The design detail lives in `CLAUDE.
 | v1.1 | 2026-08-16 | Superseded by v1.2, never applied | 7022 |
 | v1.0 | 2026-08-16 | Superseded by v1.2 — applied 2026-08-16, replaced the same day | 3847 |
 
-## v1.8 — drafted, NOT applied
+## v1.8 — as applied
 
-**This is not the live settings text.** v1.7 below is, and stays live until Joe or the project
-coordinator pastes this text into the Project's settings by hand — agents cannot apply a version.
-7638 characters, md5 `2909dc2433ec2e3f9d7bed8376aef362` over its 7650 bytes.
+The text applied verbatim to the Project's settings on 2026-08-23 by the project coordinator,
+replacing v1.7. **This is the live settings text.** 7638 characters, md5
+`2909dc2433ec2e3f9d7bed8376aef362` over its 7650 bytes.
 
 v1.8 is v1.7 plus exactly one wording change and one deletion, and nothing else — the ranking phrase
 in the replica-not-proxy paragraph, forced by `CLAUDE.md` at `origin/main` = `bca8dd2`, and the
@@ -91,10 +91,11 @@ Some things are permanently refused rather than deferred. Section 1.4 of ARCHITE
 On interface design, read section 17 of ARCHITECTURE.md before touching a screen. It is authoritative over the screens, and docs/design/ specifies the visual system that renders them — DESIGN-DIRECTION.md, tokens.css and the mockups. Read both, and where they disagree, section 17 wins. The constraint is utilitarian over stylish: standard patterns in preference to novel ones, density and speed over animation, and no visual flair that costs render time. Navidrome is the reference point, and "sleek" and "modern" are explicitly not goals. Section 17 enumerates the screens and section 16 says which ship in v0.1; read both rather than assuming a count. A degraded backend gets a non-modal banner; the catalogue never greys out.
 ````
 
-## v1.7 — as applied
+## v1.7 — superseded
 
 The text applied verbatim to the Project's settings on 2026-08-19 by the project coordinator,
-replacing v1.6. **This is the live settings text.** 7914 characters, md5
+replacing v1.6. It was superseded by v1.8 above, which was applied on 2026-08-23, so this is **no
+longer** the live settings text. 7914 characters, md5
 `eb03cc348585d2e7c55c47fb289bea62` over its 7926 bytes.
 
 v1.7 is v1.6 plus exactly two changes and nothing else — a factual repair to the two sentences that
@@ -401,7 +402,7 @@ On interface design: utilitarian over stylish. The bar is tried-and-true, easy t
 
 ## Changelog
 
-### v1.8 — 2026-08-22 (drafted; NOT applied)
+### v1.8 — 2026-08-22 (applied 2026-08-23)
 
 One wording change and one deletion against v1.7, and nothing else. The wording change is forced by
 `CLAUDE.md` at `origin/main` = `bca8dd253a81ef5b290bdd13c5cbfc57602483bd`; the deletion is the cut
@@ -503,6 +504,23 @@ v1.7's own changelog entry pre-registered for whenever the next version needed r
   `docs/` through **gitleaks alone**; a green attests "no credential-shaped string in the diff" and
   nothing whatever about whether these sentences are true. The truth claims above are carried by the
   citations, each re-resolved at `bca8dd2`.
+- **Applied to the Project's settings on 2026-08-23.** Joe authorized the paste at **16:13:19Z** —
+  `cmsg_01S5UQT5yPAMR4PFkxyLGSj9392LGLknHZVFCptAqKssDE`, item 3 of his reply, in his own words
+  *"cool, add it"* — and the project coordinator pasted the block at approximately **16:16Z** the
+  same day. The split between the two is structural rather than ceremonial: agents cannot edit
+  project settings, so a human authorized the change and a coordinator session performed the paste.
+- **What the post-apply check establishes, stated for what it is.** The coordinator relayed the
+  string the settings API echoed back after the write, and that echo was hashed here against the
+  canonical block above: **byte-identical** — **7638 characters, 7650 bytes, md5
+  `2909dc2433ec2e3f9d7bed8376aef362` on both sides, `diff` empty** — with the canonical side
+  reproducing its own recorded gate in the same pass, so the comparison ran against a fixed
+  reference rather than a remembered one.
+- **What it does not establish, recorded rather than glossed.** What was verified is that the *echo*
+  matches the canonical block. The echo is the settings API reading back its own write, so it does
+  not independently establish what the settings field now stores, and no session here can read the
+  settings surface to check. A reader should take the canonical-block-to-echo link as evidenced by
+  checksum and the echo-to-stored-value link as trusted, because that is the shape of the evidence
+  rather than an artefact of how it is worded.
 
 ### v1.7 — 2026-08-19 (applied 2026-08-19)
 
