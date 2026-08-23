@@ -1129,7 +1129,9 @@ re-sectioned on the strength of this note**, and none of the three is thereby pl
       cover~~.**
       ⚠️ **THE RUN CLAUSE IS DISCHARGED 2026-08-23 AND THE HEADLINE IS STRUCK RATHER THAN REWRITTEN,
       because what is left is no longer one clause.** A real cover has been through the path — the
-      owner's 2026-08-21 import, leg 1 below — so §4.4.1's cold-start plan is what the headline was
+      owner's 2026-08-21 import, recorded on **Done-when leg 3** and again as **entry 1 of the owed
+      list**, which are one discharge written at two sites rather than two legs — so §4.4.1's
+      cold-start plan is what the headline was
       pairing it with, and **the archive half of that run is a new question rather than a leftover of
       the old one**: he reported covers on ebooks and none on CBR or CBZ. **Read the numbered list
       beneath this box for what is owed**, which is where it was already written.
@@ -1158,21 +1160,45 @@ re-sectioned on the strength of this note**, and none of the three is thereby pl
       `cmd/usarr/import.go`'s `coverPipeline` builds the fetcher from the instance's **own**
       BookOrbit client, returning `nil` (pass disabled) for any other kind or with no image-cache
       directory. **Content commit `c4a3277`.**
-      🛑 **DO NOT READ THAT AS *"COVERS WORK"*. NOTHING HAS EVER PUT A REAL COVER THROUGH IT**,
-      and the package says so about itself rather than letting a green test suite be the only signal
-      — `internal/imagepipeline`'s package doc: *"This pipeline has been TESTED AGAINST A FAKE
-      FETCHER AND NEVER AGAINST A REAL COVER. Every image it has ever processed was fabricated by its
-      own tests; no byte from a running BookOrbit has been through it."* It draws the comparison
-      itself, and this file endorses it: **that is the same register as `deploy/Dockerfile`'s
-      written-not-built.**
+      🛑 **DO NOT READ THAT AS *"COVERS WORK"* — the guard survives its own reason, which is why the
+      heading is kept and only the ground beneath it moves.** ⚠️ **THIS READ *"~~NOTHING HAS EVER PUT
+      A REAL COVER THROUGH IT~~"* UNTIL 2026-08-23, AND THE OWNER'S 2026-08-21 IMPORT FALSIFIED IT.**
+      It was true when written, so it is struck rather than overwritten. The falsifier is the one leg
+      3 and the owed-list's item 1 both name: his channel-1 import on his own instance, reported in
+      project chat **2026-08-21 19:44:07Z**
+      (`cmsg_01S5UQT5yPAMR4PFkxyLGSj92mKCuvky88RRwSk9jLq8vE`) as *"covers looked good on ebooks"*.
+      ⚠️ **The evidence is his report and nothing in this tree**, on §2's own Kavita cover-probe
+      precedent, **and the archive half did not go through the path** — he reported no covers on CBR
+      or CBZ — so **comic artwork is still unreached**. The *"COVERS WORK"* reading is therefore
+      still the wrong reading; it is wrong for a narrower reason than it was, and the narrowing is
+      the whole of what changed.
+      ⚠️ **THE QUOTATION THIS PARAGRAPH CARRIED IS NOT WHAT THE PACKAGE DOC SAYS — MEASURED
+      2026-08-23, AND THE DIFFERENCE IS THE LOAD-BEARING WORD.** It read *"~~`internal/imagepipeline`'s
+      package doc: "This pipeline has been TESTED AGAINST A FAKE FETCHER AND NEVER AGAINST A REAL
+      COVER. Every image it has ever processed was fabricated by its own tests; no byte from a running
+      BookOrbit has been through it." It draws the comparison itself, and this file endorses it: that
+      is the same register as `deploy/Dockerfile`'s written-not-built.~~"* **The doc's admission is
+      SCOPED and this file's paraphrase dropped the scope**: since `8ecb77e` (2026-08-21 17:50 UTC)
+      it reads *"every image this package has processed **inside this repository** was fabricated by
+      its own tests"*, and the trailing BookOrbit clause is not in it at all —
+      `grep -rn 'running BookOrbit' internal/imagepipeline/` comes back **empty**, with
+      `grep -rn 'NEVER AGAINST A REAL' internal/imagepipeline/` fired beside it as the needle that
+      proves the search reaches the file. **So the doc's scoped claim is NOT falsified by the import
+      and this file's unscoped restatement of it was** — which is why the paraphrase is struck and no
+      fresher restatement is written here. **The doc is the site of record and is read there.**
       ✅ **THE STALE COMMENT THIS ITEM RECORDED IS NOW FIXED.** `internal/httpapi/images.go`'s
       package header said *"What no code does is CALL it during an import"* — written at `7e5934d`,
       when it was true, made false by `c4a3277`, and not revisited until 2026-08-19. The header now
       names `c4a3277` as the falsifier and leaves the original claim legible. Four further copies
       were corrected in the same commit: `internal/httpapi/server.go`, `internal/imagecache`,
-      `internal/httpapi/library_test.go`, and `reference/http-api.md` §1 and §9.4. **Its
-      neighbouring sentence — that the pipeline has never run against a cover from a running
-      service — is still correct, and is kept as a separate claim rather than folded in.**
+      `internal/httpapi/library_test.go`, and `reference/http-api.md` §1 and §9.4. ⚠️ **THIS CLOSED
+      *"~~Its neighbouring sentence — that the pipeline has never run against a cover from a running
+      service — is still correct, and is kept as a separate claim rather than folded in.~~"*, AND
+      THAT ENDORSEMENT IS FALSIFIED 2026-08-23 BY THE SAME 2026-08-21 IMPORT** the paragraph above
+      names. Keeping it as a separate claim was right and is why the strike lands cleanly on one
+      sentence. ⚠️ **The endorsement is what is withdrawn here, not the comment it endorsed:**
+      `internal/httpapi/images.go` still carries that sentence, this pass is docs-only, and **a
+      companion correction is OWED in that file** — a pointer to work, not a claim it is done.
       🔻 **FALSIFIED 2026-08-19 by the owner's report that the library grid shows cover art.**
       Both own-voice claims above — *"NOTHING HAS EVER PUT A REAL COVER THROUGH IT"* and *"its
       neighbouring sentence … is still correct"* — were true when written and are not true now; they
@@ -1220,9 +1246,33 @@ re-sectioned on the strength of this note**, and none of the three is thereby pl
       SUBSTITUTED HERE** — a second guess dressed as a finding is precisely how the first one came
       to be written, and one is not repaired by another. **The question, addressed to him and left
       for him:** on which screen, at what address, and on which build was the cover art seen?
-      Until he answers, the two own-voice claims above are **restored rather than struck**, **with
+      ~~Until he answers, the two own-voice claims above are **restored rather than struck**, **with
       no repository falsifier** — which is exactly what the struck mark itself conceded when it
-      said *"it is an install fact with no falsifier in this repository."*
+      said *"it is an install fact with no falsifier in this repository."*~~
+      🔻 **THE RESTORATION IS SPENT 2026-08-23 WHILE THE QUESTION ABOVE IT STAYS OPEN, AND THOSE ARE
+      TWO THINGS RATHER THAN ONE.** The clause is struck because its premise was *no falsifier*, not
+      *no answer from Joe* — and a falsifier arrived that is **a different report on a different
+      date**: **2026-08-21 19:44:07Z**, *"covers looked good on ebooks"*. Both own-voice claims are
+      struck at their own sites above, each with that date beside it.
+      ⚠️ **WHY THE 2026-08-19 DEFECT DOES NOT REACH THE 2026-08-21 REPORT — the retraction states
+      its own single step, so the test is whether that step still fails.** It states it twice: *"That
+      chain needs the library grid to have been drawing `/img`'s output on 2026-08-19, and the dates
+      say it was not"*, and *"The inference fails at the rendering, not at the pipeline."* **The step
+      is a DATING claim about a RENDERING SURFACE**, and the surfaces the retraction dates are
+      `163f608` (2026-08-21 **08:02 UTC**, Home's Block C) and `a34d87f` (2026-08-21 **13:59 UTC**,
+      the library grid). **The 2026-08-21 report is 19:44:07Z — hours AFTER both**, where the
+      2026-08-19 one was two days before them. So the objection that killed the earlier inference is
+      the objection the later report satisfies, and it bears on its own strength rather than by
+      inheriting anything from the report it does not replace.
+      ❓ **THE 2026-08-19 QUESTION IS NOT ANSWERED BY ANY OF THIS AND IS STILL JOE'S.** What he saw
+      on **that** date, on which screen and on which build, is untouched — a later sighting says
+      nothing about an earlier one — so the ❓ above stands as written. **What is withdrawn is only
+      its use as a reason to hold the two own-voice claims alive**, because they were being held
+      against a falsifier that has since arrived from elsewhere.
+      ⚠️ **AND THE NEW FALSIFIER IS NO MORE A REPOSITORY FACT THAN THE OLD ONE WAS.** It is a report
+      about an install this tree cannot reach, carried on §2's Kavita cover-probe precedent. **The
+      strike above records what the report establishes and stops there**: a real cover through the
+      path on ebooks, **no cover on CBR or CBZ**, and the three gaps below untouched.
       ⚠️ **`internal/imagepipeline`'s PACKAGE DOC IS THE SITE OF RECORD AND CARRIED THE SAME
       UNSOUND STEP, SO A COMPANION CORRECTION WAS OWED THERE.** The sentence immediately above
       calls that doc the site of record, so correcting only this file would have left the falsified
@@ -1371,21 +1421,53 @@ re-sectioned on the strength of this note**, and none of the three is thereby pl
          `curl -sS -o /dev/null -w '%{http_code} %{content_type} %{size_download}\n' '<base>/img/<key>?w=342'`
          answers `200`, an `image/*` content type and a **non-zero** size. (This container has no
          `sqlite3` CLI, so this leg is deliberately a request rather than a query.)
-         🔴 **STILL RED — AND NOW RED FOR ITS OWN REASON, WHICH IS THE POINT OF THE SPLIT.** It used
-         to be red *for leg 2's reason*: there was no `<key>` to put in the URL because nothing wrote
-         a row. **That blocker is gone and the leg did not go green with it.** Nothing has run the
-         pipeline against a real service — `internal/imagepipeline`'s own package doc says so — so
-         no install has a rendered cover to request, and **this leg is unfired rather than failed**:
-         it needs a host with a BookOrbit and a completed `usarr import`, which the agent container
-         is not. **It stays open until somebody fires it and records what came back.**
+         ✅ **REACHED 2026-08-21, RECORDED HERE 2026-08-23 — and the leg is worth reading for the two
+         things it went green ON, because the split exists to keep them apart.** This read
+         *"~~🔴 STILL RED — AND NOW RED FOR ITS OWN REASON … Nothing has run the pipeline against a
+         real service — `internal/imagepipeline`'s own package doc says so — so no install has a
+         rendered cover to request, and this leg is unfired rather than failed: it needs a host with
+         a BookOrbit and a completed `usarr import`, which the agent container is not. It stays open
+         until somebody fires it and records what came back.~~"* Every clause of that was true when
+         written; the owner then supplied precisely the host it described. **His channel-1 import on
+         his own instance, reported in project chat 2026-08-21 19:44:07Z**
+         (`cmsg_01S5UQT5yPAMR4PFkxyLGSj92mKCuvky88RRwSk9jLq8vE`) as *"covers looked good on
+         ebooks"*: artwork on the screen is `/img/{key}` answering with bytes, which is what this leg
+         asks for. **The paragraph is struck in place rather than deleted** — the earlier red is the
+         reason the split earned itself, and it distinguished *unfired* from *failed*, which is the
+         distinction that let a report discharge it.
+         ⚠️ **WHAT THE REPORT DOES NOT SUPPLY IS THE COMMAND'S OWN OUTPUT, AND THE LEG IS TICKED ON
+         THE SUBSTANCE RATHER THAN ON THE FORM.** The `curl` above was not fired: the status line,
+         the content type and the byte count were **not** recorded, so a reader wanting those still
+         has to fire it against a host with a BookOrbit and a completed `usarr import`. What the
+         report establishes is that the request succeeds on a real install, which is what the leg
+         was written to test; the numbers are the evidence a re-firer would add, not a condition the
+         leg states.
+         ⚠️ **THE EVIDENCE IS A REPORT AND NOT A TREE FACT**, on §2's own Kavita cover-probe
+         precedent — no test in this repository reaches that machine — and **the archive half did
+         not go through the path**: he reported no covers on CBR or CBZ, which is what the child-item
+         skip predicts, so **comic artwork is still unreached** and that is a live question rather
+         than something this tick closes.
          ⚠️ **A green `make check` does not touch this leg and must not be read as touching it.**
-         Every image the suite has ever put through the pipeline was fabricated by the suite.
+         Every image the suite has ever put through the pipeline was fabricated by the suite, which
+         is why the discharge above rests on an install and not on the gate.
 
-      ✅ **SO THE THREE-LEG SPLIT NOW READS TWO GREEN, ONE RED — AND IT HAS NOW EARNED THE SPLIT
-      TWICE.** Leg 1 went green on a commit that **fetches nothing**. Leg 2 then went green on a
-      commit that fetches, decodes and renders — but **still on fabricated bytes only**. Had this
-      item carried a single done-check, either commit would have closed it. **Leg 3 is the one that
-      cannot be satisfied by writing code**, and it is what holds this item open.
+      ✅ **SO EVERY LEG OF THE SPLIT IS NOW REACHED, EACH ON THE EVIDENCE ITS OWN LEG NAMES — AND
+      THE SPLIT EARNED ITSELF ON THE WAY THERE.** ⚠️ **THIS SENTENCE READ *"~~SO THE THREE-LEG SPLIT
+      NOW READS TWO GREEN, ONE RED~~"* UNTIL 2026-08-23**, when leg 3 was recorded as reached and the
+      tally beside it went stale in the same box — **a count is re-derived from the legs or it is not
+      written**, which is why the form above carries none. Legs 1 and 2 are discharged by commits and
+      by re-firable greps; **leg 3 is discharged by the owner's 2026-08-21 report and by nothing in
+      this tree**, and those are different grades of evidence that a single number would have hidden.
+      **The arc is the argument for splitting at all:** leg 1 went green on a commit that **fetches
+      nothing**; leg 2 then went green on a commit that fetches, decodes and renders — but **still on
+      fabricated bytes only**. Had this item carried a single done-check, either commit would have
+      closed it.
+      ⚠️ **AND THE CLOSING CLAUSE IS HALF FALSIFIED, SO ONLY THE HALF THAT DIED IS STRUCK.** It read
+      *"**Leg 3 is the one that cannot be satisfied by writing code**, ~~and it is what holds this
+      item open~~"*. The first half stands and was **confirmed by the manner of its own discharge** —
+      no commit closed it; a run on somebody's install did. The second half is spent: **what holds
+      this item open is the owed-list below**, §4.4.1's cold start and the two gaps beside it, and
+      the three-gaps rider above already said the box *"stays open on those alone"*.
 
       **The clause that stops this being weakened back:** the three legs exist because **a writer
       that fetches nothing, decodes nothing and serves nothing satisfies a bare SQL grep exactly** —
@@ -1415,7 +1497,13 @@ re-sectioned on the strength of this note**, and none of the three is thereby pl
       the reason in the clause above. Two misses on one line is a pattern, not luck: **a done-check
       for a pipeline has to name the pipeline's OUTPUT, never one of its INSERTs.**
 
-      **SO WHAT IS ACTUALLY STILL OWED ON THIS ITEM. Four things, and §4.4.1 is three of them.**
+      **SO WHAT IS ACTUALLY STILL OWED ON THIS ITEM — THE NUMBERED LIST BELOW, ENTRY BY ENTRY.**
+      ⚠️ **THIS READ *"~~Four things, and §4.4.1 is three of them~~"* UNTIL 2026-08-23, AND ENTRY 1
+      GOING FROM OWED TO REACHED FALSIFIED THE TALLY IN THE SAME PASS THAT TICKED IT.** **No fresher
+      number replaces it** — the list is what a later pass re-fires one by one, and a tally beside a
+      list that moves is the defect this file keeps finding in itself. **Entry 1 stays on the list
+      with its discharge legible rather than being deleted from it**, because what a reader needs is
+      which entry moved and on what evidence, and a shorter list would hide both.
       Fired against the tree at `4d95d36`, by `39cc459`, the pass that wrote this block —
       **pinned 2026-08-22**, where it read *"~~at the baseline above~~"* and had been re-aimed at
       two later tips by two baseline advances that never re-fired it.
@@ -2465,12 +2553,22 @@ re-sectioned on the strength of this note**, and none of the three is thereby pl
         unverified"* and flags the README's Compose block **illustrative only**; and §12's
         known-gaps list says **`make docker` has not been made to succeed on any checkout**. The
         `Makefile`'s own `docker` recipe fails closed on a missing daemon and points at §8.
-      - ⚠️ **THE SAME SHAPE AS THIS FILE'S OTHER OPEN LEG, AND WORTH NOTICING TWICE IN ONE PASS.**
-        §2's image-pipeline item has a leg that **cannot be satisfied by writing code** — a first run
-        against a real cover — and `internal/imagepipeline`'s package doc names
-        `deploy/Dockerfile`'s written-not-built as its own comparison. **A *Done when* that a text
-        editor can satisfy is the failure mode both of them found**, and this box is ticked knowing
-        that its check was the weak kind.
+      - ⚠️ **THE SAME SHAPE AS §2's IMAGE-PIPELINE LEG 3 — AND THAT PARALLEL IS NOW A CONTRAST,
+        WHICH IS MORE USEFUL THAN THE LIKENESS WAS.** ⚠️ **THIS OPENED *"~~THE SAME SHAPE AS THIS
+        FILE'S OTHER OPEN LEG~~"* UNTIL 2026-08-23**, when that leg was recorded as reached on the
+        owner's 2026-08-21 import; **this one is still open**, so the two are no longer the same
+        state. What they still share is the property worth noticing: a leg that **cannot be
+        satisfied by writing code**. **§2's was discharged the only way such a leg can be — somebody
+        ran it and reported what came back** — and that is exactly what this box is still owed.
+        **A *Done when* that a text editor can satisfy is the failure mode both of them found**, and
+        this box is ticked knowing that its check was the weak kind.
+      - ⚠️ **AND THE COMPARISON THIS BULLET ATTRIBUTED TO THE PACKAGE DOC IS NOT IN IT — MEASURED
+        2026-08-23.** It read *"~~`internal/imagepipeline`'s package doc names `deploy/Dockerfile`'s
+        written-not-built as its own comparison~~"*, which was true of an earlier text of that doc.
+        `grep -rn 'Dockerfile' internal/` comes back **empty** — fired with
+        `grep -rn 'package imagepipeline' internal/` beside it as the needle that proves the search
+        reaches the package. **The likeness above is this file's own observation and is stated as
+        one**, rather than borrowed from a doc that no longer makes it.
       📉 **THE *`deploy/` HAS STALLED* OBSERVATION UNDER THIS ITEM IS FALSIFIED TOO, AND IT WAS
       FALSIFIED BY THIS ITEM'S OWN COMMIT.** It used to read: *"~~`deploy/` has not moved since
       2026-08-17. The newest commit whose diff contains a `deploy/` change is `3b951cf` … the gap is
