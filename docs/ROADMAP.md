@@ -40,8 +40,22 @@
 > [`81e7310`](https://github.com/jdb3750/UsArr/commit/81e7310) (2026-08-18), the commit that created
 > this file, and **neither of them cites a source**; `docs/PROJECT-INSTRUCTIONS.md`, the canonical
 > copy of the instruction text applied to the project's own settings, carries no clause of this kind
-> in **any** version from v1.0 to v1.7. So the underlying instruction is referenced here exactly as
-> the struck sentence referenced it, and no fresher claim about its wording is made.
+> in **any** version it holds. **That rests on the grep, not on a list of versions** — a list goes
+> stale at the next apply, and this one did. So the check is over the file, which carries its version
+> texts inline: `grep -niwE 'dates|estimates' docs/PROJECT-INSTRUCTIONS.md` **must come back empty.**
+> ⚠️ **The word boundary is load-bearing, and so is the path.** Unanchored, `dates` matches
+> *Candidates* in that file's own headings and `estimat` matches its changelog's *"Measured, not
+> estimated"* — either form comes back non-empty while establishing nothing — and a `docs/`-wide form
+> would match this paragraph. **The needle is shown to fire, so the empty answer is a measurement
+> rather than a dead probe:** the same command against this file, `grep -niwE 'dates|estimates'
+> docs/ROADMAP.md`, matches the struck sentence this rider hangs off, among others.
+> ⚠️ **And the net is narrow in the other direction**: a clause carrying neither plural noun would
+> not be caught, so the grep **bounds** this claim rather than closing it.
+> ⚠️ **THIS SENTENCE ENUMERATED — *"~~in **any** version from v1.0 to v1.7~~"* — UNTIL 2026-08-23,
+> AND THE v1.8 APPLY OF THAT DATE FALSIFIED IT**, v1.8 having landed in
+> `docs/PROJECT-INSTRUCTIONS.md` outside the range the sentence named. A count-free form cannot be
+> falsified by the next apply the same way. So the underlying instruction is referenced here exactly
+> as the struck sentence referenced it, and no fresher claim about its wording is made.
 >
 > ⚠️ **THE OWNER WAS ASKED, AND REPLIED — RECORDED 2026-08-21 AS A REPLY RATHER THAN AS AN ANSWER,
 > WHICH IS THE WHOLE POINT OF THE ENTRY.** The question put to him was whether to scope the struck
@@ -169,7 +183,13 @@
 > *"a `Dockerfile` exists"* — `deploy/Dockerfile`, content commit `000ac52` — with the unbuilt image
 > and the missing daemon written out beneath the box; and §2's **image-pipeline** item's third leg
 > stays **open** although its writer and its call site landed as code (content commits `7e5934d` and
-> `c4a3277`), because no real cover has been through the path yet.
+> `c4a3277`), ~~because no real cover has been through the path yet~~.
+> ⚠️ **THAT SECOND EXAMPLE'S TENSE IS CORRECTED 2026-08-23, AND THE EXAMPLE IS KEPT.** It read
+> *"~~because no real cover **has** been through the path yet~~"*; the owner's 2026-08-21 import put
+> covers through it, on the report §3's *BookOrbit — OWNER-DECIDED* box now carries. **The worked
+> example is a record of how the carve-out was applied on the day**, which is what this paragraph
+> says it is, so it survives the world moving past it — and §2's image-pipeline item, not this
+> preamble, is where that leg's disposition is written.
 > 📌 **Boxes ticked or held under that carve-out are marked `🧾 RECORD-KEEPING CHECK` in place**, so a
 > reader meets the limit at the criterion rather than after it.
 >
@@ -1105,8 +1125,16 @@ re-sectioned on the strength of this note**, and none of the three is thereby pl
       sharper divergence, not a closed one, and still not this file's to close.**
 
 - [ ] **The image pipeline's FETCH HALF — NARROWER AGAIN. The writer, the renderer and the import
-      call site all landed; what is left is §4.4.1's cold-start plan and a first run against a real
-      cover.**
+      call site all landed; what is left is §4.4.1's cold-start plan and ~~a first run against a real
+      cover~~.**
+      ⚠️ **THE RUN CLAUSE IS DISCHARGED 2026-08-23 AND THE HEADLINE IS STRUCK RATHER THAN REWRITTEN,
+      because what is left is no longer one clause.** A real cover has been through the path — the
+      owner's 2026-08-21 import, recorded on **Done-when leg 3** and again as **entry 1 of the owed
+      list**, which are one discharge written at two sites rather than two legs — so §4.4.1's
+      cold-start plan is what the headline was
+      pairing it with, and **the archive half of that run is a new question rather than a leftover of
+      the old one**: he reported covers on ebooks and none on CBR or CBZ. **Read the numbered list
+      beneath this box for what is owed**, which is where it was already written.
       ⚠️ **THE HEADLINE USED TO READ *"~~`image_asset` is in the schema; nothing in `internal/` or
       `cmd/` writes or serves it~~"*, AND THE *SERVES* CLAUSE WENT FALSE FIRST.** `GET /img/{key}` is
       registered in `internal/httpapi/server.go` and handled by `internal/httpapi/images.go`
@@ -1132,21 +1160,45 @@ re-sectioned on the strength of this note**, and none of the three is thereby pl
       `cmd/usarr/import.go`'s `coverPipeline` builds the fetcher from the instance's **own**
       BookOrbit client, returning `nil` (pass disabled) for any other kind or with no image-cache
       directory. **Content commit `c4a3277`.**
-      🛑 **DO NOT READ THAT AS *"COVERS WORK"*. NOTHING HAS EVER PUT A REAL COVER THROUGH IT**,
-      and the package says so about itself rather than letting a green test suite be the only signal
-      — `internal/imagepipeline`'s package doc: *"This pipeline has been TESTED AGAINST A FAKE
-      FETCHER AND NEVER AGAINST A REAL COVER. Every image it has ever processed was fabricated by its
-      own tests; no byte from a running BookOrbit has been through it."* It draws the comparison
-      itself, and this file endorses it: **that is the same register as `deploy/Dockerfile`'s
-      written-not-built.**
+      🛑 **DO NOT READ THAT AS *"COVERS WORK"* — the guard survives its own reason, which is why the
+      heading is kept and only the ground beneath it moves.** ⚠️ **THIS READ *"~~NOTHING HAS EVER PUT
+      A REAL COVER THROUGH IT~~"* UNTIL 2026-08-23, AND THE OWNER'S 2026-08-21 IMPORT FALSIFIED IT.**
+      It was true when written, so it is struck rather than overwritten. The falsifier is the one leg
+      3 and the owed-list's item 1 both name: his channel-1 import on his own instance, reported in
+      project chat **2026-08-21 19:44:07Z**
+      (`cmsg_01S5UQT5yPAMR4PFkxyLGSj92mKCuvky88RRwSk9jLq8vE`) as *"covers looked good on ebooks"*.
+      ⚠️ **The evidence is his report and nothing in this tree**, on §2's own Kavita cover-probe
+      precedent, **and the archive half did not go through the path** — he reported no covers on CBR
+      or CBZ — so **comic artwork is still unreached**. The *"COVERS WORK"* reading is therefore
+      still the wrong reading; it is wrong for a narrower reason than it was, and the narrowing is
+      the whole of what changed.
+      ⚠️ **THE QUOTATION THIS PARAGRAPH CARRIED IS NOT WHAT THE PACKAGE DOC SAYS — MEASURED
+      2026-08-23, AND THE DIFFERENCE IS THE LOAD-BEARING WORD.** It read *"~~`internal/imagepipeline`'s
+      package doc: "This pipeline has been TESTED AGAINST A FAKE FETCHER AND NEVER AGAINST A REAL
+      COVER. Every image it has ever processed was fabricated by its own tests; no byte from a running
+      BookOrbit has been through it." It draws the comparison itself, and this file endorses it: that
+      is the same register as `deploy/Dockerfile`'s written-not-built.~~"* **The doc's admission is
+      SCOPED and this file's paraphrase dropped the scope**: since `8ecb77e` (2026-08-21 17:50 UTC)
+      it reads *"every image this package has processed **inside this repository** was fabricated by
+      its own tests"*, and the trailing BookOrbit clause is not in it at all —
+      `grep -rn 'running BookOrbit' internal/imagepipeline/` comes back **empty**, with
+      `grep -rn 'NEVER AGAINST A REAL' internal/imagepipeline/` fired beside it as the needle that
+      proves the search reaches the file. **So the doc's scoped claim is NOT falsified by the import
+      and this file's unscoped restatement of it was** — which is why the paraphrase is struck and no
+      fresher restatement is written here. **The doc is the site of record and is read there.**
       ✅ **THE STALE COMMENT THIS ITEM RECORDED IS NOW FIXED.** `internal/httpapi/images.go`'s
       package header said *"What no code does is CALL it during an import"* — written at `7e5934d`,
       when it was true, made false by `c4a3277`, and not revisited until 2026-08-19. The header now
       names `c4a3277` as the falsifier and leaves the original claim legible. Four further copies
       were corrected in the same commit: `internal/httpapi/server.go`, `internal/imagecache`,
-      `internal/httpapi/library_test.go`, and `reference/http-api.md` §1 and §9.4. **Its
-      neighbouring sentence — that the pipeline has never run against a cover from a running
-      service — is still correct, and is kept as a separate claim rather than folded in.**
+      `internal/httpapi/library_test.go`, and `reference/http-api.md` §1 and §9.4. ⚠️ **THIS CLOSED
+      *"~~Its neighbouring sentence — that the pipeline has never run against a cover from a running
+      service — is still correct, and is kept as a separate claim rather than folded in.~~"*, AND
+      THAT ENDORSEMENT IS FALSIFIED 2026-08-23 BY THE SAME 2026-08-21 IMPORT** the paragraph above
+      names. Keeping it as a separate claim was right and is why the strike lands cleanly on one
+      sentence. ⚠️ **The endorsement is what is withdrawn here, not the comment it endorsed:**
+      `internal/httpapi/images.go` still carries that sentence, this pass is docs-only, and **a
+      companion correction is OWED in that file** — a pointer to work, not a claim it is done.
       🔻 **FALSIFIED 2026-08-19 by the owner's report that the library grid shows cover art.**
       Both own-voice claims above — *"NOTHING HAS EVER PUT A REAL COVER THROUGH IT"* and *"its
       neighbouring sentence … is still correct"* — were true when written and are not true now; they
@@ -1194,9 +1246,33 @@ re-sectioned on the strength of this note**, and none of the three is thereby pl
       SUBSTITUTED HERE** — a second guess dressed as a finding is precisely how the first one came
       to be written, and one is not repaired by another. **The question, addressed to him and left
       for him:** on which screen, at what address, and on which build was the cover art seen?
-      Until he answers, the two own-voice claims above are **restored rather than struck**, **with
+      ~~Until he answers, the two own-voice claims above are **restored rather than struck**, **with
       no repository falsifier** — which is exactly what the struck mark itself conceded when it
-      said *"it is an install fact with no falsifier in this repository."*
+      said *"it is an install fact with no falsifier in this repository."*~~
+      🔻 **THE RESTORATION IS SPENT 2026-08-23 WHILE THE QUESTION ABOVE IT STAYS OPEN, AND THOSE ARE
+      TWO THINGS RATHER THAN ONE.** The clause is struck because its premise was *no falsifier*, not
+      *no answer from Joe* — and a falsifier arrived that is **a different report on a different
+      date**: **2026-08-21 19:44:07Z**, *"covers looked good on ebooks"*. Both own-voice claims are
+      struck at their own sites above, each with that date beside it.
+      ⚠️ **WHY THE 2026-08-19 DEFECT DOES NOT REACH THE 2026-08-21 REPORT — the retraction states
+      its own single step, so the test is whether that step still fails.** It states it twice: *"That
+      chain needs the library grid to have been drawing `/img`'s output on 2026-08-19, and the dates
+      say it was not"*, and *"The inference fails at the rendering, not at the pipeline."* **The step
+      is a DATING claim about a RENDERING SURFACE**, and the surfaces the retraction dates are
+      `163f608` (2026-08-21 **08:02 UTC**, Home's Block C) and `a34d87f` (2026-08-21 **13:59 UTC**,
+      the library grid). **The 2026-08-21 report is 19:44:07Z — hours AFTER both**, where the
+      2026-08-19 one was two days before them. So the objection that killed the earlier inference is
+      the objection the later report satisfies, and it bears on its own strength rather than by
+      inheriting anything from the report it does not replace.
+      ❓ **THE 2026-08-19 QUESTION IS NOT ANSWERED BY ANY OF THIS AND IS STILL JOE'S.** What he saw
+      on **that** date, on which screen and on which build, is untouched — a later sighting says
+      nothing about an earlier one — so the ❓ above stands as written. **What is withdrawn is only
+      its use as a reason to hold the two own-voice claims alive**, because they were being held
+      against a falsifier that has since arrived from elsewhere.
+      ⚠️ **AND THE NEW FALSIFIER IS NO MORE A REPOSITORY FACT THAN THE OLD ONE WAS.** It is a report
+      about an install this tree cannot reach, carried on §2's Kavita cover-probe precedent. **The
+      strike above records what the report establishes and stops there**: a real cover through the
+      path on ebooks, **no cover on CBR or CBZ**, and the three gaps below untouched.
       ⚠️ **`internal/imagepipeline`'s PACKAGE DOC IS THE SITE OF RECORD AND CARRIED THE SAME
       UNSOUND STEP, SO A COMPANION CORRECTION WAS OWED THERE.** The sentence immediately above
       calls that doc the site of record, so correcting only this file would have left the falsified
@@ -1345,21 +1421,53 @@ re-sectioned on the strength of this note**, and none of the three is thereby pl
          `curl -sS -o /dev/null -w '%{http_code} %{content_type} %{size_download}\n' '<base>/img/<key>?w=342'`
          answers `200`, an `image/*` content type and a **non-zero** size. (This container has no
          `sqlite3` CLI, so this leg is deliberately a request rather than a query.)
-         🔴 **STILL RED — AND NOW RED FOR ITS OWN REASON, WHICH IS THE POINT OF THE SPLIT.** It used
-         to be red *for leg 2's reason*: there was no `<key>` to put in the URL because nothing wrote
-         a row. **That blocker is gone and the leg did not go green with it.** Nothing has run the
-         pipeline against a real service — `internal/imagepipeline`'s own package doc says so — so
-         no install has a rendered cover to request, and **this leg is unfired rather than failed**:
-         it needs a host with a BookOrbit and a completed `usarr import`, which the agent container
-         is not. **It stays open until somebody fires it and records what came back.**
+         ✅ **REACHED 2026-08-21, RECORDED HERE 2026-08-23 — and the leg is worth reading for the two
+         things it went green ON, because the split exists to keep them apart.** This read
+         *"~~🔴 STILL RED — AND NOW RED FOR ITS OWN REASON … Nothing has run the pipeline against a
+         real service — `internal/imagepipeline`'s own package doc says so — so no install has a
+         rendered cover to request, and this leg is unfired rather than failed: it needs a host with
+         a BookOrbit and a completed `usarr import`, which the agent container is not. It stays open
+         until somebody fires it and records what came back.~~"* Every clause of that was true when
+         written; the owner then supplied precisely the host it described. **His channel-1 import on
+         his own instance, reported in project chat 2026-08-21 19:44:07Z**
+         (`cmsg_01S5UQT5yPAMR4PFkxyLGSj92mKCuvky88RRwSk9jLq8vE`) as *"covers looked good on
+         ebooks"*: artwork on the screen is `/img/{key}` answering with bytes, which is what this leg
+         asks for. **The paragraph is struck in place rather than deleted** — the earlier red is the
+         reason the split earned itself, and it distinguished *unfired* from *failed*, which is the
+         distinction that let a report discharge it.
+         ⚠️ **WHAT THE REPORT DOES NOT SUPPLY IS THE COMMAND'S OWN OUTPUT, AND THE LEG IS TICKED ON
+         THE SUBSTANCE RATHER THAN ON THE FORM.** The `curl` above was not fired: the status line,
+         the content type and the byte count were **not** recorded, so a reader wanting those still
+         has to fire it against a host with a BookOrbit and a completed `usarr import`. What the
+         report establishes is that the request succeeds on a real install, which is what the leg
+         was written to test; the numbers are the evidence a re-firer would add, not a condition the
+         leg states.
+         ⚠️ **THE EVIDENCE IS A REPORT AND NOT A TREE FACT**, on §2's own Kavita cover-probe
+         precedent — no test in this repository reaches that machine — and **the archive half did
+         not go through the path**: he reported no covers on CBR or CBZ, which is what the child-item
+         skip predicts, so **comic artwork is still unreached** and that is a live question rather
+         than something this tick closes.
          ⚠️ **A green `make check` does not touch this leg and must not be read as touching it.**
-         Every image the suite has ever put through the pipeline was fabricated by the suite.
+         Every image the suite has ever put through the pipeline was fabricated by the suite, which
+         is why the discharge above rests on an install and not on the gate.
 
-      ✅ **SO THE THREE-LEG SPLIT NOW READS TWO GREEN, ONE RED — AND IT HAS NOW EARNED THE SPLIT
-      TWICE.** Leg 1 went green on a commit that **fetches nothing**. Leg 2 then went green on a
-      commit that fetches, decodes and renders — but **still on fabricated bytes only**. Had this
-      item carried a single done-check, either commit would have closed it. **Leg 3 is the one that
-      cannot be satisfied by writing code**, and it is what holds this item open.
+      ✅ **SO EVERY LEG OF THE SPLIT IS NOW REACHED, EACH ON THE EVIDENCE ITS OWN LEG NAMES — AND
+      THE SPLIT EARNED ITSELF ON THE WAY THERE.** ⚠️ **THIS SENTENCE READ *"~~SO THE THREE-LEG SPLIT
+      NOW READS TWO GREEN, ONE RED~~"* UNTIL 2026-08-23**, when leg 3 was recorded as reached and the
+      tally beside it went stale in the same box — **a count is re-derived from the legs or it is not
+      written**, which is why the form above carries none. Legs 1 and 2 are discharged by commits and
+      by re-firable greps; **leg 3 is discharged by the owner's 2026-08-21 report and by nothing in
+      this tree**, and those are different grades of evidence that a single number would have hidden.
+      **The arc is the argument for splitting at all:** leg 1 went green on a commit that **fetches
+      nothing**; leg 2 then went green on a commit that fetches, decodes and renders — but **still on
+      fabricated bytes only**. Had this item carried a single done-check, either commit would have
+      closed it.
+      ⚠️ **AND THE CLOSING CLAUSE IS HALF FALSIFIED, SO ONLY THE HALF THAT DIED IS STRUCK.** It read
+      *"**Leg 3 is the one that cannot be satisfied by writing code**, ~~and it is what holds this
+      item open~~"*. The first half stands and was **confirmed by the manner of its own discharge** —
+      no commit closed it; a run on somebody's install did. The second half is spent: **what holds
+      this item open is the owed-list below**, §4.4.1's cold start and the two gaps beside it, and
+      the three-gaps rider above already said the box *"stays open on those alone"*.
 
       **The clause that stops this being weakened back:** the three legs exist because **a writer
       that fetches nothing, decodes nothing and serves nothing satisfies a bare SQL grep exactly** —
@@ -1389,12 +1497,29 @@ re-sectioned on the strength of this note**, and none of the three is thereby pl
       the reason in the clause above. Two misses on one line is a pattern, not luck: **a done-check
       for a pipeline has to name the pipeline's OUTPUT, never one of its INSERTs.**
 
-      **SO WHAT IS ACTUALLY STILL OWED ON THIS ITEM. Four things, and §4.4.1 is three of them.**
+      **SO WHAT IS ACTUALLY STILL OWED ON THIS ITEM — THE NUMBERED LIST BELOW, ENTRY BY ENTRY.**
+      ⚠️ **THIS READ *"~~Four things, and §4.4.1 is three of them~~"* UNTIL 2026-08-23, AND ENTRY 1
+      GOING FROM OWED TO REACHED FALSIFIED THE TALLY IN THE SAME PASS THAT TICKED IT.** **No fresher
+      number replaces it** — the list is what a later pass re-fires one by one, and a tally beside a
+      list that moves is the defect this file keeps finding in itself. **Entry 1 stays on the list
+      with its discharge legible rather than being deleted from it**, because what a reader needs is
+      which entry moved and on what evidence, and a shorter list would hide both.
       Fired against the tree at `4d95d36`, by `39cc459`, the pass that wrote this block —
       **pinned 2026-08-22**, where it read *"~~at the baseline above~~"* and had been re-aimed at
       two later tips by two baseline advances that never re-fired it.
-      1. **THE FIRST REAL RUN — leg 3, and it is the only one that cannot be closed by writing
-         code.** Covered above; it needs a host with a BookOrbit and a completed `usarr import`.
+      1. ✅ **THE REAL RUN — leg 3, and it is the one on this list that cannot be closed by writing
+         code.** ⚠️ **REACHED 2026-08-21 AND RECORDED HERE 2026-08-23.** This read
+         *"~~THE FIRST REAL RUN … Covered above; it needs a host with a BookOrbit and a completed
+         `usarr import`~~"*, in the future tense, and the owner supplied exactly that: a host with a
+         BookOrbit and a completed import, reported in project chat **2026-08-21 19:44:07Z**
+         (`cmsg_01S5UQT5yPAMR4PFkxyLGSj92mKCuvky88RRwSk9jLq8vE`) as *"covers looked good on
+         ebooks"*. **The evidence is his report and nothing in this tree**, on §2's own Kavita
+         cover-probe precedent; §3's *BookOrbit — OWNER-DECIDED* box carries the trace from a
+         rendered cover back through `PutPosterAsset` to a committed catalogue row, rather than a
+         second copy of it here. ⚠️ **What it does NOT reach is the archive half** — he reported no
+         covers on CBR and CBZ, which is what the child-item skip in `streamAndApply` predicts — so
+         **a comic's artwork has still not been through this path**, and that is a live question for
+         whoever picks the comic side up rather than a defect recorded closed here.
       2. **§4.4.1's COLD START IS UNBUILT IN FULL, and the columns for it have been in the schema
          since `00005`.** `image_asset.thumbhash` and `image_asset.dominant_color` are declared at
          `00005_library_sync.sql`'s `image_asset` block — the `dominant_color` line carries the
@@ -1425,10 +1550,25 @@ re-sectioned on the strength of this note**, and none of the three is thereby pl
       4. **THE TINT, which is the design decision below and is unbuilt.** `store.PosterAsset` carries
          no colour field of any kind.
       🔍 **Inference, labelled: one further gap that is a shape question rather than a missing
-      line.** The pass's only production trigger is `FullImport` — `grep -n fetchCovers
-      internal/libsync/importer.go` finds the call in phase D **among comments naming it, so read
-      the hits rather than counting them.** There is no per-work trigger and
-      no standalone backfill command, so on an install whose catalogue was imported before `c4a3277`
+      line.**
+      ⚠️ **CORRECTED 2026-08-23 — THIS OPENED *"~~The pass's only production trigger is
+      `FullImport`~~"*, AND A SECOND TRIGGER FALSIFIES IT.** `internal/libsync/delta.go`'s
+      `DeltaSync` calls `im.fetchCovers(ctx, instanceID, imported, &rep.Report)` after its rollup
+      flush, beside `FullImport`'s call in phase D of `internal/libsync/importer.go`. **The
+      replacement is the LIST rather than a fresher *"only"*,** because a closed-set claim about
+      call sites is falsified by the next call site and reads as checked until somebody re-fires it:
+      `grep -rn 'im\.fetchCovers' internal --include=*.go` **enumerates the call sites**, and what a
+      reader is looking for is one line per site with its file — a third would arrive in that output
+      rather than in a sentence nobody re-ran. **The needle is shown to fire rather than assumed:**
+      run at the writing tree it returns the two sites named above, so an answer of two is a
+      measurement and not a dead probe. ⚠️ **The old check was `grep -n fetchCovers
+      internal/libsync/importer.go`, and its defect was its PATH**: scoped to one file, it could
+      not have seen `delta.go` however carefully its output was read.
+      **The gap the inference is about survives the correction, and it is why the correction is not
+      merely a count.** Both sites hand `fetchCovers` an import's own item slice, so artwork is
+      reached through an import pass rather than through anything addressed at a single work; there
+      is **no per-work trigger and no standalone backfill command** in that output. So on an install
+      whose catalogue was imported before `c4a3277`
       the way to get artwork is to **re-run the import**, which `PosteredItems` makes cheap for the
       works that already have it. Whether that is sufficient or whether a backfill deserves its own
       entry point is **not a question this file should answer for the owner** — `internal/imagepipeline`'s
@@ -2413,12 +2553,22 @@ re-sectioned on the strength of this note**, and none of the three is thereby pl
         unverified"* and flags the README's Compose block **illustrative only**; and §12's
         known-gaps list says **`make docker` has not been made to succeed on any checkout**. The
         `Makefile`'s own `docker` recipe fails closed on a missing daemon and points at §8.
-      - ⚠️ **THE SAME SHAPE AS THIS FILE'S OTHER OPEN LEG, AND WORTH NOTICING TWICE IN ONE PASS.**
-        §2's image-pipeline item has a leg that **cannot be satisfied by writing code** — a first run
-        against a real cover — and `internal/imagepipeline`'s package doc names
-        `deploy/Dockerfile`'s written-not-built as its own comparison. **A *Done when* that a text
-        editor can satisfy is the failure mode both of them found**, and this box is ticked knowing
-        that its check was the weak kind.
+      - ⚠️ **THE SAME SHAPE AS §2's IMAGE-PIPELINE LEG 3 — AND THAT PARALLEL IS NOW A CONTRAST,
+        WHICH IS MORE USEFUL THAN THE LIKENESS WAS.** ⚠️ **THIS OPENED *"~~THE SAME SHAPE AS THIS
+        FILE'S OTHER OPEN LEG~~"* UNTIL 2026-08-23**, when that leg was recorded as reached on the
+        owner's 2026-08-21 import; **this one is still open**, so the two are no longer the same
+        state. What they still share is the property worth noticing: a leg that **cannot be
+        satisfied by writing code**. **§2's was discharged the only way such a leg can be — somebody
+        ran it and reported what came back** — and that is exactly what this box is still owed.
+        **A *Done when* that a text editor can satisfy is the failure mode both of them found**, and
+        this box is ticked knowing that its check was the weak kind.
+      - ⚠️ **AND THE COMPARISON THIS BULLET ATTRIBUTED TO THE PACKAGE DOC IS NOT IN IT — MEASURED
+        2026-08-23.** It read *"~~`internal/imagepipeline`'s package doc names `deploy/Dockerfile`'s
+        written-not-built as its own comparison~~"*, which was true of an earlier text of that doc.
+        `grep -rn 'Dockerfile' internal/` comes back **empty** — fired with
+        `grep -rn 'package imagepipeline' internal/` beside it as the needle that proves the search
+        reaches the package. **The likeness above is this file's own observation and is stated as
+        one**, rather than borrowed from a doc that no longer makes it.
       📉 **THE *`deploy/` HAS STALLED* OBSERVATION UNDER THIS ITEM IS FALSIFIED TOO, AND IT WAS
       FALSIFIED BY THIS ITEM'S OWN COMMIT.** It used to read: *"~~`deploy/` has not moved since
       2026-08-17. The newest commit whose diff contains a `deploy/` change is `3b951cf` … the gap is
@@ -2656,7 +2806,7 @@ re-sectioned on the strength of this note**, and none of the three is thereby pl
 | Item | Blocked on / sequenced behind |
 |---|---|
 | ~~Wiring Kavita's `PluginVersion`, or any second Kavita endpoint taking a credential in a query or path~~ | **UNBLOCKED.** All four LS-170 steps landed (`REVIEW-LOG.md` LS-170 § *Applied*), so the ordering constraint that gated this is discharged. `PluginVersion` remains unwired: nothing calls it, and whether to wire it is a separate decision that LS-170 no longer gates. |
-| A second catalogue adapter (Navidrome, then Audiobookshelf, then Komga) | **v0.1's BookOrbit adapter, landed and run against the owner's real library.** ⚠️ **This row used to read *"~~THE SEQUENCE IS NOW CONTRADICTED BY AN OWNER DECISION AND CANNOT BE FIXED FROM THIS FILE~~"*, on the ground that §16.1 still called Kavita v0.1's source and an ADR was owed. Both are done.** [ADR-0052](./DECISIONS.md#adr-0052) landed, and §16.1 now records that Kavita left **v0.1** as well as the table, that the three entries **shift up by one without reordering** — no source refused, no order changed between them — and that the table is therefore *"the sequence after v0.1's own source"*. **The gate is re-pointed, not absent**, and the rule it enforces never moved: **one source, proven on real data, before a second adapter** (§16.0, §16.1, [ADR-0036](./DECISIONS.md#adr-0036)). |
+| A second catalogue adapter (Navidrome, then Audiobookshelf, then Komga) | **CONDITION — and it is §16.0's, quoted rather than compressed.** ⚠️ **REWRITTEN 2026-08-23. This cell opened *"~~v0.1's BookOrbit adapter, landed and run against the owner's real library.~~"*, which reads as a CONDITION by its column and as a REPORT by its grammar; that ambiguity cost a full stage of investigation to resolve, so the condition is now stated as one and the evidence is kept separate from it.** **What §16.0 requires**, quoted rather than paraphrased and cited as a section plus a phrase because this file adds no line citations (see the preamble's citation policy): *"The sync core lands with **one** adapter in front of it and proves the replica thesis on real data — the owner's own Kavita, imported, delta-synced by channel 3b, reconciled, searched and rendered"*. **That is a set of legs, not a landing**, which is what the old opening lost. ⚠️ **The quoted sentence still names Kavita**, which [ADR-0052](./DECISIONS.md#adr-0052) replaced with BookOrbit as v0.1's source; **re-pointing §16 is §16's owner's and is not done from here** — what is quoted is the STANDARD, and the standard is leg-shaped whichever source fills it. **Leg by leg, because the disposition belongs to the legs rather than to this row:** ***imported*** is discharged — the owner ran a channel-1 import against his own instance and reported it in project chat, **2026-08-21 19:44:07Z** (`cmsg_01S5UQT5yPAMR4PFkxyLGSj92mKCuvky88RRwSk9jLq8vE`), *"covers looked good on ebooks, but i dont believe they existed on the archive files (cbr, cbz)"*; §3's *BookOrbit — OWNER-DECIDED* box carries that report with the trace from a rendered cover back to a committed catalogue row. ***Rendered*** is reached on the same report, which is about artwork he saw on a screen. ***Delta-synced by channel 3b*** is **OWED**: §2's channel-3b box records, beneath its own tick, that *"NO DELTA HAS EVER WALKED A REAL BookOrbit"* and that every check above it is over fixtures, and the running criterion it names — a delta walk against a real BookOrbit returning arrivals since the stored watermark and journalling what it applied — is unfired. ⚠️ **And that leg has an unestablished precondition rather than merely an unfired check:** nobody has established whether the 2026-08-21 run wrote `last_full_sync_at`, which `DeltaSync` reads before any HTTP and escalates on when it is not valid. **For the import leg that column is bookkeeping; here it is load-bearing** — same fact, different question, and the second question is this leg's. **This cell does not rule on *reconciled* or *searched*** and names them only as §16.0's words. 🚩 **THE GATE STAYS CLOSED, on the dated judgement of §16's owner (2026-08-23) that §16.0's condition is the whole thesis rather than its import leg** — not on a reading taken in this file, which **is authoritative for neither scope nor status** (preamble). **What this cell states is the condition, the legs and the evidence; §16 rules on the gate.** ⚠️ **This row used to read *"~~THE SEQUENCE IS NOW CONTRADICTED BY AN OWNER DECISION AND CANNOT BE FIXED FROM THIS FILE~~"*, on the ground that §16.1 still called Kavita v0.1's source and an ADR was owed. Both are done.** [ADR-0052](./DECISIONS.md#adr-0052) landed, and §16.1 now records that Kavita left **v0.1** as well as the table, that the three entries **shift up by one without reordering** — no source refused, no order changed between them — and that the table is therefore *"the sequence after v0.1's own source"*. **The gate is re-pointed, not absent**, and the rule it enforces never moved: **one source, proven on real data, before a second adapter** (§16.0, §16.1, [ADR-0036](./DECISIONS.md#adr-0036)). |
 | **The Kavita adapter code itself — RE-SEQUENCED, NOT CUT** | **Nothing.** It **STAYS IN THE TREE**: `internal/kavita`, `internal/libsync`'s Kavita path, `00006_kavita_subtypes.sql` and the recorded fixtures all remain, because **other people run Kavita** and principle 3 (*pluggable by default*) is the reason the adapter exists at all. **What the sunset stops is INVESTMENT, not the code** — no deletion, no deprecation notice, no migration. Read any Kavita item in §2 as *"unfunded, still standing"*, never as *"dead"*. |
 | **Re-keying the design mockups' v0.1 DATA off BookOrbit** — a real design change, and a different thing from the label swap | **The owner's mixed-library answer, and the two ADRs the sync lane has pre-allocated for its structural findings.** ⚠️ **Both gates are relayed from other threads and are NOT readable in this tree** — recorded as sequencing, not as status. **The label swap already landed and is not this**: `a1995f9` moved the install switcher on all five screens to *"v0.1: BookOrbit, Prowlarr"*, while `mockups/README.md`'s v0.1 figures were **deliberately left un-re-keyed** — they are arithmetically derived from the Kavita-era install, and that section now **states its provenance where a reader meets the numbers** rather than letting a BookOrbit label sit over Kavita-shaped arithmetic. Re-deriving them changes what the drawings assert about a real install, which is why it is a decision rather than a rename. ⚠️ **[ADR-0052](./DECISIONS.md#adr-0052) marks its own mockup re-draw DISCHARGED by that commit** (`cad0563`), and that mark is about **the rendered label**, not the figures under it — reading it as covering both is the mistake this row exists to prevent. ⚠️ **No ADR number is cited: none is allocated** — and **none is to be guessed from a maximum written here**, because reading one out of *this* file is exactly what mis-allocated an ADR once already (see the baseline block). [`DECISIONS.md`](./DECISIONS.md) is authoritative for the next free number. ⚠️ **The design thread is CLOSED, so this has NO OWNER at slotting time**, and naming one is part of slotting it: **a closed thread's sections do not pass to whoever next touches them.** |
 | The minimal write path — `monitor`, `unmonitor`, `delete`, `add`, the queue worker and its settlement loop | **v0.2**, with the first \*Arr adapter ([ADR-0042](./DECISIONS.md#adr-0042), [ADR-0045](./DECISIONS.md#adr-0045)). `write_queue` stays in the schema with **no writer for the whole of v0.1** — that is the seam, and it costs no migration ([ADR-0039](./DECISIONS.md#adr-0039)). |
@@ -2738,10 +2888,82 @@ That evaluation ran at HEAD **`4a420a04`** (2026-08-17). ⚠️ **The line *"~~�
 nothing, and no ADR backs any of this~~"* is false now:** §16's v0.1 entry names BookOrbit as the one
 Tier 0 adapter, and ADR-0052 backs it.
 
-- [ ] **The BookOrbit catalogue adapter — UNGATED. [ADR-0052](./DECISIONS.md#adr-0052) discharged the
+- [x] **RUN AGAINST THE OWNER'S OWN INSTANCE — TICKED 2026-08-23 ON HIS REPORT OF THAT RUN, WHICH
+      IS THE EVIDENCE AND IS NOT A TREE FACT.**
+      **The BookOrbit catalogue adapter — UNGATED. [ADR-0052](./DECISIONS.md#adr-0052) discharged the
       gate this box used to carry**, and what remains is a constraint to build against rather than a
       question to answer first. ⚠️ **This line used to read *"~~GATED ON THE UNWRITTEN ADR … do not
       start it before that ADR exists~~"*.**
+      🗓️ **Met 2026-08-21, and NO TIP IS NAMED BESIDE THE DATE, because the observation this box
+      needed is not one any tree can hold.** The *Was done when* below demanded a channel-1 import
+      **run against the owner's own instance** and said in terms that **no commit can discharge it**;
+      the tick therefore rides on what he reported. **The precedent is §2's Kavita cover-probe
+      record**, where the owner ran a probe against his own live instance, pasted the result into the
+      thread, committed nothing, and this file became a pointer to the paste rather than a second
+      copy of it. **The absence rule above is why the empty tree establishes nothing against the
+      run:** the repo is not a place that would have recorded it.
+      **THE EVIDENCE, STATED AS WHAT IT IS — A REPORT.** Project chat, 2026-08-21 19:44:07Z
+      (`cmsg_01S5UQT5yPAMR4PFkxyLGSj92mKCuvky88RRwSk9jLq8vE`), item 4 of a five-item reply:
+      *"covers looked good on ebooks, but i dont believe they existed on the archive files (cbr,
+      cbz)"*. **The standard this discharges is the box's own:** the import ran end to end against
+      his instance without erroring out, and wrote at least one row of catalogue data from his data.
+      **WHY ARTWORK ON HIS SCREEN ESTABLISHES BOTH HALVES OF THAT STANDARD.** Traced at
+      `10b359f`, 2026-08-23, and each hop is a locator a reader can re-fire rather than a
+      recollection:
+      - **The writers of the columns artwork renders from are enumerated, not tallied.**
+        `grep -rn 'INSERT INTO image_asset\|poster_asset_id' internal --include=*.go`, with
+        `_test.go` dropped and the SQL verbs kept, lands **entirely inside
+        `internal/store/imagewrite.go`** and what a reader is looking for there is
+        `PutPosterAsset`'s `INSERT INTO image_asset` and its `UPDATE work SET poster_asset_id`.
+        ⚠️ **A prose comment in that same file rides along in the output** — *"updates in place so
+        the row keeps its id"* — so **read the hits rather than counting them**, which is the same
+        caution §2's cover-trigger inference earned. **The search is scoped to `internal`, so this
+        file's own record-keeping is structurally out of it** rather than dodged by wrapping.
+        **The serving side reads what those statements wrote:** `PosterKeyExpr`
+        (`internal/store/imageassets.go`) resolves
+        `work.poster_asset_id` to the `cache_key` that `GET /img/{key}` addresses, registered in
+        `internal/httpapi/server.go`'s `mux.Handle` table. **A cover on a screen therefore means
+        that pair of statements committed.**
+      - **`PutPosterAsset` cannot attach a poster to a work no import created.** Inside the same
+        transaction it re-resolves the work through `service_item_link` —
+        `sil.service_instance_id`, `sil.remote_kind` and `sil.remote_id` equal, with
+        `sil.deleted_at IS NULL` and `w.deleted_at IS NULL` — and returns `ErrNoSuchWork` on no
+        rows, which rolls the transaction back **before** the `INSERT`. Its own comment gives the
+        ground: *"an `image_asset` with no `work` pointing at it is visible to nobody"*.
+      - **The pipeline behind that writer is wired for a BookOrbit entry.** `cmd/usarr/import.go`'s
+        `coverPipeline` returns `nil` when `entry.bookorbit == nil`, and `fetchCovers` is a no-op
+        with a nil `Covers` — `covers.go`'s header says so in terms: *"the Kavita adapter has no
+        cover fetch wired"*. **So artwork that rendered came through the BookOrbit entry**, which is
+        what makes his report about this adapter and not another.
+      - **Either trigger sits behind a completed channel-1 import.** `fetchCovers` is reached from
+        `FullImport` and from `DeltaSync` (§2's image-pipeline item enumerates both), and
+        `DeltaSync` reads `LastFullSyncAt` **before any HTTP** and escalates when it is not valid —
+        *"this service has never completed a full sync, so there is no catalogue for a delta to add
+        to"* — returning `ErrEscalateToFullImport` rather than walking.
+      - **Catalogue rows committed before any cover was fetched, which is the *wrote at least one
+        row* clause reached directly.** `fetchCovers` takes the `imported` slice that
+        `streamAndApply`'s flush appends to **after** `ApplyCatalogueBatch` returns — the loop's own
+        comment reads *"AFTER the commit, never before: these are the items whose links now
+        exist."* An empty slice returns at `fetchCovers`'s first guard, so a fetched cover implies a
+        non-empty one.
+      - **The ebook-yes / archive-no split is what the code PREDICTS, which is stronger than the
+        report merely being consistent with it.** That same loop drops any item carrying a parent
+        (`if it.Parent != nil { continue }`, `internal/libsync/importer.go`), and `mapComic`
+        (`internal/libsync/bookorbit.go`) sets `it.Parent` on **both** of its branches —
+        `comicSeriesParent` for a real series, `synthesizedComicSeriesParent` for a oneshot — so a
+        comic issue does not reach the cover pass, while `mapBook` sets no parent. **CBR and CBZ are
+        what BookOrbit files as comics** (§3's verified-facts bullet below), so *covers on ebooks
+        and not on the archive files* is the shape this code produces.
+      ❓ **A SEPARATE FACT NOBODY HAS ESTABLISHED, AND IT IS A DIFFERENT QUESTION RATHER THAN A
+      WEAKER FORM OF THIS ONE: whether `last_full_sync_at` was written by that run.** Nothing in the
+      report speaks to it and no artefact here can. **For THIS box it is bookkeeping the run left
+      behind, not part of what the run proved** — the standard above is *ran without erroring out*
+      and *wrote catalogue data*, and the trace establishes both without reading that column.
+      🚩 **It is NOT thereby inconsequential, and saying so here is deliberate.** The same column is
+      the watermark `DeltaSync` reads as its precondition, so it is **load-bearing for a different
+      question** — *can a delta walk proceed?* — which §3's second-adapter row states as the leg
+      still owed. **One fact, two questions, different weight in each**, and neither reading
+      overrides the other.
       🚩 **THE GATING UNKNOWN IS ANSWERED, AND BADLY — RECORD IT AS A CONSTRAINT, NOT AS A STATE.**
       This box used to read *"~~UNVERIFIED: nobody has checked whether a SERIES-level ordered read
       exists at all~~"*. Somebody has, against BookOrbit's own source at HEAD **`73b7877`**
@@ -2918,6 +3140,14 @@ Tier 0 adapter, and ADR-0052 backs it.
       one. **The missing prerequisite is the same one §4 owes: an import against the owner's own
       instance.** Until then the correct statement is *"the cause this box named is gone"*, not
       *"audiobooks render correctly"*.
+      ⚠️ **THE PREREQUISITE SENTENCE IS FALSIFIED 2026-08-23 AND THE PARAGRAPH'S POINT OUTLIVES IT.**
+      It read *"~~The missing prerequisite is the same one §4 owes: an import against the owner's own
+      instance~~"*, and that import has since run — it is this box's tick. **What the prerequisite
+      was standing in for has NOT arrived:** his report is about covers and says nothing about an
+      `edition` row, a Type cell or the `/library/audiobooks` grid, so the observation this paragraph
+      refuses to assume is still untaken. **The prerequisite is now the narrower one — an audiobook
+      seen rendering off a real `edition` row — rather than the run**, and the closing sentence is
+      unchanged by the correction.
 
       ~~🔴 **OPEN DEFECT — EVERY BOOKORBIT BOOK RENDERS AS AN EBOOK, AND `/library/audiobooks` RETURNS
       NONE OF THEM. Verified against the tree at the baseline above.** This is a **user-visible wrong
@@ -3004,14 +3234,23 @@ Tier 0 adapter, and ADR-0052 backs it.
       ⚠️ **This line used to demand *"~~the full-resync-or-local-diff decision~~"*, which presumed
       the absence claim corrected below**, and then *"~~until then this item is a specification, not
       work in progress~~"*. **It is work now.**
-      *Done when:* `internal/libsync` carries a BookOrbit adapter whose channel-1 import has been run
-      against the owner's own instance — the rule in §1, which naming a source does not satisfy.
-      ⚠️ **ITS FIRST HALF IS NOW MET AND THE SECOND IS THE WHOLE CONDITION.**
+      *Was done when:* `internal/libsync` carries a BookOrbit adapter whose channel-1 import has been
+      run against the owner's own instance — the rule in §1, which naming a source does not satisfy.
+      ⚠️ **ITS FIRST HALF WAS MET FIRST AND THE SECOND WAS THE WHOLE CONDITION.**
       `internal/libsync/bookorbit.go` exists (slices 1 and the completeness detection, above), so
-      *"`internal/libsync` carries a BookOrbit adapter"* is no longer outstanding. **What remains is
-      THE RUN, against the owner's own instance**, and it is §4's rather than this file's — **no
-      commit can discharge it**, which is exactly why §1 states the rule as *one source, proven on
-      real data* rather than *one source, written*.
+      *"`internal/libsync` carries a BookOrbit adapter"* stopped being outstanding there. **What
+      remained was THE RUN, against the owner's own instance**, and it was §4's rather than this
+      file's — **no commit can discharge it**, which is exactly why §1 states the rule as *one
+      source, proven on real data* rather than *one source, written*.
+      ✅ **AND THE RUN HAPPENED, 2026-08-21.** The tick above carries his report of it, the trace
+      that makes covers-on-a-screen evidence of a channel-1 import, and the one fact about the run
+      that stays unestablished. **This *Was done when* is satisfied by a report and by nothing in
+      this tree**, which is the whole reason it was written as a rule no commit could meet.
+      ❗ **WHAT THE TICK DOES NOT CLAIM, because this box's condition is narrower than §16.0's.**
+      This box asked for a **channel-1 import**. §16.0's standard for the second-adapter gate is the
+      replica thesis whole — imported, delta-synced by channel 3b, reconciled, searched, rendered —
+      and §2's channel-3b box records that no delta has walked a real BookOrbit. **§3's
+      second-adapter row is where that decomposition lives; this tick does not move it.**
 
 **The importer, stream and UI plumbing is source-agnostic, and the Kavita adapter stays either way** —
 see the blocked table above, where that is now its own row.
@@ -3066,6 +3305,14 @@ Things no agent in this repo can do. Nothing here is blocked on code.
   as [ADR-0052](./DECISIONS.md#adr-0052)**, so nothing here is outstanding against the owner.
   **What v0.1 still owes him is the run, not a decision** (§1): the BookOrbit adapter exercised
   against his own library is what proves the replica thesis, and no document can discharge it.
+  ⚠️ **THE IMPORT LEG OF THAT RUN HAPPENED ON 2026-08-21, AND THE SENTENCE IS SCOPED RATHER THAN
+  STRUCK, 2026-08-23.** He ran a channel-1 import against his own instance and reported covers off
+  it — project chat 19:44:07Z, `cmsg_01S5UQT5yPAMR4PFkxyLGSj92mKCuvky88RRwSk9jLq8vE`, carried with
+  its trace in §3's *BookOrbit — OWNER-DECIDED* box. **What §16.0's standard still wants is the
+  delta leg**: §2's channel-3b box records that no delta has walked a real BookOrbit, and §3's
+  second-adapter row decomposes the standard leg by leg. **So *"the run"* is a set of legs with one
+  outstanding, and no document discharges that one either** — which is why the sentence is narrowed
+  instead of removed.
 - **Verify Symfonium's `apiKeyAuthentication` support against a live client** before any gateway code
   is written. Far out — it gates v0.4, not v0.1 — but it is unverified and the whole v0.4 success
   criterion rests on it (§16 v0.4 entry).

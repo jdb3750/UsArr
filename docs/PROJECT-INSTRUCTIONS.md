@@ -17,8 +17,8 @@ This file records the instruction text only. The design detail lives in `CLAUDE.
 
 | Version | Date | State | Size (characters) |
 | --- | --- | --- | --- |
-| v1.8 | 2026-08-22 | **Drafted — NOT applied.** Awaiting application by Joe or the project coordinator | 7638 (7650 bytes), md5 `2909dc2433ec2e3f9d7bed8376aef362` |
-| v1.7 | 2026-08-19 | **Applied to project settings** — 2026-08-19 | 7914 (7926 bytes) |
+| v1.8 | 2026-08-22 | **Applied to project settings** — 2026-08-23 | 7638 (7650 bytes), md5 `2909dc2433ec2e3f9d7bed8376aef362` |
+| v1.7 | 2026-08-19 | Applied 2026-08-19, superseded by v1.8 on 2026-08-23 | 7914 (7926 bytes) |
 | v1.6 | 2026-08-18 | Applied 2026-08-18, superseded by v1.7 on 2026-08-19 | 7729 (7739 bytes) |
 | v1.5 | 2026-08-17 | Applied 2026-08-17 05:05 UTC, superseded by v1.6 | 8112 (8124 bytes) |
 | v1.4 | 2026-08-17 | Applied 2026-08-17 04:52 UTC, superseded by v1.5 the same day | 8108 |
@@ -27,18 +27,18 @@ This file records the instruction text only. The design detail lives in `CLAUDE.
 | v1.1 | 2026-08-16 | Superseded by v1.2, never applied | 7022 |
 | v1.0 | 2026-08-16 | Superseded by v1.2 — applied 2026-08-16, replaced the same day | 3847 |
 
-## v1.8 — drafted, NOT applied
+## v1.8 — as applied
 
-**This is not the live settings text.** v1.7 below is, and stays live until Joe or the project
-coordinator pastes this text into the Project's settings by hand — agents cannot apply a version.
-7638 characters, md5 `2909dc2433ec2e3f9d7bed8376aef362` over its 7650 bytes.
+The text applied verbatim to the Project's settings on 2026-08-23 by the project coordinator,
+replacing v1.7. **This is the live settings text.** 7638 characters, md5
+`2909dc2433ec2e3f9d7bed8376aef362` over its 7650 bytes.
 
 v1.8 is v1.7 plus exactly one wording change and one deletion, and nothing else — the ranking phrase
 in the replica-not-proxy paragraph, forced by `CLAUDE.md` at `origin/main` = `bca8dd2`, and the
 Go-floor sentence, cut for headroom exactly as v1.7's changelog entry pre-registered. The changelog
 entry below cites both.
 
-The verification chain, as far as it can run without an apply. **Before the edit**, the v1.7 block
+The verification chain, as it actually ran. **Before the edit**, the v1.7 block
 was extracted from `docs/PROJECT-INSTRUCTIONS.md` at `origin/main` = `bca8dd2`, first fenced block,
 the with-trailing-newline variant, and all three of its recorded gates were matched against that
 extract: **7914 characters** via `python3 len()`, **7926 bytes**, and md5
@@ -46,9 +46,17 @@ extract: **7914 characters** via `python3 len()`, **7926 bytes**, and md5
 the text that is live. **After the edit**, the two blocks were compared line by line: of the block's
 26 lines exactly two differ — line 1, which loses the Go-floor sentence, and line 7, which carries
 the ranking phrase — and the remainder of the edited sentence is byte-identical to v1.7's, so the
-change is confined to the ranking phrase itself. **There is no post-apply read-back to record**,
-because there has been no apply; that half of the chain belongs to whoever applies it, and this
-section must not be rewritten to claim it until they do.
+change is confined to the ranking phrase itself. **After the apply**, the project coordinator
+relayed the string the settings API echoed back after the write, and that echo was hashed here
+against the canonical block below: **7638 characters, 7650 bytes, md5
+`2909dc2433ec2e3f9d7bed8376aef362` on both sides, `diff` empty**, with the canonical side
+reproducing its own recorded gate in the same pass, so the comparison ran against a fixed
+reference rather than a remembered one. **What that link is worth, and what the next one is not.**
+The canonical-block-to-echo link is carried by checksum. The echo-to-stored-value link is not: an
+echo is the settings API reading back its own write, so it does not independently establish what
+the settings field now stores, and no session here can read the settings surface to check. Read
+the second link as trusted rather than as verified — the chain is closed as far as the available
+instruments reach, and that is short of the whole distance.
 
 **It lands 362 characters under the 8000 limit, more than the ~150 this file aims to leave.** The
 overshoot is the size of the pre-registered cut rather than a target: v1.7's changelog named the
@@ -91,10 +99,11 @@ Some things are permanently refused rather than deferred. Section 1.4 of ARCHITE
 On interface design, read section 17 of ARCHITECTURE.md before touching a screen. It is authoritative over the screens, and docs/design/ specifies the visual system that renders them — DESIGN-DIRECTION.md, tokens.css and the mockups. Read both, and where they disagree, section 17 wins. The constraint is utilitarian over stylish: standard patterns in preference to novel ones, density and speed over animation, and no visual flair that costs render time. Navidrome is the reference point, and "sleek" and "modern" are explicitly not goals. Section 17 enumerates the screens and section 16 says which ship in v0.1; read both rather than assuming a count. A degraded backend gets a non-modal banner; the catalogue never greys out.
 ````
 
-## v1.7 — as applied
+## v1.7 — superseded
 
 The text applied verbatim to the Project's settings on 2026-08-19 by the project coordinator,
-replacing v1.6. **This is the live settings text.** 7914 characters, md5
+replacing v1.6. It was superseded by v1.8 above, which was applied on 2026-08-23, so this is **no
+longer** the live settings text. 7914 characters, md5
 `eb03cc348585d2e7c55c47fb289bea62` over its 7926 bytes.
 
 v1.7 is v1.6 plus exactly two changes and nothing else — a factual repair to the two sentences that
@@ -401,7 +410,7 @@ On interface design: utilitarian over stylish. The bar is tried-and-true, easy t
 
 ## Changelog
 
-### v1.8 — 2026-08-22 (drafted; NOT applied)
+### v1.8 — 2026-08-22 (applied 2026-08-23)
 
 One wording change and one deletion against v1.7, and nothing else. The wording change is forced by
 `CLAUDE.md` at `origin/main` = `bca8dd253a81ef5b290bdd13c5cbfc57602483bd`; the deletion is the cut
@@ -462,12 +471,22 @@ v1.7's own changelog entry pre-registered for whenever the next version needed r
 - **A tension with this file's own Candidates doctrine, recorded rather than hidden.** That section
   says a fenced block and a Status row "mark a version that exists as a single applied artefact with
   a checksum over it", and that a candidate gets a block "on the day it becomes a version, and not
-  before". v1.8 has both while being unapplied. It is given them because it is a complete, numbered,
-  measured version rather than a candidate fragment, and because a checksum is exactly what whoever
-  applies it will need to verify the paste. The doctrine's real purpose — that no reader mistake
-  unapplied text for live — is served instead by the heading, the Status row and this entry all
-  saying **NOT applied** outright, and by v1.7's section being left exactly as it stands, still
-  reading "This is the live settings text", because it still is.
+  before". v1.8 has both ~~while being unapplied~~. It is given them because it is a complete,
+  numbered, measured version rather than a candidate fragment, and because a checksum is exactly
+  what whoever applies it will need to verify the paste. The doctrine's real purpose — that no
+  reader mistake unapplied text for live — is served instead by ~~the heading, the Status row and
+  this entry all saying **NOT applied** outright, and by v1.7's section being left exactly as it
+  stands, still reading "This is the live settings text", because it still is.~~
+
+  🚩 **STRUCK 2026-08-23 — the apply falsified the struck wording and dissolved the tension it
+  recorded.** v1.8 was pasted into the Project's settings on 2026-08-23, so it is no longer
+  unapplied, and none of the three markers named still reads **NOT applied**: the heading is
+  "v1.8 — as applied", the Status row records the apply date, and this entry's own title carries
+  it. v1.7's section was rewritten in the same landing and now names v1.8 as the live text and
+  itself as superseded. The unstruck sentences are kept because they are the record of *why* an
+  unapplied version was given a fenced block and a Status row — the question the next candidate
+  will raise — and that reasoning is unaffected by the paste. What the strike removes is only the
+  present tense: the safeguards described held for the day between the draft and the apply.
 - **Adversarial review of the draft, run against the repo at `bca8dd2`.** The block's remaining
   factual claims were re-resolved rather than assumed, and the findings are recorded here.
   - *Holds.* The six permanent refusals: `ARCHITECTURE.md` §1.4 (`:117-128`) lists exactly six, and
@@ -503,6 +522,23 @@ v1.7's own changelog entry pre-registered for whenever the next version needed r
   `docs/` through **gitleaks alone**; a green attests "no credential-shaped string in the diff" and
   nothing whatever about whether these sentences are true. The truth claims above are carried by the
   citations, each re-resolved at `bca8dd2`.
+- **Applied to the Project's settings on 2026-08-23.** Joe authorized the paste at **16:13:19Z** —
+  `cmsg_01S5UQT5yPAMR4PFkxyLGSj9392LGLknHZVFCptAqKssDE`, item 3 of his reply, in his own words
+  *"cool, add it"* — and the project coordinator pasted the block at approximately **16:16Z** the
+  same day. The split between the two is structural rather than ceremonial: agents cannot edit
+  project settings, so a human authorized the change and a coordinator session performed the paste.
+- **What the post-apply check establishes, stated for what it is.** The coordinator relayed the
+  string the settings API echoed back after the write, and that echo was hashed here against the
+  canonical block above: **byte-identical** — **7638 characters, 7650 bytes, md5
+  `2909dc2433ec2e3f9d7bed8376aef362` on both sides, `diff` empty** — with the canonical side
+  reproducing its own recorded gate in the same pass, so the comparison ran against a fixed
+  reference rather than a remembered one.
+- **What it does not establish, recorded rather than glossed.** What was verified is that the *echo*
+  matches the canonical block. The echo is the settings API reading back its own write, so it does
+  not independently establish what the settings field now stores, and no session here can read the
+  settings surface to check. A reader should take the canonical-block-to-echo link as evidenced by
+  checksum and the echo-to-stored-value link as trusted, because that is the shape of the evidence
+  rather than an artefact of how it is worded.
 
 ### v1.7 — 2026-08-19 (applied 2026-08-19)
 
@@ -863,9 +899,11 @@ other.
 ## Candidates for a future version — NOT applied
 
 **Nothing in this section is applied, and nothing in it is authoritative.** These are drafted
-changes queued for the next version of the instructions text; the live settings text is v1.7 above
-and stays v1.7 until somebody applies a successor. Agents cannot apply a version — only Joe or the
-project coordinator can, by pasting the full text into the Project's settings by hand, exactly as
+changes queued for the next version of the instructions text; ~~the live settings text is v1.7 above
+and stays v1.7 until somebody applies a successor~~ — 🚩 **STRUCK 2026-08-23: the live settings text
+is v1.8 above, applied that day, and it stays v1.8 until somebody applies a successor.** Agents
+cannot apply a version — only Joe or the project coordinator can, by pasting the full text into the
+Project's settings by hand, exactly as
 "How this file is maintained" describes. Until that happens, a candidate here binds no session and
 overrides nothing: where a candidate and the applied text disagree, the applied text wins.
 
@@ -879,11 +917,14 @@ measured is a wish rather than a proposal.
 ### Candidate 1 — quote the gate's `tool:` banner, never a bare `--version`
 
 **PROMOTED into v1.7 on 2026-08-19 — no longer pending.** It is in the v1.7 fenced block above,
-verbatim, and v1.7 was applied to the Project's settings on 2026-08-19, so this candidate is now
-tracked by v1.7's row in the Status table rather than by this section. The rationale below is kept
-as the record of why it was made, and the Makefile line numbers in it are as of `7bd45e9`; v1.7's
-changelog entry carries
-them re-resolved at `4731c7d`.
+verbatim, and v1.7 was applied to the Project's settings on 2026-08-19, so this candidate is ~~now
+tracked by v1.7's row in the Status table~~ tracked by a Status row rather than by this section.
+🚩 **STRUCK 2026-08-23: v1.7 was superseded by v1.8 on 2026-08-23, so the row that tracks this
+candidate is now v1.8's.** The promoted sentence carried into v1.8 unchanged — both fenced blocks
+hold it byte-for-byte, and v1.8's changelog entry records that the only edits against v1.7 were the
+ranking phrase and the Go-floor cut, neither of which touches it. The rationale below is kept as the
+record of why it was made, and the Makefile line numbers in it are as of `7bd45e9`; v1.7's changelog
+entry carries them re-resolved at `4731c7d`.
 
 **Where it goes.** Appended to the gates sentence in the "Verify, do not assert" paragraph,
 immediately after "…is indistinguishable from no guard."
