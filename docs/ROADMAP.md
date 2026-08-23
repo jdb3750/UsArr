@@ -40,8 +40,22 @@
 > [`81e7310`](https://github.com/jdb3750/UsArr/commit/81e7310) (2026-08-18), the commit that created
 > this file, and **neither of them cites a source**; `docs/PROJECT-INSTRUCTIONS.md`, the canonical
 > copy of the instruction text applied to the project's own settings, carries no clause of this kind
-> in **any** version from v1.0 to v1.7. So the underlying instruction is referenced here exactly as
-> the struck sentence referenced it, and no fresher claim about its wording is made.
+> in **any** version it holds. **That rests on the grep, not on a list of versions** — a list goes
+> stale at the next apply, and this one did. So the check is over the file, which carries its version
+> texts inline: `grep -niwE 'dates|estimates' docs/PROJECT-INSTRUCTIONS.md` **must come back empty.**
+> ⚠️ **The word boundary is load-bearing, and so is the path.** Unanchored, `dates` matches
+> *Candidates* in that file's own headings and `estimat` matches its changelog's *"Measured, not
+> estimated"* — either form comes back non-empty while establishing nothing — and a `docs/`-wide form
+> would match this paragraph. **The needle is shown to fire, so the empty answer is a measurement
+> rather than a dead probe:** the same command against this file, `grep -niwE 'dates|estimates'
+> docs/ROADMAP.md`, matches the struck sentence this rider hangs off, among others.
+> ⚠️ **And the net is narrow in the other direction**: a clause carrying neither plural noun would
+> not be caught, so the grep **bounds** this claim rather than closing it.
+> ⚠️ **THIS SENTENCE ENUMERATED — *"~~in **any** version from v1.0 to v1.7~~"* — UNTIL 2026-08-23,
+> AND THE v1.8 APPLY OF THAT DATE FALSIFIED IT**, v1.8 having landed in
+> `docs/PROJECT-INSTRUCTIONS.md` outside the range the sentence named. A count-free form cannot be
+> falsified by the next apply the same way. So the underlying instruction is referenced here exactly
+> as the struck sentence referenced it, and no fresher claim about its wording is made.
 >
 > ⚠️ **THE OWNER WAS ASKED, AND REPLIED — RECORDED 2026-08-21 AS A REPLY RATHER THAN AS AN ANSWER,
 > WHICH IS THE WHOLE POINT OF THE ENTRY.** The question put to him was whether to scope the struck
