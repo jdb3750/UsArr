@@ -271,8 +271,11 @@ func TestAddingABookOrbitProducesACatalogue(t *testing.T) {
 	                          WHERE w.kind = 'comic_issue'`); n != 0 {
 		t.Errorf("comic_issue library_member rows = %d, want 0", n)
 	}
-	// NO SERIES WORK IS EVER MINTED INTO NO LIBRARY AT ALL, and it is the COMIC
-	// library it lands in rather than the book one it was walked from.
+	// NO SERIES WORK IS MINTED INTO NO LIBRARY — bounded, since ADR-0078, to the
+	// population that still HAS a library, which is this fixture's — and it is
+	// the COMIC library it lands in rather than the book one it was walked from.
+	// The bound is step 8's `if !b.NoLibrary` (`internal/store/catalogue.go`): a
+	// container with no accepted proposal takes no library_member row at all.
 	if n := countIn(t, env, `SELECT COUNT(*) FROM library_member lm
 	                           JOIN work w ON w.id = lm.work_id
 	                           JOIN library l ON l.id = lm.library_id

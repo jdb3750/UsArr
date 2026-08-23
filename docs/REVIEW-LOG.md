@@ -28416,3 +28416,246 @@ this file's convention and the precedent `LS-399.8` states for ADR-0078.
 and is now stale"*, but ruled it **reported rather than applied**, ADR-0078's header not naming it —
 per the no-unauthorised-rider rule. **LS-401 is the authorisation that finding was waiting on**, and
 the three riders discharge it.
+
+---
+
+## LS-402 — the §17 steward ratifies the ADR-0068 rider and the §17.8 passages WITH CHANGES; the changes land as published text, one of them is withdrawn by its own author, and the same motion carries the comments `a83ff9c` falsified
+
+**Target:** [ADR-0068](./DECISIONS.md#adr-0068)'s rider of 2026-08-22, and `docs/ARCHITECTURE.md`
+§17.8's creation bullet, its one-way-door bullet and its Accept-step paragraph. **Reviewer:** the
+**`Library sync and first source` lane**, which is §17's steward and ADR-0068's author. **Two
+rulings:** item 2 at **2026-08-22T12:08:04Z** and item 1 at **2026-08-22T12:12:53Z**. **Measured
+against the tree at `5756d54`**, the base this landing sits on.
+
+**The pass in one sentence.** Both texts are **ratified with changes** rather than accepted or
+refused, the changes are the steward's own words rather than a paraphrase of them, and the
+falsifier of the Go comments corrected below is the conditional membership write `a83ff9c` landed
+earlier on THIS BRANCH — so the correction rides in the branch's motion, not this commit's.
+
+### LS-402.1 ✅ The replacement text is taken from a hashed file, not from a message
+
+⚠️ **The steward's blocks were composed in a thread message, and a message is not bytes anyone can
+hash.** They were therefore published as a file, and that file is what this landing copied from:
+`usarr-steward-replacement-blocks-20260822.md`, whole-file sha256
+`fb5b39aa117aaa710dd3cbc7cb6a81758b8d577957509a6e50910081cae0b737`. Each block was hashed
+fence-exclusive and verified before use, and each was **copied rather than retyped** — the `⚠️` in
+this corpus is `U+26A0 U+FE0F`, and a retype that drops the variation selector renders identically
+and is a defect no gate sees.
+
+**Applied as published:**
+
+* **Block 1** replaces the ADR-0068 rider's closing sentence. The old sentence credited
+  [`reference/schema.md`](./reference/schema.md) §7 invariant 5 with *"scop[ing] its search document
+  to reserved library 0"*. **§7 states the debt; `writeSearchDoc` discharges it** — the new text
+  names the builder, its zero-affected scoping insert and `internal/store/searchlibrary.go`, and
+  quotes §7's own admission that reserved library 0 *"is not a mechanism that upholds anything on
+  its own"*.
+* **Block 2** replaces the rider's *"now returns"* sentence, restating ADR-0078's holding as a
+  decision about what a container binds rather than as a report of a return value.
+* **Block 4** replaces §17.8's creation bullet's opening clause. `building a Kavita client stack`
+  named one service kind where the arm is general; the replacement says **catalogue-source** and
+  sends the reader to `cmd/usarr/services.go`'s `switch si.Kind` for which kinds carry it.
+* **Block 5** replaces §17.8's *"Nothing consults the mark"* sentence and its claim of zero non-test
+  readers, replacing an asserted count with a grep the reader runs, scoped to the `library` table
+  rather than to `service_instance`'s unrelated column of the same name.
+
+### LS-402.2 📌 Block 3 is WITHDRAWN BY ITS AUTHOR, and nothing was placed in its stead
+
+The steward ruled block 3 withdrawn and its text placed nowhere: *"Don't place my text anywhere."*
+**No text was placed and nothing was deleted on block 3's account.**
+
+**The stated reason is the author's own, and it is the BYTES rather than a paraphrase of them.**
+LS-402.1's practice applies unchanged: the reason was composed in a message, published as a file,
+and **copied from that file rather than retyped**. The five lines below are that file verbatim — LF
+endings, one trailing newline, one em dash and no other non-ASCII — and they hash, alone and with
+nothing prefixed to them, to sha256
+`ad3abccd8569d0b731ef85963f48a39c81786d1e603a39ef2883f0c3e0f68f65`. **No re-wrap was applied**, and
+none was needed: the longest of the five is 96 columns, inside this file's 100.
+
+Block 3 was withdrawn. It was drafted to bound an unbounded universal in resolveBinding's doc
+comment, and the site asserts none: the doc block carries no never/always/ever in any case and
+states only that a failure below is an error rather than a fallback to library 0. A rider that
+bounds a universal has nothing to bound there. No claim about how the site came to read that way
+is made or needed — the withdrawal rests on what the comment says, not on its history.
+
+⚠️ **The quoted reason's *"states only"* is one sentence short of the block it describes, and the
+correction rides HERE because the quoted bytes cannot carry it.** The block —
+`internal/store/catalogue.go:2116-2118` at `5756d54`, `:2124-2126` in the staged tree,
+byte-identical at both — closes with a sentence the reason does not reach: `"No library"` and
+`"library 0"` stay opposite states. **The withdrawal it grounds is unaffected**, because that second
+sentence asserts no unbounded universal either, and a rider that bounds one still has nothing to
+bound there: `never`, `always` or `ever` read case-insensitively over the block returns nothing at
+either tree, and the read is live rather than vacuous — the same needle over the same file finds the
+capitalised `NEVER` at `internal/store/catalogue.go:92`, unmoved between the two trees. **The five
+lines above are left exactly as written** because their sha256 is published: the correction cannot
+ride in the bytes without falsifying the digest that vouches for them.
+
+**Confirmed here rather than taken on trust — and this entry issues no runnable needle of its
+own.** A sentence that pastes its own search string makes the search match the document: a
+re-runner collects hits off THIS FILE rather than off the code and reads them as survivals, which
+is exactly what the superseded sentence did. The search is described instead: read block 3's
+phrase off block 3 in the hashed file LS-402.1 names, and grep for it recursively.
+
+⚠️ **Two conditions on the re-run, and both are why the superseded measurement was worthless.**
+**Scope it to Go sources.** This file is self-matching whatever the check sentence does, because
+the published reason quoted above carries the phrase in the author's own words — a whole-tree run
+therefore returns prose hits that are not code and never were. **And run it case-insensitively.**
+The superseded run was case-sensitive, and a capitalised site is precisely what a case-sensitive
+run cannot see.
+
+🚩 **The search is LIVE rather than silently empty, and the control says so.** Run under both
+conditions at `5756d54` it finds a capitalised comment — `internal/store/catalogue.go:2116`, opening
+`A FAILURE BELOW IS STILL AN ERROR`, inside `resolveBinding`'s own doc block three lines above the
+function. That hit is both the positive control on the search and the site the withdrawal reason
+describes, and a case-sensitive whole-tree run reported neither. Read there, the block carries no
+`never`, `always` or `ever` in any case, and says only that a failure below is an error rather than
+a fallback, and that `"No library"` and `"library 0"` stay opposite states. **No figure for what the
+re-run returns is recorded here**, per LS-402.3's ruling — the described re-run is the whole check.
+
+⚠️ **One discrepancy is registered OPEN rather than settled.** The reviewing lane read that
+comment at `b3ed224afa36` as **two** lines, with a universal on the line above the behavioural one,
+and the diff pair a later commit shows does not account for that reading. **Nothing here asserts
+the site never carried a universal** — that claim is refused, not merely deferred, and this entry
+takes no position on the history. Nothing in this landing turns on the answer: the withdrawal rests
+on what the comment says NOW. It is recorded for whoever next opens `resolveBinding`'s doc block
+and needs it.
+
+⚠️ **The `MINTED INTO NO LIBRARY` comments are NOT block 3's**, and were not treated as such.
+They ride in this landing on the separate grounds in LS-402.4.
+
+### LS-402.3 ✅ The grep §17.8 recommends gets a word boundary, and NO COUNT rides with it
+
+`grep -rn 'INSERT INTO library'` matches `library_source`, `library_member` and `library_override`
+as well as `library`, which is why the surrounding prose had to disclaim them in words. The
+recommendation is now `grep -rnE 'INSERT INTO library\b'`, which is the same repair `LS-401.1`
+already used to take its own measurement. **Both §17.8 sites carrying that recommendation were
+changed**, the creation bullet's and the Accept-step paragraph's, because half-applying an
+identical recommendation leaves the stale half looking deliberate.
+
+⚠️ **THE SWEEP IS §17.8's, NOT THE TREE'S, AND ITS THREE SURVIVORS ARE NAMED RATHER THAN IMPLIED
+AWAY.** Verified by reading each at `5756d54`: `docs/ROADMAP.md:904` recommends the bare phrase
+over non-test Go in prose, and `docs/DECISIONS.md:7212` and `docs/DECISIONS.md:14544` each carry
+the unanchored command in full as the falsifier they tell a reader to re-run. All three are
+outside this pass's target and were left alone rather than swept, so the sentence above claims
+§17.8 and claims no more than §17.8. **Trigger:** the next motion that opens any of the three
+anchors its grep the way §17.8's now is.
+⚠️ A FOURTH HIT IS DELIBERATELY NOT COUNTED AMONG THEM: `docs/REVIEW-LOG.md:27414` carries the same
+unanchored command as the record of a measurement already taken, not as a live recommendation.
+⚠️ AND THIS SUB-ENTRY IS ITSELF A HIT: ITS OPENING LINE QUOTES THE UNANCHORED COMMAND. A reader
+who re-runs the search to check the sweep therefore matches this entry too, and the list above does
+not account for it. **The three named above are a SURVIVOR LIST — recommendation sites left
+un-swept — which is a different set from what the search returns, so reconcile the sets rather than
+their sizes.** They part both ways: `docs/ROADMAP.md:904` phrases the recommendation in prose rather
+than as a runnable command, so it survives without ever matching, while this entry's opening line
+and `docs/REVIEW-LOG.md:27414` match without being survivors.
+
+🚩 **No figure for what the grep returns went in, and that is a ruling rather than an omission.**
+The steward: *"A document must not carry a count of what a command will return."* Neither candidate
+figure was recorded, and the run-it-yourself instruction is the whole repair.
+
+### LS-402.4 🚩 The Go comments `a83ff9c`'s conditional membership write falsified — fixed, not annotated
+
+**The falsifier is one line**, `if !b.NoLibrary {` at `internal/store/catalogue.go`'s step 8, which
+made the membership write conditional. ⚠️ **It is not this landing's line**, on the same test
+LS-401.2 applied to its own base: it already stands at `5756d54:internal/store/catalogue.go:1950`,
+introduced by `a83ff9c` (2026-08-22T01:12:57Z, *"feat: the import stops creating libraries; an
+unaccepted container files nothing"*), an **ancestor of that base** and so not this landing's — an
+earlier commit on THIS BRANCH, pushed on `origin/claude/hearth-thread-jyaovx` and **not an ancestor
+of `origin/main`**. What this landing changes at step 8 is the COMMENT above the condition; the
+condition itself is unchanged context in the diff. Everything below asserted, in one form or
+another, that membership is written first **always**. It is not, and the steward ruled these ride
+here because *"the falsifier and the correction land in the same motion"* — the same BRANCH's
+motion. Per `CLAUDE.md`, each is **fixed or deleted rather than annotated**, and each names the
+path that falsified it.
+
+* `internal/store/catalogue.go:424`, `BatchResult.Members`'s doc comment: *"Members counts
+  library_member writes, one per applied item, on the same terms as SearchDocs."* **Now false in
+  its counting rule.** Step 8 is conditional, so an item applied under a `NoLibrary` binding is
+  applied and not counted, and `Members` and `SearchDocs` no longer move together — the *"same
+  terms as SearchDocs"* clause carried the same dead premise a second time. The comment now states
+  the condition and names what the counter therefore excludes.
+* `internal/store/catalogue.go:1423-1424`, INVARIANT 5's bullet: *"Membership is written first; a
+  work that ends up in no library is filed into library 0 ("Unfiled") in the SAME transaction."*
+  **Two defects, and only the first is the step-8 conditional's.** *"Membership is written first"*
+  is the same universal step 8's conditional falsified, and is now bounded to a binding that has a
+  library, with `if !b.NoLibrary` named as the bound. ⚠️ *"is filed into library 0"* was **wrong
+  independently of that conditional**: a work that ends up in no library gets no `library_member`
+  row at all, and library 0 scopes the search document rather than admitting the work to a library.
+  It is corrected in the same motion because the sentence cannot be bounded without also being
+  un-said.
+* `internal/store/catalogue_test.go`, `TestRebuildSearchDocFilesAStrandedDocAsUnfiled`'s doc
+  comment: *"The fallback is unreachable through ApplyCatalogueBatch — membership is always written
+  first"*. **Now false in its main clause.** The comment states the reachable route, names
+  `TestAnUnacceptedContainersItemsAreAppliedAndFiledNowhere` as its guard, and keeps this test's own
+  justification — the direct call is the route migration 0005's stranded-doc debt names and the one
+  no batch shape produces. The same comment's *"because no shipped caller reaches it"* carried the
+  same dead premise a second time and is excised.
+* `internal/store/catalogue_test.go`, the `⚠️ IT DOES NOT EXERCISE writeSearchDoc's FALLBACK`
+  comment. ⚠️ **Its claim about ITS OWN test survives and was not over-corrected**: that test binds
+  `LibraryID: UnfiledLibraryID` with `NoLibrary` false, so step 8 still writes a member row, the
+  scoping `SELECT` still finds library 0, and the fallback still is not entered. What broke is the
+  **general** reading of *"applyOneItem writes the library_member row BEFORE it builds the
+  document"*, so the ordering is now stated as **this binding's rather than a rule**, with the
+  general case and its guard named beside it.
+* `internal/store/comicissue_test.go`, `cmd/usarr/bookorbit_import_e2e_test.go` and
+  `internal/libsync/bookorbit_test.go`, each carrying the same universal about series works and no
+  library. **The defect is the quantifier**, exactly as `LS-399` ruled for the ADR-0068 sentence
+  these comments are the in-code twin of: *"bounded, not corrected"*, and *"is ever"* is the word
+  that over-claimed. All three are now bounded to the population that still has a library — which
+  is each fixture's, since its containers are accepted — with step 8's `if !b.NoLibrary` named as
+  the bound.
+  ⚠️ **The third of these is why the sweep is enumerated rather than counted.** The first two carry
+  the sentence capitalised; `internal/libsync/bookorbit_test.go` carries it lower-case and
+  mid-sentence, so a case-sensitive sweep over the capitalised form finds two of the three and
+  reports itself complete — the same defect class LS-402.2's re-run conditions exist to stop.
+  ⚠️ **`series work` is kept as the term.** It is ADR-0068's identity term rather than a
+  `work.kind` literal, and re-vocabularising it is not this landing's job.
+
+### LS-402.5 🚩 A half-dangling citation in `internal/store/catalogue.go`
+
+`ApplyCatalogueBatch`'s doc comment claimed its two search-document invariants were *"asserted by
+TestSearchDocInvariantsAfterImport and TestSearchDocInvariantQueriesCatchABreak"*. The second
+exists. **The first does not exist anywhere** — its only repo-wide hit was the citation itself, so
+a reader following it finds nothing and cannot tell a missing test from a renamed one. The
+invariants **are** covered, by the helper `assertCorpusInvariants` in `catalogue_test.go`, which
+asserts invariant 2 (including the rowid misalignment counting cannot see) and invariant 5, and
+which the import tests in that package call. The citation now names the helper and the deliberate
+break-test, and every name left behind resolves to a definition in the tree.
+
+### LS-402.6 ✅ The drill: the zero-affected fallback fires through the REAL batch path
+
+⚠️ **An assertion that has never been triggered is indistinguishable from no assertion**, so the
+fallback was broken on purpose rather than reasoned about. Deleting `writeSearchDoc`'s `n == 0`
+branch outright and running the store package:
+
+* `TestAnUnacceptedContainersItemsAreAppliedAndFiledNowhere` **FAILS** — *"the unfiled work's
+  document is scoped to [], want exactly [0]"* — so the fallback does fire through the real
+  `ApplyCatalogueBatch` on an unaccepted container, and files the document under `library_id = 0`.
+  **That test is the standing guard on this route**, and it already existed; this landing added no
+  test for it.
+* `TestRebuildSearchDocFilesAStrandedDocAsUnfiled` **FAILS**, as the direct-call guard should.
+* `TestUnfiledIsWhereAWorkBoundToNoOtherLibraryLands` **stays GREEN**, which is the measurement that
+  keeps LS-402.4's second bullet from over-correcting: that test really does not exercise the
+  fallback.
+
+The mutation was reverted from a byte copy taken before it, and the three tests are green at the
+tree this entry ships on.
+
+### LS-402.7 📌 Registered, not fixed: the zero-membership parenthetical at `internal/store/catalogue.go:1086-1090`
+
+The retype guard's second bullet — *"ZERO library_member rows"* — explains how a container can hold
+real content and still show none, and its parenthetical names **one** cause: *"applyOneItem step 8
+returns early for a child kind"*. There are **two** at this tree. `a83ff9c`'s `if !b.NoLibrary`
+is the second: an item under a `NoLibrary` binding is applied in full and takes no membership row
+whatever its kind. The parenthetical is therefore **incomplete rather than false** — every word of
+it is true, and the bullet's conclusion, that a comics-only container's `book` library reads as
+empty and is retypable, is untouched.
+
+**It is registered rather than fixed, and the reason is scope.** LS-402.4 rides the comments the
+step-8 conditional made FALSE. A comment that merely became less complete is not that, and
+widening the pass to catch it would put an unreviewed edit into a guard's own documentation.
+
+**Trigger — a specific edit, not a later date.** The NEXT edit to that guard. Whoever opens it adds
+the `NoLibrary` cause beside the child-kind one, or writes down why the enumeration stays at one.
+⚠️ **A landing that opens this guard and leaves the parenthetical naming one cause has fired the
+trigger without discharging it**, and this registration stays open with that recorded against it.

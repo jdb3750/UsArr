@@ -421,8 +421,9 @@ type BatchResult struct {
 	// assertions count the TABLE rather than this field.
 	SearchDocs int
 
-	// Members counts library_member writes, one per applied item, on the same
-	// terms as SearchDocs.
+	// Members counts library_member writes, which is one per applied item whose
+	// binding has a library: step 8 is conditional on the binding, so an item
+	// applied under a `NoLibrary` binding is applied and not counted here.
 	Members int
 
 	// IDsReused counts §7.4 guard 1 firings: a tombstoned link whose upstream id
@@ -1420,15 +1421,20 @@ func upsertLibrarySource(
 // cannot declare. This is that builder:
 //
 //   - INVARIANT 5 — every search_doc row has at least one search_doc_library
-//     row. Membership is written first; a work that ends up in no library is
-//     filed into library 0 ("Unfiled") in the SAME transaction.
+//     row. Membership is written first WHEN THE BINDING HAS A LIBRARY — step 8
+//     is conditional, see `if !b.NoLibrary` — and a work that ends up in no
+//     library still gets a search document, SCOPED to library 0 ("Unfiled") in
+//     the SAME transaction. That is a scope on the document, not a membership
+//     row for the work: "no library" and "library 0" stay opposite states.
 //   - INVARIANT 2 — count(search_fts) == count(search_trgm) == count(search_doc).
 //     search_doc.rowid is THE allocator: the doc is inserted first, and its
 //     rowid is then inserted EXPLICITLY into both FTS tables. A single implicit
 //     rowid fuses unrelated documents, because RRF fuses on rowid.
 //
-// Both are asserted by TestSearchDocInvariantsAfterImport and
-// TestSearchDocInvariantQueriesCatchABreak, which `make check` runs.
+// Both are asserted by assertCorpusInvariants in catalogue_test.go, which the
+// import tests in this package call, and TestSearchDocInvariantQueriesCatchABreak
+// fires both of its assertions deliberately so neither is an assertion that has
+// never been triggered. `make check` runs them.
 //
 // It is a replication write and takes no Scope. See the file header.
 func (s *Store) ApplyCatalogueBatch(
@@ -1945,8 +1951,10 @@ func applyOneItem(
 	// service_item_link, `remote_library_id` and all — which is what lets §17.8's
 	// Accept screen show a real item count beside a proposal, and what lets
 	// AcceptLibraries file those works the moment one is ticked. Step 9 below runs
-	// too, and §7 invariant 5 files the document under library 0 for want of a
-	// membership row, so an unaccepted catalogue is searchable with no new rule.
+	// too, and `writeSearchDoc`'s scoping insert affects zero rows for want of a
+	// membership row, so the builder itself files the document into reserved
+	// library 0 — §7 invariant 5 is the rule that keeps, not the mechanism that
+	// does it — and an unaccepted catalogue is searchable with no new rule.
 	if !b.NoLibrary {
 		if _, err := tx.ExecContext(ctx,
 			`DELETE FROM library_member WHERE library_id = ? AND work_id = ?`,

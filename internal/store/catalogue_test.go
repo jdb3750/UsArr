@@ -991,9 +991,16 @@ func TestExternalIDConflictIsRecordedAndTheBatchSurvives(t *testing.T) {
 //
 // ⚠️ IT DOES NOT EXERCISE writeSearchDoc's FALLBACK, and it used to claim it
 // did. Measured: deleting that fallback outright left this test green, because
-// applyOneItem writes the library_member row BEFORE it builds the document, so
-// the `SELECT … FROM library_member` always finds library 0 and the fallback
-// branch is never entered. The fallback's own guard is
+// this binding is not `NoLibrary` — it names library 0 as a real library — so
+// applyOneItem writes the library_member row BEFORE it builds the document, the
+// `SELECT … FROM library_member` finds library 0, and the fallback branch is
+// never entered.
+//
+// ⚠️ THAT ORDERING IS THIS BINDING'S, NOT A RULE. Step 8 is `if !b.NoLibrary`
+// (`internal/store/catalogue.go`), so a container with no accepted proposal
+// writes no member row at all and the fallback DOES fire through
+// ApplyCatalogueBatch — TestAnUnacceptedContainersItemsAreAppliedAndFiledNowhere
+// is that route's guard. The fallback's DIRECT guard is
 // TestRebuildSearchDocFilesAStrandedDocAsUnfiled below.
 func TestUnfiledIsWhereAWorkBoundToNoOtherLibraryLands(t *testing.T) {
 	s := newTestStore(t)
@@ -1034,18 +1041,23 @@ func TestUnfiledIsWhereAWorkBoundToNoOtherLibraryLands(t *testing.T) {
 // TestRebuildSearchDocFilesAStrandedDocAsUnfiled fires invariant 5's ACTUAL
 // landing place.
 //
-// The fallback is unreachable through ApplyCatalogueBatch — membership is always
-// written first — so it is reached the only way it ever will be: by calling the
-// builder directly for a work that belongs to no library. That is not a
-// contrived shape. Migration 0005 names exactly this case as the debt this code
-// owes: "any OTHER library's deletion can still strand a doc whose only scope
-// was that library … the search-document builder … must re-file a stranded doc
-// into library 0 in the same transaction".
+// The fallback IS reachable through ApplyCatalogueBatch: applyOneItem's step 8
+// is `if !b.NoLibrary` (`internal/store/catalogue.go`), so an unaccepted
+// container writes no library_member row, the builder's scoping insert affects
+// zero rows and the fallback fires on ADR-0048's ordinary path —
+// TestAnUnacceptedContainersItemsAreAppliedAndFiledNowhere is the guard on that
+// route. THIS test keeps the OTHER route, the direct call for a work that
+// belongs to no library, because that is the one the migration's debt names and
+// the one no batch shape produces. That is not a contrived shape. Migration
+// 0005 names exactly this case as the debt this code owes: "any OTHER library's
+// deletion can still strand a doc whose only scope was that library … the
+// search-document builder … must re-file a stranded doc into library 0 in the
+// same transaction".
 //
 // Testing it directly rather than through the batch is the honest option. The
-// alternative — deleting the branch because no shipped caller reaches it — would
-// remove the one piece of code the migration says owes this invariant, and the
-// caller that needs it (the library-delete path) is a later commit.
+// alternative — deleting the branch — would remove the one piece of code the
+// migration says owes this invariant, and the caller that needs it (the
+// library-delete path) is a later commit.
 func TestRebuildSearchDocFilesAStrandedDocAsUnfiled(t *testing.T) {
 	s := newTestStore(t)
 	inst := fixtureInstance(t, s, "kavita")

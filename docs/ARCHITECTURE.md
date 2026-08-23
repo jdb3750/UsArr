@@ -4577,13 +4577,15 @@ asserted:
 
 - **What CREATES a `library` row is this bullet's question, and the bullet answers it by saying
   where to read rather than by listing writers.** The trigger half is stable and still worth naming:
-  building a Kavita client stack fires `bootstrapImport` once per instance per database, gated on
-  `last_full_sync_at` being unset (`cmd/usarr/services.go`, `cmd/usarr/import.go`), and that runs the
-  full import, which reaches `store.BindContainers` → `bindOneContainer`. **For creation, read three
-  places and take whatever they hold at the tree you are on.** Read `internal/db/migrations` for the
-  SEED, because a migration that inserts a `library` row creates one in exactly the sense a Go call
-  site does, and a list of Go writers that leaves the seed out is short by one before it is read.
-  Read every non-test hit of `grep -rn 'INSERT INTO library' --include='*.go'`, taken against the
+  connecting a catalogue-source client stack fires `bootstrapImport` once per instance per
+  database, gated on `last_full_sync_at` being unset — `cmd/usarr/services.go`'s `switch si.Kind`
+  is where you read which service kinds carry that arm, and `cmd/usarr/import.go` is the gate
+  itself, and that runs the full import, which reaches `store.BindContainers` → `bindOneContainer`.
+  **For creation, read three places and take whatever they hold at the tree you are on.** Read
+  `internal/db/migrations` for the SEED, because a migration that inserts a `library` row creates
+  one in exactly the sense a Go call site does, and a list of Go writers that leaves the seed out
+  is short by one before it is read.
+  Read every non-test hit of `grep -rnE 'INSERT INTO library\b' --include='*.go'`, taken against the
   `library` table itself rather than `library_source`, `library_member` or `library_override`. And
   read `bindOneContainer`'s own numbered steps in `internal/store/catalogue.go` for what the bind
   path does with a container that matches nothing. **None of those three reads is a closed set, and
@@ -4649,14 +4651,17 @@ asserted:
   whatever the caller decides, and `internal/httpapi/proposals.go` reaches it from
   `POST /api/v1/libraries/accept`, sending `'user'` for a proposal the user edited — so a library CAN
   be marked user-managed now, from the wire, with no screen in front of it
-  (`web/src/routes` is authoritative for that half). **Nothing consults the mark**: the column still
-  has zero non-test readers, so what a later connect may offer against a user-managed library is
-  [ADR-0048](./DECISIONS.md#adr-0048)'s open question 2 and remains untested design. ⚠️ **The
-  surviving claim is about writes, not about occurrences** — an earlier draft said `'user'` occurred
-  in the tree in exactly one place, the `CHECK` that permits it, and that was false: it also occurs
-  in the migration's own adjoining comment and twice in the generated schema mirror
-  `internal/db/testdata/schema.sql`, besides `docs/reference/`. None of those was ever a writer,
-  which is why a count of occurrences was never the claim that carried the point.
+  (`web/src/routes` is authoritative for that half).
+  **What the mark does not yet do is drive anything a user sees**: what a later connect may offer
+  against a user-managed library is [ADR-0048](./DECISIONS.md#adr-0048)'s open question 2 and
+  remains untested design. ⚠️ **It is read, though, and a sentence saying otherwise has been wrong
+  before.** Read the non-test hits of `grep -rn 'managed_by' --include='*.go'`, scoped to the
+  `library` table rather than to `service_instance`, which carries an unrelated column of the same
+  name. ⚠️ **The surviving claim is about writes, not about occurrences** — an earlier draft said
+  `'user'` occurred in the tree in exactly one place, the `CHECK` that permits it, and that was
+  false: it also occurs in the migration's own adjoining comment and twice in the generated schema
+  mirror `internal/db/testdata/schema.sql`, besides `docs/reference/`. None of those was ever a
+  writer, which is why a count of occurrences was never the claim that carried the point.
 
 ⚠️ **§17.8's falsification history, consolidated into one dated note, 2026-08-22.** It is collected
 here because it had accumulated as separate riders inside the two passages it falsified, and a
@@ -4677,7 +4682,7 @@ a fourth closed list would be the same defect with fresher contents.
 
 **And the Accept step's harder half is a removal, not an addition.** Whether that removal has been
 performed is not this paragraph's to report: read `bindOneContainer`'s numbered steps in
-`internal/store/catalogue.go`, and the non-test hits of `grep -rn 'INSERT INTO library'
+`internal/store/catalogue.go`, and the non-test hits of `grep -rnE 'INSERT INTO library\b'
 --include='*.go'` beside the seed in `internal/db/migrations`, and take what those reads hold. What
 does not depend on the tree is the shape of the work and the debt it carries: taking creation out of
 a working path owes an upgrade story to installs that have already auto-created libraries.

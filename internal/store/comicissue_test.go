@@ -127,7 +127,12 @@ func TestIssuesAreMintedUnderOneSeriesAndTheSeriesIsNotPerRow(t *testing.T) {
 			"libraries stand over the SAME container ref, which needs no migration because "+
 			"library_source's uniqueness carries library_id", n)
 	}
-	// NO SERIES WORK IS EVER MINTED INTO NO LIBRARY AT ALL.
+	// NO SERIES WORK IS MINTED INTO NO LIBRARY — bounded, since ADR-0078, to the
+	// population that still HAS a library, which is this fixture's: its
+	// containers are accepted, so step 8's `if !b.NoLibrary`
+	// (`internal/store/catalogue.go`) takes the writing branch. An unaccepted
+	// container's series works are applied in full and take no library_member
+	// row at all.
 	if n := count(t, s, `SELECT COUNT(*) FROM work w WHERE w.kind = 'comic'
 	                       AND NOT EXISTS (SELECT 1 FROM library_member lm WHERE lm.work_id = w.id)`); n != 0 {
 		t.Errorf("unfiled comic series = %d, want 0", n)

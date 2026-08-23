@@ -833,7 +833,12 @@ func TestBookOrbitFullImportFromCassettes(t *testing.T) {
 	}
 	// ADR-0066 decision 5, activated: the comic series is filed into a 'comic'
 	// library minted over the SAME container ref the book was walked from, and
-	// no series work is ever minted into no library at all.
+	// NO SERIES WORK IS MINTED INTO NO LIBRARY — bounded, since ADR-0078, to the
+	// population that still HAS a library, which is this fixture's: its
+	// containers are accepted by the `acceptContainers` call above, so step 8's
+	// `if !b.NoLibrary` (`internal/store/catalogue.go`) takes the writing branch.
+	// An unaccepted container's series works are applied in full and take no
+	// library_member row at all.
 	if n := readOne(`SELECT COUNT(*) FROM library WHERE kind = 'comic' AND id <> 0`); n != 1 {
 		t.Errorf("comic libraries = %d, want 1", n)
 	}

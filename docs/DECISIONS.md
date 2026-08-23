@@ -10875,17 +10875,23 @@ mixed container binds exactly as it does today"* stops applying at the slice tha
 > SENTENCE ABOVE WAS TRUE WHEN WRITTEN; ITS QUANTIFIER IS WHAT THIS ENDS.** *"No series work is ever
 > minted into no library at all"* was sound on 2026-08-19: `bindOneContainer`'s step 3 created a
 > library for every container that matched nothing, so there was no reachable state in which a minted
-> series work had none. **ADR-0078 removed step 3.** A container the user has not accepted a proposal
-> for now returns a binding carrying `NoLibrary`, and its works — series works included — are applied
-> in full and get **no `library_member` row at all**. So the sentence is not corrected; **it is
-> bounded to the population that still has a library**, and *"is ever"* is the word that over-claimed.
+> series work had none. **ADR-0078 removed step 3.**
+> ADR-0078 decides that a container the user has not accepted a proposal for binds `NoLibrary`,
+> and that its works — series works included — are applied in full and take **no `library_member`
+> row at all**.
+> So the sentence is not corrected; **it is bounded to the population that still has a library**,
+> and *"is ever"* is the word that over-claimed.
 > ⚠️ **What decision 5 actually RULES is untouched**: WHICH library a comic series belongs to, when one
 > exists, is still the `comic` library minted over the `library_source` container ref the issue's book
 > was walked from, and ADR-0078 changes neither that binding nor ADR-0066 decision 5's
-> mixed-container rule. **The property this sentence was protecting still holds by another
-> mechanism** — a series work in no library stays findable, because
-> [`reference/schema.md`](./reference/schema.md) §7 invariant 5 scopes its search document to reserved
-> library 0.
+> mixed-container rule.
+> **The property this sentence was protecting still holds, and by code rather than by a
+> document** — `writeSearchDoc` (`internal/store/catalogue.go`) counts what its `library_member`
+> scoping insert affected and, on zero, files the document into reserved library 0 explicitly,
+> returning an error rather than committing a scope-less document; search does not exclude
+> library 0 (`internal/store/searchlibrary.go`). [`reference/schema.md`](./reference/schema.md)
+> §7 invariant 5 is the rule this keeps, and it says of itself that reserved library 0 *"is not a
+> mechanism that upholds anything on its own"* — so it states the debt rather than discharging it.
 
 
 ### Why
