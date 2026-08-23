@@ -2210,7 +2210,7 @@ head('1b. §13 copy bans, over rendered chrome text, cells included');
    *
    *   THE RULE, in full, so it replays. COMMITS: `git log --full-history
    *   --format='%H %P' -- docs/ARCHITECTURE.md`, run at
-   *   `7fb330d28ab1b22861e0b5baecddd14b769ba5e8` -- that commit is the tree
+   *   `b0ab1515246e4fa0f210acad74a6d8637932a7db` -- that commit is the tree
    *   these figures were measured on, and "the branch tip", which is what
    *   stood here, is not a target anybody can re-run against -- 303
    *   commits, 118 with one parent and 185 merges with two, so 488

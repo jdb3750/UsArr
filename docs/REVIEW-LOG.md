@@ -27410,6 +27410,113 @@ name, and rounds 3 to 5 worked in a throwaway worktree. Two lanes quoting differ
 the same comment were both reading correctly off different trees, which is why nothing here addresses
 anything by line number.
 
+⚠️ **Dated rider, 2026-08-23 — rounds 4 and 5 in the table above name commits that no longer exist,
+and their replacements carry different SHAs.** The five commits that held rounds 4 and 5 and the
+landing of this entry were destroyed along with the container they lived in on 2026-08-23. **They
+were never on any remote**, so nothing could be fetched back and the recovery was a rebuild rather
+than a restore. For rounds 4 and 5 the table above is its own record of that — *"unpushed, anchored
+at `refs/keep/round4`"*. For the landing commit the evidence is the preservation lane's
+`git for-each-ref --contains 8e502e01425e0648d001d69e3adb3586bc10fa93`, run before the reset, which
+returned **only** `refs/keep/landing` — a local anchor, no remote ref. ⚠️ That command measures the
+landing commit; `b13268b` and `9c4a12f` are its unpushed ancestors on the same local chain, and that
+they were on no remote **follows from the chain never having been pushed rather than from a separate
+measurement of those two**. What was carried across is the
+**file contents**; the commits are new objects:
+
+| destroyed commit | now reachable as |
+| --- | --- |
+| `7fb330d28ab1b22861e0b5baecddd14b769ba5e8` | `b0ab1515246e4fa0f210acad74a6d8637932a7db` |
+| `2e88ad12daa0fe6a48656743979f254a355a91bf` | `ed388f823a81d9bf6e732350122b66f2e75ceacb` |
+| `b13268b1f92a5959edd9ac8d33866717ddd58fc7` | `4cc2ee8165659374912d8213b7612be1c9c81e7d` |
+| `9c4a12ffc14dda7457aa9d1bc04c354d68708172` | `0403354e5546d1727d7cc53123876dbf0e8b6b06` |
+| `8e502e01425e0648d001d69e3adb3586bc10fa93` | `36fa570a6fe90bbd65d9e3e0d637f1a875c0baae` |
+
+📌 **What the rebuild is verified by, stated per commit rather than as one claim over the five.**
+Three of the five reproduce a recorded blob hash for `docs/design/check.mjs`; the landing commit
+reproduces a recorded diffstat and a recorded digest of the body it inserted; and one — `9c4a12f` —
+reproduces neither, and is treated separately below. ⚠️ **The recorded oracle is an abbreviated
+hash, not a full one.** What the review lanes' diff output preserved is `git diff`'s `index` line,
+which prints seven hex characters: `index f207ae6..6789873`, `index 6789873..e33c9d4`,
+`index e33c9d4..968ec03`. **No 40-character blob hash was recorded before the reset**, so the match is a
+match on seven characters — 28 bits — and it should be read as that and not as a full-hash identity.
+On that evidence `check.mjs` at the round-4 replacement agrees with the recorded `6789873`, at the
+round-5 replacement with `e33c9d4`, and at the `b13268b` replacement with `968ec03`. The landing
+commit is corroborated on two independent figures instead: its diff is a pure insertion of 619 lines,
+as recorded, and the entry body it inserted reproduces the full sha256
+`80273b4a2963e57e5a28c2833395573b6cd55530903c6a148cca5e4a0a443e60` taken before the reset.
+
+⚠️ **Why the SHAs differ, and the residual that leaves.** The original author and committer
+timestamps were not recoverable, which is sufficient on its own to change every SHA. But it is not
+established as the *only* cause, and this rider does not say it is. A control experiment rebuilt
+**the arc's last surviving commit, `fe67dd1` — the rebuild's base, which is why it was the one
+used** — **SHA-identically** from its own inputs, proving the signing key, the
+determinism of its signatures and the commit-construction pipeline are all exact. ℹ️ **Four commits
+of the arc survive, not one**: `d097c39`, `f9a9084`, `f32e061` and `fe67dd1`, exactly as the trees
+table above lists them, all four still on the remote; `fe67dd1` is distinguished only by being last
+and by being what the rebuild was based on. Against that control, **the parent chain, the messages
+and the signing pipeline** were each shown exact and **per-file blob content for three of the five
+agreed with the recorded seven-character hash**, and
+brute-force searches over the timestamp space still did not reproduce the original SHAs. **So at
+least one commit-header input beyond the timestamp remains unidentified — and the tree is itself one
+of a commit's header inputs, and is unproven here, so the tree is among the candidates.** The dates
+the rebuilt commits carry are estimates taken from tool-call times, not the originals.
+
+⚠️ **Tree identity against the *original* trees is not asserted here, and could not be.** The originals'
+objects are gone, and no tree SHA of an original was recorded before the reset. That is a negative claim,
+so here is the argument rather than a tally: sweep `grep -rhoE 'tree [0-9a-f]{40}'` over this session's
+subagent transcripts and attribute each hit by its **earliest** appearance, and each falls into one of two
+classes. Either it **first appears before the originals existed** — the bulk are ordinary objects of the
+repo's own history, and four belong to an unrelated patch-handoff lane of 2026-08-21, a day before round 4
+was written — or it **appears only after the reset**, in rebuild or verification output, either beside a
+`parent` line naming a surviving or a rebuilt commit or as an `ls-tree` row of an object that survives.
+Neither class can be a record of an original's tree. 📌 The second class is not hypothetical:
+`f0c108c813349f8c1d27a5a4a5019c7f928a71d6`, the rebuilt `0403354`'s tree, appears in a `git cat-file
+commit` dump whose `parent` is the rebuilt `4cc2ee8` — the rebuild's own output, corroborating nothing
+about the original. ⚠️ **A count is the wrong instrument here, and is deliberately not offered as the
+evidence.** The sweep's regex also catches `ls-tree` subtree entries and at least one commit object, so
+the hits are not all root trees; and the corpus is one that measuring it mutates — running the sweep
+writes its own results back into the transcripts, so a later lane will get a larger total. **The
+classification is what should be re-run, not the number.** The blob and diffstat figures above are
+per-file and per-diff, which is a weaker statement than tree equality. **This is why the rebuilt tip tree
+was re-gated from scratch rather than carrying a transferred green:** a green earned on a tree whose
+identity to the reviewed tree cannot be shown is not evidence about the new tree.
+
+📌 **The re-gate, named rather than alluded to.** Of the five rebuilt trees, **none** was gated. What
+was gated is the tree of the commit this rider lands in — the tip's content plus this rider and the
+re-pointed pin, which is a sixth tree and not any of the five. `make design` — the §13 pass this
+entry is about — was run there under node v22.22.2 and **exited 0**, and `make check` was run on the
+same tree and **exited 0** (gofumpt v0.11.0, golangci-lint 2.12.2, gitleaks v8.30.1, govulncheck
+v1.7.0, each asserted against its pin). **A commit cannot name its own hash**, so this paragraph does
+not: `docs/design/check.mjs` prints the commit it ran on and whether the working tree was clean as
+the **first line of its own output** — the second line of `make design`'s, because make echoes the
+recipe first — and that is where a run is pinned to a tree. ⚠️ **No tree of any of the five rebuilt
+commits has been gated**, and nothing here is evidence about them.
+
+📌 **One of the five is corroborated by no per-commit oracle, and what does constrain it is a range.** For
+`9c4a12f` → `0403354e5546d1727d7cc53123876dbf0e8b6b06`, **both per-commit oracles are absent before the
+reset: no diffstat was recorded for it, and no blob hash was recorded for it.** What constrains it instead
+is a recorded *range* diffstat — the preservation lane, running before the reset, recorded
+`09ef0c0..8e502e0` as 3 files, 1,398 insertions and 62 deletions, with `docs/design/check.mjs` at
+**+815**. Because the landing commit `8e502e0` touches only `docs/REVIEW-LOG.md`, that `+815` describes
+`check.mjs` **at this commit's tree**, and the rebuilt range reproduces it. ⚠️ **It is a net line count
+and nothing stronger** — it does not fix which lines, and many trees satisfy it. Its **commit message** is
+separately preserved, at 711 bytes, and the rebuilt message is byte-identical to it; **that corroborates
+the message, not the tree.** The other four are not in this position, and the landing commit `36fa570` in
+particular is **not** weakly attested.
+
+ℹ️ **A consequence of the above, landed with this rider.** The §17 enumeration recipe in
+`docs/design/check.mjs` pinned its figures to `7fb330d`, on the stated reasoning that *"the branch
+tip … is not a target anybody can re-run against"*. That pin had become unre-runnable in exactly the
+way it was written to prevent, and it is re-pointed to
+`b0ab1515246e4fa0f210acad74a6d8637932a7db` in the same commit as this rider. **The re-point escapes
+the failure mode rather than relocating it: `b0ab1515` is on the remote** — `git merge-base
+--is-ancestor b0ab1515… origin/claude/hearth-thread-4vbzaj` exits 0 — **whereas `7fb330d` never was**,
+which is precisely what killed the old pin. It was also fired, not assumed: the pinned command run at
+the new SHA returns 303 commits, 118 with one parent and 185 merges, so 488 commit/parent pairs — the
+comment's own figures, unchanged. **The occurrences of the dead SHAs in the prose of this entry are
+deliberately left as they stand**; this rider carries the mapping, per the house convention that a
+landed finding is corrected by a dated rider and never by a silent edit.
+
 **Findings keep their reviews' own labels, prefixed by round** (`R1-F1`, `R2-3`, `R3-4`, `R4-B1`),
 because the reviews each numbered or lettered from the start. ⚠️ **Nothing here states how many
 findings there are** — `LS-394.24`'s rule, restated at `LS-394.26` and `LS-395`.
